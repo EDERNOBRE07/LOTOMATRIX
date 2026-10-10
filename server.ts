@@ -390,9 +390,12 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isDev =
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NODE_ENV !== 'publish' &&
+    !import.meta.url.endsWith('server.js');
 
-  if (!isProd) {
+  if (isDev) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -407,7 +410,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`LotoSniper Server rodando na porta ${PORT} [${isProd ? 'PROD' : 'DEV'}]`);
+    console.log(`LotoSniper Server rodando na porta ${PORT} [${!isDev ? 'PROD' : 'DEV'}]`);
   });
 }
 

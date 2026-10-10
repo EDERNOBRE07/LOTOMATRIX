@@ -1,7 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { fileURLToPath } from 'url';
+import { defineConfig } from 'vite';
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig(() => {
   return {
@@ -9,8 +12,11 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname || __dirname, '.'),
+        '@': path.resolve(rootDir, '.'),
       },
+    },
+    build: {
+      chunkSizeWarningLimit: 1600,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
