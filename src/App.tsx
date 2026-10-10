@@ -335,17 +335,17 @@ export default function App() {
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div>
-            <span className="font-bold text-slate-400 font-mono">LOTOMATRIX PRO</span> — Sincronização
-            automática a cada abertura • Concurso #{latestDraw.concurso} ({latestDraw.data}).
+            <span className="font-black text-emerald-400 font-mono tracking-wider">LOTOSNIPER</span> — Precisão
+            cirúrgica na Lotofácil • Concurso #{latestDraw.concurso} ({latestDraw.data}).
             <p className="text-[11px] text-slate-600 mt-0.5">
-              Dados oficiais Caixa Econômica Federal. Fechamentos matemáticos com garantia canônica.
+              Dados oficiais Caixa Econômica Federal. Fechamentos matemáticos com garantia de 14 pontos.
             </p>
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-slate-400">
             <span>C(25,15) = 3.268.760 combinações</span>
             <span>•</span>
-            <span className="text-emerald-400">Auto-Update Integrado</span>
+            <span className="text-emerald-400 font-semibold">Alvo 15 Pontos</span>
           </div>
         </div>
       </footer>

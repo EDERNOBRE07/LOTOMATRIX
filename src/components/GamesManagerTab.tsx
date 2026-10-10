@@ -53,7 +53,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const handleExportTXT = () => {
     if (tickets.length === 0) return;
     const content =
-      `# LOTOMATRIX PRO - MATRIZ DE FECHAMENTO LOTOFÁCIL\n` +
+      `# LOTOSNIPER - MATRIZ DE FECHAMENTO LOTOFÁCIL (ALVO 15)\n` +
       `# Total de Bilhetes: ${tickets.length}\n` +
       `# Gerado em: ${new Date().toLocaleString('pt-BR')}\n` +
       `# ------------------------------------------------------------\n` +
@@ -70,7 +70,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotomatrix_pro_lotofacil_${tickets.length}_jogos.txt`;
+    link.download = `lotosniper_fechamento_${tickets.length}_jogos.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -90,7 +90,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotomatrix_pro_fechamento.csv`;
+    link.download = `lotosniper_fechamento.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };

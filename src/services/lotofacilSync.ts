@@ -1,8 +1,8 @@
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS, RECENT_DRAWS } from '../data/lotofacilData';
 
-const LOCAL_STORAGE_KEY = 'lotomatrix_live_draw_v1';
-const LOCAL_STORAGE_LAST_SYNC = 'lotomatrix_last_sync_timestamp';
+const LOCAL_STORAGE_KEY = 'lotosniper_live_draw_v1';
+const LOCAL_STORAGE_LAST_SYNC = 'lotosniper_last_sync_timestamp';
 
 export interface SyncResult {
   draw: LotofacilDraw;

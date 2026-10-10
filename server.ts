@@ -251,7 +251,7 @@ app.post('/api/ai/optimize', async (req: Request, res: Response) => {
 
     // If Gemini API client is available, run deep mathematical prompt with structured output
     if (ai) {
-      const prompt = `Você é o LotoMatrix Pro, especialista sênior em engenharia de software aplicada e modelagem estatística hiper-especializada na Lotofácil da Caixa Econômica Federal.
+      const prompt = `Você é o LotoSniper, especialista sênior em engenharia de software aplicada e modelagem estatística com precisão cirúrgica na Lotofácil da Caixa Econômica Federal.
 Contexto do último concurso analisado (Concurso ${concurso}):
 Dezenas sorteadas: ${JSON.stringify(dezenasAnterior)}
 Dezenas ausentes no último concurso: ${JSON.stringify(LATEST_DRAW.dezenasAusentes)}
@@ -368,7 +368,7 @@ Forneça uma análise preditiva em formato JSON estruturado com:
         ],
         taxaConfianca: 94.6,
         justificativaTecnica:
-          'Modelo heurístico LotoMatrix Pro: Priorização de dezenas com atraso crítico (17 e 22 no ciclo 804), equilíbrio de paridade (7P/8I e 8P/7I), moldura centrada em 10 dezenas e taxa de repetição de 9 dezenas do concurso 3800.',
+          'Modelo heurístico LotoSniper: Priorização de dezenas com atraso crítico (17 e 22 no ciclo 804), equilíbrio de paridade (7P/8I e 8P/7I), moldura centrada em 10 dezenas e taxa de repetição de 9 dezenas do concurso 3800.',
         dezenasChave: [17, 22, 10, 20, 11],
         padroesSugeridos: {
           paresImpares: '7 Pares / 8 Ímpares (ou 8P/7I)',
@@ -407,7 +407,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`LotoMatrix Pro Server rodando na porta ${PORT} [${isProd ? 'PROD' : 'DEV'}]`);
+    console.log(`LotoSniper Server rodando na porta ${PORT} [${isProd ? 'PROD' : 'DEV'}]`);
   });
 }
 

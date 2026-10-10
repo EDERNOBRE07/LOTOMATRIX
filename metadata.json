@@ -1,6 +1,6 @@
 {
-  "name": "LotoMatrix Pro - Engenharia Estatística & IA para Lotofácil",
-  "description": "Plataforma de alta precisão matemática para a Lotofácil: fechamentos otimizados com garantia matemática de 14 pontos, análise estatística dinâmica (pares/ímpares, primos, moldura, Fibonacci, ciclos), simulações e predições com IA em tempo real.",
+  "name": "LotoSniper - Precisão Cirúrgica para Lotofácil",
+  "description": "LotoSniper: Plataforma de alta precisão matemática e IA para a Lotofácil. Fechamentos cirúrgicos com garantia de 14 pontos, análise dinâmica de atrasos, ciclos, moldura e predições com aprendizado de máquina.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

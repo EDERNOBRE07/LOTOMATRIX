@@ -1,6 +1,7 @@
 import React from 'react';
-import { Cpu, Sparkles, TrendingUp, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Sparkles, TrendingUp, AlertTriangle, RefreshCw } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
+import { LotoSniperLogo } from './LotoSniperLogo';
 
 interface HeaderProps {
   latestDraw: LotofacilDraw;
@@ -33,26 +34,20 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        {/* Brand & Identity */}
+        {/* Brand & Identity with Official LotoSniper Logo */}
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow-lg shadow-emerald-500/20 border border-emerald-400/40">
-            <Cpu className="w-6 h-6 text-white" />
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-          </div>
+          <LotoSniperLogo size="md" showText={false} />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-white font-mono flex items-center gap-1.5">
-                LOTOMATRIX <span className="text-emerald-400">PRO</span>
+              <h1 className="text-xl font-black tracking-wider text-emerald-400 font-mono flex items-center gap-1.5 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+                LOTOSNIPER
               </h1>
-              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                v2.6 Live Sync
+              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                Alvo 15 Pontos
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Engenharia Combinatória & Modelagem Estatística com IA • Lotofácil
+              Precisão Cirúrgica • Fechamentos Matemáticos & IA para Lotofácil
             </p>
           </div>
         </div>
