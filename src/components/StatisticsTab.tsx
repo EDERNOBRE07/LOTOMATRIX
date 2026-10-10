@@ -7,6 +7,7 @@ import {
   CONCURSO_ATUAL,
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { FrequencyDelayChart } from './FrequencyDelayChart';
 import {
   BarChart,
   TrendingUp,
@@ -106,17 +107,26 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
       {/* SUBTAB 1: ATRASOS DAS DEZENAS */}
       {activeSubTab === 'atrasos' && (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-3">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-emerald-400" />
-                <span>Estatística de Frequência e Atraso das 25 Dezenas</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                Atraso atual, último atraso, maior atraso histórico e média de ocorrência.
-              </p>
-            </div>
+        <div className="space-y-6">
+          {/* Dynamic Recharts Bar Chart */}
+          <FrequencyDelayChart
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            latestDraw={latestDraw}
+          />
+
+          {/* Detailed Statistics Table */}
+          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-400" />
+                  <span>Tabela Detalhada de Frequência e Atraso das 25 Dezenas</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Atraso atual, último atraso, maior atraso histórico e média de ocorrência (dados oficiais do anexo).
+                </p>
+              </div>
 
             {/* Sorter */}
             <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
@@ -241,7 +251,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                           </span>
                         ) : dez.atrasoAtual === 0 ? (
                           <span className="text-emerald-400 text-[11px]">
-                            ✓ Saiu no #3800
+                            ✓ Saiu no #{latestDraw.concurso}
                           </span>
                         ) : dez.atrasoAcimaDaMedia ? (
                           <span className="text-rose-400 font-medium text-[11px]">
@@ -258,6 +268,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </table>
           </div>
         </div>
+      </div>
       )}
 
       {/* SUBTAB 2: DUPLAS AMIGAS */}
