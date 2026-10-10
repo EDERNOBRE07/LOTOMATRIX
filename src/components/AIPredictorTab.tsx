@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AIPredictionResponse } from '../types/lotofacil';
+import { AIPredictionResponse, LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import {
   Sparkles,
@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 
 interface AIPredictorTabProps {
+  latestDraw?: LotofacilDraw;
+  dynamicStats?: DezenaStats[];
+  cyclePendingNumbers?: number[];
   prediction: AIPredictionResponse | null;
   isLoading: boolean;
   onRefreshPrediction: () => void;
@@ -24,6 +27,9 @@ interface AIPredictorTabProps {
 }
 
 export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
+  latestDraw = CONCURSO_ATUAL,
+  dynamicStats = DEZENAS_STATS,
+  cyclePendingNumbers = [17, 22],
   prediction,
   isLoading,
   onRefreshPrediction,
@@ -33,11 +39,11 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
 
   const scores =
     prediction?.scores ||
-    DEZENAS_STATS.map((s) => {
+    dynamicStats.map((s) => {
       let sc = 50;
-      if (s.numero === 17 || s.numero === 22) sc = 95;
+      if (cyclePendingNumbers.includes(s.numero)) sc = 95;
       else if ([11, 20, 25, 10, 13, 24, 1, 4].includes(s.numero)) sc = 82;
-      else if (CONCURSO_ATUAL.dezenas.includes(s.numero)) sc = 68;
+      else if (latestDraw.dezenas.includes(s.numero)) sc = 68;
       return sc;
     });
 
@@ -69,8 +75,8 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
               </span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1">
-              Partindo rigorosamente da análise do Concurso #{CONCURSO_ATUAL.concurso}, o modelo
-              pondera o atraso anômalo das dezenas, a quebra pendente do Ciclo 804 (17 e 22),
+              Partindo rigorosamente da análise do Concurso #{latestDraw.concurso} ({latestDraw.data}), o modelo
+              pondera o atraso anômalo das dezenas, a quebra pendente do Ciclo ({cyclePendingNumbers.join(' e ')}),
               e a ressonância de moldura, primos e paridades canônicas.
             </p>
           </div>

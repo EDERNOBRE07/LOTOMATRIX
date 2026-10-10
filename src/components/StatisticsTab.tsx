@@ -6,6 +6,7 @@ import {
   PRIMOS_HISTORICA,
   CONCURSO_ATUAL,
 } from '../data/lotofacilData';
+import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import {
   BarChart,
   TrendingUp,
@@ -20,7 +21,19 @@ import {
   RotateCw,
 } from 'lucide-react';
 
-export const StatisticsTab: React.FC = () => {
+interface StatisticsTabProps {
+  latestDraw?: LotofacilDraw;
+  statsList?: DezenaStats[];
+  cyclePendingNumbers?: number[];
+  concursosNoCiclo?: number;
+}
+
+export const StatisticsTab: React.FC<StatisticsTabProps> = ({
+  latestDraw = CONCURSO_ATUAL,
+  statsList = DEZENAS_STATS,
+  cyclePendingNumbers = [17, 22],
+  concursosNoCiclo = 4,
+}) => {
   const [activeSubTab, setActiveSubTab] = useState<
     'atrasos' | 'duplas' | 'ciclos' | 'padroes'
   >('atrasos');
@@ -29,7 +42,7 @@ export const StatisticsTab: React.FC = () => {
   >('atraso_desc');
 
   // Sorted views of the 25 numbers
-  const sortedDezenas = [...DEZENAS_STATS].sort((a, b) => {
+  const sortedDezenas = [...statsList].sort((a, b) => {
     if (atrasoSortOrder === 'atraso_desc') return b.atrasoAtual - a.atrasoAtual;
     if (atrasoSortOrder === 'vezes_desc') return b.vezes - a.vezes;
     return a.numero - b.numero;

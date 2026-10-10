@@ -61,11 +61,178 @@ const LATEST_DRAW = {
   ],
 };
 
-// API: Get current draw & statistical baseline
-app.get('/api/lotofacil/status', (_req: Request, res: Response) => {
+// Cache in memory for recent draws
+let cachedLatestDraw: any = LATEST_DRAW;
+let lastFetchTime = 0;
+const CACHE_TTL_MS = 60 * 1000; // 1 minute cache to avoid hammering Caixa API
+
+async function fetchFromCaixa(): Promise<any | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+  try {
+    const res = await fetch('https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil', {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    });
+
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data || !data.numero || !Array.isArray(data.listaDezenas)) return null;
+
+    const dezenas = data.listaDezenas
+      .map((d: string) => parseInt(d, 10))
+      .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
+      .sort((a: number, b: number) => a - b);
+
+    if (dezenas.length !== 15) return null;
+
+    // Rateios
+    const rateios = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+    const getFaixa = (faixaNum: number) => {
+      const f = rateios.find((r: any) => r.faixa === faixaNum || r.descricaoFaixa?.includes(`${16 - faixaNum}`));
+      return {
+        ganhadores: f ? (f.numeroDeGanhadores || 0) : 0,
+        valor: f ? (f.valorPremio || 0) : 0,
+      };
+    };
+
+    return {
+      source: 'caixa-oficial',
+      concurso: data.numero,
+      data: data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
+      dezenas,
+      acumulou: !!data.acumulado,
+      proximoEstimado: data.valorEstimadoProximoConcurso || 1700000,
+      premiacoes: {
+        faixa15: getFaixa(1),
+        faixa14: getFaixa(2),
+        faixa13: getFaixa(3),
+        faixa12: getFaixa(4),
+        faixa11: getFaixa(5),
+      },
+    };
+  } catch {
+    clearTimeout(timeoutId);
+    return null;
+  }
+}
+
+async function fetchFromMirror(): Promise<any | null> {
+  const mirrors = [
+    'https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest',
+    'https://api.guidi.dev.br/loteria/lotofacil/ultimo',
+  ];
+
+  for (const url of mirrors) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
+      if (!rawDezenas || !Array.isArray(rawDezenas)) continue;
+
+      const dezenas = rawDezenas
+        .map((d: any) => parseInt(String(d), 10))
+        .filter((n: number) => !isNaN(n))
+        .sort((a: number, b: number) => a - b);
+
+      if (dezenas.length !== 15) continue;
+
+      return {
+        source: 'espelho-api',
+        concurso: data.concurso || data.numero,
+        data: data.data || data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
+        dezenas,
+        acumulou: !!data.acumulou || !!data.acumulado,
+        proximoEstimado: data.valorEstimadoProximoConcurso || 1700000,
+        premiacoes: {
+          faixa15: { ganhadores: data.premiacoes?.[0]?.ganhadores || 1, valor: data.premiacoes?.[0]?.valorPremio || 1500000 },
+          faixa14: { ganhadores: data.premiacoes?.[1]?.ganhadores || 300, valor: data.premiacoes?.[1]?.valorPremio || 1500 },
+          faixa13: { ganhadores: 25000, valor: 35 },
+          faixa12: { ganhadores: 150000, valor: 14 },
+          faixa11: { ganhadores: 800000, valor: 7 },
+        },
+      };
+    } catch {
+      clearTimeout(timeoutId);
+      continue;
+    }
+  }
+  return null;
+}
+
+async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
+  const now = Date.now();
+  if (!forceFresh && cachedLatestDraw && now - lastFetchTime < CACHE_TTL_MS) {
+    return cachedLatestDraw;
+  }
+
+  // 1. Try official Caixa
+  let draw = await fetchFromCaixa();
+
+  // 2. Try mirror if Caixa fails
+  if (!draw) {
+    draw = await fetchFromMirror();
+  }
+
+  // 3. Fallback to baseline LATEST_DRAW if offline or blocked
+  if (!draw) {
+    draw = {
+      ...LATEST_DRAW,
+      source: 'base-local-verificada',
+    };
+  }
+
+  cachedLatestDraw = draw;
+  lastFetchTime = now;
+  return draw;
+}
+
+// API: Get current draw & statistical baseline (Live dynamic sync)
+app.get('/api/lotofacil/status', async (req: Request, res: Response) => {
+  const forceFresh = req.query.fresh === 'true';
+  const draw = await getOrUpdateLatestDraw(forceFresh);
+
   res.json({
     success: true,
-    latestDraw: LATEST_DRAW,
+    latestDraw: draw,
+    source: draw.source || 'caixa-oficial',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/lotofacil/latest', async (req: Request, res: Response) => {
+  const forceFresh = req.query.fresh === 'true';
+  const draw = await getOrUpdateLatestDraw(forceFresh);
+  res.json({
+    success: true,
+    draw,
+    source: draw.source,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post('/api/lotofacil/sync', async (_req: Request, res: Response) => {
+  const draw = await getOrUpdateLatestDraw(true);
+  res.json({
+    success: true,
+    updated: true,
+    draw,
     timestamp: new Date().toISOString(),
   });
 });

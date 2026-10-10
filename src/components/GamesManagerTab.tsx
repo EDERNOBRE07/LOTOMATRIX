@@ -18,22 +18,32 @@ import {
 
 interface GamesManagerTabProps {
   tickets: GameTicket[];
+  latestDraw?: LotofacilDraw;
   onClearTickets: () => void;
   onGoToGenerator: () => void;
 }
 
 export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   tickets,
+  latestDraw = CONCURSO_ATUAL,
   onClearTickets,
   onGoToGenerator,
 }) => {
-  const [conferirDezenas, setConferirDezenas] = useState<number[]>(CONCURSO_ATUAL.dezenas);
-  const [selectedConcurso, setSelectedConcurso] = useState<number>(CONCURSO_ATUAL.concurso);
+  const [conferirDezenas, setConferirDezenas] = useState<number[]>(latestDraw.dezenas);
+  const [selectedConcurso, setSelectedConcurso] = useState<number>(latestDraw.concurso);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
+
+  // Update when latestDraw changes
+  React.useEffect(() => {
+    setConferirDezenas(latestDraw.dezenas);
+    setSelectedConcurso(latestDraw.concurso);
+  }, [latestDraw.concurso, latestDraw.dezenas]);
+
+  const allDraws = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
 
   const handleSelectConcurso = (concursoNum: number) => {
     setSelectedConcurso(concursoNum);
-    const draw = RECENT_DRAWS.find((d) => d.concurso === concursoNum);
+    const draw = allDraws.find((d) => d.concurso === concursoNum);
     if (draw) {
       setConferirDezenas(draw.dezenas);
     }

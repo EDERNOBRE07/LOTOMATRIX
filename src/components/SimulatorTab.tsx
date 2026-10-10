@@ -16,10 +16,15 @@ import {
 
 interface SimulatorTabProps {
   tickets: GameTicket[];
+  latestDraw?: LotofacilDraw;
   onGoToGenerator: () => void;
 }
 
-export const SimulatorTab: React.FC<SimulatorTabProps> = ({ tickets, onGoToGenerator }) => {
+export const SimulatorTab: React.FC<SimulatorTabProps> = ({
+  tickets,
+  latestDraw = CONCURSO_ATUAL,
+  onGoToGenerator,
+}) => {
   const [simulationScope, setSimulationScope] = useState<'concurso_3800' | 'ultimos_15' | 'monte_carlo_1000'>('concurso_3800');
   const [results, setResults] = useState<SimulationResult | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -34,7 +39,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ tickets, onGoToGener
       const shuffled = [...pool].sort(() => Math.random() - 0.5);
       const drawn = shuffled.slice(0, 15).sort((a, b) => a - b);
       list.push({
-        concurso: 3800 + c,
+        concurso: latestDraw.concurso + c,
         data: `Simulação #${c}`,
         dezenas: drawn,
       });
@@ -49,9 +54,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ tickets, onGoToGener
     setTimeout(() => {
       let drawsToTest: LotofacilDraw[] = [];
       if (simulationScope === 'concurso_3800') {
-        drawsToTest = [CONCURSO_ATUAL];
+        drawsToTest = [latestDraw];
       } else if (simulationScope === 'ultimos_15') {
-        drawsToTest = RECENT_DRAWS;
+        drawsToTest = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
       } else {
         drawsToTest = generateMonteCarloDraws(1000);
       }
@@ -129,7 +134,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ tickets, onGoToGener
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  Concurso #{CONCURSO_ATUAL.concurso} (08/10/2026)
+                  Concurso #{latestDraw.concurso} ({latestDraw.data})
                 </button>
                 <button
                   onClick={() => setSimulationScope('ultimos_15')}

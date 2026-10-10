@@ -13,6 +13,8 @@ interface VolanteSelectorProps {
   fixedNumbers: number[];
   excludedNumbers: number[];
   aiScores?: number[];
+  statsList?: typeof DEZENAS_STATS;
+  cyclePendingNumbers?: number[];
   onToggleNumber: (n: number) => void;
   onSetFixed: (n: number) => void;
   onSetExcluded: (n: number) => void;
@@ -26,6 +28,8 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   fixedNumbers,
   excludedNumbers,
   aiScores,
+  statsList = DEZENAS_STATS,
+  cyclePendingNumbers = [17, 22],
   onToggleNumber,
   onSetFixed,
   onSetExcluded,
@@ -227,7 +231,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             const isSelected = selectedNumbers.includes(num);
             const isFixed = fixedNumbers.includes(num);
             const isExcluded = excludedNumbers.includes(num);
-            const stat = DEZENAS_STATS.find((s) => s.numero === num);
+            const stat = statsList.find((s) => s.numero === num);
             const atraso = stat?.atrasoAtual ?? 0;
             const vezes = stat?.vezes ?? 0;
             const scoreIA = aiScores ? aiScores[num - 1] ?? 50 : 50;
@@ -236,7 +240,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             const isMolduraNumber = MOLDURA.includes(num);
             const isPrimoNumber = PRIMOS.includes(num);
             const isFibonacciNumber = FIBONACCI.includes(num);
-            const isCriticalDelay = num === 17 || num === 22 || atraso >= 3;
+            const isCriticalDelay = cyclePendingNumbers.includes(num) || atraso >= 3;
 
             let borderStyle = 'border-slate-800';
             let bgStyle = 'bg-slate-950/70 hover:bg-slate-800/80 text-slate-200';
@@ -307,10 +311,10 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 </div>
 
                 {/* Badges for cycle priority or AI score */}
-                {(num === 17 || num === 22) && (
+                {cyclePendingNumbers.includes(num) && (
                   <span
                     className="absolute -top-1.5 -right-1.5 bg-amber-500 text-slate-950 font-black text-[9px] px-1 rounded-full shadow"
-                    title="Pendente para fechar o Ciclo 804!"
+                    title="Pendente para fechar o Ciclo!"
                   >
                     CICLO
                   </span>

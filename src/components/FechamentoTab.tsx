@@ -4,7 +4,10 @@ import {
   FilterCriteria,
   GameTicket,
   AIPredictionResponse,
+  LotofacilDraw,
+  DezenaStats,
 } from '../types/lotofacil';
+import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
 import {
@@ -27,6 +30,9 @@ import {
 } from 'lucide-react';
 
 interface FechamentoTabProps {
+  latestDraw: LotofacilDraw;
+  dynamicStats?: DezenaStats[];
+  cyclePendingNumbers?: number[];
   aiPrediction: AIPredictionResponse | null;
   onSaveTickets: (tickets: GameTicket[]) => void;
   onGoToSimulator: (tickets: GameTicket[]) => void;
@@ -34,6 +40,9 @@ interface FechamentoTabProps {
 }
 
 export const FechamentoTab: React.FC<FechamentoTabProps> = ({
+  latestDraw = CONCURSO_ATUAL,
+  dynamicStats = DEZENAS_STATS,
+  cyclePendingNumbers = [17, 22],
   aiPrediction,
   onSaveTickets,
   onGoToSimulator,
@@ -43,7 +52,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([
     1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 17, 19, 20, 21, 22, 25,
   ]);
-  const [fixedNumbers, setFixedNumbers] = useState<number[]>([17, 22]); // By default, ciclo 804 keys
+  const [fixedNumbers, setFixedNumbers] = useState<number[]>(cyclePendingNumbers.slice(0, 2));
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [filters, setFilters] = useState<FilterCriteria>(DEFAULT_FILTERS);
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
@@ -116,7 +125,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           mode.includes('13') ? 13 : 14,
           preset.jogosMaximos,
           fullFilters,
-          undefined,
+          latestDraw.dezenas,
           aiPrediction?.scores
         );
 
@@ -266,6 +275,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         fixedNumbers={fixedNumbers}
         excludedNumbers={excludedNumbers}
         aiScores={aiPrediction?.scores}
+        statsList={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
         onToggleNumber={handleToggleNumber}
         onSetFixed={handleSetFixed}
         onSetExcluded={handleSetExcluded}
