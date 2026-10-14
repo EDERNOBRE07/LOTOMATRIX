@@ -18,7 +18,7 @@ import {
   buildOptimal18Pool,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
-import { TotalizadorApostas } from './TotalizadorApostas';
+import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import {
   Sparkles,
   Zap,
@@ -294,8 +294,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
-      {/* Real-time Apostador Investment Totalizer */}
-      <TotalizadorApostas
+      {/* Totalizador de Custos - Cálculo Automático do Investimento */}
+      <TotalizadorDeCustos
         preset={preset}
         mode={mode}
         targetCount={targetCount}
@@ -401,16 +401,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-3">
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                <span>Matriz Gerada: {generatedTickets.length} Bilhetes Otimizados</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-400" />
+                  <span>Matriz Gerada: {generatedTickets.length} Bilhetes Otimizados</span>
+                </h3>
                 {generationTimeMs !== null && (
                   <span className="text-[11px] text-slate-500 font-mono">
                     ({generationTimeMs}ms)
                   </span>
                 )}
-              </h3>
-              <p className="text-xs text-slate-400">
+                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <span>Custo Total:</span>
+                  <strong className="text-emerald-400">
+                    R$ {(generatedTickets.length * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
                 Todos os bilhetes atendem estritamente aos filtros matemáticos e à garantia de{' '}
                 {preset.garantia}.
               </p>
@@ -442,6 +450,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Componente Totalizador de Custos para os Fechamentos Gerados */}
+          <TotalizadorDeCustos
+            preset={preset}
+            mode={mode}
+            targetCount={targetCount}
+            totalJogos={generatedTickets.length}
+            isGenerated={true}
+            title="Totalizador de Custos dos Jogos Gerados"
+            subtitle={`Investimento total calculado automaticamente: ${generatedTickets.length} jogos × R$ 3,50 = R$ ${(
+              generatedTickets.length * VALOR_APOSTA_LOTOFACIL
+            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+          />
 
           {/* Tickets List */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
