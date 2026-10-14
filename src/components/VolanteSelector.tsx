@@ -6,15 +6,18 @@ import {
   DEZENAS_STATS,
   CONCURSO_ATUAL,
 } from '../data/lotofacilData';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw } from 'lucide-react';
+import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { buildOptimal18Pool } from '../services/combinatorics';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap } from 'lucide-react';
 
 interface VolanteSelectorProps {
   selectedNumbers: number[];
   fixedNumbers: number[];
   excludedNumbers: number[];
   aiScores?: number[];
-  statsList?: typeof DEZENAS_STATS;
+  statsList?: DezenaStats[];
   cyclePendingNumbers?: number[];
+  latestDraw?: LotofacilDraw;
   onToggleNumber: (n: number) => void;
   onSetFixed: (n: number) => void;
   onSetExcluded: (n: number) => void;
@@ -30,6 +33,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   aiScores,
   statsList = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
+  latestDraw = CONCURSO_ATUAL,
   onToggleNumber,
   onSetFixed,
   onSetExcluded,
@@ -44,35 +48,40 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
 
   // Fast preset selections
   const handleSelectTop18AI = () => {
-    // Top 18 sorted by AI score or delay urgency
-    const sorted = [...DEZENAS_STATS]
+    // Top sorted by AI score or delay urgency
+    const sorted = [...statsList]
       .sort((a, b) => {
         const scoreA = aiScores ? aiScores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
         const scoreB = aiScores ? aiScores[b.numero - 1] : b.vezes / 24 + b.atrasoAtual * 5;
         return scoreB - scoreA;
       })
-      .slice(0, 18)
+      .slice(0, targetCount)
       .map((s) => s.numero)
       .sort((a, b) => a - b);
     onSelectSet(sorted);
   };
 
+  const handleSelectDocumentStrategy = (qtdRep: number = 9, qtdAus: number = 9) => {
+    const optimal = buildOptimal18Pool(latestDraw, statsList, cyclePendingNumbers, qtdRep, qtdAus);
+    onSelectSet(optimal.dezenas18.slice(0, targetCount));
+  };
+
   const handleSelectCycleClosure = () => {
-    // Numbers 17 and 22 are missing to close cycle 804, plus top recurring numbers
-    const cycleFocus = [17, 22, 1, 2, 3, 4, 5, 7, 10, 11, 12, 13, 14, 19, 20, 21, 24, 25];
+    // Urgent pending cycle numbers + top recurring
+    const cycleFocus = Array.from(
+      new Set([
+        ...cyclePendingNumbers,
+        ...statsList.filter(s => s.atrasoAcimaDaMedia).map(s => s.numero),
+        11, 20, 25, 10, 13, 24, 1, 4, 2, 3, 5, 7, 9, 12, 14, 15, 19, 21, 22, 23
+      ])
+    );
     onSelectSet(cycleFocus.slice(0, targetCount));
   };
 
   const handleSelectEquilibrio = () => {
-    // 10 moldura + 5 miolo + 5 primos + 4 fibonacci
-    const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 17, 19, 20, 21, 22, 23, 24, 25];
+    // 10 moldura + 5 miolo + 5 primos
+    const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25];
     onSelectSet(eq.slice(0, targetCount));
-  };
-
-  const handleSelectRepetidas3800 = () => {
-    // 9 repetidas do 3800 + 17 e 22 + outras
-    const base = [1, 3, 4, 5, 7, 10, 12, 13, 19, 17, 22, 11, 20, 25, 2, 14, 24, 21];
-    onSelectSet(base.slice(0, targetCount));
   };
 
   const handleNumberClick = (n: number) => {
@@ -334,29 +343,30 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => handleSelectDocumentStrategy(9, 9)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400 text-emerald-300 text-xs font-bold transition shadow-sm shadow-emerald-500/20 cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+            <span>⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)</span>
+          </button>
+          <button
             onClick={handleSelectTop18AI}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Top {targetCount} IA (Garantia 14)</span>
+            <span>Top {targetCount} IA</span>
           </button>
           <button
             onClick={handleSelectCycleClosure}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-medium transition cursor-pointer"
           >
-            <span>Fechar Ciclo (17 & 22)</span>
+            <span>Fechar Ciclo ({cyclePendingNumbers.slice(0, 3).join(', ')})</span>
           </button>
           <button
             onClick={handleSelectEquilibrio}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
           >
             <span>Equilíbrio Canônico</span>
-          </button>
-          <button
-            onClick={handleSelectRepetidas3800}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
-          >
-            <span>9 Repetidas do Concurso 3800</span>
           </button>
         </div>
 

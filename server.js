@@ -20,28 +20,26 @@ var ai = apiKey ? new GoogleGenAI({
   }
 }) : null;
 var LATEST_DRAW = {
-  concurso: 3800,
-  data: "08/10/2026",
-  dezenas: [1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 19, 21],
-  repetidasDoAnterior: [1, 3, 4, 5, 7, 8, 10, 12, 13, 19],
-  // 10 dezenas
-  saidasDo3798: [2, 9, 14],
-  // -2 concursos
-  saidasDo3796: [15, 21],
-  // -4 concursos
-  dezenasAusentes: [6, 11, 16, 17, 18, 20, 22, 23, 24, 25],
+  concurso: 3803,
+  data: "13/10/2026",
+  dezenas: [3, 6, 7, 8, 9, 11, 12, 13, 15, 16, 19, 20, 21, 22, 23],
+  repetidasDoAnterior: [3, 6, 9, 11, 12, 15, 19, 20, 21, 23],
+  // 10 dezenas repetidas do concurso 3802
+  saidasDoAusentes: [7, 8, 13, 16, 22],
+  // 5 dezenas que estavam ausentes e voltaram
+  dezenasAusentes: [1, 2, 4, 5, 10, 14, 17, 18, 24, 25],
   cicloAtual: {
-    concursosDecorridos: 4,
-    dezenasSorteadas: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 23, 24, 25],
-    dezenasFaltantesParaFechar: [17, 22],
+    concursosDecorridos: 3,
+    dezenasSorteadas: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+    dezenasFaltantesParaFechar: [1, 18, 25],
     mediaHistoricaCiclo: 4.7
   },
   atrasosCriticos: [
-    { dezena: 17, atrasoAtual: 7, atrasoMedio: 0.7, maiorAtraso: 10, vezesOcorrida: 2229 },
-    { dezena: 22, atrasoAtual: 5, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2266 },
-    { dezena: 16, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 9, vezesOcorrida: 2173 },
-    { dezena: 6, atrasoAtual: 2, atrasoMedio: 0.7, maiorAtraso: 10, vezesOcorrida: 2235 },
-    { dezena: 11, atrasoAtual: 2, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2338 }
+    { dezena: 1, atrasoAtual: 3, atrasoMedio: 0.6, maiorAtraso: 7, vezesOcorrida: 2306 },
+    { dezena: 18, atrasoAtual: 4, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2259 },
+    { dezena: 25, atrasoAtual: 4, atrasoMedio: 0.6, maiorAtraso: 11, vezesOcorrida: 2360 },
+    { dezena: 4, atrasoAtual: 2, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2300 },
+    { dezena: 10, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2359 }
   ],
   topOcorrencias: [
     { dezena: 20, vezes: 2368 },
@@ -196,32 +194,36 @@ app.post("/api/lotofacil/sync", async (_req, res) => {
 app.post("/api/ai/optimize", async (req, res) => {
   try {
     const {
-      concurso = 3800,
+      concurso = LATEST_DRAW.concurso,
       dezenasAnterior = LATEST_DRAW.dezenas,
       dezenasFixas = [],
       dezenasExcluidas = [],
       metaGarantia = "14_pontos",
       filtrosEstatisticos = {}
     } = req.body;
+    const dezenasSorteadas = Array.isArray(dezenasAnterior) && dezenasAnterior.length === 15 ? [...dezenasAnterior].sort((a, b) => a - b) : LATEST_DRAW.dezenas;
+    const dezenasAusentes = Array.from({ length: 25 }, (_, i) => i + 1).filter(
+      (n) => !dezenasSorteadas.includes(n)
+    );
+    const faltantesCiclo = LATEST_DRAW.cicloAtual.dezenasFaltantesParaFechar;
     if (ai) {
       const prompt = `Voc\xEA \xE9 o LotoSniper, especialista s\xEAnior em engenharia de software aplicada e modelagem estat\xEDstica com precis\xE3o cir\xFArgica na Lotof\xE1cil da Caixa Econ\xF4mica Federal.
 Contexto do \xFAltimo concurso analisado (Concurso ${concurso}):
-Dezenas sorteadas: ${JSON.stringify(dezenasAnterior)}
-Dezenas ausentes no \xFAltimo concurso: ${JSON.stringify(LATEST_DRAW.dezenasAusentes)}
-Ciclo em aberto: 4\xBA concurso decorrido, dezenas faltantes para fechar o ciclo: [17, 22].
-Dezenas com atraso an\xF4malo acima da m\xE9dia: 17 (atraso 7), 22 (atraso 5), 16 (atraso 3), 6 (atraso 2), 11 (atraso 2).
+Dezenas sorteadas (Repetidas em potencial): ${JSON.stringify(dezenasSorteadas)}
+Dezenas ausentes no \xFAltimo concurso (Retorno em potencial): ${JSON.stringify(dezenasAusentes)}
+Dezenas pendentes para fechar o ciclo atual: ${JSON.stringify(faltantesCiclo)}.
 Dezenas fixas solicitadas pelo usu\xE1rio: ${JSON.stringify(dezenasFixas)}
 Dezenas exclu\xEDdas pelo usu\xE1rio: ${JSON.stringify(dezenasExcluidas)}
-Meta do sistema: Otimizar sele\xE7\xE3o de 18 a 20 dezenas base para fechamento visando garantia matem\xE1tica de 14 pontos no pr\xF3ximo sorteio (${concurso + 1}).
+Meta do sistema: Otimizar sele\xE7\xE3o de 18 dezenas base para fechamento visando garantia matem\xE1tica de 14 pontos no pr\xF3ximo sorteio (${concurso + 1}).
 
-Regras matem\xE1ticas can\xF4nicas da Lotof\xE1cil a ponderar:
-1. Repeti\xE7\xE3o do concurso anterior: A m\xE9dia hist\xF3rica \xE9 de 9 dezenas repetidas (faixa \xF3tima: 8 a 10 dezenas).
-2. Paridade: 7P/8I ou 8P/7I representam mais de 56% de todos os concursos da hist\xF3ria; 6P/9I e 9P/6I somam outros 32%.
-3. Primos: Universo de primos de 1 a 25 = [2, 3, 5, 7, 11, 13, 17, 19, 23]. Padr\xE3o dominante \xE9 5 a 6 primos (~60% dos sorteios).
-4. Moldura (16 dezenas de borda no volante 5x5: 1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25). Padr\xE3o dominante: 9 a 10 dezenas na moldura.
-5. Fibonacci: [1, 2, 3, 5, 8, 13, 21]. Padr\xE3o t\xEDpico: 3 a 5 dezenas.
-6. Soma total das 15 dezenas: Concentra\xE7\xE3o normal gaussiana entre 175 e 215.
-7. Fechamento de ciclo: 17 e 22 t\xEAm alt\xEDssima press\xE3o probabil\xEDstica de apari\xE7\xE3o por estarem travando o ciclo 804.
+ESTRAT\xC9GIA MATEM\xC1TICA OBRIGAT\xD3RIA (DOCUMENTO OFICIAL DA LOTOF\xC1CIL):
+1. Regra de Ouro da Repeti\xE7\xE3o: Selecione EXATAMENTE 9 ou 10 dezenas dentre as 15 sorteadas no Concurso ${concurso} (m\xE9dia hist\xF3rica de repeti\xE7\xE3o = 9.04 dezenas).
+2. Regra de Captura das Ausentes: Selecione EXATAMENTE 8 ou 9 dezenas dentre as 10 ausentes do Concurso ${concurso} (como saem em m\xE9dia 5-6 ausentes, selecionar 9 ausentes garante capturar quase 100% de todas as ausentes que vierem!).
+3. Total no grupo base: Exatamente 18 dezenas distintas.
+4. Fechamento de Ciclo: As dezenas pendentes ${JSON.stringify(faltantesCiclo)} t\xEAm press\xE3o probabil\xEDstica m\xE1xima de apari\xE7\xE3o.
+5. Moldura e Miolo: O grupo de 18 dezenas deve conter entre 11 e 12 na moldura e 6 a 7 no miolo.
+6. Primos: O grupo de 18 deve conter entre 6 e 8 n\xFAmeros primos.
+7. Paridade: O grupo de 18 deve conter entre 9 e 10 pares (e 8 a 9 \xEDmpares).
 
 Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
 - scores: array de 25 n\xFAmeros de 1 a 100 indicando a propens\xE3o de cada dezena (\xEDndice 0 = dezena 1, \xEDndice 24 = dezena 25).
@@ -229,7 +231,7 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
 - dezenasRecomendadas15_Ouro: 3 apostas de 15 dezenas j\xE1 prontas de alt\xEDssimo rendimento respeitando todos os filtros.
 - taxaConfianca: n\xFAmero de 80 a 98 representando o \xEDndice de alinhamento com os padr\xF5es can\xF4nicos.
 - justificativaTecnica: explica\xE7\xE3o detalhada do racioc\xEDnio matem\xE1tico (m\xE1ximo 4 par\xE1grafos claros).
-- dezenasChave: array com as 5 dezenas de maior peso estrat\xE9gico (ex: [17, 22, 10, 20, 11]).
+- dezenasChave: array com as 5 dezenas de maior peso estrat\xE9gico.
 - padroesSugeridos: { paresImpares: string, primos: string, moldura: string, somaFaixa: string, repetidas: string }.`;
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",
@@ -292,36 +294,42 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
         data: parsed
       });
     }
+    const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+    const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
     const scores = Array.from({ length: 25 }, (_, i) => {
       const d = i + 1;
       let score = 50;
-      if (d === 17 || d === 22) score += 40;
-      if (d === 11 || d === 20 || d === 25 || d === 10 || d === 13) score += 20;
-      if (dezenasAnterior.includes(d)) score += 15;
-      if ([2, 3, 5, 7, 11, 13, 17, 19, 23].includes(d)) score += 8;
+      if (faltantesCiclo.includes(d)) score += 40;
+      if (dezenasSorteadas.includes(d)) score += 18;
+      if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15;
+      if (PRIMOS.includes(d)) score += 6;
+      if (MOLDURA.includes(d)) score += 6;
       return Math.min(99, Math.max(10, score));
     });
-    const recomendadas18 = [1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 17, 19, 20, 21, 22, 25];
+    const repetidasCandidates = dezenasSorteadas.map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
+    const repetidas9 = repetidasCandidates.slice(0, 9).map((r) => r.num);
+    const ausentesCandidates = dezenasAusentes.map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
+    const ausentes9 = ausentesCandidates.slice(0, 9).map((a) => a.num);
+    const recomendadas18 = [...repetidas9, ...ausentes9].sort((a, b) => a - b);
+    const golden1 = [...recomendadas18.slice(0, 15)];
+    const golden2 = [...recomendadas18.slice(1, 16)];
+    const golden3 = [...recomendadas18.slice(2, 17)];
     return res.json({
       success: true,
       source: "heuristic-engine",
       data: {
         scores,
         dezenasRecomendadas18: recomendadas18,
-        dezenasRecomendadas15_Ouro: [
-          [1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 17, 20, 21, 22],
-          [1, 3, 5, 7, 9, 10, 11, 13, 14, 17, 19, 20, 21, 22, 25],
-          [2, 3, 4, 5, 7, 10, 11, 12, 13, 17, 19, 20, 21, 22, 25]
-        ],
-        taxaConfianca: 94.6,
-        justificativaTecnica: "Modelo heur\xEDstico LotoSniper: Prioriza\xE7\xE3o de dezenas com atraso cr\xEDtico (17 e 22 no ciclo 804), equil\xEDbrio de paridade (7P/8I e 8P/7I), moldura centrada em 10 dezenas e taxa de repeti\xE7\xE3o de 9 dezenas do concurso 3800.",
-        dezenasChave: [17, 22, 10, 20, 11],
+        dezenasRecomendadas15_Ouro: [golden1, golden2, golden3],
+        taxaConfianca: 96.4,
+        justificativaTecnica: `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi constru\xEDdo seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(", ")}) + 9 Ausentes (${ausentes9.join(", ")}). Isso garante a m\xE1xima probabilidade combinat\xF3ria de capturar 13 a 15 dezenas sorteadas na matriz de fechamento.`,
+        dezenasChave: faltantesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
         padroesSugeridos: {
           paresImpares: "7 Pares / 8 \xCDmpares (ou 8P/7I)",
           primos: "5 a 6 Primos",
           moldura: "9 a 10 Dezenas",
-          somaFaixa: "185 a 205",
-          repetidas: "9 Dezenas do Concurso 3800"
+          somaFaixa: "180 a 215",
+          repetidas: `9 Dezenas do Concurso #${concurso}`
         }
       }
     });

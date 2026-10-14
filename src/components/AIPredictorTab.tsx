@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AIPredictionResponse, LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
+import { buildOptimal18Pool } from '../services/combinatorics';
 import {
   Sparkles,
   Cpu,
@@ -47,15 +48,20 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       return sc;
     });
 
-  const recomendadas18 =
-    prediction?.dezenasRecomendadas18 || [
-      1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 17, 19, 20, 21, 22, 25,
-    ];
+  const optimalFallback = buildOptimal18Pool(
+    latestDraw,
+    dynamicStats,
+    cyclePendingNumbers,
+    9,
+    9
+  );
+
+  const recomendadas18 = prediction?.dezenasRecomendadas18 || optimalFallback.dezenas18;
 
   const goldenBets = prediction?.dezenasRecomendadas15_Ouro || [
-    [1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 17, 20, 21, 22],
-    [1, 3, 5, 7, 9, 10, 11, 13, 14, 17, 19, 20, 21, 22, 25],
-    [2, 3, 4, 5, 7, 10, 11, 12, 13, 17, 19, 20, 21, 22, 25],
+    recomendadas18.slice(0, 15),
+    [...recomendadas18.slice(1, 15), recomendadas18[0]].sort((a, b) => a - b),
+    [...recomendadas18.slice(2, 16), recomendadas18[1]].sort((a, b) => a - b),
   ];
 
   return (

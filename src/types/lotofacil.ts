@@ -3,12 +3,12 @@ export interface LotofacilDraw {
   data: string;
   dezenas: number[];
   premiacoes?: {
-    faixa15: { ganhadores: number; valor: number };
-    faixa14: { ganhadores: number; valor: number };
-    faixa13: { ganhadores: number; valor: number };
-    faixa12: { ganhadores: number; valor: number };
-    faixa11: { ganhadores: number; valor: number };
-    acumuladoProximo: number;
+    faixa15?: { ganhadores: number; valor: number };
+    faixa14?: { ganhadores: number; valor: number };
+    faixa13?: { ganhadores: number; valor: number };
+    faixa12?: { ganhadores: number; valor: number };
+    faixa11?: { ganhadores: number; valor: number };
+    acumuladoProximo?: number;
   };
 }
 

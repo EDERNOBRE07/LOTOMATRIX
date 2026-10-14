@@ -10,10 +10,12 @@ import {
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
+import { Diagnostic3803Panel } from './Diagnostic3803Panel';
 import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
   DEFAULT_FILTERS,
+  buildOptimal18Pool,
 } from '../services/combinatorics';
 import {
   Sparkles,
@@ -49,9 +51,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   isAILoading,
 }) => {
   const [mode, setMode] = useState<FechamentoMode>('18_14_15');
-  const [selectedNumbers, setSelectedNumbers] = useState<number[]>([
-    1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 17, 19, 20, 21, 22, 25,
-  ]);
+  const preset = FECHAMENTO_PRESETS[mode];
+  const targetCount = preset.dezenasNecessarias;
+
+  const [selectedNumbers, setSelectedNumbers] = useState<number[]>(() => {
+    try {
+      const optimal = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, 9, 9);
+      return optimal.dezenas18.slice(0, 18);
+    } catch {
+      return [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 19, 20, 21, 22];
+    }
+  });
+
   const [fixedNumbers, setFixedNumbers] = useState<number[]>(cyclePendingNumbers.slice(0, 2));
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [filters, setFilters] = useState<FilterCriteria>(DEFAULT_FILTERS);
@@ -60,9 +71,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
+  const [documentMessage, setDocumentMessage] = useState<string | null>(null);
 
-  const preset = FECHAMENTO_PRESETS[mode];
-  const targetCount = preset.dezenasNecessarias;
+  // Apply Document Strategy (9 Repetidas + 9 Ausentes)
+  const handleApplyOptimalDocumentPool = (repCount: number = 9, ausCount: number = 9) => {
+    const optimal = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, repCount, ausCount);
+    setSelectedNumbers(optimal.dezenas18.slice(0, targetCount));
+    setDocumentMessage(optimal.explicacao);
+    setTimeout(() => setDocumentMessage(null), 6000);
+  };
 
   // Toggle selection
   const handleToggleNumber = (n: number) => {
@@ -269,6 +286,28 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
+      {/* Diagnostic Panel for Concurso 3803 & Hypergeometric Math Explanation */}
+      <Diagnostic3803Panel
+        onApplyOptimalPool={() => handleApplyOptimalDocumentPool(9, 9)}
+        targetCount={targetCount}
+      />
+
+      {/* Success Notification for Document Strategy Pool */}
+      {documentMessage && (
+        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{documentMessage}</span>
+          </div>
+          <button
+            onClick={() => setDocumentMessage(null)}
+            className="text-emerald-400/70 hover:text-emerald-200 text-xs font-semibold cursor-pointer"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
+
       {/* Volante 5x5 Grid */}
       <VolanteSelector
         selectedNumbers={selectedNumbers}
@@ -277,6 +316,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         aiScores={aiPrediction?.scores}
         statsList={dynamicStats}
         cyclePendingNumbers={cyclePendingNumbers}
+        latestDraw={latestDraw}
         onToggleNumber={handleToggleNumber}
         onSetFixed={handleSetFixed}
         onSetExcluded={handleSetExcluded}

@@ -25,7 +25,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   onGoToGenerator,
 }) => {
-  const [simulationScope, setSimulationScope] = useState<'concurso_3800' | 'ultimos_15' | 'monte_carlo_1000'>('concurso_3800');
+  const [simulationScope, setSimulationScope] = useState<
+    'concurso_3803' | 'concurso_3802' | 'concurso_3801' | 'ultimos_15' | 'monte_carlo_1000'
+  >('concurso_3803');
   const [results, setResults] = useState<SimulationResult | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
 
@@ -53,10 +55,18 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
     setTimeout(() => {
       let drawsToTest: LotofacilDraw[] = [];
-      if (simulationScope === 'concurso_3800') {
-        drawsToTest = [latestDraw];
+      const draw3803 = RECENT_DRAWS.find((d) => d.concurso === 3803) || latestDraw;
+      const draw3802 = RECENT_DRAWS.find((d) => d.concurso === 3802) || latestDraw;
+      const draw3801 = RECENT_DRAWS.find((d) => d.concurso === 3801) || latestDraw;
+
+      if (simulationScope === 'concurso_3803') {
+        drawsToTest = [draw3803];
+      } else if (simulationScope === 'concurso_3802') {
+        drawsToTest = [draw3802];
+      } else if (simulationScope === 'concurso_3801') {
+        drawsToTest = [draw3801];
       } else if (simulationScope === 'ultimos_15') {
-        drawsToTest = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
+        drawsToTest = RECENT_DRAWS.slice(0, 15);
       } else {
         drawsToTest = generateMonteCarloDraws(1000);
       }
@@ -127,14 +137,34 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               <span className="text-slate-400 font-semibold">Cenário de Teste:</span>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => setSimulationScope('concurso_3800')}
+                  onClick={() => setSimulationScope('concurso_3803')}
                   className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
-                    simulationScope === 'concurso_3800'
+                    simulationScope === 'concurso_3803'
                       ? 'bg-emerald-500 text-slate-950 font-bold'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  Concurso #{latestDraw.concurso} ({latestDraw.data})
+                  Concurso #3803 (13/10)
+                </button>
+                <button
+                  onClick={() => setSimulationScope('concurso_3802')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                    simulationScope === 'concurso_3802'
+                      ? 'bg-emerald-500 text-slate-950 font-bold'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  Concurso #3802 (11/10)
+                </button>
+                <button
+                  onClick={() => setSimulationScope('concurso_3801')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                    simulationScope === 'concurso_3801'
+                      ? 'bg-emerald-500 text-slate-950 font-bold'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  Concurso #3801 (09/10)
                 </button>
                 <button
                   onClick={() => setSimulationScope('ultimos_15')}
@@ -144,7 +174,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  Últimos 15 Concursos Oficiais
+                  Últimos 15 Concursos
                 </button>
                 <button
                   onClick={() => setSimulationScope('monte_carlo_1000')}
@@ -154,7 +184,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  Monte Carlo (1.000 Sorteios Aleatórios)
+                  Monte Carlo (1.000 Sorteios)
                 </button>
               </div>
             </div>
@@ -217,20 +247,24 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                 </div>
               </div>
 
-              {/* Concurso 3800 Specific Detailed Hits Breakdown */}
-              {simulationScope === 'concurso_3800' && (
-                <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3">
-                  <h3 className="text-base font-bold text-white flex items-center justify-between pb-2 border-b border-slate-800">
-                    <span>Resultado do Conferidor no Concurso #3800</span>
-                    <span className="text-xs font-mono text-slate-400">
-                      Dezenas Oficiais: 01, 02, 03, 04, 05, 07, 08, 09, 10, 12, 13, 14, 15, 19, 21
-                    </span>
-                  </h3>
+              {/* Single Contest Specific Detailed Hits Breakdown */}
+              {simulationScope.startsWith('concurso_') && (() => {
+                const concursoNum = simulationScope === 'concurso_3803' ? 3803 : simulationScope === 'concurso_3802' ? 3802 : 3801;
+                const targetTestDraw = RECENT_DRAWS.find(d => d.concurso === concursoNum) || latestDraw;
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-1">
-                    {tickets.map((t) => {
-                      const matches = countMatches(t.dezenas, CONCURSO_ATUAL.dezenas);
-                      const isAwarded = matches >= 11;
+                return (
+                  <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3">
+                    <h3 className="text-base font-bold text-white flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-800 gap-1">
+                      <span>Resultado do Conferidor no Concurso #{targetTestDraw.concurso} ({targetTestDraw.data})</span>
+                      <span className="text-xs font-mono text-emerald-400">
+                        Dezenas Sorteadas: {targetTestDraw.dezenas.map(n => n.toString().padStart(2, '0')).join(', ')}
+                      </span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-1">
+                      {tickets.map((t) => {
+                        const matches = countMatches(t.dezenas, targetTestDraw.dezenas);
+                        const isAwarded = matches >= 11;
 
                       return (
                         <div
@@ -264,7 +298,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
                           <div className="flex flex-wrap gap-1">
                             {t.dezenas.map((num) => {
-                              const wasDrawn = CONCURSO_ATUAL.dezenas.includes(num);
+                              const wasDrawn = targetTestDraw.dezenas.includes(num);
                               return (
                                 <span
                                   key={num}
@@ -284,7 +318,8 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                     })}
                   </div>
                 </div>
-              )}
+              );
+            })()}
             </div>
           )}
         </>

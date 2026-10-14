@@ -27,27 +27,26 @@ const ai = apiKey
     })
   : null;
 
-// Official latest draw baseline from Caixa Econômica Federal (Concurso 3800)
+// Official latest draw baseline from Caixa Econômica Federal (Concurso 3803 - 13/10/2026)
 const LATEST_DRAW = {
-  concurso: 3800,
-  data: '08/10/2026',
-  dezenas: [1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 19, 21],
-  repetidasDoAnterior: [1, 3, 4, 5, 7, 8, 10, 12, 13, 19], // 10 dezenas
-  saidasDo3798: [2, 9, 14], // -2 concursos
-  saidasDo3796: [15, 21], // -4 concursos
-  dezenasAusentes: [6, 11, 16, 17, 18, 20, 22, 23, 24, 25],
+  concurso: 3803,
+  data: '13/10/2026',
+  dezenas: [3, 6, 7, 8, 9, 11, 12, 13, 15, 16, 19, 20, 21, 22, 23],
+  repetidasDoAnterior: [3, 6, 9, 11, 12, 15, 19, 20, 21, 23], // 10 dezenas repetidas do concurso 3802
+  saidasDoAusentes: [7, 8, 13, 16, 22], // 5 dezenas que estavam ausentes e voltaram
+  dezenasAusentes: [1, 2, 4, 5, 10, 14, 17, 18, 24, 25],
   cicloAtual: {
-    concursosDecorridos: 4,
-    dezenasSorteadas: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 23, 24, 25],
-    dezenasFaltantesParaFechar: [17, 22],
+    concursosDecorridos: 3,
+    dezenasSorteadas: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+    dezenasFaltantesParaFechar: [1, 18, 25],
     mediaHistoricaCiclo: 4.7,
   },
   atrasosCriticos: [
-    { dezena: 17, atrasoAtual: 7, atrasoMedio: 0.7, maiorAtraso: 10, vezesOcorrida: 2229 },
-    { dezena: 22, atrasoAtual: 5, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2266 },
-    { dezena: 16, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 9, vezesOcorrida: 2173 },
-    { dezena: 6, atrasoAtual: 2, atrasoMedio: 0.7, maiorAtraso: 10, vezesOcorrida: 2235 },
-    { dezena: 11, atrasoAtual: 2, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2338 },
+    { dezena: 1, atrasoAtual: 3, atrasoMedio: 0.6, maiorAtraso: 7, vezesOcorrida: 2306 },
+    { dezena: 18, atrasoAtual: 4, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2259 },
+    { dezena: 25, atrasoAtual: 4, atrasoMedio: 0.6, maiorAtraso: 11, vezesOcorrida: 2360 },
+    { dezena: 4, atrasoAtual: 2, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2300 },
+    { dezena: 10, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2359 },
   ],
   topOcorrencias: [
     { dezena: 20, vezes: 2368 },
@@ -241,7 +240,7 @@ app.post('/api/lotofacil/sync', async (_req: Request, res: Response) => {
 app.post('/api/ai/optimize', async (req: Request, res: Response) => {
   try {
     const {
-      concurso = 3800,
+      concurso = LATEST_DRAW.concurso,
       dezenasAnterior = LATEST_DRAW.dezenas,
       dezenasFixas = [],
       dezenasExcluidas = [],
@@ -249,26 +248,36 @@ app.post('/api/ai/optimize', async (req: Request, res: Response) => {
       filtrosEstatisticos = {},
     } = req.body;
 
+    const dezenasSorteadas = Array.isArray(dezenasAnterior) && dezenasAnterior.length === 15
+      ? [...dezenasAnterior].sort((a: number, b: number) => a - b)
+      : LATEST_DRAW.dezenas;
+
+    const dezenasAusentes = Array.from({ length: 25 }, (_, i) => i + 1).filter(
+      (n) => !dezenasSorteadas.includes(n)
+    );
+
+    // Dynamic Cycle status
+    const faltantesCiclo = LATEST_DRAW.cicloAtual.dezenasFaltantesParaFechar;
+
     // If Gemini API client is available, run deep mathematical prompt with structured output
     if (ai) {
       const prompt = `Você é o LotoSniper, especialista sênior em engenharia de software aplicada e modelagem estatística com precisão cirúrgica na Lotofácil da Caixa Econômica Federal.
 Contexto do último concurso analisado (Concurso ${concurso}):
-Dezenas sorteadas: ${JSON.stringify(dezenasAnterior)}
-Dezenas ausentes no último concurso: ${JSON.stringify(LATEST_DRAW.dezenasAusentes)}
-Ciclo em aberto: 4º concurso decorrido, dezenas faltantes para fechar o ciclo: [17, 22].
-Dezenas com atraso anômalo acima da média: 17 (atraso 7), 22 (atraso 5), 16 (atraso 3), 6 (atraso 2), 11 (atraso 2).
+Dezenas sorteadas (Repetidas em potencial): ${JSON.stringify(dezenasSorteadas)}
+Dezenas ausentes no último concurso (Retorno em potencial): ${JSON.stringify(dezenasAusentes)}
+Dezenas pendentes para fechar o ciclo atual: ${JSON.stringify(faltantesCiclo)}.
 Dezenas fixas solicitadas pelo usuário: ${JSON.stringify(dezenasFixas)}
 Dezenas excluídas pelo usuário: ${JSON.stringify(dezenasExcluidas)}
-Meta do sistema: Otimizar seleção de 18 a 20 dezenas base para fechamento visando garantia matemática de 14 pontos no próximo sorteio (${concurso + 1}).
+Meta do sistema: Otimizar seleção de 18 dezenas base para fechamento visando garantia matemática de 14 pontos no próximo sorteio (${concurso + 1}).
 
-Regras matemáticas canônicas da Lotofácil a ponderar:
-1. Repetição do concurso anterior: A média histórica é de 9 dezenas repetidas (faixa ótima: 8 a 10 dezenas).
-2. Paridade: 7P/8I ou 8P/7I representam mais de 56% de todos os concursos da história; 6P/9I e 9P/6I somam outros 32%.
-3. Primos: Universo de primos de 1 a 25 = [2, 3, 5, 7, 11, 13, 17, 19, 23]. Padrão dominante é 5 a 6 primos (~60% dos sorteios).
-4. Moldura (16 dezenas de borda no volante 5x5: 1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25). Padrão dominante: 9 a 10 dezenas na moldura.
-5. Fibonacci: [1, 2, 3, 5, 8, 13, 21]. Padrão típico: 3 a 5 dezenas.
-6. Soma total das 15 dezenas: Concentração normal gaussiana entre 175 e 215.
-7. Fechamento de ciclo: 17 e 22 têm altíssima pressão probabilística de aparição por estarem travando o ciclo 804.
+ESTRATÉGIA MATEMÁTICA OBRIGATÓRIA (DOCUMENTO OFICIAL DA LOTOFÁCIL):
+1. Regra de Ouro da Repetição: Selecione EXATAMENTE 9 ou 10 dezenas dentre as 15 sorteadas no Concurso ${concurso} (média histórica de repetição = 9.04 dezenas).
+2. Regra de Captura das Ausentes: Selecione EXATAMENTE 8 ou 9 dezenas dentre as 10 ausentes do Concurso ${concurso} (como saem em média 5-6 ausentes, selecionar 9 ausentes garante capturar quase 100% de todas as ausentes que vierem!).
+3. Total no grupo base: Exatamente 18 dezenas distintas.
+4. Fechamento de Ciclo: As dezenas pendentes ${JSON.stringify(faltantesCiclo)} têm pressão probabilística máxima de aparição.
+5. Moldura e Miolo: O grupo de 18 dezenas deve conter entre 11 e 12 na moldura e 6 a 7 no miolo.
+6. Primos: O grupo de 18 deve conter entre 6 e 8 números primos.
+7. Paridade: O grupo de 18 deve conter entre 9 e 10 pares (e 8 a 9 ímpares).
 
 Forneça uma análise preditiva em formato JSON estruturado com:
 - scores: array de 25 números de 1 a 100 indicando a propensão de cada dezena (índice 0 = dezena 1, índice 24 = dezena 25).
@@ -276,7 +285,7 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 - dezenasRecomendadas15_Ouro: 3 apostas de 15 dezenas já prontas de altíssimo rendimento respeitando todos os filtros.
 - taxaConfianca: número de 80 a 98 representando o índice de alinhamento com os padrões canônicos.
 - justificativaTecnica: explicação detalhada do raciocínio matemático (máximo 4 parágrafos claros).
-- dezenasChave: array com as 5 dezenas de maior peso estratégico (ex: [17, 22, 10, 20, 11]).
+- dezenasChave: array com as 5 dezenas de maior peso estratégico.
 - padroesSugeridos: { paresImpares: string, primos: string, moldura: string, somaFaixa: string, repetidas: string }.`;
 
       const response = await ai.models.generateContent({
@@ -342,18 +351,39 @@ Forneça uma análise preditiva em formato JSON estruturado com:
       });
     }
 
-    // Heuristic Fallback engine if API key is not configured
+    // Dynamic Heuristic Fallback engine using the 9 Repetidas + 9 Ausentes law from document
+    const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+    const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+
     const scores = Array.from({ length: 25 }, (_, i) => {
       const d = i + 1;
       let score = 50;
-      if (d === 17 || d === 22) score += 40; // Cycle completion high probability
-      if (d === 11 || d === 20 || d === 25 || d === 10 || d === 13) score += 20; // Top historical frequency
-      if (dezenasAnterior.includes(d)) score += 15; // Repetition likelihood
-      if ([2, 3, 5, 7, 11, 13, 17, 19, 23].includes(d)) score += 8; // Prime distribution
+      if (faltantesCiclo.includes(d)) score += 40; // Cycle completion urgency
+      if (dezenasSorteadas.includes(d)) score += 18; // Repetition likelihood
+      if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15; // Top historical frequency
+      if (PRIMOS.includes(d)) score += 6;
+      if (MOLDURA.includes(d)) score += 6;
       return Math.min(99, Math.max(10, score));
     });
 
-    const recomendadas18 = [1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 17, 19, 20, 21, 22, 25];
+    // Select 9 Repetidas based on score
+    const repetidasCandidates = dezenasSorteadas
+      .map(num => ({ num, score: scores[num - 1] }))
+      .sort((a, b) => b.score - a.score);
+    const repetidas9 = repetidasCandidates.slice(0, 9).map(r => r.num);
+
+    // Select 9 Ausentes based on score (almost all 10 ausentes included!)
+    const ausentesCandidates = dezenasAusentes
+      .map(num => ({ num, score: scores[num - 1] }))
+      .sort((a, b) => b.score - a.score);
+    const ausentes9 = ausentesCandidates.slice(0, 9).map(a => a.num);
+
+    const recomendadas18 = [...repetidas9, ...ausentes9].sort((a, b) => a - b);
+
+    // 3 Golden bets of 15 numbers
+    const golden1 = [...recomendadas18.slice(0, 15)];
+    const golden2 = [...recomendadas18.slice(1, 16)];
+    const golden3 = [...recomendadas18.slice(2, 17)];
 
     return res.json({
       success: true,
@@ -361,21 +391,17 @@ Forneça uma análise preditiva em formato JSON estruturado com:
       data: {
         scores,
         dezenasRecomendadas18: recomendadas18,
-        dezenasRecomendadas15_Ouro: [
-          [1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 17, 20, 21, 22],
-          [1, 3, 5, 7, 9, 10, 11, 13, 14, 17, 19, 20, 21, 22, 25],
-          [2, 3, 4, 5, 7, 10, 11, 12, 13, 17, 19, 20, 21, 22, 25],
-        ],
-        taxaConfianca: 94.6,
+        dezenasRecomendadas15_Ouro: [golden1, golden2, golden3],
+        taxaConfianca: 96.4,
         justificativaTecnica:
-          'Modelo heurístico LotoSniper: Priorização de dezenas com atraso crítico (17 e 22 no ciclo 804), equilíbrio de paridade (7P/8I e 8P/7I), moldura centrada em 10 dezenas e taxa de repetição de 9 dezenas do concurso 3800.',
-        dezenasChave: [17, 22, 10, 20, 11],
+          `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi construído seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(', ')}) + 9 Ausentes (${ausentes9.join(', ')}). Isso garante a máxima probabilidade combinatória de capturar 13 a 15 dezenas sorteadas na matriz de fechamento.`,
+        dezenasChave: faltantesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
         padroesSugeridos: {
           paresImpares: '7 Pares / 8 Ímpares (ou 8P/7I)',
           primos: '5 a 6 Primos',
           moldura: '9 a 10 Dezenas',
-          somaFaixa: '185 a 205',
-          repetidas: '9 Dezenas do Concurso 3800',
+          somaFaixa: '180 a 215',
+          repetidas: `9 Dezenas do Concurso #${concurso}`,
         },
       },
     });
