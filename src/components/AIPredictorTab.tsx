@@ -248,9 +248,14 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
               <Sparkles className="w-4 h-4 text-amber-400" />
               <span>3 Apostas Ouro (15 Dezenas Prontas)</span>
             </h3>
-            <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-              Calibração Máxima
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Total: R$ 10,50 (R$ 3,50 / jogo)
+              </span>
+              <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                Calibração Máxima
+              </span>
+            </div>
           </div>
 
           <p className="text-xs text-slate-400">

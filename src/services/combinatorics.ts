@@ -370,6 +370,8 @@ export const FECHAMENTO_PRESETS: Record<
   },
 };
 
+export const VALOR_APOSTA_LOTOFACIL = 3.50;
+
 /**
  * Monte Carlo Simulation & Historical Backtesting Engine
  * Tests an array of tickets against actual historical draws or random draws
@@ -377,7 +379,7 @@ export const FECHAMENTO_PRESETS: Record<
 export function runSimulation(
   tickets: GameTicket[],
   drawsToTest: LotofacilDraw[] = [CONCURSO_ATUAL],
-  custoPorJogo: number = 3.0
+  custoPorJogo: number = VALOR_APOSTA_LOTOFACIL
 ): SimulationResult {
   const totalJogos = tickets.length;
   const concursosTestados = drawsToTest.length;

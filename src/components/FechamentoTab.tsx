@@ -16,7 +16,9 @@ import {
   generateFechamentoCovering,
   DEFAULT_FILTERS,
   buildOptimal18Pool,
+  VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
+import { TotalizadorApostas } from './TotalizadorApostas';
 import {
   Sparkles,
   Zap,
@@ -181,12 +183,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setTimeout(() => setCopiedTicketId(null), 1500);
   };
 
-  // Financial calculations
-  const totalCost = (generatedTickets.length || preset.jogosMaximos) * 3.0;
+  // Financial calculations with official Caixa bet price (R$ 3,50)
+  const totalCost = (generatedTickets.length || preset.jogosMaximos) * VALOR_APOSTA_LOTOFACIL;
   // Full raw Caixa permutation cost
   const rawPermutations =
-    targetCount === 16 ? 16 : targetCount === 17 ? 136 : targetCount === 18 ? 816 : targetCount === 19 ? 3876 : 15504;
-  const rawCaixaCost = rawPermutations * 3.0;
+    targetCount === 15 ? 1 : targetCount === 16 ? 16 : targetCount === 17 ? 136 : targetCount === 18 ? 816 : targetCount === 19 ? 3876 : targetCount === 20 ? 15504 : 54264;
+  const rawCaixaCost = rawPermutations * VALOR_APOSTA_LOTOFACIL;
   const savings = Math.max(0, rawCaixaCost - totalCost);
 
   return (
@@ -246,6 +248,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           {(Object.keys(FECHAMENTO_PRESETS) as FechamentoMode[]).map((key) => {
             const p = FECHAMENTO_PRESETS[key];
             const isSelected = mode === key;
+            const custoFechamento = p.jogosMaximos * VALOR_APOSTA_LOTOFACIL;
             return (
               <button
                 key={key}
@@ -270,9 +273,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   <span className="font-bold text-xs sm:text-sm text-white">
                     {p.dezenasNecessarias} Dezenas
                   </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold">
-                    {p.jogosMaximos} jogos
-                  </span>
+                  <div className="text-right">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold block">
+                      {p.jogosMaximos} jogos
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-amber-300 block mt-0.5">
+                      R$ {custoFechamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-[11px] text-emerald-300 font-semibold mt-1">
                   {p.garantia}
@@ -285,6 +293,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           })}
         </div>
       </div>
+
+      {/* Real-time Apostador Investment Totalizer */}
+      <TotalizadorApostas
+        preset={preset}
+        mode={mode}
+        targetCount={targetCount}
+        totalJogos={generatedTickets.length || preset.jogosMaximos}
+      />
 
       {/* Diagnostic Panel for Concurso 3803 & Hypergeometric Math Explanation */}
       <Diagnostic3803Panel
@@ -495,7 +511,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     Soma: {ticket.soma}
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                    {ticket.repetidas} Rep. #3800
+                    {ticket.repetidas} Rep. #{latestDraw.concurso}
                   </span>
                 </div>
               </div>

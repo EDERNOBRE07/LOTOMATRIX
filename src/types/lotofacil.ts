@@ -65,6 +65,16 @@ export type FechamentoMode =
   | '21_13_15'
   | 'surpresinha_inteligente';
 
+export interface FechamentoPreset {
+  nome: string;
+  dezenasNecessarias: number;
+  jogosMaximos: number;
+  garantia: string;
+  condicao: string;
+  reducaoPercentual: number;
+  descricao: string;
+}
+
 export interface GameTicket {
   id: string;
   index: number;
