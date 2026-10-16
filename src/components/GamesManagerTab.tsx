@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches } from '../services/combinatorics';
+import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import {
   Download,
   Copy,
@@ -188,19 +189,26 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       </div>
 
       {tickets.length === 0 ? (
-        <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-12 text-center space-y-4">
-          <Layers className="w-12 h-12 text-slate-600 mx-auto" />
-          <h3 className="text-lg font-bold text-white">Nenhum bilhete ativo no momento</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Gere uma matriz com garantia de 14 pontos no Fechamento para visualizá-la, exportá-la
-            e conferir aqui.
-          </p>
-          <button
-            onClick={onGoToGenerator}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
-          >
-            Ir para o Gerador
-          </button>
+        <div className="space-y-6">
+          <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Layers className="w-8 h-8 text-emerald-400 shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-white">Nenhum fechamento salvo na sessão</h3>
+                <p className="text-xs text-slate-400">
+                  Gere combinações com garantia no Fechamento ou utilize o Módulo de Conferência abaixo para conferir qualquer volante digitado ou colado.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onGoToGenerator}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer whitespace-nowrap"
+            >
+              Ir para o Fechamento
+            </button>
+          </div>
+
+          <ModuloConferenciaJogos latestDraw={latestDraw} />
         </div>
       ) : (
         <>

@@ -6,6 +6,7 @@ import { StatisticsTab } from './components/StatisticsTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { GamesManagerTab } from './components/GamesManagerTab';
 import { HostingerGuideTab } from './components/HostingerGuideTab';
+import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { GameTicket, AIPredictionResponse, LotofacilDraw } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -22,11 +23,12 @@ import {
   RefreshCw,
   Bell,
   X,
+  ClipboardCheck,
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
-    'fechamento' | 'ia_preditor' | 'estatisticas' | 'simulador' | 'jogos' | 'hostinger'
+    'fechamento' | 'conferencia' | 'ia_preditor' | 'estatisticas' | 'simulador' | 'jogos' | 'hostinger'
   >('fechamento');
 
   // Dynamic Contest State (Loaded automatically every time the app opens)
@@ -212,6 +214,21 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('conferencia')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'conferencia'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            <span>Conferência de Jogos</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-950 text-emerald-400">
+              24
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('ia_preditor')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'ia_preditor'
@@ -292,6 +309,13 @@ export default function App() {
             onSaveTickets={(tickets) => setSavedTickets(tickets)}
             onGoToSimulator={handleGoToSimulator}
             isAILoading={isAILoading}
+          />
+        )}
+
+        {activeTab === 'conferencia' && (
+          <ModuloConferenciaJogos
+            latestDraw={latestDraw}
+            generatedTickets={savedTickets}
           />
         )}
 

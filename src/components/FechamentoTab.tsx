@@ -10,7 +10,6 @@ import {
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
-import { Diagnostic3803Panel } from './Diagnostic3803Panel';
 import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
@@ -20,7 +19,7 @@ import {
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
-import { DiagnosticAuditPanel } from './DiagnosticAuditPanel';
+import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import {
   Sparkles,
   Zap,
@@ -304,10 +303,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         totalJogos={generatedTickets.length || preset.jogosMaximos}
       />
 
-      {/* Diagnostic Audit Panel for Concurso 3804 & 3803 */}
-      <DiagnosticAuditPanel
-        onApplyOptimalPool={() => handleApplyOptimalDocumentPool()}
-        targetCount={targetCount}
+      {/* Módulo de Conferência Oficial de Jogos (Formato Jogo XX e Seletor Prioritário) */}
+      <ModuloConferenciaJogos
+        latestDraw={latestDraw}
+        generatedTickets={generatedTickets}
       />
 
       {/* Success Notification for Document Strategy Pool */}
