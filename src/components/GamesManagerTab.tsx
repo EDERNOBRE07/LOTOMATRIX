@@ -3,11 +3,13 @@ import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches } from '../services/combinatorics';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
+import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import {
   Download,
   Copy,
   Printer,
   FileText,
+  FileSpreadsheet,
   CheckCircle2,
   Trash2,
   Search,
@@ -33,12 +35,53 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [conferirDezenas, setConferirDezenas] = useState<number[]>(latestDraw.dezenas);
   const [selectedConcurso, setSelectedConcurso] = useState<number>(latestDraw.concurso);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
+  const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
 
   // Update when latestDraw changes
   React.useEffect(() => {
     setConferirDezenas(latestDraw.dezenas);
     setSelectedConcurso(latestDraw.concurso);
   }, [latestDraw.concurso, latestDraw.dezenas]);
+
+  // Convert tickets to CSVExportGame format with live hits and prizes
+  const csvExportGames: CSVExportGame[] = React.useMemo(() => {
+    return tickets.map((t) => {
+      const hits = countMatches(t.dezenas, conferirDezenas);
+      let premioNome = 'Não premiado';
+      let premioValor = 0;
+      if (hits === 15) {
+        premioNome = '15 Pontos';
+        premioValor = latestDraw.premiacoes?.faixa15?.valor || 1750000;
+      } else if (hits === 14) {
+        premioNome = '14 Pontos';
+        premioValor = latestDraw.premiacoes?.faixa14?.valor || 1400;
+      } else if (hits === 13) {
+        premioNome = '13 Pontos';
+        premioValor = 35.0;
+      } else if (hits === 12) {
+        premioNome = '12 Pontos';
+        premioValor = 14.0;
+      } else if (hits === 11) {
+        premioNome = '11 Pontos';
+        premioValor = 7.0;
+      }
+
+      return {
+        index: t.index,
+        label: `Jogo ${t.index.toString().padStart(2, '0')}`,
+        dezenas: t.dezenas,
+        pares: t.pares,
+        impares: t.impares,
+        primos: t.primos,
+        soma: t.soma,
+        moldura: t.moldura,
+        scoreIA: t.scoreIA,
+        hits,
+        premioNome,
+        premioValor,
+      };
+    });
+  }, [tickets, conferirDezenas, latestDraw]);
 
   const allDraws = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
 
@@ -170,11 +213,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             </button>
 
             <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+              onClick={() => setIsCSVModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-emerald-500/10"
+              title="Exportar CSV formatado para volantes e Excel"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Baixar CSV</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Exportar CSV (Volantes)</span>
             </button>
 
             <button
@@ -356,6 +400,15 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </div>
         </>
       )}
+      {/* Modal de Exportação CSV para Volantes e Excel */}
+      <ExportCSVModal
+        isOpen={isCSVModalOpen}
+        onClose={() => setIsCSVModalOpen(false)}
+        games={csvExportGames}
+        concursoRef={selectedConcurso}
+        title="Exportar Jogos Salvos em CSV"
+        defaultFilename={`lotosniper_volantes_${tickets.length}_jogos.csv`}
+      />
     </div>
   );
 };

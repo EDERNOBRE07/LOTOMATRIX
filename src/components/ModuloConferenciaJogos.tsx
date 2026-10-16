@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { LotofacilDraw, GameTicket } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
+import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import {
   ClipboardCheck,
   CheckCircle2,
@@ -22,7 +23,33 @@ import {
   ArrowRight,
   TrendingUp,
   HelpCircle,
+  Calculator,
+  Table,
+  LayoutGrid,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
+
+export interface SubsetTierMetric {
+  tier: number;
+  label: string;
+  custo: number;
+  disponivel: boolean;
+  totalJogosAvaliados: number;
+  total15: number;
+  total14: number;
+  total13: number;
+  total12: number;
+  total11: number;
+  totalPremiados: number;
+  premiosValorTotal: number;
+  saldoLiquido: number;
+  roi: number;
+  taxaAcerto: number;
+  bestHit: number;
+  isBestROI?: boolean;
+  isBestProfit?: boolean;
+}
 
 export const SAMPLE_24_GAMES_TEXT = `Jogo 01: 01 - 02 - 03 - 04 - 05 - 06 - 10 - 11 - 12 - 13 - 20 - 22 - 23 - 24 - 25
 Jogo 02: 01 - 02 - 03 - 04 - 05 - 06 - 10 - 11 - 13 - 14 - 15 - 20 - 21 - 22 - 23
@@ -73,6 +100,14 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   const [isEditorExpanded, setIsEditorExpanded] = useState<boolean>(true);
   const [filterFaixa, setFilterFaixa] = useState<'all' | 'premiados' | '15' | '14' | '13' | '12' | '11'>('all');
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
+
+  // TOTALIZER SUBSET STATE (6 a 15 jogos)
+  const [selectedSubsetSize, setSelectedSubsetSize] = useState<number | 'all'>('all');
+  const [totalizerViewMode, setTotalizerViewMode] = useState<'cards' | 'table'>('cards');
+
+  // CSV EXPORT MODAL STATE
+  const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
+  const [csvModalSubset, setCsvModalSubset] = useState<number | null>(null);
 
   // CONTEST SELECTOR: LATEST CONTEST IS ALWAYS THE DEFAULT & HIGHEST PRIORITY
   const [selectedConcursoId, setSelectedConcursoId] = useState<number>(latestDraw.concurso);
@@ -227,9 +262,97 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     };
   }, [parsedGames, targetDraw]);
 
-  // Filtered games list
+  // TOTALIZER CALCULATION: 6 JOGOS, 7 JOGOS ATÉ 15 JOGOS
+  const SUBSET_TIERS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+  const subsetTiersSummary = useMemo<SubsetTierMetric[]>(() => {
+    const validGameResults = conferenceSummary.gameResults.filter((g) => g.isValid);
+
+    const metrics: SubsetTierMetric[] = SUBSET_TIERS.map((tier) => {
+      const custo = tier * VALOR_APOSTA_LOTOFACIL;
+      const slice = validGameResults.slice(0, tier);
+      const disponivel = validGameResults.length >= tier;
+      const totalJogosAvaliados = slice.length;
+
+      let t15 = 0;
+      let t14 = 0;
+      let t13 = 0;
+      let t12 = 0;
+      let t11 = 0;
+      let premiosValorTotal = 0;
+      let bestHit = 0;
+
+      slice.forEach((g) => {
+        if (g.hits > bestHit) bestHit = g.hits;
+        if (g.hits === 15) t15++;
+        else if (g.hits === 14) t14++;
+        else if (g.hits === 13) t13++;
+        else if (g.hits === 12) t12++;
+        else if (g.hits === 11) t11++;
+        premiosValorTotal += g.premioValor;
+      });
+
+      const totalPremiados = t15 + t14 + t13 + t12 + t11;
+      const saldoLiquido = premiosValorTotal - custo;
+      const roi = custo > 0 ? ((premiosValorTotal - custo) / custo) * 100 : 0;
+      const taxaAcerto = totalJogosAvaliados > 0 ? (totalPremiados / totalJogosAvaliados) * 100 : 0;
+
+      return {
+        tier,
+        label: `${tier} Jogos`,
+        custo,
+        disponivel,
+        totalJogosAvaliados,
+        total15: t15,
+        total14: t14,
+        total13: t13,
+        total12: t12,
+        total11: t11,
+        totalPremiados,
+        premiosValorTotal,
+        saldoLiquido,
+        roi,
+        taxaAcerto,
+        bestHit,
+      };
+    });
+
+    let maxRoi = -Infinity;
+    let maxRoiIndex = -1;
+    let maxProfit = -Infinity;
+    let maxProfitIndex = -1;
+
+    metrics.forEach((m, idx) => {
+      if (m.saldoLiquido > maxProfit) {
+        maxProfit = m.saldoLiquido;
+        maxProfitIndex = idx;
+      }
+      if (m.roi > maxRoi) {
+        maxRoi = m.roi;
+        maxRoiIndex = idx;
+      }
+    });
+
+    if (maxProfitIndex !== -1 && metrics[maxProfitIndex].premiosValorTotal > 0) {
+      metrics[maxProfitIndex].isBestProfit = true;
+    }
+    if (maxRoiIndex !== -1 && metrics[maxRoiIndex].premiosValorTotal > 0) {
+      metrics[maxRoiIndex].isBestROI = true;
+    }
+
+    return metrics;
+  }, [conferenceSummary.gameResults]);
+
+  // Filtered games list (combines subset slice and prize tier filter)
   const filteredGames = useMemo(() => {
-    return conferenceSummary.gameResults.filter((game) => {
+    let pool = conferenceSummary.gameResults;
+    if (selectedSubsetSize !== 'all') {
+      const validPool = pool.filter((g) => g.isValid);
+      const invalidPool = pool.filter((g) => !g.isValid);
+      pool = [...validPool.slice(0, selectedSubsetSize), ...invalidPool];
+    }
+
+    return pool.filter((game) => {
       if (filterFaixa === 'all') return true;
       if (filterFaixa === 'premiados') return game.hits >= 11;
       if (filterFaixa === '15') return game.hits === 15;
@@ -239,7 +362,26 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       if (filterFaixa === '11') return game.hits === 11;
       return true;
     });
-  }, [conferenceSummary.gameResults, filterFaixa]);
+  }, [conferenceSummary.gameResults, selectedSubsetSize, filterFaixa]);
+
+  // Games prepared for CSV export (all games or selected subset)
+  const gamesForCSV: CSVExportGame[] = useMemo(() => {
+    let targetList = conferenceSummary.gameResults.filter((g) => g.isValid);
+    if (csvModalSubset !== null) {
+      targetList = targetList.slice(0, csvModalSubset);
+    } else if (selectedSubsetSize !== 'all') {
+      targetList = targetList.slice(0, selectedSubsetSize);
+    }
+
+    return targetList.map((g, idx) => ({
+      index: idx + 1,
+      label: g.label,
+      dezenas: g.dezenas,
+      hits: g.hits,
+      premioNome: g.premioNome,
+      premioValor: g.premioValor,
+    }));
+  }, [conferenceSummary.gameResults, csvModalSubset, selectedSubsetSize]);
 
   // Action handlers
   const handleLoadSample24 = () => {
@@ -403,6 +545,18 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
             )}
 
             <button
+              onClick={() => {
+                setCsvModalSubset(null);
+                setIsCSVModalOpen(true);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold transition cursor-pointer flex items-center gap-1.5"
+              title="Exportar jogos em formato CSV pronto para impressão de volantes ou Excel"
+            >
+              <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+              <span>Exportar CSV (Volantes)</span>
+            </button>
+
+            <button
               onClick={handleCopyInput}
               className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1"
             >
@@ -441,6 +595,335 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
               <span>Formato aceito: <code className="text-slate-400 font-mono">Jogo 01: 01 - 02 - 03 ...</code> (hífens, espaços ou vírgulas são aceitos).</span>
               <span>{parsedGames.filter((g) => g.isValid).length} de {parsedGames.length} válidos (15 dezenas)</span>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TOTALIZADOR OFICIAL DE JOGOS: CORTES DE 6 A 15 JOGOS (R$ 3,50 CADA)     */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/95 rounded-2xl border border-emerald-500/30 p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <Calculator className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <span>Totalizador de Investimento & Retorno (6 a 15 Jogos)</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  R$ {VALOR_APOSTA_LOTOFACIL.toFixed(2).replace('.', ',')} / aposta
+                </span>
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Calcule quanto gastará e qual seria sua premiação líquida caso decida apostar de <strong>6 até 15 jogos</strong> desta matriz no Concurso #{targetDraw.concurso}.
+            </p>
+          </div>
+
+          {/* View mode toggle & reset */}
+          <div className="flex items-center gap-2">
+            {selectedSubsetSize !== 'all' && (
+              <button
+                onClick={() => setSelectedSubsetSize('all')}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+              >
+                <span>Mostrar Todos ({conferenceSummary.totalJogos})</span>
+              </button>
+            )}
+
+            <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs">
+              <button
+                onClick={() => setTotalizerViewMode('cards')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  totalizerViewMode === 'cards'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cards</span>
+              </button>
+              <button
+                onClick={() => setTotalizerViewMode('table')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  totalizerViewMode === 'table'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Tabela Comparativa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Subset Active Notification Banner */}
+        {selectedSubsetSize !== 'all' && (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-300">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                Filtro ativo: <strong>Apenas os primeiros {selectedSubsetSize} jogos</strong> (Jogos 01 a {selectedSubsetSize.toString().padStart(2, '0')}).
+                Investimento: <strong>R$ {(Number(selectedSubsetSize) * VALOR_APOSTA_LOTOFACIL).toFixed(2).replace('.', ',')}</strong>.
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setCsvModalSubset(selectedSubsetSize as number);
+                  setIsCSVModalOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Exportar estes {selectedSubsetSize} em CSV</span>
+              </button>
+              <button
+                onClick={() => setSelectedSubsetSize('all')}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Restaurar Todos
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* View Mode: CARDS (Grid of 6 to 15 games) */}
+        {totalizerViewMode === 'cards' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {subsetTiersSummary.map((item) => {
+              const isSelected = selectedSubsetSize === item.tier;
+              const hasProfit = item.saldoLiquido > 0;
+              const hasBreakEven = item.saldoLiquido === 0 && item.premiosValorTotal > 0;
+
+              return (
+                <div
+                  key={item.tier}
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all ${
+                    isSelected
+                      ? 'bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-400/50'
+                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div>
+                    {/* Header with Title and badges */}
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono font-black text-sm text-white">
+                        {item.tier} Jogos
+                      </span>
+                      {isSelected ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950">
+                          ATIVO
+                        </span>
+                      ) : item.isBestROI ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+                          ★ MELHOR ROI
+                        </span>
+                      ) : item.isBestProfit ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950">
+                          ★ MAIS LUCRO
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Cost of betting this subset */}
+                    <div className="mt-1.5 flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-400">Investimento:</span>
+                      <span className="font-mono font-bold text-amber-400 text-xs sm:text-sm">
+                        R$ {item.custo.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+
+                    {/* Total prizes won */}
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-400">Prêmios:</span>
+                      <span className="font-mono font-bold text-emerald-400 text-xs sm:text-sm">
+                        R$ {item.premiosValorTotal.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+
+                    {/* Net balance */}
+                    <div className="mt-1 flex items-baseline justify-between">
+                      <span className="text-[11px] text-slate-400">Saldo:</span>
+                      <span
+                        className={`font-mono font-black text-xs sm:text-sm ${
+                          hasProfit
+                            ? 'text-emerald-400'
+                            : hasBreakEven
+                            ? 'text-cyan-400'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {item.saldoLiquido > 0 ? '+' : ''}
+                        R$ {item.saldoLiquido.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+
+                    {/* Badges of hits */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-800 text-[10px] space-y-1">
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span>Premiados:</span>
+                        <strong className="text-slate-200 font-mono">
+                          {item.totalPremiados} de {item.totalJogosAvaliados} ({item.taxaAcerto.toFixed(0)}%)
+                        </strong>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {item.total15 > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-bold font-mono">
+                            {item.total15}x 15p
+                          </span>
+                        )}
+                        {item.total14 > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-400 text-slate-950 font-bold font-mono">
+                            {item.total14}x 14p
+                          </span>
+                        )}
+                        {item.total13 > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold font-mono">
+                            {item.total13}x 13p
+                          </span>
+                        )}
+                        {item.total12 > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-bold font-mono">
+                            {item.total12}x 12p
+                          </span>
+                        )}
+                        {item.total11 > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold font-mono">
+                            {item.total11}x 11p
+                          </span>
+                        )}
+                        {item.totalPremiados === 0 && (
+                          <span className="text-slate-500">Sem acerto 11+</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions for this tier */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center gap-1.5">
+                    <button
+                      onClick={() => setSelectedSubsetSize(isSelected ? 'all' : item.tier)}
+                      className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer text-center ${
+                        isSelected
+                          ? 'bg-slate-800 text-white hover:bg-slate-700'
+                          : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {isSelected ? 'Ver Todos' : `Conferir ${item.tier}`}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCsvModalSubset(item.tier);
+                        setIsCSVModalOpen(true);
+                      }}
+                      title={`Exportar estes ${item.tier} jogos em CSV para volantes`}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-emerald-400 border border-slate-700 transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* View Mode: COMPARATIVE TABLE (6 to 15 games) */
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="p-3">Qtd Jogos</th>
+                  <th className="p-3">Investimento</th>
+                  <th className="p-3 text-center">15 pts</th>
+                  <th className="p-3 text-center">14 pts</th>
+                  <th className="p-3 text-center">13 pts</th>
+                  <th className="p-3 text-center">12 pts</th>
+                  <th className="p-3 text-center">11 pts</th>
+                  <th className="p-3 text-center">Total Premiados</th>
+                  <th className="p-3 text-right">Prêmios (R$)</th>
+                  <th className="p-3 text-right">Saldo Líquido</th>
+                  <th className="p-3 text-center">ROI</th>
+                  <th className="p-3 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 font-mono">
+                {subsetTiersSummary.map((item) => {
+                  const isSelected = selectedSubsetSize === item.tier;
+                  const hasProfit = item.saldoLiquido > 0;
+
+                  return (
+                    <tr
+                      key={item.tier}
+                      className={`hover:bg-slate-900/60 transition ${
+                        isSelected ? 'bg-emerald-950/20 font-bold' : ''
+                      }`}
+                    >
+                      <td className="p-3 text-white font-bold flex items-center gap-1.5">
+                        <span>{item.tier} Jogos</span>
+                        {item.isBestROI && (
+                          <span className="text-[9px] font-sans px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-bold">
+                            MELHOR ROI
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-amber-400 font-semibold">
+                        R$ {item.custo.toFixed(2).replace('.', ',')}
+                      </td>
+                      <td className="p-3 text-center text-amber-400 font-black">{item.total15}</td>
+                      <td className="p-3 text-center text-indigo-400 font-black">{item.total14}</td>
+                      <td className="p-3 text-center text-emerald-400">{item.total13}</td>
+                      <td className="p-3 text-center text-teal-400">{item.total12}</td>
+                      <td className="p-3 text-center text-cyan-400">{item.total11}</td>
+                      <td className="p-3 text-center font-bold text-slate-200">
+                        {item.totalPremiados} / {item.totalJogosAvaliados}
+                      </td>
+                      <td className="p-3 text-right text-emerald-400 font-bold">
+                        R$ {item.premiosValorTotal.toFixed(2).replace('.', ',')}
+                      </td>
+                      <td
+                        className={`p-3 text-right font-black ${
+                          hasProfit ? 'text-emerald-400' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.saldoLiquido > 0 ? '+' : ''}
+                        R$ {item.saldoLiquido.toFixed(2).replace('.', ',')}
+                      </td>
+                      <td
+                        className={`p-3 text-center font-bold ${
+                          item.roi > 0 ? 'text-emerald-400' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.roi > 0 ? '+' : ''}
+                        {item.roi.toFixed(1)}%
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5 font-sans">
+                          <button
+                            onClick={() => setSelectedSubsetSize(isSelected ? 'all' : item.tier)}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer"
+                          >
+                            {isSelected ? 'Ver Todos' : 'Conferir'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCsvModalSubset(item.tier);
+                              setIsCSVModalOpen(true);
+                            }}
+                            title="Exportar CSV deste subconjunto"
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -748,6 +1231,30 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
           })
         )}
       </div>
+      {/* Modal de Exportação CSV para Volantes e Excel */}
+      <ExportCSVModal
+        isOpen={isCSVModalOpen}
+        onClose={() => {
+          setIsCSVModalOpen(false);
+          setCsvModalSubset(null);
+        }}
+        games={gamesForCSV}
+        concursoRef={targetDraw.concurso}
+        title={
+          csvModalSubset !== null
+            ? `Exportar Subconjunto de ${csvModalSubset} Jogos em CSV`
+            : selectedSubsetSize !== 'all'
+            ? `Exportar Subconjunto de ${selectedSubsetSize} Jogos em CSV`
+            : 'Exportar Jogos da Conferência em CSV'
+        }
+        defaultFilename={
+          csvModalSubset !== null
+            ? `lotosniper_volantes_${csvModalSubset}_jogos.csv`
+            : selectedSubsetSize !== 'all'
+            ? `lotosniper_volantes_${selectedSubsetSize}_jogos.csv`
+            : `lotosniper_conferencia_${gamesForCSV.length}_jogos.csv`
+        }
+      />
     </div>
   );
 };
