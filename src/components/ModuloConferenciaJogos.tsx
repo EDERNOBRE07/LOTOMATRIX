@@ -28,27 +28,25 @@ import {
   LayoutGrid,
   FileSpreadsheet,
   Download,
+  Target,
 } from 'lucide-react';
 
-export interface SubsetTierMetric {
-  tier: number;
+export interface PontosTierMetric {
+  pontos: number;
   label: string;
-  custo: number;
-  disponivel: boolean;
-  totalJogosAvaliados: number;
-  total15: number;
-  total14: number;
-  total13: number;
-  total12: number;
-  total11: number;
-  totalPremiados: number;
-  premiosValorTotal: number;
-  saldoLiquido: number;
-  roi: number;
-  taxaAcerto: number;
-  bestHit: number;
-  isBestROI?: boolean;
-  isBestProfit?: boolean;
+  count: number;
+  percentage: number;
+  isPremiado: boolean;
+  premioDesc: string;
+  premioValorEstimado?: number;
+  colorTheme: {
+    bgCard: string;
+    borderCard: string;
+    textTitle: string;
+    badgeBg: string;
+    badgeText: string;
+    ring: string;
+  };
 }
 
 export const SAMPLE_24_GAMES_TEXT = `Jogo 01: 01 - 02 - 03 - 04 - 05 - 06 - 10 - 11 - 12 - 13 - 20 - 22 - 23 - 24 - 25
@@ -101,8 +99,8 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   const [filterFaixa, setFilterFaixa] = useState<'all' | 'premiados' | '15' | '14' | '13' | '12' | '11'>('all');
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
 
-  // TOTALIZER SUBSET STATE (6 a 15 jogos)
-  const [selectedSubsetSize, setSelectedSubsetSize] = useState<number | 'all'>('all');
+  // CONTADOR DE PONTOS / ACERTOS (6 A 15 PONTOS)
+  const [selectedPontosFilter, setSelectedPontosFilter] = useState<number | 'all'>('all');
   const [totalizerViewMode, setTotalizerViewMode] = useState<'cards' | 'table'>('cards');
 
   // CSV EXPORT MODAL STATE
@@ -262,94 +260,150 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     };
   }, [parsedGames, targetDraw]);
 
-  // TOTALIZER CALCULATION: 6 JOGOS, 7 JOGOS ATÉ 15 JOGOS
-  const SUBSET_TIERS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+  // CONTADOR OFICIAL DE ACERTOS DA CONFERÊNCIA: 6 A 15 PONTOS
+  const PONTOS_TIERS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
-  const subsetTiersSummary = useMemo<SubsetTierMetric[]>(() => {
-    const validGameResults = conferenceSummary.gameResults.filter((g) => g.isValid);
+  const pontosCountSummary = useMemo<PontosTierMetric[]>(() => {
+    const validGames = conferenceSummary.gameResults.filter((g) => g.isValid);
+    const totalValid = validGames.length;
 
-    const metrics: SubsetTierMetric[] = SUBSET_TIERS.map((tier) => {
-      const custo = tier * VALOR_APOSTA_LOTOFACIL;
-      const slice = validGameResults.slice(0, tier);
-      const disponivel = validGameResults.length >= tier;
-      const totalJogosAvaliados = slice.length;
+    const themeMap: Record<number, PontosTierMetric['colorTheme']> = {
+      15: {
+        bgCard: 'bg-gradient-to-br from-amber-500/25 via-amber-900/30 to-amber-950/40',
+        borderCard: 'border-amber-400/80',
+        textTitle: 'text-amber-300',
+        badgeBg: 'bg-amber-400',
+        badgeText: 'text-slate-950',
+        ring: 'ring-2 ring-amber-400/70 shadow-lg shadow-amber-500/20',
+      },
+      14: {
+        bgCard: 'bg-gradient-to-br from-purple-500/20 via-indigo-950/30 to-slate-900',
+        borderCard: 'border-purple-400/70',
+        textTitle: 'text-purple-300',
+        badgeBg: 'bg-purple-400',
+        badgeText: 'text-slate-950',
+        ring: 'ring-2 ring-purple-400/50 shadow-md shadow-purple-500/20',
+      },
+      13: {
+        bgCard: 'bg-gradient-to-br from-emerald-500/20 via-emerald-950/30 to-slate-900',
+        borderCard: 'border-emerald-400/60',
+        textTitle: 'text-emerald-300',
+        badgeBg: 'bg-emerald-400',
+        badgeText: 'text-slate-950',
+        ring: 'ring-1 ring-emerald-400/50',
+      },
+      12: {
+        bgCard: 'bg-gradient-to-br from-teal-500/15 via-teal-950/30 to-slate-900',
+        borderCard: 'border-teal-400/50',
+        textTitle: 'text-teal-300',
+        badgeBg: 'bg-teal-400',
+        badgeText: 'text-slate-950',
+        ring: 'ring-1 ring-teal-400/40',
+      },
+      11: {
+        bgCard: 'bg-gradient-to-br from-cyan-500/15 via-cyan-950/30 to-slate-900',
+        borderCard: 'border-cyan-400/50',
+        textTitle: 'text-cyan-300',
+        badgeBg: 'bg-cyan-400',
+        badgeText: 'text-slate-950',
+        ring: 'ring-1 ring-cyan-400/40',
+      },
+      10: {
+        bgCard: 'bg-slate-900/90',
+        borderCard: 'border-indigo-800/40',
+        textTitle: 'text-indigo-300',
+        badgeBg: 'bg-indigo-950 border border-indigo-700/50',
+        badgeText: 'text-indigo-300',
+        ring: 'ring-1 ring-indigo-500/20',
+      },
+      9: {
+        bgCard: 'bg-slate-900/80',
+        borderCard: 'border-slate-800',
+        textTitle: 'text-sky-300',
+        badgeBg: 'bg-slate-800',
+        badgeText: 'text-sky-300',
+        ring: '',
+      },
+      8: {
+        bgCard: 'bg-slate-900/70',
+        borderCard: 'border-slate-800',
+        textTitle: 'text-slate-300',
+        badgeBg: 'bg-slate-800',
+        badgeText: 'text-slate-300',
+        ring: '',
+      },
+      7: {
+        bgCard: 'bg-slate-900/60',
+        borderCard: 'border-slate-800/80',
+        textTitle: 'text-slate-400',
+        badgeBg: 'bg-slate-850',
+        badgeText: 'text-slate-400',
+        ring: '',
+      },
+      6: {
+        bgCard: 'bg-slate-900/50',
+        borderCard: 'border-slate-800/60',
+        textTitle: 'text-slate-500',
+        badgeBg: 'bg-slate-900',
+        badgeText: 'text-slate-500',
+        ring: '',
+      },
+    };
 
-      let t15 = 0;
-      let t14 = 0;
-      let t13 = 0;
-      let t12 = 0;
-      let t11 = 0;
-      let premiosValorTotal = 0;
-      let bestHit = 0;
+    return PONTOS_TIERS.map((pontos) => {
+      const matchingGames = validGames.filter((g) => g.hits === pontos);
+      const count = matchingGames.length;
+      const percentage = totalValid > 0 ? (count / totalValid) * 100 : 0;
+      const isPremiado = pontos >= 11;
 
-      slice.forEach((g) => {
-        if (g.hits > bestHit) bestHit = g.hits;
-        if (g.hits === 15) t15++;
-        else if (g.hits === 14) t14++;
-        else if (g.hits === 13) t13++;
-        else if (g.hits === 12) t12++;
-        else if (g.hits === 11) t11++;
-        premiosValorTotal += g.premioValor;
-      });
+      let premioDesc = 'Sem premiação';
+      let premioValorEstimado: number | undefined;
 
-      const totalPremiados = t15 + t14 + t13 + t12 + t11;
-      const saldoLiquido = premiosValorTotal - custo;
-      const roi = custo > 0 ? ((premiosValorTotal - custo) / custo) * 100 : 0;
-      const taxaAcerto = totalJogosAvaliados > 0 ? (totalPremiados / totalJogosAvaliados) * 100 : 0;
+      if (pontos === 15) {
+        premioDesc = 'Faixa Máxima (15 Pontos)';
+        premioValorEstimado = targetDraw.premiacoes?.faixa15?.valor || 1750000;
+      } else if (pontos === 14) {
+        premioDesc = '14 Pontos Oficial';
+        premioValorEstimado = targetDraw.premiacoes?.faixa14?.valor || 1400;
+      } else if (pontos === 13) {
+        premioDesc = '13 Pontos (R$ 35,00)';
+        premioValorEstimado = targetDraw.premiacoes?.faixa13?.valor || 35.0;
+      } else if (pontos === 12) {
+        premioDesc = '12 Pontos (R$ 14,00)';
+        premioValorEstimado = targetDraw.premiacoes?.faixa12?.valor || 14.0;
+      } else if (pontos === 11) {
+        premioDesc = '11 Pontos (R$ 7,00)';
+        premioValorEstimado = targetDraw.premiacoes?.faixa11?.valor || 7.0;
+      } else if (pontos === 10) {
+        premioDesc = 'A 1 acerto do prêmio';
+      } else if (pontos === 9) {
+        premioDesc = 'A 2 acertos do prêmio';
+      } else if (pontos === 8) {
+        premioDesc = '8 acertos';
+      } else if (pontos === 7) {
+        premioDesc = '7 acertos';
+      } else if (pontos === 6) {
+        premioDesc = '6 acertos';
+      }
 
       return {
-        tier,
-        label: `${tier} Jogos`,
-        custo,
-        disponivel,
-        totalJogosAvaliados,
-        total15: t15,
-        total14: t14,
-        total13: t13,
-        total12: t12,
-        total11: t11,
-        totalPremiados,
-        premiosValorTotal,
-        saldoLiquido,
-        roi,
-        taxaAcerto,
-        bestHit,
+        pontos,
+        label: `${pontos} Pontos`,
+        count,
+        percentage,
+        isPremiado,
+        premioDesc,
+        premioValorEstimado,
+        colorTheme: themeMap[pontos] || themeMap[6],
       };
     });
+  }, [conferenceSummary.gameResults, targetDraw]);
 
-    let maxRoi = -Infinity;
-    let maxRoiIndex = -1;
-    let maxProfit = -Infinity;
-    let maxProfitIndex = -1;
-
-    metrics.forEach((m, idx) => {
-      if (m.saldoLiquido > maxProfit) {
-        maxProfit = m.saldoLiquido;
-        maxProfitIndex = idx;
-      }
-      if (m.roi > maxRoi) {
-        maxRoi = m.roi;
-        maxRoiIndex = idx;
-      }
-    });
-
-    if (maxProfitIndex !== -1 && metrics[maxProfitIndex].premiosValorTotal > 0) {
-      metrics[maxProfitIndex].isBestProfit = true;
-    }
-    if (maxRoiIndex !== -1 && metrics[maxRoiIndex].premiosValorTotal > 0) {
-      metrics[maxRoiIndex].isBestROI = true;
-    }
-
-    return metrics;
-  }, [conferenceSummary.gameResults]);
-
-  // Filtered games list (combines subset slice and prize tier filter)
+  // Filtered games list (combines exact points filter and prize tier filter)
   const filteredGames = useMemo(() => {
     let pool = conferenceSummary.gameResults;
-    if (selectedSubsetSize !== 'all') {
-      const validPool = pool.filter((g) => g.isValid);
-      const invalidPool = pool.filter((g) => !g.isValid);
-      pool = [...validPool.slice(0, selectedSubsetSize), ...invalidPool];
+    if (selectedPontosFilter !== 'all') {
+      pool = pool.filter((g) => g.hits === selectedPontosFilter);
     }
 
     return pool.filter((game) => {
@@ -362,15 +416,13 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       if (filterFaixa === '11') return game.hits === 11;
       return true;
     });
-  }, [conferenceSummary.gameResults, selectedSubsetSize, filterFaixa]);
+  }, [conferenceSummary.gameResults, selectedPontosFilter, filterFaixa]);
 
-  // Games prepared for CSV export (all games or selected subset)
+  // Games prepared for CSV export (all games or selected points filter)
   const gamesForCSV: CSVExportGame[] = useMemo(() => {
     let targetList = conferenceSummary.gameResults.filter((g) => g.isValid);
-    if (csvModalSubset !== null) {
-      targetList = targetList.slice(0, csvModalSubset);
-    } else if (selectedSubsetSize !== 'all') {
-      targetList = targetList.slice(0, selectedSubsetSize);
+    if (selectedPontosFilter !== 'all') {
+      targetList = targetList.filter((g) => g.hits === selectedPontosFilter);
     }
 
     return targetList.map((g, idx) => ({
@@ -381,7 +433,7 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       premioNome: g.premioNome,
       premioValor: g.premioValor,
     }));
-  }, [conferenceSummary.gameResults, csvModalSubset, selectedSubsetSize]);
+  }, [conferenceSummary.gameResults, selectedPontosFilter]);
 
   // Action handlers
   const handleLoadSample24 = () => {
@@ -600,332 +652,204 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* TOTALIZADOR OFICIAL DE JOGOS: CORTES DE 6 A 15 JOGOS (R$ 3,50 CADA)     */}
+      {/* CONTADOR OFICIAL DE ACERTOS: 6 A 15 PONTOS (CORES DIFERENCIADAS)        */}
       {/* ========================================================================= */}
-      <div className="bg-slate-950/95 rounded-2xl border border-emerald-500/30 p-5 shadow-xl space-y-4">
+      <div className="bg-slate-950/95 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <Calculator className="w-4 h-4" />
+                <Target className="w-4 h-4" />
               </div>
               <h3 className="text-base font-black text-white flex items-center gap-2">
-                <span>Totalizador de Investimento & Retorno (6 a 15 Jogos)</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  R$ {VALOR_APOSTA_LOTOFACIL.toFixed(2).replace('.', ',')} / aposta
+                <span>Contador de Acertos da Conferência (6 a 15 Pontos)</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  {conferenceSummary.totalJogos} {conferenceSummary.totalJogos === 1 ? 'Jogo' : 'Jogos'} Analisados
                 </span>
               </h3>
             </div>
             <p className="text-xs text-slate-400">
-              Calcule quanto gastará e qual seria sua premiação líquida caso decida apostar de <strong>6 até 15 jogos</strong> desta matriz no Concurso #{targetDraw.concurso}.
+              Distribuição exata de quantos jogos conferidos acertaram <strong>6, 7, 8, 9, 10, 11, 12, 13, 14 ou 15 dezenas</strong> no Concurso #{targetDraw.concurso}. Clique para filtrar.
             </p>
           </div>
 
-          {/* View mode toggle & reset */}
-          <div className="flex items-center gap-2">
-            {selectedSubsetSize !== 'all' && (
-              <button
-                onClick={() => setSelectedSubsetSize('all')}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-              >
-                <span>Mostrar Todos ({conferenceSummary.totalJogos})</span>
-              </button>
-            )}
-
-            <div className="bg-slate-900 p-1 rounded-xl border border-slate-800 flex items-center gap-1 text-xs">
-              <button
-                onClick={() => setTotalizerViewMode('cards')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                  totalizerViewMode === 'cards'
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Cards</span>
-              </button>
-              <button
-                onClick={() => setTotalizerViewMode('table')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                  totalizerViewMode === 'table'
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Table className="w-3.5 h-3.5" />
-                <span>Tabela Comparativa</span>
-              </button>
-            </div>
-          </div>
+          {selectedPontosFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedPontosFilter('all')}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Restaurar Todos ({conferenceSummary.totalJogos})</span>
+            </button>
+          )}
         </div>
 
-        {/* Subset Active Notification Banner */}
-        {selectedSubsetSize !== 'all' && (
+        {/* Active Filter Banner */}
+        {selectedPontosFilter !== 'all' && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-300">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>
-                Filtro ativo: <strong>Apenas os primeiros {selectedSubsetSize} jogos</strong> (Jogos 01 a {selectedSubsetSize.toString().padStart(2, '0')}).
-                Investimento: <strong>R$ {(Number(selectedSubsetSize) * VALOR_APOSTA_LOTOFACIL).toFixed(2).replace('.', ',')}</strong>.
+                Filtro ativo: Exibindo apenas os jogos com <strong>{selectedPontosFilter} pontos</strong> ({filteredGames.length} {filteredGames.length === 1 ? 'jogo encontrado' : 'jogos encontrados'}).
               </span>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  setCsvModalSubset(selectedSubsetSize as number);
-                  setIsCSVModalOpen(true);
-                }}
+                onClick={() => setIsCSVModalOpen(true)}
                 className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>Exportar estes {selectedSubsetSize} em CSV</span>
+                <span>Exportar estes {filteredGames.length} em CSV</span>
               </button>
               <button
-                onClick={() => setSelectedSubsetSize('all')}
+                onClick={() => setSelectedPontosFilter('all')}
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
               >
-                Restaurar Todos
+                Ver Todos os Jogos
               </button>
             </div>
           </div>
         )}
 
-        {/* View Mode: CARDS (Grid of 6 to 15 games) */}
-        {totalizerViewMode === 'cards' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {subsetTiersSummary.map((item) => {
-              const isSelected = selectedSubsetSize === item.tier;
-              const hasProfit = item.saldoLiquido > 0;
-              const hasBreakEven = item.saldoLiquido === 0 && item.premiosValorTotal > 0;
+        {/* 1. FAIXAS PREMIADAS (11 A 15 PONTOS) - CORES VIBRANTES E DESTACADAS */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <Award className="w-3.5 h-3.5" />
+              <span>Faixas Premiadas Oficiais (11 a 15 Dezenas Sorteadas)</span>
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono">
+              Total Premiados: <strong className="text-emerald-300">{conferenceSummary.totalPremiados}</strong> de {conferenceSummary.totalJogos} ({conferenceSummary.taxaAcerto.toFixed(1)}%)
+            </span>
+          </div>
 
-              return (
-                <div
-                  key={item.tier}
-                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all ${
-                    isSelected
-                      ? 'bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-400/50'
-                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div>
-                    {/* Header with Title and badges */}
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="font-mono font-black text-sm text-white">
-                        {item.tier} Jogos
-                      </span>
-                      {isSelected ? (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950">
-                          ATIVO
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+            {pontosCountSummary
+              .filter((tier) => tier.isPremiado)
+              .map((tier) => {
+                const isSelected = selectedPontosFilter === tier.pontos;
+                const hasHits = tier.count > 0;
+
+                return (
+                  <button
+                    key={tier.pontos}
+                    type="button"
+                    onClick={() => setSelectedPontosFilter(isSelected ? 'all' : tier.pontos)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                      isSelected
+                        ? `${tier.colorTheme.bgCard} ${tier.colorTheme.borderCard} ${tier.colorTheme.ring}`
+                        : hasHits
+                        ? `${tier.colorTheme.bgCard} ${tier.colorTheme.borderCard} hover:scale-[1.02]`
+                        : 'bg-slate-900/50 border-slate-800/80 opacity-60 hover:opacity-90'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className={`text-xs font-black font-mono ${tier.colorTheme.textTitle}`}>
+                          {tier.label}
                         </span>
-                      ) : item.isBestROI ? (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
-                          ★ MELHOR ROI
+                        <span className={`text-[9px] font-black font-mono px-1.5 py-0.2 rounded ${tier.colorTheme.badgeBg} ${tier.colorTheme.badgeText}`}>
+                          {tier.pontos === 15 ? '★ PRÊMIO MÁXIMO' : '★ PREMIADO'}
                         </span>
-                      ) : item.isBestProfit ? (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-400 text-slate-950">
-                          ★ MAIS LUCRO
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {/* Cost of betting this subset */}
-                    <div className="mt-1.5 flex items-baseline justify-between">
-                      <span className="text-[11px] text-slate-400">Investimento:</span>
-                      <span className="font-mono font-bold text-amber-400 text-xs sm:text-sm">
-                        R$ {item.custo.toFixed(2).replace('.', ',')}
-                      </span>
-                    </div>
-
-                    {/* Total prizes won */}
-                    <div className="mt-1 flex items-baseline justify-between">
-                      <span className="text-[11px] text-slate-400">Prêmios:</span>
-                      <span className="font-mono font-bold text-emerald-400 text-xs sm:text-sm">
-                        R$ {item.premiosValorTotal.toFixed(2).replace('.', ',')}
-                      </span>
-                    </div>
-
-                    {/* Net balance */}
-                    <div className="mt-1 flex items-baseline justify-between">
-                      <span className="text-[11px] text-slate-400">Saldo:</span>
-                      <span
-                        className={`font-mono font-black text-xs sm:text-sm ${
-                          hasProfit
-                            ? 'text-emerald-400'
-                            : hasBreakEven
-                            ? 'text-cyan-400'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {item.saldoLiquido > 0 ? '+' : ''}
-                        R$ {item.saldoLiquido.toFixed(2).replace('.', ',')}
-                      </span>
-                    </div>
-
-                    {/* Badges of hits */}
-                    <div className="mt-2.5 pt-2 border-t border-slate-800 text-[10px] space-y-1">
-                      <div className="flex items-center justify-between text-slate-400">
-                        <span>Premiados:</span>
-                        <strong className="text-slate-200 font-mono">
-                          {item.totalPremiados} de {item.totalJogosAvaliados} ({item.taxaAcerto.toFixed(0)}%)
-                        </strong>
                       </div>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {item.total15 > 0 && (
-                          <span className="px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-bold font-mono">
-                            {item.total15}x 15p
-                          </span>
-                        )}
-                        {item.total14 > 0 && (
-                          <span className="px-1.5 py-0.2 rounded bg-indigo-400 text-slate-950 font-bold font-mono">
-                            {item.total14}x 14p
-                          </span>
-                        )}
-                        {item.total13 > 0 && (
-                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold font-mono">
-                            {item.total13}x 13p
-                          </span>
-                        )}
-                        {item.total12 > 0 && (
-                          <span className="px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-bold font-mono">
-                            {item.total12}x 12p
-                          </span>
-                        )}
-                        {item.total11 > 0 && (
-                          <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold font-mono">
-                            {item.total11}x 11p
-                          </span>
-                        )}
-                        {item.totalPremiados === 0 && (
-                          <span className="text-slate-500">Sem acerto 11+</span>
-                        )}
+
+                      {/* Number of Games Counter */}
+                      <div className="mt-1 flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black font-mono text-white">
+                          {tier.count}
+                        </span>
+                        <span className="text-xs text-slate-400 font-semibold">
+                          {tier.count === 1 ? 'jogo' : 'jogos'}
+                        </span>
+                      </div>
+
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {tier.percentage.toFixed(1)}% do total
                       </div>
                     </div>
-                  </div>
 
-                  {/* Actions for this tier */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center gap-1.5">
-                    <button
-                      onClick={() => setSelectedSubsetSize(isSelected ? 'all' : item.tier)}
-                      className={`flex-1 py-1 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer text-center ${
-                        isSelected
-                          ? 'bg-slate-800 text-white hover:bg-slate-700'
-                          : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
-                      }`}
-                    >
-                      {isSelected ? 'Ver Todos' : `Conferir ${item.tier}`}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCsvModalSubset(item.tier);
-                        setIsCSVModalOpen(true);
-                      }}
-                      title={`Exportar estes ${item.tier} jogos em CSV para volantes`}
-                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-emerald-400 border border-slate-700 transition cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400 truncate">{tier.premioDesc}</span>
+                      {isSelected && (
+                        <span className="font-bold text-emerald-400 font-mono">ATIVO</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
           </div>
-        ) : (
-          /* View Mode: COMPARATIVE TABLE (6 to 15 games) */
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-900 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Qtd Jogos</th>
-                  <th className="p-3">Investimento</th>
-                  <th className="p-3 text-center">15 pts</th>
-                  <th className="p-3 text-center">14 pts</th>
-                  <th className="p-3 text-center">13 pts</th>
-                  <th className="p-3 text-center">12 pts</th>
-                  <th className="p-3 text-center">11 pts</th>
-                  <th className="p-3 text-center">Total Premiados</th>
-                  <th className="p-3 text-right">Prêmios (R$)</th>
-                  <th className="p-3 text-right">Saldo Líquido</th>
-                  <th className="p-3 text-center">ROI</th>
-                  <th className="p-3 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 font-mono">
-                {subsetTiersSummary.map((item) => {
-                  const isSelected = selectedSubsetSize === item.tier;
-                  const hasProfit = item.saldoLiquido > 0;
+        </div>
 
-                  return (
-                    <tr
-                      key={item.tier}
-                      className={`hover:bg-slate-900/60 transition ${
-                        isSelected ? 'bg-emerald-950/20 font-bold' : ''
-                      }`}
-                    >
-                      <td className="p-3 text-white font-bold flex items-center gap-1.5">
-                        <span>{item.tier} Jogos</span>
-                        {item.isBestROI && (
-                          <span className="text-[9px] font-sans px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-bold">
-                            MELHOR ROI
+        {/* 2. FAIXAS NÃO PREMIADAS (6 A 10 PONTOS) - TONS DISCRETOS */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
+              <span>Faixas Não Premiadas (6 a 10 Dezenas Sorteadas)</span>
+            </span>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {conferenceSummary.totalNaoPremiados} jogos abaixo de 11 pontos
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+            {pontosCountSummary
+              .filter((tier) => !tier.isPremiado)
+              .map((tier) => {
+                const isSelected = selectedPontosFilter === tier.pontos;
+                const hasHits = tier.count > 0;
+
+                return (
+                  <button
+                    key={tier.pontos}
+                    type="button"
+                    onClick={() => setSelectedPontosFilter(isSelected ? 'all' : tier.pontos)}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                      isSelected
+                        ? `${tier.colorTheme.bgCard} border-emerald-500 ring-2 ring-emerald-400/50`
+                        : hasHits
+                        ? `${tier.colorTheme.bgCard} ${tier.colorTheme.borderCard} hover:border-slate-700`
+                        : 'bg-slate-950/40 border-slate-850 opacity-40 hover:opacity-70'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className={`text-xs font-bold font-mono ${tier.colorTheme.textTitle}`}>
+                          {tier.label}
+                        </span>
+                        {tier.pontos === 10 ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/50">
+                            QUASE LÁ
                           </span>
-                        )}
-                      </td>
-                      <td className="p-3 text-amber-400 font-semibold">
-                        R$ {item.custo.toFixed(2).replace('.', ',')}
-                      </td>
-                      <td className="p-3 text-center text-amber-400 font-black">{item.total15}</td>
-                      <td className="p-3 text-center text-indigo-400 font-black">{item.total14}</td>
-                      <td className="p-3 text-center text-emerald-400">{item.total13}</td>
-                      <td className="p-3 text-center text-teal-400">{item.total12}</td>
-                      <td className="p-3 text-center text-cyan-400">{item.total11}</td>
-                      <td className="p-3 text-center font-bold text-slate-200">
-                        {item.totalPremiados} / {item.totalJogosAvaliados}
-                      </td>
-                      <td className="p-3 text-right text-emerald-400 font-bold">
-                        R$ {item.premiosValorTotal.toFixed(2).replace('.', ',')}
-                      </td>
-                      <td
-                        className={`p-3 text-right font-black ${
-                          hasProfit ? 'text-emerald-400' : 'text-slate-400'
-                        }`}
-                      >
-                        {item.saldoLiquido > 0 ? '+' : ''}
-                        R$ {item.saldoLiquido.toFixed(2).replace('.', ',')}
-                      </td>
-                      <td
-                        className={`p-3 text-center font-bold ${
-                          item.roi > 0 ? 'text-emerald-400' : 'text-slate-400'
-                        }`}
-                      >
-                        {item.roi > 0 ? '+' : ''}
-                        {item.roi.toFixed(1)}%
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5 font-sans">
-                          <button
-                            onClick={() => setSelectedSubsetSize(isSelected ? 'all' : item.tier)}
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer"
-                          >
-                            {isSelected ? 'Ver Todos' : 'Conferir'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCsvModalSubset(item.tier);
-                              setIsCSVModalOpen(true);
-                            }}
-                            title="Exportar CSV deste subconjunto"
-                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        ) : null}
+                      </div>
+
+                      {/* Number of Games Counter */}
+                      <div className="mt-1 flex items-baseline gap-1.5">
+                        <span className="text-xl font-bold font-mono text-slate-200">
+                          {tier.count}
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">
+                          {tier.count === 1 ? 'jogo' : 'jogos'}
+                        </span>
+                      </div>
+
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        {tier.percentage.toFixed(1)}% do total
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500 truncate">{tier.premioDesc}</span>
+                      {isSelected && (
+                        <span className="font-bold text-emerald-400 font-mono">ATIVO</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
           </div>
-        )}
+        </div>
       </div>
 
       {/* FINANCIAL & PERFORMANCE TOTALIZER */}
@@ -1241,17 +1165,13 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
         games={gamesForCSV}
         concursoRef={targetDraw.concurso}
         title={
-          csvModalSubset !== null
-            ? `Exportar Subconjunto de ${csvModalSubset} Jogos em CSV`
-            : selectedSubsetSize !== 'all'
-            ? `Exportar Subconjunto de ${selectedSubsetSize} Jogos em CSV`
+          selectedPontosFilter !== 'all'
+            ? `Exportar Jogos com ${selectedPontosFilter} Pontos em CSV`
             : 'Exportar Jogos da Conferência em CSV'
         }
         defaultFilename={
-          csvModalSubset !== null
-            ? `lotosniper_volantes_${csvModalSubset}_jogos.csv`
-            : selectedSubsetSize !== 'all'
-            ? `lotosniper_volantes_${selectedSubsetSize}_jogos.csv`
+          selectedPontosFilter !== 'all'
+            ? `lotosniper_jogos_${selectedPontosFilter}_pontos.csv`
             : `lotosniper_conferencia_${gamesForCSV.length}_jogos.csv`
         }
       />
