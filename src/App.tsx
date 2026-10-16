@@ -337,6 +337,7 @@ export default function App() {
             statsList={dynamicStats}
             cyclePendingNumbers={dezenasPendentesCiclo}
             concursosNoCiclo={concursosNoCiclo}
+            onApplyNumbers={handleApplyAIRecsToFechamento}
           />
         )}
 

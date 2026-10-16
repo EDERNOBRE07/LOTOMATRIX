@@ -8,6 +8,7 @@ import {
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { FrequencyDelayChart } from './FrequencyDelayChart';
+import { MonteCarloSimulation } from './MonteCarloSimulation';
 import {
   BarChart,
   TrendingUp,
@@ -20,6 +21,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCw,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -27,6 +30,7 @@ interface StatisticsTabProps {
   statsList?: DezenaStats[];
   cyclePendingNumbers?: number[];
   concursosNoCiclo?: number;
+  onApplyNumbers?: (numbers: number[]) => void;
 }
 
 export const StatisticsTab: React.FC<StatisticsTabProps> = ({
@@ -34,9 +38,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   statsList = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
   concursosNoCiclo = 4,
+  onApplyNumbers,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'atrasos' | 'duplas' | 'ciclos' | 'padroes'
+    'atrasos' | 'montecarlo' | 'duplas' | 'ciclos' | 'padroes'
   >('atrasos');
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
@@ -58,7 +63,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             onClick={() => setActiveSubTab('atrasos')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'atrasos'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -66,10 +71,30 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Estatística das Dezenas & Atrasos</span>
           </button>
           <button
+            onClick={() => setActiveSubTab('montecarlo')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'montecarlo'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span>Simulação Monte Carlo (5 Concursos)</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                activeSubTab === 'montecarlo'
+                  ? 'bg-slate-950 text-emerald-400'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              PROJEÇÃO
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('duplas')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'duplas'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -80,7 +105,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             onClick={() => setActiveSubTab('ciclos')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'ciclos'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -91,7 +116,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             onClick={() => setActiveSubTab('padroes')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'padroes'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -108,6 +133,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB 1: ATRASOS DAS DEZENAS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* Quick callout to Monte Carlo projection */}
+          <div className="bg-gradient-to-r from-emerald-950/50 via-slate-900 to-indigo-950/40 rounded-2xl border border-emerald-500/30 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span>Projeção de Monte Carlo Estocástica para os Próximos 5 Concursos</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    5.000 ITERAÇÕES
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Simulação de probabilidade de ocorrência para cada uma das 25 dezenas nos concursos #{latestDraw.concurso + 1} a #{latestDraw.concurso + 5} ponderada por atrasos e ciclo.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('montecarlo')}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
+            >
+              <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Dynamic Recharts Bar Chart */}
           <FrequencyDelayChart
             statsList={statsList}
@@ -269,6 +321,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </div>
         </div>
       </div>
+      )}
+
+      {/* SUBTAB: SIMULAÇÃO DE MONTE CARLO (PRÓXIMOS 5 CONCURSOS) */}
+      {activeSubTab === 'montecarlo' && (
+        <MonteCarloSimulation
+          latestDraw={latestDraw}
+          statsList={statsList}
+          cyclePendingNumbers={cyclePendingNumbers}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB 2: DUPLAS AMIGAS */}
