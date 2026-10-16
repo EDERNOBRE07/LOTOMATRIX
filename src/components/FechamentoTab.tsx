@@ -15,10 +15,12 @@ import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
   DEFAULT_FILTERS,
+  buildOptimalPool,
   buildOptimal18Pool,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
+import { DiagnosticAuditPanel } from './DiagnosticAuditPanel';
 import {
   Sparkles,
   Zap,
@@ -75,10 +77,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
 
-  // Apply Document Strategy (9 Repetidas + 9 Ausentes)
-  const handleApplyOptimalDocumentPool = (repCount: number = 9, ausCount: number = 9) => {
-    const optimal = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, repCount, ausCount);
-    setSelectedNumbers(optimal.dezenas18.slice(0, targetCount));
+  // Apply Document Strategy (Calibrated pool dynamically scaled to targetCount)
+  const handleApplyOptimalDocumentPool = (repCount?: number, ausCount?: number) => {
+    const optimal = buildOptimalPool(targetCount, latestDraw, dynamicStats, cyclePendingNumbers, repCount, ausCount);
+    setSelectedNumbers(optimal.dezenas);
     setDocumentMessage(optimal.explicacao);
     setTimeout(() => setDocumentMessage(null), 6000);
   };
@@ -302,9 +304,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         totalJogos={generatedTickets.length || preset.jogosMaximos}
       />
 
-      {/* Diagnostic Panel for Concurso 3803 & Hypergeometric Math Explanation */}
-      <Diagnostic3803Panel
-        onApplyOptimalPool={() => handleApplyOptimalDocumentPool(9, 9)}
+      {/* Diagnostic Audit Panel for Concurso 3804 & 3803 */}
+      <DiagnosticAuditPanel
+        onApplyOptimalPool={() => handleApplyOptimalDocumentPool()}
         targetCount={targetCount}
       />
 

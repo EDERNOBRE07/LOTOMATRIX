@@ -120,14 +120,14 @@ export default function App() {
         [...recomendadas18.slice(2, 16), recomendadas18[1]].sort((a, b) => a - b),
       ],
       taxaConfianca: 96.8,
-      justificativaTecnica: `Sincronização LotoSniper com o Concurso #${draw.concurso} (${draw.data}). Matriz construída com a Regra do Documento Oficial: 9 Repetidas do sorteio anterior + 9 Ausentes de alta pressão estatística (${optimalPool.ausentesSelecionadas.join(', ')}). Proteção contra o desvio do Concurso 3803 garantindo alta densidade de acertos na matriz de fechamento.`,
+      justificativaTecnica: `Sincronização LotoSniper com o Concurso #${draw.concurso} (${draw.data}). Matriz construída com a Regra do Documento Oficial: proporção de Repetidas e Ausentes calibrada com base no Concurso 3804 (fechamento de ciclo 100% comprovado com 01, 18 e 25). Proteção estatística com filtros ampliados para 8-11 moldura e 4-7 primos para máxima assertividade sem podas indevidas.`,
       dezenasChave: dezenasPendentesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
       padroesSugeridos: {
-        paresImpares: '7 Pares / 8 Ímpares (ou 8P/7I)',
-        primos: '5 a 6 Primos',
-        moldura: '9 a 10 Dezenas',
-        somaFaixa: '180 a 215',
-        repetidas: `9 Dezenas do Concurso #${draw.concurso}`,
+        paresImpares: '8 Pares / 7 Ímpares (ou 7P/8I)',
+        primos: '4 a 7 Primos (calibrado #3804)',
+        moldura: '8 a 11 Dezenas (calibrado #3804)',
+        somaFaixa: '175 a 220',
+        repetidas: `8 a 10 Dezenas do Concurso #${draw.concurso}`,
       },
     });
     setIsAILoading(false);

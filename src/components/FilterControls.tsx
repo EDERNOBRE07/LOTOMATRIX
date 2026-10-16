@@ -18,6 +18,25 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     onChange({ ...filters, ...partial });
   };
 
+  const applyCalibrated3804Preset = () => {
+    onChange({
+      ...filters,
+      paresMin: 7,
+      paresMax: 8,
+      primosMin: 4,
+      primosMax: 7,
+      somaMin: 175,
+      somaMax: 220,
+      molduraMin: 8,
+      molduraMax: 11,
+      fibonacciMin: 3,
+      fibonacciMax: 5,
+      repetidasMin: 8,
+      repetidasMax: 10,
+      maxConsecutivas: 5,
+    });
+  };
+
   const applyStrictPreset = () => {
     onChange({
       ...filters,
@@ -66,16 +85,23 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             Filtros Matemáticos & Restrições Canônicas
           </h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
+          <button
+            onClick={applyCalibrated3804Preset}
+            className="px-2.5 py-1 text-xs rounded-lg bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition shadow-sm shadow-emerald-500/20 cursor-pointer"
+            title="Calibrado com os parâmetros reais do Concurso 3804"
+          >
+            ★ Assertividade #3804 (Recomendado)
+          </button>
           <button
             onClick={applyStrictPreset}
-            className="px-2.5 py-1 text-xs rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20 transition cursor-pointer"
+            className="px-2 py-1 text-xs rounded-lg bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition cursor-pointer"
           >
-            Filtros Estritos (56%+)
+            Filtros Estritos
           </button>
           <button
             onClick={applyWidePreset}
-            className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition cursor-pointer"
+            className="px-2 py-1 text-xs rounded-lg bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition cursor-pointer"
           >
             Filtros Amplos
           </button>

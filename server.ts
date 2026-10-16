@@ -27,35 +27,40 @@ const ai = apiKey
     })
   : null;
 
-// Official latest draw baseline from Caixa Econômica Federal (Concurso 3803 - 13/10/2026)
+// Official latest draw baseline from Caixa Econômica Federal (Concurso 3804 - 14/10/2026)
 const LATEST_DRAW = {
-  concurso: 3803,
-  data: '13/10/2026',
-  dezenas: [3, 6, 7, 8, 9, 11, 12, 13, 15, 16, 19, 20, 21, 22, 23],
-  repetidasDoAnterior: [3, 6, 9, 11, 12, 15, 19, 20, 21, 23], // 10 dezenas repetidas do concurso 3802
-  saidasDoAusentes: [7, 8, 13, 16, 22], // 5 dezenas que estavam ausentes e voltaram
-  dezenasAusentes: [1, 2, 4, 5, 10, 14, 17, 18, 24, 25],
+  concurso: 3804,
+  data: '14/10/2026',
+  dezenas: [1, 2, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19, 21, 24, 25],
+  repetidasDoAnterior: [6, 7, 8, 12, 15, 16, 19, 21], // 8 dezenas repetidas do concurso 3803
+  saidasDoAusentes: [1, 2, 14, 17, 18, 24, 25], // 7 dezenas que estavam ausentes no 3803 e voltaram
+  dezenasAusentes: [3, 4, 5, 9, 10, 11, 13, 20, 22, 23],
   cicloAtual: {
-    concursosDecorridos: 3,
-    dezenasSorteadas: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
-    dezenasFaltantesParaFechar: [1, 18, 25],
-    mediaHistoricaCiclo: 4.7,
+    concursosDecorridos: 1,
+    dezenasSorteadas: [1, 2, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19, 21, 24, 25],
+    dezenasFaltantesParaFechar: [3, 4, 5, 9, 10, 11, 13, 20, 22, 23],
+    mediaHistoricaCiclo: 4.5,
   },
   atrasosCriticos: [
-    { dezena: 1, atrasoAtual: 3, atrasoMedio: 0.6, maiorAtraso: 7, vezesOcorrida: 2306 },
-    { dezena: 18, atrasoAtual: 4, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2259 },
-    { dezena: 25, atrasoAtual: 4, atrasoMedio: 0.6, maiorAtraso: 11, vezesOcorrida: 2360 },
-    { dezena: 4, atrasoAtual: 2, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2300 },
-    { dezena: 10, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2359 },
+    { dezena: 4, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2300 },
+    { dezena: 5, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 9, vezesOcorrida: 2291 },
+    { dezena: 10, atrasoAtual: 2, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2359 },
+    { dezena: 3, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2292 },
+    { dezena: 9, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2269 },
+    { dezena: 11, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2338 },
+    { dezena: 13, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 7, vezesOcorrida: 2313 },
+    { dezena: 20, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2368 },
+    { dezena: 22, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2266 },
+    { dezena: 23, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2230 },
   ],
   topOcorrencias: [
     { dezena: 20, vezes: 2368 },
-    { dezena: 25, vezes: 2360 },
+    { dezena: 25, vezes: 2361 },
     { dezena: 10, vezes: 2359 },
     { dezena: 11, vezes: 2338 },
     { dezena: 13, vezes: 2313 },
-    { dezena: 24, vezes: 2309 },
-    { dezena: 1, vezes: 2306 },
+    { dezena: 24, vezes: 2310 },
+    { dezena: 1, vezes: 2307 },
     { dezena: 4, vezes: 2300 },
   ],
 };
@@ -275,9 +280,10 @@ ESTRATÉGIA MATEMÁTICA OBRIGATÓRIA (DOCUMENTO OFICIAL DA LOTOFÁCIL):
 2. Regra de Captura das Ausentes: Selecione EXATAMENTE 8 ou 9 dezenas dentre as 10 ausentes do Concurso ${concurso} (como saem em média 5-6 ausentes, selecionar 9 ausentes garante capturar quase 100% de todas as ausentes que vierem!).
 3. Total no grupo base: Exatamente 18 dezenas distintas.
 4. Fechamento de Ciclo: As dezenas pendentes ${JSON.stringify(faltantesCiclo)} têm pressão probabilística máxima de aparição.
-5. Moldura e Miolo: O grupo de 18 dezenas deve conter entre 11 e 12 na moldura e 6 a 7 no miolo.
-6. Primos: O grupo de 18 deve conter entre 6 e 8 números primos.
-7. Paridade: O grupo de 18 deve conter entre 9 e 10 pares (e 8 a 9 ímpares).
+5. Moldura e Miolo: No grupo de 15 apostado, esperar entre 8 e 11 na moldura (média 10; concurso 3804 teve 8 na moldura e 7 no miolo).
+6. Primos: No bilhete de 15, esperar entre 4 e 7 números primos (concurso 3804 teve 4 primos).
+7. Paridade: No bilhete de 15, esperar entre 7 e 8 pares (ou 8P/7I como no 3804, que é o padrão líder da história).
+8. Soma Total: Faixa canônica equilibrada de 175 a 220 (o 3804 teve soma exata 205).
 
 Forneça uma análise preditiva em formato JSON estruturado com:
 - scores: array de 25 números de 1 a 100 indicando a propensão de cada dezena (índice 0 = dezena 1, índice 24 = dezena 25).
