@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GameTicket, SimulationResult, LotofacilDraw } from '../types/lotofacil';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
 import { runSimulation, countMatches } from '../services/combinatorics';
+import { EspelhoAnalysisTab } from './EspelhoAnalysisTab';
 import {
   Play,
   RotateCcw,
@@ -25,6 +26,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   onGoToGenerator,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'backtest' | 'espelho'>('backtest');
   const [simulationScope, setSimulationScope] = useState<
     'concurso_3803' | 'concurso_3802' | 'concurso_3801' | 'ultimos_15' | 'monte_carlo_1000'
   >('concurso_3803');
@@ -113,6 +115,50 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
         )}
       </div>
 
+      {/* Subtab Navigation: Backtest Principal vs Análise do Espelho */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 shadow-xl">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+          <button
+            onClick={() => setActiveSubTab('backtest')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'backtest'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>Simulador & Backtest Principal</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('espelho')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'espelho'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/25 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4 text-purple-400" />
+            <span>Análise do Espelho (Jogando Contra a Sorte?)</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'espelho'
+                  ? 'bg-purple-950 text-purple-200 border border-purple-400/30'
+                  : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+              }`}
+            >
+              10 NÃO ESCOLHIDAS
+            </span>
+          </button>
+        </div>
+
+        {tickets.length > 0 && (
+          <div className="text-xs text-slate-400 font-mono px-2">
+            Base: <strong className="text-white">{tickets.length}</strong> bilhetes salvos
+          </div>
+        )}
+      </div>
+
       {tickets.length === 0 ? (
         <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-12 text-center space-y-4">
           <Layers className="w-12 h-12 text-slate-600 mx-auto" />
@@ -129,6 +175,12 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             Ir para o Gerador de Fechamentos
           </button>
         </div>
+      ) : activeSubTab === 'espelho' ? (
+        <EspelhoAnalysisTab
+          tickets={tickets}
+          latestDraw={latestDraw}
+          onGoToGenerator={onGoToGenerator}
+        />
       ) : (
         <>
           {/* Simulation Scope Selector */}

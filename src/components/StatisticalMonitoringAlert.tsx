@@ -41,7 +41,17 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
   onGoToFechamento,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const [activeTabSource, setActiveTabSource] = useState<'conferencia' | 'salvos'>('conferencia');
+  const [activeTabSource, setActiveTabSource] = useState<'conferencia' | 'salvos'>(() => {
+    if (savedTicketsSummary && savedTicketsSummary.improbableCount > 0) return 'salvos';
+    return 'conferencia';
+  });
+
+  // Automatically focus on saved games if anomalies are detected there
+  React.useEffect(() => {
+    if (savedTicketsSummary && savedTicketsSummary.improbableCount > 0) {
+      setActiveTabSource('salvos');
+    }
+  }, [savedTicketsSummary?.improbableCount]);
 
   // Determine current active summary based on tab
   const activeSummary =
@@ -50,8 +60,37 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
   const hasAnomalies = activeSummary.improbableCount > 0;
   const isFilterActive = activeFilter === 'improbable';
 
+  const savedTicketsHaveAnomalies =
+    savedTicketsSummary && savedTicketsSummary.improbableCount > 0;
+
   return (
     <div className="space-y-3">
+      {/* High-priority notification alert for saved games if anomalies exist */}
+      {savedTicketsHaveAnomalies && activeTabSource !== 'salvos' && (
+        <div className="bg-rose-950/80 border border-rose-500/50 rounded-xl p-3 px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-lg shadow-rose-950/30 animate-pulse">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1 rounded bg-rose-500/20 text-rose-300">
+              <ShieldAlert className="w-4 h-4 text-rose-400" />
+            </span>
+            <div className="text-slate-200">
+              <strong className="text-rose-300 font-bold">
+                Atenção aos Jogos Salvos:
+              </strong>{' '}
+              <span>
+                Detectamos {savedTicketsSummary.improbableCount} jogo(s) salvo(s) com padrões improváveis (ex: soma fora de 175-220 ou pares/ímpares desbalanceados).
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTabSource('salvos')}
+            className="px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0"
+          >
+            Ver Jogos Salvos Afetados
+          </button>
+        </div>
+      )}
+
       {/* Main Alert Card */}
       <div
         className={`rounded-2xl border p-4 sm:p-5 transition-all shadow-xl relative overflow-hidden ${
