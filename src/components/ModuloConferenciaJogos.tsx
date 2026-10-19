@@ -591,60 +591,6 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
         </div>
       </div>
 
-      {/* TARGET CONTEST DRAWN NUMBERS BANNER */}
-      <div className={`p-4 rounded-xl border transition-all ${
-        isCurrentPriority
-          ? 'bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border-emerald-500/30'
-          : 'bg-slate-950/60 border-slate-800'
-      }`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-bold text-slate-300">
-              Resultado Concurso <span className="font-mono text-emerald-400 font-extrabold text-sm">#{targetDraw.concurso}</span> ({targetDraw.data})
-            </span>
-            {isCurrentPriority && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
-                ★ PRIORIDADE MÁXIMA
-              </span>
-            )}
-          </div>
-
-          <div className="text-xs text-slate-400 flex items-center gap-3">
-            <span>Aposta Unitária: <strong className="text-slate-200">R$ {VALOR_APOSTA_LOTOFACIL.toFixed(2).replace('.', ',')}</strong></span>
-            {targetDraw.premiacoes?.faixa15?.ganhadores !== undefined && (
-              <span className="hidden sm:inline text-slate-500">• {targetDraw.premiacoes.faixa15.ganhadores} ganhador(es) de 15 pts</span>
-            )}
-          </div>
-        </div>
-
-        {/* Drawn balls display */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {targetDraw.dezenas.map((num) => (
-            <div
-              key={num}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 text-slate-950 font-black font-mono text-xs sm:text-sm flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-emerald-300/40 select-none"
-            >
-              {num.toString().padStart(2, '0')}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* SISTEMA DE MONITORAMENTO ESTATÍSTICO DE ANOMALIAS (JOGOS SALVOS E CONFERÊNCIA) */}
-      <StatisticalMonitoringAlert
-        summary={monitoringSummary}
-        savedTicketsSummary={savedTicketsMonitoringSummary}
-        hasSavedTickets={generatedTickets.length > 0}
-        activeFilter={monitoringFilter}
-        onFilterChange={setMonitoringFilter}
-        onSelectGame={(gameId) => {
-          setMonitoringFilter(gameId);
-          setHighlightedGameId(gameId);
-        }}
-        onGoToFechamento={onGoToFechamento}
-      />
-
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
       <div className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden">
         <div className="p-3 bg-slate-900/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">

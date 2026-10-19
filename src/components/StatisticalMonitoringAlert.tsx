@@ -24,48 +24,58 @@ import {
 interface StatisticalMonitoringAlertProps {
   summary: MonitoringSummary;
   savedTicketsSummary?: MonitoringSummary;
-  hasSavedTickets: boolean;
-  activeFilter: 'all' | 'improbable' | string;
-  onFilterChange: (filter: 'all' | 'improbable' | string) => void;
+  hasSavedTickets?: boolean;
+  activeFilter?: 'all' | 'improbable' | string;
+  onFilterChange?: (filter: 'all' | 'improbable' | string) => void;
   onSelectGame?: (gameId: string) => void;
   onGoToFechamento?: () => void;
+  isFechamentoEvaluator?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProps> = ({
   summary,
   savedTicketsSummary,
-  hasSavedTickets,
-  activeFilter,
+  hasSavedTickets = false,
+  activeFilter = 'all',
   onFilterChange,
   onSelectGame,
   onGoToFechamento,
+  isFechamentoEvaluator = false,
+  title,
+  subtitle,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [activeTabSource, setActiveTabSource] = useState<'conferencia' | 'salvos'>(() => {
+    if (isFechamentoEvaluator) return 'salvos';
     if (savedTicketsSummary && savedTicketsSummary.improbableCount > 0) return 'salvos';
     return 'conferencia';
   });
 
   // Automatically focus on saved games if anomalies are detected there
   React.useEffect(() => {
-    if (savedTicketsSummary && savedTicketsSummary.improbableCount > 0) {
+    if (!isFechamentoEvaluator && savedTicketsSummary && savedTicketsSummary.improbableCount > 0) {
       setActiveTabSource('salvos');
     }
-  }, [savedTicketsSummary?.improbableCount]);
+  }, [savedTicketsSummary?.improbableCount, isFechamentoEvaluator]);
 
-  // Determine current active summary based on tab
-  const activeSummary =
-    activeTabSource === 'salvos' && savedTicketsSummary ? savedTicketsSummary : summary;
+  // Determine current active summary based on tab or direct fechamento mode
+  const activeSummary = isFechamentoEvaluator
+    ? summary
+    : activeTabSource === 'salvos' && savedTicketsSummary
+    ? savedTicketsSummary
+    : summary;
 
   const hasAnomalies = activeSummary.improbableCount > 0;
   const isFilterActive = activeFilter === 'improbable';
 
   const savedTicketsHaveAnomalies =
-    savedTicketsSummary && savedTicketsSummary.improbableCount > 0;
+    !isFechamentoEvaluator && savedTicketsSummary && savedTicketsSummary.improbableCount > 0;
 
   return (
     <div className="space-y-3">
-      {/* High-priority notification alert for saved games if anomalies exist */}
+      {/* High-priority notification alert for saved games if anomalies exist (only in multi-tab mode) */}
       {savedTicketsHaveAnomalies && activeTabSource !== 'salvos' && (
         <div className="bg-rose-950/80 border border-rose-500/50 rounded-xl p-3 px-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-lg shadow-rose-950/30 animate-pulse">
           <div className="flex items-center gap-2.5">
@@ -74,10 +84,10 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
             </span>
             <div className="text-slate-200">
               <strong className="text-rose-300 font-bold">
-                Atenção aos Jogos Salvos:
+                Atenção aos Fechamentos Salvos:
               </strong>{' '}
               <span>
-                Detectamos {savedTicketsSummary.improbableCount} jogo(s) salvo(s) com padrões improváveis (ex: soma fora de 175-220 ou pares/ímpares desbalanceados).
+                Detectamos {savedTicketsSummary.improbableCount} jogo(s) com padrões improváveis (ex: soma fora de 175-220 ou pares/ímpares desbalanceados).
               </span>
             </div>
           </div>
@@ -86,7 +96,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
             onClick={() => setActiveTabSource('salvos')}
             className="px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0"
           >
-            Ver Jogos Salvos Afetados
+            Ver Jogos Afetados
           </button>
         </div>
       )}
@@ -132,39 +142,60 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
                       : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   }`}
                 >
-                  {hasAnomalies ? '⚠️ ALERTA DE PROBABILIDADE' : '✓ CONFORMIDADE ESTATÍSTICA'}
+                  {isFechamentoEvaluator
+                    ? hasAnomalies
+                      ? '⚠️ AUDITORIA: DESVIO EM FECHAMENTO'
+                      : '✓ AUDITORIA DOS FECHAMENTOS GERADOS: 100% OK'
+                    : hasAnomalies
+                    ? '⚠️ ALERTA DE PROBABILIDADE'
+                    : '✓ CONFORMIDADE ESTATÍSTICA'}
                 </span>
 
-                {hasSavedTickets && (
+                {isFechamentoEvaluator ? (
                   <span className="text-[10px] text-slate-400 font-mono">
-                    • Monitorando jogos salvos e conferência
+                    • Monitorando {activeSummary.totalAnalyzed} fechamentos gerados
                   </span>
+                ) : (
+                  hasSavedTickets && (
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      • Monitorando jogos salvos e conferência
+                    </span>
+                  )
                 )}
               </div>
 
               <h3 className="text-base sm:text-lg font-black text-white tracking-tight mt-0.5">
-                {hasAnomalies ? (
+                {title ? (
+                  <span>{title}</span>
+                ) : hasAnomalies ? (
                   <span>
                     Sistema de Monitoramento:{' '}
                     <strong className="text-amber-300 font-extrabold">
-                      {activeSummary.improbableCount} de {activeSummary.totalAnalyzed} jogo(s)
+                      {activeSummary.improbableCount} de {activeSummary.totalAnalyzed}{' '}
+                      {isFechamentoEvaluator ? 'fechamento(s)' : 'jogo(s)'}
                     </strong>{' '}
                     com padrão improvável detectado!
                   </span>
                 ) : (
                   <span>
-                    Monitoramento Estatístico:{' '}
-                    <strong className="text-emerald-300">100% dos jogos</strong> dentro dos
-                    parâmetros canônicos de alta assertividade
+                    Sistema de Monitoramento:{' '}
+                    <strong className="text-emerald-300">
+                      100% dos {isFechamentoEvaluator ? 'fechamentos gerados' : 'jogos'}
+                    </strong>{' '}
+                    dentro dos parâmetros canônicos de alta assertividade
                   </span>
                 )}
               </h3>
+
+              {subtitle && (
+                <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+              )}
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 self-start md:self-auto shrink-0 flex-wrap">
-            {hasAnomalies && (
+            {hasAnomalies && onFilterChange && (
               <button
                 type="button"
                 onClick={() => onFilterChange(isFilterActive ? 'all' : 'improbable')}

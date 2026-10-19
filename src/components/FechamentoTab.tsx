@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FechamentoMode,
   FilterCriteria,
@@ -20,6 +20,8 @@ import {
 } from '../services/combinatorics';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
+import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
+import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
   Sparkles,
   Zap,
@@ -32,6 +34,7 @@ import {
   Play,
   Layers,
   ChevronDown,
+  Filter,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -70,11 +73,41 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [filters, setFilters] = useState<FilterCriteria>(DEFAULT_FILTERS);
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
+  const [fechamentoFilter, setFechamentoFilter] = useState<'all' | 'improbable' | string>('all');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
+
+  // Monitoramento Estatístico dos Fechamentos Gerados
+  const fechamentoMonitoringSummary = useMemo<MonitoringSummary | null>(() => {
+    if (generatedTickets.length === 0) return null;
+    return analyzeGamesList(
+      generatedTickets.map((t) => ({
+        id: `Bilhete #${t.index.toString().padStart(2, '0')}`,
+        dezenas: t.dezenas,
+        label: `Bilhete #${t.index.toString().padStart(2, '0')}`,
+        index: t.index,
+      }))
+    );
+  }, [generatedTickets]);
+
+  // Bilhetes exibidos com suporte a filtro do monitoramento
+  const displayedTickets = useMemo(() => {
+    if (fechamentoFilter === 'improbable' && fechamentoMonitoringSummary) {
+      const improbableIds = fechamentoMonitoringSummary.gamesWithAnomalies.map((g) => g.gameId);
+      return generatedTickets.filter((t) =>
+        improbableIds.includes(`Bilhete #${t.index.toString().padStart(2, '0')}`)
+      );
+    }
+    if (fechamentoFilter.startsWith('Bilhete #')) {
+      return generatedTickets.filter(
+        (t) => `Bilhete #${t.index.toString().padStart(2, '0')}` === fechamentoFilter
+      );
+    }
+    return generatedTickets;
+  }, [generatedTickets, fechamentoFilter, fechamentoMonitoringSummary]);
 
   // Apply Document Strategy (Calibrated pool dynamically scaled to targetCount)
   const handleApplyOptimalDocumentPool = (repCount?: number, ausCount?: number) => {
@@ -572,6 +605,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           </div>
 
+          {/* SISTEMA DE MONITORAMENTO ESTATÍSTICO DOS FECHAMENTOS GERADOS */}
+          {fechamentoMonitoringSummary && (
+            <StatisticalMonitoringAlert
+              summary={fechamentoMonitoringSummary}
+              isFechamentoEvaluator={true}
+              hasSavedTickets={false}
+              activeFilter={fechamentoFilter}
+              onFilterChange={setFechamentoFilter}
+              onSelectGame={(gameId) => setFechamentoFilter(gameId)}
+              title="Sistema de Monitoramento dos Fechamentos Gerados"
+              subtitle="Auditoria matemática de probabilidade avaliando todos os bilhetes da matriz recém-gerada"
+            />
+          )}
+
           {/* Componente Totalizador de Custos para os Fechamentos Gerados */}
           <TotalizadorDeCustos
             preset={preset}
@@ -585,9 +632,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           />
 
+          {/* Feedback de Filtro Ativo do Monitoramento */}
+          {fechamentoFilter !== 'all' && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Filter className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  Filtro do Monitoramento: Exibindo {displayedTickets.length} de {generatedTickets.length} fechamentos
+                  {fechamentoFilter === 'improbable' ? ' com padrão improvável' : ` (${fechamentoFilter})`}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setFechamentoFilter('all')}
+                className="underline text-amber-300 font-bold hover:text-white transition cursor-pointer"
+              >
+                Limpar Filtro e Ver Todos os Fechamentos
+              </button>
+            </div>
+          )}
+
           {/* Tickets List */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
-            {generatedTickets.map((ticket) => (
+            {displayedTickets.map((ticket) => (
               <div
                 key={ticket.id}
                 className="bg-slate-950/70 rounded-xl border border-slate-800/90 p-3.5 hover:border-slate-700 transition"
