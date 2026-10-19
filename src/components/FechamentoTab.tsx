@@ -21,6 +21,7 @@ import {
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
+import { SomaScatterPlot } from './SomaScatterPlot';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
   Sparkles,
@@ -381,7 +382,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         latestDraw={latestDraw}
       />
 
-      {/* 2. PRONTO PARA PROCESSAR A MATRIZ? (EM DESTAQUE COM DESIGN APRIMORADO) */}
+      {/* 2. GRÁFICO DE DISPERSÃO DE SOMAS DOS ÚLTIMOS 100 CONCURSOS & ZONA DE OURO (190–210) */}
+      <SomaScatterPlot
+        latestDraw={latestDraw}
+        currentSomaMin={filters.somaMin}
+        currentSomaMax={filters.somaMax}
+        onApplySomaRange={(min, max) =>
+          setFilters((prev) => ({ ...prev, somaMin: min, somaMax: max }))
+        }
+      />
+
+      {/* 3. PRONTO PARA PROCESSAR A MATRIZ? (EM DESTAQUE COM DESIGN APRIMORADO) */}
       <div
         className={`relative overflow-hidden rounded-2xl border-2 transition-all p-5 sm:p-6 shadow-2xl ${
           selectedNumbers.length === targetCount
