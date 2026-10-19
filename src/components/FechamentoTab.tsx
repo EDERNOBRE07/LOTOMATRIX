@@ -303,12 +303,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         totalJogos={generatedTickets.length || preset.jogosMaximos}
       />
 
-      {/* Módulo de Conferência Oficial de Jogos (Formato Jogo XX e Seletor Prioritário) */}
-      <ModuloConferenciaJogos
-        latestDraw={latestDraw}
-        generatedTickets={generatedTickets}
-      />
-
       {/* Success Notification for Document Strategy Pool */}
       {documentMessage && (
         <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in">
@@ -344,6 +338,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           setExcludedNumbers([]);
         }}
         targetCount={targetCount}
+      />
+
+      {/* Módulo de Conferência Oficial de Jogos (Colocado após o Volante Oficial Interativo 5×5) */}
+      <ModuloConferenciaJogos
+        latestDraw={latestDraw}
+        generatedTickets={generatedTickets}
       />
 
       {/* Filter Constraints Panel */}

@@ -252,7 +252,11 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             </button>
           </div>
 
-          <ModuloConferenciaJogos latestDraw={latestDraw} />
+          <ModuloConferenciaJogos
+            latestDraw={latestDraw}
+            generatedTickets={tickets}
+            onGoToFechamento={onGoToGenerator}
+          />
         </div>
       ) : (
         <>

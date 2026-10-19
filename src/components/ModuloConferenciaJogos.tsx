@@ -4,6 +4,13 @@ import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import {
+  analyzeGamesList,
+  analyzeGameStatistics,
+  GameMonitoringResult,
+  MonitoringSummary,
+} from '../services/statisticalMonitor';
+import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
+import {
   ClipboardCheck,
   CheckCircle2,
   AlertCircle,
@@ -29,6 +36,9 @@ import {
   FileSpreadsheet,
   Download,
   Target,
+  ShieldAlert,
+  AlertTriangle,
+  Scale,
 } from 'lucide-react';
 
 export interface PontosTierMetric {
@@ -87,17 +97,27 @@ interface ModuloConferenciaJogosProps {
   latestDraw?: LotofacilDraw;
   generatedTickets?: GameTicket[];
   onImportFechamento?: () => void;
+  inspectedVolanteNumbers?: number[];
+  onAddVolanteToConference?: (nums: number[]) => void;
+  onGoToFechamento?: () => void;
 }
 
 export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   latestDraw = CONCURSO_ATUAL,
   generatedTickets = [],
+  inspectedVolanteNumbers = [],
+  onAddVolanteToConference,
+  onGoToFechamento,
 }) => {
   // Input raw text with 24 games as initial value
   const [inputText, setInputText] = useState<string>(SAMPLE_24_GAMES_TEXT);
   const [isEditorExpanded, setIsEditorExpanded] = useState<boolean>(true);
   const [filterFaixa, setFilterFaixa] = useState<'all' | 'premiados' | '15' | '14' | '13' | '12' | '11'>('all');
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
+
+  // SISTEMA DE MONITORAMENTO ESTATÍSTICO DE ANOMALIAS
+  const [monitoringFilter, setMonitoringFilter] = useState<'all' | 'improbable' | string>('all');
+  const [highlightedGameId, setHighlightedGameId] = useState<string | null>(null);
 
   // CONTADOR DE PONTOS / ACERTOS (6 A 15 PONTOS)
   const [selectedPontosFilter, setSelectedPontosFilter] = useState<number | 'all'>('all');
@@ -399,11 +419,49 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     });
   }, [conferenceSummary.gameResults, targetDraw]);
 
-  // Filtered games list (combines exact points filter and prize tier filter)
+  // SISTEMA DE MONITORAMENTO ESTATÍSTICO: JOGOS DA CONFERÊNCIA
+  const monitoringSummary = useMemo<MonitoringSummary>(() => {
+    const validGames = conferenceSummary.gameResults
+      .filter((g) => g.isValid)
+      .map((g, idx) => ({ dezenas: g.dezenas, label: g.label, index: idx + 1 }));
+    return analyzeGamesList(validGames);
+  }, [conferenceSummary.gameResults]);
+
+  // SISTEMA DE MONITORAMENTO ESTATÍSTICO: JOGOS SALVOS DO USUÁRIO (FECHAMENTO)
+  const savedTicketsMonitoringSummary = useMemo<MonitoringSummary | undefined>(() => {
+    if (!generatedTickets || generatedTickets.length === 0) return undefined;
+    const tickets = generatedTickets.map((t) => ({
+      dezenas: t.dezenas,
+      label: `Bilhete #${t.index.toString().padStart(2, '0')}`,
+      index: t.index,
+    }));
+    return analyzeGamesList(tickets);
+  }, [generatedTickets]);
+
+  // Map for fast lookup by game label
+  const gamesMonitoringMap = useMemo(() => {
+    const map = new Map<string, GameMonitoringResult>();
+    monitoringSummary.allResults.forEach((r) => {
+      map.set(r.gameId, r);
+    });
+    return map;
+  }, [monitoringSummary.allResults]);
+
+  // Filtered games list (combines exact points filter, prize tier filter, and monitoring filter)
   const filteredGames = useMemo(() => {
     let pool = conferenceSummary.gameResults;
     if (selectedPontosFilter !== 'all') {
       pool = pool.filter((g) => g.hits === selectedPontosFilter);
+    }
+
+    // Monitoring filter: improbable only or specific game
+    if (monitoringFilter === 'improbable') {
+      const improbableIds = new Set(
+        monitoringSummary.gamesWithAnomalies.map((g) => g.gameId)
+      );
+      pool = pool.filter((g) => improbableIds.has(g.label));
+    } else if (monitoringFilter !== 'all') {
+      pool = pool.filter((g) => g.label === monitoringFilter);
     }
 
     return pool.filter((game) => {
@@ -416,7 +474,13 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       if (filterFaixa === '11') return game.hits === 11;
       return true;
     });
-  }, [conferenceSummary.gameResults, selectedPontosFilter, filterFaixa]);
+  }, [
+    conferenceSummary.gameResults,
+    selectedPontosFilter,
+    filterFaixa,
+    monitoringFilter,
+    monitoringSummary.gamesWithAnomalies,
+  ]);
 
   // Games prepared for CSV export (all games or selected points filter)
   const gamesForCSV: CSVExportGame[] = useMemo(() => {
@@ -567,6 +631,20 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
         </div>
       </div>
 
+      {/* SISTEMA DE MONITORAMENTO ESTATÍSTICO DE ANOMALIAS (JOGOS SALVOS E CONFERÊNCIA) */}
+      <StatisticalMonitoringAlert
+        summary={monitoringSummary}
+        savedTicketsSummary={savedTicketsMonitoringSummary}
+        hasSavedTickets={generatedTickets.length > 0}
+        activeFilter={monitoringFilter}
+        onFilterChange={setMonitoringFilter}
+        onSelectGame={(gameId) => {
+          setMonitoringFilter(gameId);
+          setHighlightedGameId(gameId);
+        }}
+        onGoToFechamento={onGoToFechamento}
+      />
+
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
       <div className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden">
         <div className="p-3 bg-slate-900/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
@@ -585,6 +663,27 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
               <RefreshCw className="w-3 h-3 text-emerald-400" />
               <span>Carregar os 24 Jogos de Exemplo</span>
             </button>
+
+            {inspectedVolanteNumbers && inspectedVolanteNumbers.length === 15 && (
+              <button
+                onClick={() => {
+                  const sorted = [...inspectedVolanteNumbers].sort((a, b) => a - b);
+                  const nextGameNum = parsedGames.length + 1;
+                  const newLine = `Jogo ${nextGameNum.toString().padStart(2, '0')}: ${sorted
+                    .map((n) => n.toString().padStart(2, '0'))
+                    .join(' - ')}`;
+                  setInputText((prev) => (prev.trim() ? `${prev.trim()}\n${newLine}` : newLine));
+                  if (onAddVolanteToConference) {
+                    onAddVolanteToConference(sorted);
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition cursor-pointer flex items-center gap-1.5"
+                title="Inserir as 15 dezenas selecionadas no Volante Oficial Interativo 5x5 acima para conferir"
+              >
+                <Sparkles className="w-3 h-3 text-emerald-400" />
+                <span>+ Adicionar Dezenas do Volante 5×5</span>
+              </button>
+            )}
 
             {generatedTickets.length > 0 && (
               <button
@@ -1039,6 +1138,34 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
               11 pts ({conferenceSummary.total11})
             </button>
           )}
+
+          {/* Improbable Games Filter Button */}
+          {monitoringSummary.improbableCount > 0 && (
+            <button
+              onClick={() => setMonitoringFilter(monitoringFilter === 'improbable' ? 'all' : 'improbable')}
+              className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                monitoringFilter === 'improbable'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm'
+                  : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>Improváveis ({monitoringSummary.improbableCount})</span>
+            </button>
+          )}
+
+          {monitoringFilter !== 'all' && monitoringFilter !== 'improbable' && (
+            <button
+              onClick={() => {
+                setMonitoringFilter('all');
+                setHighlightedGameId(null);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-200 border border-amber-500/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <span>Filtro: {monitoringFilter}</span>
+              <span className="text-amber-400 text-[10px] font-bold">✕</span>
+            </button>
+          )}
         </div>
 
         <div className="text-xs text-slate-400 font-mono">
@@ -1049,18 +1176,34 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       {/* GAMES CARDS LIST */}
       <div className="space-y-2.5">
         {filteredGames.length === 0 ? (
-          <div className="bg-slate-950/60 rounded-xl border border-slate-800 p-8 text-center text-slate-400 text-xs">
-            Nenhum jogo atende ao filtro selecionado. Selecione <strong className="text-slate-200">"Todos"</strong> ou verifique o texto dos jogos acima.
+          <div className="bg-slate-950/60 rounded-xl border border-slate-800 p-8 text-center text-slate-400 text-xs space-y-2">
+            <div>
+              Nenhum jogo atende ao filtro selecionado ({monitoringFilter === 'improbable' ? 'Apenas Improváveis' : filterFaixa}).
+            </div>
+            <button
+              onClick={() => {
+                setFilterFaixa('all');
+                setMonitoringFilter('all');
+                setSelectedPontosFilter('all');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition cursor-pointer"
+            >
+              Restaurar Todos os Jogos
+            </button>
           </div>
         ) : (
           filteredGames.map((game) => {
             const isWinner = game.hits >= 11;
+            const gameMonitoring = gamesMonitoringMap.get(game.label);
+            const isHighlighted = highlightedGameId === game.label;
 
             return (
               <div
                 key={game.id}
                 className={`p-3.5 rounded-xl border transition-all ${
-                  game.hits === 15
+                  isHighlighted
+                    ? 'ring-2 ring-amber-400 shadow-xl shadow-amber-500/20 bg-slate-900 border-amber-400'
+                    : game.hits === 15
                     ? 'bg-amber-950/30 border-amber-500/60 shadow-lg shadow-amber-500/10'
                     : game.hits === 14
                     ? 'bg-indigo-950/30 border-indigo-500/50 shadow-md'
@@ -1073,7 +1216,7 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   {/* Game Label & Hits Badge */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-mono font-bold text-xs text-slate-300 px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
                       {game.label}
                     </span>
@@ -1097,6 +1240,18 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
                       {game.hits >= 11 ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
                       <span>{game.hits} Acertos</span>
                     </div>
+
+                    {/* Statistical Improbability Alert Pill */}
+                    {gameMonitoring && gameMonitoring.isImprobable ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/35 text-[10px] font-bold font-mono">
+                        <ShieldAlert className="w-3 h-3 text-amber-400" />
+                        <span>Padrão Improvável</span>
+                      </span>
+                    ) : gameMonitoring ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium font-mono">
+                        <span>✓ Equilibrado</span>
+                      </span>
+                    ) : null}
 
                     {/* Prize description */}
                     {isWinner && (
@@ -1150,6 +1305,68 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
                     );
                   })}
                 </div>
+
+                {/* Statistical Diagnosis Footer on Card */}
+                {gameMonitoring && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-850 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[10px]">
+                    <div className="flex flex-wrap items-center gap-1.5 font-mono">
+                      <span
+                        className={`px-1.5 py-0.5 rounded ${
+                          gameMonitoring.soma < 175 || gameMonitoring.soma > 220
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/35 font-bold'
+                            : 'bg-slate-900 text-slate-300'
+                        }`}
+                      >
+                        Soma: {gameMonitoring.soma}
+                      </span>
+
+                      <span
+                        className={`px-1.5 py-0.5 rounded ${
+                          gameMonitoring.pares >= 10 || gameMonitoring.impares >= 10
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/35 font-bold'
+                            : 'bg-slate-900 text-slate-300'
+                        }`}
+                      >
+                        {gameMonitoring.pares}P / {gameMonitoring.impares}I
+                      </span>
+
+                      <span
+                        className={`px-1.5 py-0.5 rounded ${
+                          gameMonitoring.primos <= 2 || gameMonitoring.primos >= 9
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/35 font-bold'
+                            : 'bg-slate-900 text-slate-400'
+                        }`}
+                      >
+                        {gameMonitoring.primos} Primos
+                      </span>
+
+                      <span
+                        className={`px-1.5 py-0.5 rounded ${
+                          gameMonitoring.moldura <= 6 || gameMonitoring.moldura >= 13
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/35 font-bold'
+                            : 'bg-slate-900 text-slate-400'
+                        }`}
+                      >
+                        {gameMonitoring.moldura} Moldura
+                      </span>
+
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400">
+                        {gameMonitoring.miolo} Miolo
+                      </span>
+                    </div>
+
+                    {gameMonitoring.isImprobable ? (
+                      <span className="text-amber-300 font-sans font-medium flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        <span>{gameMonitoring.anomalies.map((a) => a.title).join(' • ')}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 font-sans">
+                        ✓ Calibração estatística recomendada
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })

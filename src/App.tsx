@@ -7,6 +7,7 @@ import { SimulatorTab } from './components/SimulatorTab';
 import { GamesManagerTab } from './components/GamesManagerTab';
 import { HostingerGuideTab } from './components/HostingerGuideTab';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
+import { VolanteSelector } from './components/VolanteSelector';
 import { GameTicket, AIPredictionResponse, LotofacilDraw } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -139,6 +140,21 @@ export default function App() {
   useEffect(() => {
     runAutoUpdate(false);
   }, []);
+
+  const [conferenciaVolanteNumbers, setConferenciaVolanteNumbers] = useState<number[]>(latestDraw.dezenas);
+
+  // Sync conference Volante with latestDraw
+  useEffect(() => {
+    if (latestDraw && latestDraw.dezenas) {
+      setConferenciaVolanteNumbers(latestDraw.dezenas);
+    }
+  }, [latestDraw.concurso]);
+
+  const handleToggleConferenciaNumber = (n: number) => {
+    setConferenciaVolanteNumbers((prev) =>
+      prev.includes(n) ? prev.filter((x) => x !== n) : prev.length < 15 ? [...prev, n].sort((a, b) => a - b) : prev
+    );
+  };
 
   const handleApplyAIRecsToFechamento = (numbers: number[]) => {
     setActiveTab('fechamento');
@@ -313,10 +329,31 @@ export default function App() {
         )}
 
         {activeTab === 'conferencia' && (
-          <ModuloConferenciaJogos
-            latestDraw={latestDraw}
-            generatedTickets={savedTickets}
-          />
+          <div className="space-y-6">
+            {/* Volante Oficial Interativo 5×5 */}
+            <VolanteSelector
+              selectedNumbers={conferenciaVolanteNumbers}
+              fixedNumbers={[]}
+              excludedNumbers={[]}
+              statsList={dynamicStats}
+              cyclePendingNumbers={dezenasPendentesCiclo}
+              latestDraw={latestDraw}
+              onToggleNumber={handleToggleConferenciaNumber}
+              onSetFixed={() => {}}
+              onSetExcluded={() => {}}
+              onSelectSet={(nums) => setConferenciaVolanteNumbers(nums.slice(0, 15))}
+              onClear={() => setConferenciaVolanteNumbers([])}
+              targetCount={15}
+            />
+
+            {/* Módulo de Conferência Oficial de Jogos (Colocado após o Volante Oficial Interativo 5×5) */}
+            <ModuloConferenciaJogos
+              latestDraw={latestDraw}
+              generatedTickets={savedTickets}
+              inspectedVolanteNumbers={conferenciaVolanteNumbers}
+              onGoToFechamento={() => setActiveTab('fechamento')}
+            />
+          </div>
         )}
 
         {activeTab === 'ia_preditor' && (
