@@ -13,6 +13,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
+import { DailyInsightsWidget } from './DailyInsightsWidget';
 import {
   Sparkles,
   Cpu,
@@ -28,6 +29,7 @@ import {
   ShieldAlert,
   Award,
   Activity,
+  Compass,
 } from 'lucide-react';
 
 interface AIPredictorTabProps {
@@ -615,6 +617,16 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* WIDGET FLUTUANTE / LATERAL: INSIGHTS DIÁRIOS (FIBONACCI & NÚMEROS PRIMOS) */}
+      <DailyInsightsWidget
+        key={latestDraw.concurso}
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        aiScores={scores}
+        onApplyNumbers={onApplyRecommendation}
+      />
     </div>
   );
 };
