@@ -9,6 +9,7 @@ import {
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
+import { QuentesFriasModule } from './QuentesFriasModule';
 import {
   BarChart,
   TrendingUp,
@@ -41,7 +42,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   onApplyNumbers,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'atrasos' | 'montecarlo' | 'duplas' | 'ciclos' | 'padroes'
+    'atrasos' | 'quentes_frias' | 'montecarlo' | 'duplas' | 'ciclos' | 'padroes'
   >('atrasos');
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
@@ -69,6 +70,26 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística das Dezenas & Atrasos</span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('quentes_frias')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'quentes_frias'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 fill-current" />
+            <span>Radar Quentes & Frias</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                activeSubTab === 'quentes_frias'
+                  ? 'bg-slate-950 text-amber-300'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              }`}
+            >
+              DESTAQUE
+            </span>
           </button>
           <button
             onClick={() => setActiveSubTab('montecarlo')}
@@ -159,6 +180,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Módulo Especial: Sequências de Quentes (Últimos 3 Concursos) e Frias (> 5 Concursos Ausentes) */}
+          <QuentesFriasModule
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+          />
 
           {/* Dynamic Recharts Bar Chart */}
           <FrequencyDelayChart
@@ -513,6 +542,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* SUBTAB DEDICADA: RADAR DE DEZENAS QUENTES & FRIAS */}
+      {activeSubTab === 'quentes_frias' && (
+        <QuentesFriasModule
+          latestDraw={latestDraw}
+          statsList={statsList}
+          cyclePendingNumbers={cyclePendingNumbers}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
     </div>
   );

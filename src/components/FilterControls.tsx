@@ -34,23 +34,30 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     onChange({ ...filters, ...partial });
   };
 
-  const applyCalibrated3804Preset = () => {
+  const [appliedNotice, setAppliedNotice] = React.useState<string | null>(null);
+
+  // Insights Diários da IA para calibrar os Filtros Matemáticos & Restrições Canônicas
+  const applyAIDailyInsightsPreset = () => {
     onChange({
       ...filters,
       paresMin: 7,
       paresMax: 8,
       primosMin: 4,
-      primosMax: 7,
-      somaMin: 175,
-      somaMax: 220,
-      molduraMin: 8,
-      molduraMax: 11,
+      primosMax: 6,
+      somaMin: 190, // Regra de Ouro da Soma recomendada pela IA
+      somaMax: 210,
+      molduraMin: 9,
+      molduraMax: 10,
       fibonacciMin: 3,
       fibonacciMax: 5,
       repetidasMin: 8,
       repetidasMax: 10,
-      maxConsecutivas: 5,
+      maxConsecutivas: 4,
     });
+    setAppliedNotice(
+      `Insights Diários da IA aplicados: Soma na Zona de Ouro (190–210), 4–6 Primos, 3–5 Fibonacci e 8–10 Repetidas do Concurso #${latestDraw.concurso}.`
+    );
+    setTimeout(() => setAppliedNotice(null), 5000);
   };
 
   const applyStrictPreset = () => {
@@ -117,12 +124,15 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
         <div className="flex items-center flex-wrap gap-2 shrink-0">
           <button
             type="button"
-            onClick={applyCalibrated3804Preset}
-            className="px-2.5 py-1.5 text-xs rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition shadow-sm shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5"
-            title="Calibrado com os parâmetros canônicos do Concurso 3804"
+            onClick={applyAIDailyInsightsPreset}
+            className="px-3 py-1.5 text-xs rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-slate-950 font-black hover:opacity-95 transition shadow-sm shadow-emerald-500/25 cursor-pointer flex items-center gap-1.5"
+            title="Aplica os Insights Diários da IA nos Filtros Matemáticos: Zona de Ouro (190–210), 4–6 Primos, 3–5 Fibonacci e 8–10 Repetidas"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Preset Canônico #3804</span>
+            <Sparkles className="w-3.5 h-3.5 text-slate-950 fill-slate-950" />
+            <span>Insights Diários da IA</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-950 text-emerald-300 font-mono font-bold">
+              RECOMENDADO
+            </span>
           </button>
           <button
             type="button"
@@ -148,6 +158,23 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Alerta de Aplicação dos Insights Diários da IA */}
+      {appliedNotice && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs px-3.5 py-2 rounded-xl flex items-center justify-between gap-2 shadow-md shadow-emerald-500/10">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{appliedNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAppliedNotice(null)}
+            className="text-emerald-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SEÇÃO PRINCIPAL DE DESTAQUE: REPETIDAS DO CONCURSO ANTERIOR & FAIXA DE SOMA */}
