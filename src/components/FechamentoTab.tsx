@@ -373,11 +373,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         targetCount={targetCount}
       />
 
-      {/* 1. FILTROS MATEMÁTICOS & RESTRIÇÕES CANÔNICAS (LOGO APÓS O VOLANTE OFICIAL INTERATIVO 5×5) */}
+      {/* 1. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (LOGO APÓS O VOLANTE OFICIAL INTERATIVO 5×5) */}
       <FilterControls
         filters={filters}
         onChange={setFilters}
         onReset={() => setFilters(DEFAULT_FILTERS)}
+        latestDraw={latestDraw}
       />
 
       {/* 2. PRONTO PARA PROCESSAR A MATRIZ? (EM DESTAQUE COM DESIGN APRIMORADO) */}
