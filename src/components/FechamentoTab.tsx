@@ -13,13 +13,13 @@ import { FilterControls } from './FilterControls';
 import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
+  generateFibonacciOptimizedGames,
   DEFAULT_FILTERS,
   buildOptimalPool,
   buildOptimal18Pool,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
-import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
@@ -80,6 +80,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
+  const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci'>('matriz');
 
   // Monitoramento Estatístico dos Fechamentos Gerados
   const fechamentoMonitoringSummary = useMemo<MonitoringSummary | null>(() => {
@@ -185,6 +186,33 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         setGeneratedTickets(tickets);
         onSaveTickets(tickets);
+        setGenerationType('matriz');
+        const end = performance.now();
+        setGenerationTimeMs(Math.round(end - start));
+      } catch (err: any) {
+        console.error(err);
+      } finally {
+        setIsGenerating(false);
+      }
+    }, 150);
+  };
+
+  // Gerador de Sequências Otimizadas baseado em distribuições de Fibonacci
+  // Cria 5 jogos com garantia de pelo menos 3 jogos na Regra de Ouro (soma 190-210)
+  const handleGenerateFibonacci = () => {
+    setIsGenerating(true);
+    const start = performance.now();
+
+    setTimeout(() => {
+      try {
+        const tickets = generateFibonacciOptimizedGames(
+          latestDraw.dezenas,
+          aiPrediction?.scores
+        );
+
+        setGeneratedTickets(tickets);
+        onSaveTickets(tickets);
+        setGenerationType('fibonacci');
         const end = performance.now();
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
@@ -523,41 +551,70 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             )}
           </div>
 
-          {/* Action Row & Process Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>
-                Algoritmo de cobertura combinatorial com eliminação de desvios e matriz comprovada de 14 pontos.
-              </span>
+          {/* Action Row & Process Buttons */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-1">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs text-slate-300 font-semibold">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Algoritmo Combinatório Oficial com Filtros Canônicos e Proteção Estatística</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Gere a matriz desdobrada das {targetCount} dezenas ou crie automaticamente 5 sequências com padrões de Fibonacci.
+              </p>
             </div>
 
-            <button
-              onClick={handleGenerate}
-              disabled={selectedNumbers.length < targetCount || isGenerating}
-              className={`flex items-center justify-center gap-3 px-8 py-4 rounded-xl font-black text-sm tracking-wide transition-all shadow-xl cursor-pointer ${
-                selectedNumbers.length === targetCount && !isGenerating
-                  ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] active:scale-[0.98]'
-                  : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
-              }`}
-            >
-              {isGenerating ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  <span>PROCESSANDO COMBINAÇÕES...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-5 h-5 fill-current" />
-                  <span>
-                    {selectedNumbers.length === targetCount
-                      ? `PROCESSAR & GERAR ${preset.jogosMaximos} JOGOS OTIMIZADOS`
-                      : `SELECIONE MAIS ${targetCount - selectedNumbers.length} DEZENA(S) NO VOLANTE`}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Botão Gerador de Sequências Otimizadas (Fibonacci + Regra de Ouro) */}
+              <button
+                type="button"
+                onClick={handleGenerateFibonacci}
+                disabled={isGenerating}
+                className="flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer border border-indigo-400/40 whitespace-nowrap"
+                title="Cria automaticamente 5 jogos baseados em distribuições de Fibonacci, garantindo que pelo menos 3 jogos sigam a Regra de Ouro de soma (190-210)"
+              >
+                <Sparkles className="w-4 h-4 text-cyan-300 shrink-0" />
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm">
+                    <span>Gerador de Sequências Otimizadas</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-400/40 font-bold">
+                      5 JOGOS
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-cyan-200/80 font-normal block">
+                    Padrões Fibonacci • ≥ 3 na Regra de Ouro (190–210)
                   </span>
-                  <Sparkles className="w-4 h-4 text-slate-950" />
-                </>
-              )}
-            </button>
+                </div>
+              </button>
+
+              {/* Botão Principal de Processar Matriz do Volante */}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={selectedNumbers.length < targetCount || isGenerating}
+                className={`flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl font-black text-xs sm:text-sm tracking-wide transition-all shadow-xl cursor-pointer whitespace-nowrap ${
+                  selectedNumbers.length === targetCount && !isGenerating
+                    ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] active:scale-[0.98]'
+                    : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
+                }`}
+              >
+                {isGenerating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    <span>PROCESSANDO...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 fill-current" />
+                    <span>
+                      {selectedNumbers.length === targetCount
+                        ? `PROCESSAR & GERAR ${preset.jogosMaximos} JOGOS`
+                        : `SELECIONE MAIS ${targetCount - selectedNumbers.length} DEZENA(S)`}
+                    </span>
+                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -570,11 +627,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Layers className="w-4 h-4 text-emerald-400" />
-                  <span>Matriz Gerada: {generatedTickets.length} Bilhetes Otimizados</span>
+                  <span>
+                    {generationType === 'fibonacci' || generatedTickets.length === 5
+                      ? 'Sequências Otimizadas (Fibonacci): 5 Bilhetes Gerados'
+                      : `Matriz Gerada: ${generatedTickets.length} Bilhetes Otimizados`}
+                  </span>
                 </h3>
                 {generationTimeMs !== null && (
                   <span className="text-[11px] text-slate-500 font-mono">
                     ({generationTimeMs}ms)
+                  </span>
+                )}
+                {generationType === 'fibonacci' && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    Regra de Ouro (190–210) Ativa
                   </span>
                 )}
                 <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -585,8 +651,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Todos os bilhetes atendem estritamente aos filtros matemáticos e à garantia de{' '}
-                {preset.garantia}.
+                {generationType === 'fibonacci' || generatedTickets.length === 5
+                  ? 'Jogos calibrados com distribuições de Fibonacci (3 a 5 dezenas) e garantia de que pelo menos 3 jogos residem na Zona de Ouro de soma (190–210).'
+                  : `Todos os bilhetes atendem estritamente aos filtros matemáticos e à garantia de ${preset.garantia}.`}
               </p>
             </div>
 
@@ -738,16 +805,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Módulo de Conferência Oficial de Jogos para conferência dos bilhetes gerados */}
-      {generatedTickets.length > 0 && (
-        <div className="pt-2">
-          <ModuloConferenciaJogos
-            latestDraw={latestDraw}
-            generatedTickets={generatedTickets}
-          />
         </div>
       )}
     </div>
