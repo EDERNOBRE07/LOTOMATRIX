@@ -4,6 +4,7 @@ import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches } from '../services/combinatorics';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
+import { ExportPDFModal } from './ExportPDFModal';
 import {
   Download,
   Copy,
@@ -17,6 +18,12 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
+  Tag,
+  Plus,
+  X,
+  Filter,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 
 interface GamesManagerTabProps {
@@ -36,6 +43,72 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [selectedConcurso, setSelectedConcurso] = useState<number>(latestDraw.concurso);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
+  const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
+
+  // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
+  const [ticketTags, setTicketTags] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_ticket_tags');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [activeTagFilter, setActiveTagFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [newTagInput, setNewTagInput] = useState<{ [ticketId: string]: string }>({});
+
+  // Seleção de múltiplos jogos para exportação em lote
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(() => {
+    return new Set(tickets.map((t) => t.id || `ticket-${t.index}`));
+  });
+
+  // Atualiza seleção padrão quando novos tickets chegam
+  React.useEffect(() => {
+    setSelectedTicketIds(new Set(tickets.map((t) => t.id || `ticket-${t.index}`)));
+  }, [tickets]);
+
+  const handleToggleSelectTicket = (id: string) => {
+    setSelectedTicketIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllTickets = () => {
+    setSelectedTicketIds(new Set(tickets.map((t) => t.id || `ticket-${t.index}`)));
+  };
+
+  const handleDeselectAllTickets = () => {
+    setSelectedTicketIds(new Set());
+  };
+
+  // Funções de Gerenciamento de Tags
+  const handleAddTag = (ticketId: string, tagToAdd: string) => {
+    const cleanTag = tagToAdd.trim();
+    if (!cleanTag) return;
+    const current = ticketTags[ticketId] || [];
+    if (!current.includes(cleanTag)) {
+      const updated = { ...ticketTags, [ticketId]: [...current, cleanTag] };
+      setTicketTags(updated);
+      try {
+        localStorage.setItem('lotosniper_ticket_tags', JSON.stringify(updated));
+      } catch {}
+    }
+    setNewTagInput((prev) => ({ ...prev, [ticketId]: '' }));
+  };
+
+  const handleRemoveTag = (ticketId: string, tagToRemove: string) => {
+    const current = ticketTags[ticketId] || [];
+    const updated = { ...ticketTags, [ticketId]: current.filter((t) => t !== tagToRemove) };
+    setTicketTags(updated);
+    try {
+      localStorage.setItem('lotosniper_ticket_tags', JSON.stringify(updated));
+    } catch {}
+  };
 
   // Update when latestDraw changes
   React.useEffect(() => {
@@ -43,9 +116,51 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     setSelectedConcurso(latestDraw.concurso);
   }, [latestDraw.concurso, latestDraw.dezenas]);
 
-  // Convert tickets to CSVExportGame format with live hits and prizes
+  // Lista de todos os tags únicos existentes
+  const allExistingTags = React.useMemo(() => {
+    const defaultTags = ['Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro', 'Equilíbrio 8P/7I'];
+    const customTags = Object.values(ticketTags).flat();
+    return Array.from(new Set([...defaultTags, ...customTags]));
+  }, [ticketTags]);
+
+  // Jogos filtrados por Tag e Busca
+  const filteredTickets = React.useMemo(() => {
+    return tickets.filter((t) => {
+      const id = t.id || `ticket-${t.index}`;
+      const tags = ticketTags[id] || [];
+
+      // Filtro de tag
+      if (activeTagFilter !== 'all' && !tags.includes(activeTagFilter)) {
+        return false;
+      }
+
+      // Filtro de busca (por número de dezenas ou label)
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const hasTag = tags.some((tg) => tg.toLowerCase().includes(q));
+        const hasNumber = t.dezenas.some((n) => n.toString() === q || n.toString().padStart(2, '0') === q);
+        const hasLabel = `jogo ${t.index}`.includes(q);
+        return hasTag || hasNumber || hasLabel;
+      }
+
+      return true;
+    });
+  }, [tickets, ticketTags, activeTagFilter, searchQuery]);
+
+  // Tickets formatados com tags para o PDF e CSV
+  const ticketsWithTags: GameTicket[] = React.useMemo(() => {
+    return tickets.map((t) => ({
+      ...t,
+      tags: ticketTags[t.id || `ticket-${t.index}`] || [],
+    }));
+  }, [tickets, ticketTags]);
+
+  // Convert selected tickets to CSVExportGame format for batch export
   const csvExportGames: CSVExportGame[] = React.useMemo(() => {
-    return tickets.map((t) => {
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+
+    return listToExport.map((t) => {
       const hits = countMatches(t.dezenas, conferirDezenas);
       let premioNome = 'Não premiado';
       let premioValor = 0;
@@ -66,9 +181,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         premioValor = 7.0;
       }
 
+      const id = t.id || `ticket-${t.index}`;
+      const tags = ticketTags[id] || [];
+
       return {
         index: t.index,
-        label: `Jogo ${t.index.toString().padStart(2, '0')}`,
+        label: `Jogo ${t.index.toString().padStart(2, '0')}${tags.length > 0 ? ` [${tags.join(', ')}]` : ''}`,
         dezenas: t.dezenas,
         pares: t.pares,
         impares: t.impares,
@@ -81,7 +199,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         premioValor,
       };
     });
-  }, [tickets, conferirDezenas, latestDraw]);
+  }, [tickets, selectedTicketIds, conferirDezenas, latestDraw, ticketTags]);
 
   const allDraws = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
 
@@ -95,26 +213,31 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
   // Export TXT
   const handleExportTXT = () => {
-    if (tickets.length === 0) return;
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+    if (listToExport.length === 0) return;
+
     const content =
       `# LOTOSNIPER - MATRIZ DE FECHAMENTO LOTOFÁCIL (ALVO 15)\n` +
-      `# Total de Bilhetes: ${tickets.length}\n` +
+      `# Total de Bilhetes: ${listToExport.length}\n` +
+      `# Concurso Base: #${latestDraw.concurso} (${latestDraw.data})\n` +
       `# Gerado em: ${new Date().toLocaleString('pt-BR')}\n` +
       `# ------------------------------------------------------------\n` +
-      tickets
-        .map(
-          (t) =>
-            `Jogo ${t.index.toString().padStart(2, '0')}: ${t.dezenas
-              .map((n) => n.toString().padStart(2, '0'))
-              .join(' ')}`
-        )
+      listToExport
+        .map((t) => {
+          const tags = ticketTags[t.id || `ticket-${t.index}`] || [];
+          const tagStr = tags.length > 0 ? ` [Tags: ${tags.join(', ')}]` : '';
+          return `Jogo ${t.index.toString().padStart(2, '0')}: ${t.dezenas
+            .map((n) => n.toString().padStart(2, '0'))
+            .join(' ')}${tagStr}`;
+        })
         .join('\n');
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_fechamento_${tickets.length}_jogos.txt`;
+    link.download = `lotosniper_fechamento_${listToExport.length}_jogos.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -212,25 +335,118 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Baixar TXT</span>
             </button>
 
+            {/* Exportar CSV em Lote (com contagem de selecionados) */}
             <button
               onClick={() => setIsCSVModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-emerald-500/10"
-              title="Exportar CSV formatado para volantes e Excel"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-emerald-500/10"
+              title="Exportar CSV em lote formatado para ferramentas de aposta ou Excel"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Exportar CSV (Volantes)</span>
+              <span>Exportar CSV em Lote ({selectedTicketIds.size})</span>
             </button>
 
+            {/* Exportar PDF Formatado para Volantes da Lotofácil */}
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
+              onClick={() => setIsPDFModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-purple-500/15"
+              title="Exportar PDF formatado pronto para impressão em volantes da Lotofácil"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir</span>
+              <Printer className="w-3.5 h-3.5 text-purple-400" />
+              <span>Exportar PDF (Volantes)</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* Barra de Filtros por Tags e Seleção em Lote */}
+      {tickets.length > 0 && (
+        <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-4 shadow-lg space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            {/* Tag Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-slate-400 font-semibold flex items-center gap-1 mr-1">
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span>Tags:</span>
+              </span>
+              <button
+                onClick={() => setActiveTagFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                  activeTagFilter === 'all'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                Todas ({tickets.length})
+              </button>
+              {allExistingTags.map((tag) => {
+                const count = tickets.filter((t) => (ticketTags[t.id || `ticket-${t.index}`] || []).includes(tag)).length;
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => setActiveTagFilter(tag)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer flex items-center gap-1 ${
+                      activeTagFilter === tag
+                        ? 'bg-amber-400 text-slate-950 shadow-sm'
+                        : 'bg-slate-800/80 text-amber-300/80 hover:text-amber-200 border border-slate-700/60'
+                    }`}
+                  >
+                    <span>{tag}</span>
+                    <span className="text-[10px] opacity-75 font-mono">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Search Input */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar por tag ou dezena..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 text-white rounded-xl pl-8 pr-3 py-1.5 text-xs w-48 sm:w-56 focus:outline-none focus:border-emerald-500"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Batch Selection Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSelectAllTickets}
+                className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                <span>Selecionar Todos</span>
+              </button>
+              <span className="text-slate-600">•</span>
+              <button
+                onClick={handleDeselectAllTickets}
+                className="text-slate-400 hover:text-rose-400 flex items-center gap-1 cursor-pointer"
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>Desmarcar Todos</span>
+              </button>
+            </div>
+
+            <div className="text-slate-400 font-mono text-[11px]">
+              <strong className="text-emerald-400">{selectedTicketIds.size}</strong> de{' '}
+              <strong className="text-white">{tickets.length}</strong> jogos marcados para exportação
+            </div>
+          </div>
+        </div>
+      )}
 
       {tickets.length === 0 ? (
         <div className="space-y-6">
@@ -266,10 +482,10 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Search className="w-4 h-4 text-emerald-400" />
-                  <span>Conferidor Instantâneo de Acertos</span>
+                  <span>Conferidor Instantâneo de Acertos & Gestão de Tags</span>
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Compare sua matriz contra os resultados oficiais da Lotofácil.
+                  Compare sua matriz contra os resultados oficiais da Lotofácil e organize seus jogos com tags personalizadas.
                 </p>
               </div>
 
@@ -344,29 +560,42 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </div>
             </div>
 
-            {/* List of Tickets with Highlighted Matches */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[550px] overflow-y-auto pr-1">
-              {tickets.map((t) => {
+            {/* List of Tickets with Tags and Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
+              {filteredTickets.map((t) => {
+                const id = t.id || `ticket-${t.index}`;
                 const hits = countMatches(t.dezenas, conferirDezenas);
                 const isAwarded = hits >= 11;
+                const isSelected = selectedTicketIds.has(id);
+                const currentTags = ticketTags[id] || [];
 
                 return (
                   <div
-                    key={t.id}
-                    className={`p-3 rounded-xl border transition ${
+                    key={id}
+                    className={`p-3.5 rounded-2xl border transition space-y-2.5 ${
+                      isSelected
+                        ? 'border-emerald-500/50 bg-slate-950'
+                        : 'border-slate-800/80 bg-slate-950/40 opacity-75'
+                    } ${
                       hits >= 14
-                        ? 'bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-400/50'
-                        : hits >= 13
-                        ? 'bg-emerald-500/10 border-emerald-500/30'
-                        : isAwarded
-                        ? 'bg-slate-950 border-slate-800'
-                        : 'bg-slate-950/40 border-slate-850 opacity-60'
+                        ? 'ring-1 ring-amber-400/50 bg-amber-500/5'
+                        : ''
                     }`}
                   >
-                    <div className="flex items-center justify-between text-xs mb-2">
-                      <span className="font-mono font-bold text-white">
-                        Jogo #{t.index.toString().padStart(2, '0')}
-                      </span>
+                    {/* Top Row: Selection Checkbox, Game Title & Hit Badge */}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectTicket(id)}
+                          className="w-4 h-4 rounded text-emerald-500 accent-emerald-500 cursor-pointer"
+                        />
+                        <span className="font-mono font-black text-white text-sm">
+                          Jogo #{t.index.toString().padStart(2, '0')}
+                        </span>
+                      </div>
+
                       <span
                         className={`font-mono text-xs font-black px-2 py-0.5 rounded ${
                           hits >= 14
@@ -380,6 +609,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                       </span>
                     </div>
 
+                    {/* Numbers Grid */}
                     <div className="flex flex-wrap gap-1">
                       {t.dezenas.map((num) => {
                         const matched = conferirDezenas.includes(num);
@@ -389,13 +619,83 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                             className={`inline-flex items-center justify-center w-7 h-7 rounded text-xs font-mono font-bold ${
                               matched
                                 ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
-                                : 'bg-slate-800/80 text-slate-500'
+                                : 'bg-slate-800/80 text-slate-400'
                             }`}
                           >
                             {num.toString().padStart(2, '0')}
                           </span>
                         );
                       })}
+                    </div>
+
+                    {/* Tags Section */}
+                    <div className="pt-2 border-t border-slate-850 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {currentTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              onClick={() => handleRemoveTag(id, tag)}
+                              className="text-amber-400 hover:text-white cursor-pointer"
+                              title="Remover tag"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+
+                        {/* Quick Add Tag Suggestions */}
+                        {!currentTags.includes('Ciclo Ativo') && (
+                          <button
+                            onClick={() => handleAddTag(id, 'Ciclo Ativo')}
+                            className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 hover:text-amber-300 cursor-pointer"
+                          >
+                            + Ciclo Ativo
+                          </button>
+                        )}
+                        {!currentTags.includes('Matriz Ouro') && (
+                          <button
+                            onClick={() => handleAddTag(id, 'Matriz Ouro')}
+                            className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 hover:text-amber-300 cursor-pointer"
+                          >
+                            + Matriz Ouro
+                          </button>
+                        )}
+                        {!currentTags.includes('Aposta Agressiva') && (
+                          <button
+                            onClick={() => handleAddTag(id, 'Aposta Agressiva')}
+                            className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 hover:text-amber-300 cursor-pointer"
+                          >
+                            + Agressiva
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Custom Tag Input */}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          placeholder="Nova tag..."
+                          value={newTagInput[id] || ''}
+                          onChange={(e) => setNewTagInput({ ...newTagInput, [id]: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleAddTag(id, newTagInput[id] || '');
+                            }
+                          }}
+                          className="bg-slate-900 border border-slate-800 text-white text-[10px] rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-amber-400"
+                        />
+                        <button
+                          onClick={() => handleAddTag(id, newTagInput[id] || '')}
+                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                          title="Adicionar tag"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -404,14 +704,23 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </div>
         </>
       )}
-      {/* Modal de Exportação CSV para Volantes e Excel */}
+
+      {/* Modal de Exportação CSV em Lote para Volantes e Excel */}
       <ExportCSVModal
         isOpen={isCSVModalOpen}
         onClose={() => setIsCSVModalOpen(false)}
         games={csvExportGames}
         concursoRef={selectedConcurso}
-        title="Exportar Jogos Salvos em CSV"
-        defaultFilename={`lotosniper_volantes_${tickets.length}_jogos.csv`}
+        title={`Exportar ${csvExportGames.length} Jogos Selecionados em CSV`}
+        defaultFilename={`lotosniper_lote_${csvExportGames.length}_jogos.csv`}
+      />
+
+      {/* Modal de Exportação em PDF Formatado para Volantes da Lotofácil */}
+      <ExportPDFModal
+        isOpen={isPDFModalOpen}
+        onClose={() => setIsPDFModalOpen(false)}
+        tickets={ticketsWithTags}
+        latestDraw={latestDraw}
       />
     </div>
   );

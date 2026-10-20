@@ -22,6 +22,11 @@ import {
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
+import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
+import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
+import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
+import { D3CoverageHeatmap } from './D3CoverageHeatmap';
+import { soundService } from '../services/soundAlert';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
   Sparkles,
@@ -36,6 +41,10 @@ import {
   Layers,
   ChevronDown,
   Filter,
+  History,
+  RotateCcw,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -81,6 +90,71 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
   const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci'>('matriz');
+
+  // Notificação sonora opcional para jogos fora da zona de ouro (190-210)
+  const [soundAlertEnabled, setSoundAlertEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_sound_alert') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSoundAlert = (enabled: boolean) => {
+    setSoundAlertEnabled(enabled);
+    try {
+      localStorage.setItem('lotosniper_sound_alert', String(enabled));
+    } catch {}
+  };
+
+  // Histórico de Auto-Save para as últimas 10 gerações
+  const [autoSaveHistory, setAutoSaveHistory] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_matrix_autosave');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isAutoSaveModalOpen, setIsAutoSaveModalOpen] = useState(false);
+
+  const saveToAutoSave = (
+    tickets: GameTicket[],
+    genMode: FechamentoMode,
+    numbers: number[],
+    genFilters: FilterCriteria,
+    type: 'matriz' | 'fibonacci'
+  ) => {
+    try {
+      const item = {
+        id: `gen-${Date.now()}`,
+        timestamp: Date.now(),
+        dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        mode: genMode,
+        targetCount: numbers.length,
+        selectedNumbers: numbers,
+        filters: genFilters,
+        ticketsCount: tickets.length,
+        tickets,
+        generationType: type,
+      };
+      const updated = [item, ...autoSaveHistory.filter((h) => h.id !== item.id)].slice(0, 10);
+      setAutoSaveHistory(updated);
+      localStorage.setItem('lotosniper_matrix_autosave', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Falha ao salvar auto-save:', e);
+    }
+  };
+
+  const handleRestoreGeneration = (item: any) => {
+    setMode(item.mode);
+    setSelectedNumbers(item.selectedNumbers);
+    setFilters(item.filters);
+    setGeneratedTickets(item.tickets);
+    setGenerationType(item.generationType);
+    onSaveTickets(item.tickets);
+    setIsAutoSaveModalOpen(false);
+  };
 
   // Monitoramento Estatístico dos Fechamentos Gerados
   const fechamentoMonitoringSummary = useMemo<MonitoringSummary | null>(() => {
@@ -187,6 +261,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setGeneratedTickets(tickets);
         onSaveTickets(tickets);
         setGenerationType('matriz');
+        saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
+
+        if (soundAlertEnabled) {
+          const hasOutside = tickets.some((t) => t.soma < 190 || t.soma > 210);
+          if (hasOutside) soundService.playOutsideGoldenZoneAlert();
+          else soundService.playGoldenZoneSuccessChime();
+        }
+
         const end = performance.now();
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
@@ -213,6 +295,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setGeneratedTickets(tickets);
         onSaveTickets(tickets);
         setGenerationType('fibonacci');
+        saveToAutoSave(tickets, mode, selectedNumbers, filters, 'fibonacci');
+
+        if (soundAlertEnabled) {
+          const hasOutside = tickets.some((t) => t.soma < 190 || t.soma > 210);
+          if (hasOutside) soundService.playOutsideGoldenZoneAlert();
+          else soundService.playGoldenZoneSuccessChime();
+        }
+
         const end = performance.now();
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
@@ -262,9 +352,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Garantia Matemática Comprovada</span>
+            <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Garantia Matemática Comprovada</span>
+              </div>
+
+              {autoSaveHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsAutoSaveModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-indigo-300 text-xs font-bold transition cursor-pointer shadow-sm"
+                  title="Recuperar configurações e jogos das últimas 10 gerações salvas no localStorage"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Histórico Auto-Save ({autoSaveHistory.length}/10)</span>
+                </button>
+              )}
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               Otimizador de Fechamentos para 14 Pontos
@@ -402,15 +506,33 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         targetCount={targetCount}
       />
 
-      {/* 1. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (LOGO APÓS O VOLANTE OFICIAL INTERATIVO 5×5) */}
+      {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}
+      <EquilibrioEstruturalSelector
+        filters={filters}
+        onChange={setFilters}
+        selectedNumbers={selectedNumbers}
+        latestDraw={latestDraw}
+      />
+
+      {/* 2. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (GRID 2X2 COM FIBONACCI E ALERTA SONORO) */}
       <FilterControls
         filters={filters}
         onChange={setFilters}
         onReset={() => setFilters(DEFAULT_FILTERS)}
         latestDraw={latestDraw}
+        soundAlertEnabled={soundAlertEnabled}
+        onToggleSoundAlert={handleToggleSoundAlert}
       />
 
-      {/* 2. GRÁFICO DE DISPERSÃO DE SOMAS DOS ÚLTIMOS 100 CONCURSOS & ZONA DE OURO (190–210) */}
+      {/* 3. SIMULAÇÃO EM TEMPO REAL DOS FILTROS PERSONALIZADOS (PRÉVIA DE 5 JOGOS) */}
+      <RealTimeFilterSimulation
+        filters={filters}
+        selectedNumbers={selectedNumbers}
+        latestDraw={latestDraw}
+        aiScores={aiPrediction?.scores}
+      />
+
+      {/* 4. GRÁFICO DE DISPERSÃO DE SOMAS DOS ÚLTIMOS 100 CONCURSOS & ZONA DE OURO (190–210) */}
       <SomaScatterPlot
         latestDraw={latestDraw}
         currentSomaMin={filters.somaMin}
@@ -684,6 +806,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           </div>
 
+          {/* VERIFICAÇÃO DE INTEGRIDADE DE FECHAMENTO (WORKER BACKGROUND) */}
+          <ClosingIntegrityValidator
+            selectedNumbers={selectedNumbers}
+            targetHits={mode.includes('13') ? 13 : 14}
+            tickets={generatedTickets}
+            targetCount={targetCount}
+          />
+
+          {/* MAPA DE CALOR D3 DE COBERTURA DE GARANTIAS EM TEMPO REAL */}
+          <D3CoverageHeatmap
+            tickets={generatedTickets}
+            latestDraw={latestDraw}
+          />
+
           {/* SISTEMA DE MONITORAMENTO ESTATÍSTICO DOS FECHAMENTOS GERADOS */}
           {fechamentoMonitoringSummary && (
             <StatisticalMonitoringAlert
@@ -804,6 +940,90 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      {/* Modal de Histórico de Auto-Save (Últimas 10 Gerações) */}
+      {isAutoSaveModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">
+                  Histórico de Auto-Save (Últimas 10 Gerações)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsAutoSaveModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              O LotoSniper armazena automaticamente no seu navegador (localStorage) as últimas 10 gerações. Clique em &quot;Restaurar Matriz&quot; para recuperar imediatamente as dezenas, os filtros e todos os bilhetes gerados.
+            </p>
+
+            <div className="space-y-2.5">
+              {autoSaveHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs">
+                  Nenhuma matriz armazenada ainda. Gere um fechamento para salvar automaticamente.
+                </div>
+              ) : (
+                autoSaveHistory.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <strong className="text-white font-mono">
+                          Geração #{idx + 1} ({item.dateStr})
+                        </strong>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                          {item.generationType === 'fibonacci' ? 'Sequência Fibonacci' : `Matriz ${item.targetCount} Dezenas`}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {item.ticketsCount} bilhetes
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-1">
+                        Dezenas: {item.selectedNumbers.slice(0, 10).map((n: number) => n.toString().padStart(2, '0')).join(', ')}...
+                        <span className="ml-2 text-emerald-400">
+                          (Soma: {item.filters.somaMin}–{item.filters.somaMax}, Pares: {item.filters.paresMin}–{item.filters.paresMax})
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreGeneration(item)}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer shrink-0"
+                    >
+                      Restaurar Matriz
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+              <span>{autoSaveHistory.length} de 10 slots utilizados</span>
+              {autoSaveHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutoSaveHistory([]);
+                    localStorage.removeItem('lotosniper_matrix_autosave');
+                  }}
+                  className="text-rose-400 hover:underline cursor-pointer"
+                >
+                  Limpar Histórico
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

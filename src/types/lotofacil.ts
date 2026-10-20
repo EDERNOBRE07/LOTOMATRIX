@@ -89,6 +89,7 @@ export interface GameTicket {
   repetidas: number;
   maxConsecutivas: number;
   scoreIA: number;
+  tags?: string[];
 }
 
 export interface SimulationResult {

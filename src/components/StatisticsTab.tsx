@@ -10,6 +10,11 @@ import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
 import { QuentesFriasModule } from './QuentesFriasModule';
+import { RadarZoneGoldChart } from './RadarZoneGoldChart';
+import { DezenasAscensaoModule } from './DezenasAscensaoModule';
+import { DicasDeOuroPanel } from './DicasDeOuroPanel';
+import { ParesDeOuroModule } from './ParesDeOuroModule';
+import { EvolucaoPontuacaoChart } from './EvolucaoPontuacaoChart';
 import {
   BarChart,
   TrendingUp,
@@ -24,6 +29,9 @@ import {
   RotateCw,
   Sparkles,
   ArrowRight,
+  Target,
+  Compass,
+  Lightbulb,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -42,7 +50,17 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   onApplyNumbers,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'atrasos' | 'quentes_frias' | 'montecarlo' | 'duplas' | 'ciclos' | 'padroes'
+    | 'atrasos'
+    | 'radar_ouro'
+    | 'ascensao'
+    | 'dicas_ouro'
+    | 'pares_ouro'
+    | 'quentes_frias'
+    | 'montecarlo'
+    | 'duplas'
+    | 'evolucao'
+    | 'ciclos'
+    | 'padroes'
   >('atrasos');
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
@@ -69,8 +87,75 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Estatística das Dezenas & Atrasos</span>
+            <span>Estatística & Atrasos</span>
           </button>
+
+          <button
+            onClick={() => setActiveSubTab('radar_ouro')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'radar_ouro'
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                : 'text-amber-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Compass className="w-4 h-4" />
+            <span>Radar Zona de Ouro (0–100%)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              RADAR
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('ascensao')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'ascensao'
+                ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20 font-black'
+                : 'text-cyan-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Dezenas em Ascensão</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+              10 CONCURSOS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('dicas_ouro')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'dicas_ouro'
+                ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Lightbulb className="w-4 h-4" />
+            <span>Dicas de Ouro</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('pares_ouro')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'pares_ouro'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>Pares de Ouro</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('evolucao')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'evolucao'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            <span>Evolução da Pontuação Média</span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('quentes_frias')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -81,16 +166,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Flame className="w-4 h-4 fill-current" />
             <span>Radar Quentes & Frias</span>
-            <span
-              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                activeSubTab === 'quentes_frias'
-                  ? 'bg-slate-950 text-amber-300'
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-              }`}
-            >
-              DESTAQUE
-            </span>
           </button>
+
           <button
             onClick={() => setActiveSubTab('montecarlo')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -100,17 +177,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }`}
           >
             <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>Simulação Monte Carlo (5 Concursos)</span>
-            <span
-              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                activeSubTab === 'montecarlo'
-                  ? 'bg-slate-950 text-emerald-400'
-                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-              }`}
-            >
-              PROJEÇÃO
-            </span>
+            <span>Simulação Monte Carlo</span>
           </button>
+
           <button
             onClick={() => setActiveSubTab('duplas')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -120,8 +189,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }`}
           >
             <Flame className="w-4 h-4" />
-            <span>Duplas Amigas (Mais Sorteadas)</span>
+            <span>Duplas Amigas</span>
           </button>
+
           <button
             onClick={() => setActiveSubTab('ciclos')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -131,8 +201,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }`}
           >
             <RotateCw className="w-4 h-4" />
-            <span>Controle de Ciclos & Ciclo Inverso</span>
+            <span>Controle de Ciclos</span>
           </button>
+
           <button
             onClick={() => setActiveSubTab('padroes')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -142,7 +213,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }`}
           >
             <BarChart className="w-4 h-4" />
-            <span>Paridade, Primos, Moldura & Finais</span>
+            <span>Paridade, Primos, Moldura</span>
           </button>
         </div>
 
@@ -552,6 +623,36 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           cyclePendingNumbers={cyclePendingNumbers}
           onApplyNumbers={onApplyNumbers}
         />
+      )}
+
+      {/* SUBTAB: RADAR DA ZONA DE OURO & ADERÊNCIA ESTATÍSTICA 0-100% */}
+      {activeSubTab === 'radar_ouro' && (
+        <RadarZoneGoldChart latestDraw={latestDraw} />
+      )}
+
+      {/* SUBTAB: DEZENAS EM ASCENSÃO (MOMENTUM ÚLTIMOS 10 CONCURSOS) */}
+      {activeSubTab === 'ascensao' && (
+        <DezenasAscensaoModule latestDraw={latestDraw} onApplyNumbers={onApplyNumbers} />
+      )}
+
+      {/* SUBTAB: DICAS DE OURO DA LOTOFÁCIL */}
+      {activeSubTab === 'dicas_ouro' && (
+        <DicasDeOuroPanel />
+      )}
+
+      {/* SUBTAB: PARES DE OURO COM MAIOR AFINIDADE */}
+      {activeSubTab === 'pares_ouro' && (
+        <ParesDeOuroModule
+          latestDraw={latestDraw}
+          onApplyPairAsFilter={(pair) => {
+            if (onApplyNumbers) onApplyNumbers([pair[0], pair[1]]);
+          }}
+        />
+      )}
+
+      {/* SUBTAB: EVOLUÇÃO DA PONTUAÇÃO MÉDIA (ÚLTIMOS 10 CONCURSOS) */}
+      {activeSubTab === 'evolucao' && (
+        <EvolucaoPontuacaoChart latestDraw={latestDraw} />
       )}
     </div>
   );

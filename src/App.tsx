@@ -6,6 +6,8 @@ import { StatisticsTab } from './components/StatisticsTab';
 import { SimulatorTab } from './components/SimulatorTab';
 import { GamesManagerTab } from './components/GamesManagerTab';
 import { HostingerGuideTab } from './components/HostingerGuideTab';
+import { SettingsTab } from './components/SettingsTab';
+import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { GameTicket, AIPredictionResponse, LotofacilDraw } from './types/lotofacil';
@@ -25,12 +27,32 @@ import {
   Bell,
   X,
   ClipboardCheck,
+  Settings,
+  HelpCircle,
+  Flame,
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
-    'fechamento' | 'conferencia' | 'ia_preditor' | 'estatisticas' | 'simulador' | 'jogos' | 'hostinger'
+    'fechamento' | 'conferencia' | 'ia_preditor' | 'estatisticas' | 'simulador' | 'jogos' | 'configuracoes' | 'hostinger'
   >('fechamento');
+
+  // Guided Tour modal state (opens on first load or on demand)
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_tour_completed') !== 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Notificação de brinde (toast) ao detectar fechamento ou início de ciclo das 25 dezenas
+  const [cycleToast, setCycleToast] = useState<{
+    type: 'closed' | 'started' | 'urgent';
+    title: string;
+    description: string;
+    concurso: number;
+  } | null>(null);
 
   // Dynamic Contest State (Loaded automatically every time the app opens)
   const [latestDraw, setLatestDraw] = useState<LotofacilDraw>(CONCURSO_ATUAL);
@@ -51,6 +73,33 @@ export default function App() {
   const { stats: dynamicStats, dezenasPendentesCiclo, concursosNoCiclo } = useMemo(() => {
     return computeDynamicStats(latestDraw, RECENT_DRAWS);
   }, [latestDraw]);
+
+  // Efeito disparado na carga do concurso para detectar brinde/status de ciclo
+  useEffect(() => {
+    if (!latestDraw) return;
+    if (dezenasPendentesCiclo.length === 0) {
+      setCycleToast({
+        type: 'closed',
+        title: '🎉 Brinde de Ciclo: FECHAMENTO COMPLETO DAS 25 DEZENAS!',
+        description: `Todas as 25 dezenas da Lotofácil foram sorteadas ao longo de ${concursosNoCiclo} concursos! Momento estatístico de ouro para reiniciar estratégias canônicas.`,
+        concurso: latestDraw.concurso,
+      });
+    } else if (concursosNoCiclo === 1) {
+      setCycleToast({
+        type: 'started',
+        title: '🚀 Início de um Novo Ciclo das 25 Dezenas!',
+        description: `O Concurso #${latestDraw.concurso} iniciou um novo ciclo. 15 dezenas saíram e 10 dezenas ausentes entram com alta propensão de saída.`,
+        concurso: latestDraw.concurso,
+      });
+    } else if (dezenasPendentesCiclo.length <= 2) {
+      setCycleToast({
+        type: 'urgent',
+        title: `⚡ Ciclo Quase Fechado (${concursosNoCiclo}º Concurso)`,
+        description: `Faltam apenas as dezenas [${dezenasPendentesCiclo.map(d => d.toString().padStart(2, '0')).join(', ')}] para completar todas as 25! Forte pressão estatística.`,
+        concurso: latestDraw.concurso,
+      });
+    }
+  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo]);
 
   // Real-time synchronization function: triggered on every app open
   const runAutoUpdate = async (forceFresh: boolean = false) => {
@@ -215,6 +264,29 @@ export default function App() {
           </div>
         )}
 
+        {/* Cycle Toast Notification Banner (Detects cycle closure or start of a new cycle) */}
+        {cycleToast && (
+          <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/40 rounded-xl p-3 sm:px-4 flex items-center justify-between gap-3 text-xs shadow-lg">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                <Flame className="w-4 h-4 fill-amber-400" />
+              </span>
+              <div>
+                <strong className="text-amber-300 font-bold block">{cycleToast.title}</strong>
+                <span className="text-slate-300 text-[11px]">{cycleToast.description}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setCycleToast(null)}
+              className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer shrink-0"
+              title="Fechar notificação de ciclo"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 p-1.5 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto text-xs">
           <button
@@ -303,6 +375,18 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('configuracoes')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'configuracoes'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Configurações & Dados</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('hostinger')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
               activeTab === 'hostinger'
@@ -312,6 +396,16 @@ export default function App() {
           >
             <Globe className="w-4 h-4 text-indigo-400" />
             <span>Publicar no Hostinger</span>
+          </button>
+
+          {/* Botão de Tour Guiado Interativo */}
+          <button
+            onClick={() => setIsTourOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-bold transition ml-auto whitespace-nowrap cursor-pointer shrink-0"
+            title="Abrir Tutorial Guiado do LotoSniper"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Tour Guiado</span>
           </button>
         </div>
 
@@ -395,6 +489,16 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'configuracoes' && (
+          <SettingsTab
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onRestoreTickets={(t) => setSavedTickets(t)}
+            onSyncNow={() => runAutoUpdate(true)}
+            isSyncing={isSyncing}
+          />
+        )}
+
         {activeTab === 'hostinger' && <HostingerGuideTab />}
       </main>
 
@@ -416,6 +520,13 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Interactive Guided Tour Modal */}
+      <GuidedTourModal
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab as any)}
+      />
     </div>
   );
 }

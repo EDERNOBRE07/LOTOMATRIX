@@ -3,6 +3,9 @@ import { GameTicket, SimulationResult, LotofacilDraw } from '../types/lotofacil'
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
 import { runSimulation, countMatches } from '../services/combinatorics';
 import { EspelhoAnalysisTab } from './EspelhoAnalysisTab';
+import { CostBenefitCalculator } from './CostBenefitCalculator';
+import { AnimatedDrawChecker } from './AnimatedDrawChecker';
+import { EfficiencyReportModal } from './EfficiencyReportModal';
 import {
   Play,
   RotateCcw,
@@ -13,6 +16,10 @@ import {
   Sparkles,
   CheckCircle2,
   Calendar,
+  Calculator,
+  Film,
+  FileSpreadsheet,
+  BarChart3,
 } from 'lucide-react';
 
 interface SimulatorTabProps {
@@ -26,7 +33,8 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   onGoToGenerator,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'backtest' | 'espelho'>('backtest');
+  const [activeSubTab, setActiveSubTab] = useState<'backtest' | 'calculadora' | 'animacao' | 'espelho'>('backtest');
+  const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
     'concurso_3803' | 'concurso_3802' | 'concurso_3801' | 'ultimos_15' | 'monte_carlo_1000'
   >('concurso_3803');
@@ -94,8 +102,18 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </p>
         </div>
 
-        {tickets.length > 0 ? (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsEfficiencyModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/40 border border-indigo-500/50 text-indigo-300 font-bold text-xs transition cursor-pointer shadow-sm"
+            title="Relatório de Eficiência: ROI histórico de estratégias (18D vs 19D) ao longo dos últimos 200 concursos"
+          >
+            <BarChart3 className="w-4 h-4 text-indigo-400" />
+            <span>Relatório de Eficiência (ROI 200)</span>
+          </button>
+
+          {tickets.length > 0 ? (
             <button
               onClick={handleRunSimulation}
               disabled={isSimulating}
@@ -104,18 +122,18 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               <Play className="w-4 h-4 fill-current" />
               <span>{isSimulating ? 'Simulando...' : 'Executar Simulação'}</span>
             </button>
-          </div>
-        ) : (
-          <button
-            onClick={onGoToGenerator}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition cursor-pointer"
-          >
-            Gerar Jogos no Fechamento Primeiro
-          </button>
-        )}
+          ) : (
+            <button
+              onClick={onGoToGenerator}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            >
+              Gerar Jogos no Fechamento Primeiro
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Subtab Navigation: Backtest Principal vs Análise do Espelho */}
+      {/* Subtab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
           <button
@@ -131,6 +149,30 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('calculadora')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'calculadora'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Calculator className="w-4 h-4" />
+            <span>Calculadora Custo-Benefício (15 a 21)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('animacao')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'animacao'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Sorteio Animado Bola a Bola</span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('espelho')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
               activeSubTab === 'espelho'
@@ -139,7 +181,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             }`}
           >
             <RotateCcw className="w-4 h-4 text-purple-400" />
-            <span>Análise do Espelho (Jogando Contra a Sorte?)</span>
+            <span>Análise do Espelho</span>
             <span
               className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
                 activeSubTab === 'espelho'
@@ -159,7 +201,43 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
         )}
       </div>
 
-      {tickets.length === 0 ? (
+      {/* Modal de Relatório de Eficiência */}
+      <EfficiencyReportModal
+        isOpen={isEfficiencyModalOpen}
+        onClose={() => setIsEfficiencyModalOpen(false)}
+      />
+
+      {/* Render Subtab Views */}
+      {activeSubTab === 'calculadora' ? (
+        <CostBenefitCalculator />
+      ) : activeSubTab === 'animacao' ? (
+        tickets.length > 0 ? (
+          <AnimatedDrawChecker
+            tickets={tickets}
+            targetDraw={latestDraw}
+          />
+        ) : (
+          <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-12 text-center space-y-4">
+            <Sparkles className="w-12 h-12 text-amber-500/60 mx-auto" />
+            <h3 className="text-lg font-bold text-white">Nenhum bilhete carregado para conferência animada</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Gere uma matriz na aba <strong>Fechamento & Desdobramentos</strong> para acompanhar a revelação bola a bola dos seus bilhetes.
+            </p>
+            <button
+              onClick={onGoToGenerator}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+            >
+              Ir para o Gerador de Fechamentos
+            </button>
+          </div>
+        )
+      ) : activeSubTab === 'espelho' ? (
+        <EspelhoAnalysisTab
+          tickets={tickets}
+          latestDraw={latestDraw}
+          onGoToGenerator={onGoToGenerator}
+        />
+      ) : tickets.length === 0 ? (
         <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-12 text-center space-y-4">
           <Layers className="w-12 h-12 text-slate-600 mx-auto" />
           <h3 className="text-lg font-bold text-white">Nenhum bilhete carregado para simulação</h3>
@@ -175,12 +253,6 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             Ir para o Gerador de Fechamentos
           </button>
         </div>
-      ) : activeSubTab === 'espelho' ? (
-        <EspelhoAnalysisTab
-          tickets={tickets}
-          latestDraw={latestDraw}
-          onGoToGenerator={onGoToGenerator}
-        />
       ) : (
         <>
           {/* Simulation Scope Selector */}

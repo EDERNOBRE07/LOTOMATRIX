@@ -14,6 +14,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { DailyInsightsWidget } from './DailyInsightsWidget';
+import { HistoricalProbability500Module } from './HistoricalProbability500Module';
 import {
   Sparkles,
   Cpu,
@@ -576,6 +577,13 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* COMPONENTE DEDICADO: PROBABILIDADE HISTÓRICA DE 500 CONCURSOS VS ATRASO ATUAL */}
+      <HistoricalProbability500Module
+        dynamicStats={dynamicStats}
+        latestDraw={latestDraw}
+        onApplyNumbers={onApplyRecommendation}
+      />
 
       {/* Technical Justification & Insights Panel */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl">
