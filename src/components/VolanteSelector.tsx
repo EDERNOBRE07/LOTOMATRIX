@@ -24,6 +24,7 @@ interface VolanteSelectorProps {
   onSelectSet: (numbers: number[]) => void;
   onClear: () => void;
   targetCount?: number;
+  onStrategySelect?: (strategyName: string) => void;
 }
 
 export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
@@ -40,6 +41,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   onSelectSet,
   onClear,
   targetCount = 18,
+  onStrategySelect,
 }) => {
   const [visualMode, setVisualMode] = useState<
     'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia'
@@ -59,11 +61,13 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       .map((s) => s.numero)
       .sort((a, b) => a - b);
     onSelectSet(sorted);
+    onStrategySelect?.(`Top ${targetCount} IA`);
   };
 
   const handleSelectDocumentStrategy = (qtdRep: number = 9, qtdAus: number = 9) => {
     const optimal = buildOptimal18Pool(latestDraw, statsList, cyclePendingNumbers, qtdRep, qtdAus);
     onSelectSet(optimal.dezenas18.slice(0, targetCount));
+    onStrategySelect?.('⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)');
   };
 
   const handleSelectCycleClosure = () => {
@@ -76,12 +80,14 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       ])
     );
     onSelectSet(cycleFocus.slice(0, targetCount));
+    onStrategySelect?.(`Fechar Ciclo (${cyclePendingNumbers.slice(0, 3).join(', ')})`);
   };
 
   const handleSelectEquilibrio = () => {
     // 10 moldura + 5 miolo + 5 primos
     const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25];
     onSelectSet(eq.slice(0, targetCount));
+    onStrategySelect?.('Equilíbrio Canônico');
   };
 
   const handleNumberClick = (n: number) => {
