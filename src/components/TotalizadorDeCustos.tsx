@@ -14,13 +14,14 @@ import { FechamentoPreset, FechamentoMode } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 
 export interface TotalizadorDeCustosProps {
-  preset: FechamentoPreset;
+  preset?: FechamentoPreset;
   mode?: FechamentoMode;
   targetCount: number;
   totalJogos: number;
   isGenerated?: boolean;
   title?: string;
   subtitle?: string;
+  shortcutButtonLabel?: string;
   onGoToGamesManager?: () => void;
 }
 
@@ -32,11 +33,14 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
   isGenerated = false,
   title = 'Totalizador de Custos',
   subtitle,
+  shortcutButtonLabel,
   onGoToGamesManager,
 }) => {
   const [teimosinhaConcursos, setTeimosinhaConcursos] = useState<number>(1);
   const [numCotistas, setNumCotistas] = useState<number>(5);
   const [showBolaoCalc, setShowBolaoCalc] = useState<boolean>(false);
+
+  const buttonLabel = shortcutButtonLabel || 'Gerenciar & Conferir';
 
   const handleGoToGamesManager = () => {
     if (onGoToGamesManager) {
@@ -149,10 +153,10 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
             type="button"
             onClick={handleGoToGamesManager}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
-            title="Acessar o Gerenciador de Jogos, Exportador & Conferidor"
+            title={`Acessar ${buttonLabel}`}
           >
             <Download className="w-4 h-4 text-slate-950 shrink-0" />
-            <span>Gerenciador de Jogos, Exportador & Conferidor</span>
+            <span>{buttonLabel}</span>
             <ArrowRight className="w-4 h-4 text-slate-950 shrink-0" />
           </button>
         </div>
@@ -253,7 +257,7 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
             R$ {custoPorConcurso.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </div>
           <span className="text-[10px] text-emerald-400/80 font-medium">
-            Garantia de {preset.garantia}
+            Garantia de {preset?.garantia || '14 Pontos'}
           </span>
         </div>
 
@@ -266,7 +270,7 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
             R$ {economiaReais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </div>
           <span className="text-[10px] text-slate-400">
-            Economia de <strong className="text-amber-300 font-mono">{preset.reducaoPercentual}%</strong> no bolso!
+            Economia de <strong className="text-amber-300 font-mono">{preset?.reducaoPercentual || '97'}%</strong> no bolso!
           </span>
         </div>
       </div>
@@ -380,10 +384,10 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
           type="button"
           onClick={handleGoToGamesManager}
           className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
-          title="Acessar o Gerenciador de Jogos, Exportador & Conferidor"
+          title={`Acessar ${buttonLabel}`}
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Gerenciador de Jogos, Exportador & Conferidor</span>
+          <span>{buttonLabel}</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>

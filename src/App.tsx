@@ -500,6 +500,7 @@ export default function App() {
             tickets={savedTickets}
             latestDraw={latestDraw}
             onGoToGenerator={() => setActiveTab('fechamento')}
+            onGoToGamesManager={() => setActiveTab('jogos')}
           />
         )}
 

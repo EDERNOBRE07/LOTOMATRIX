@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { GameTicket, SimulationResult, LotofacilDraw } from '../types/lotofacil';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
-import { runSimulation, countMatches } from '../services/combinatorics';
+import { runSimulation, countMatches, VALOR_APOSTA_LOTOFACIL, FECHAMENTO_PRESETS } from '../services/combinatorics';
 import { EspelhoAnalysisTab } from './EspelhoAnalysisTab';
 import { CostBenefitCalculator } from './CostBenefitCalculator';
 import { AnimatedDrawChecker } from './AnimatedDrawChecker';
 import { EfficiencyReportModal } from './EfficiencyReportModal';
+import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import {
   Play,
   RotateCcw,
@@ -20,19 +21,30 @@ import {
   Film,
   FileSpreadsheet,
   BarChart3,
+  Download,
+  ArrowRight,
 } from 'lucide-react';
 
 interface SimulatorTabProps {
   tickets: GameTicket[];
   latestDraw?: LotofacilDraw;
   onGoToGenerator: () => void;
+  onGoToGamesManager?: () => void;
 }
 
 export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   tickets,
   latestDraw = CONCURSO_ATUAL,
   onGoToGenerator,
+  onGoToGamesManager,
 }) => {
+  const handleGoToGamesManager = () => {
+    if (onGoToGamesManager) {
+      onGoToGamesManager();
+    } else {
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+    }
+  };
   const [activeSubTab, setActiveSubTab] = useState<'backtest' | 'calculadora' | 'animacao' | 'espelho'>('backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
@@ -112,6 +124,19 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             <BarChart3 className="w-4 h-4 text-indigo-400" />
             <span>Relatório de Eficiência (ROI 200)</span>
           </button>
+
+          {tickets.length > 0 && (
+            <button
+              type="button"
+              onClick={handleGoToGamesManager}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Ir para Meus Jogos & Conferidor mantendo os jogos gerados"
+            >
+              <Download className="w-4 h-4 text-slate-950" />
+              <span>Gerenciar & Conferir ({tickets.length})</span>
+              <ArrowRight className="w-4 h-4 text-slate-950" />
+            </button>
+          )}
 
           {tickets.length > 0 ? (
             <button
@@ -246,15 +271,39 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             18 dezenas (24 jogos) ou use a <strong>IA Preditora</strong> para gerar apostas
             calibradas.
           </p>
-          <button
-            onClick={onGoToGenerator}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
-          >
-            Ir para o Gerador de Fechamentos
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={onGoToGenerator}
+              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+            >
+              Ir para o Gerador de Fechamentos
+            </button>
+            <button
+              onClick={handleGoToGamesManager}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition cursor-pointer shadow-sm"
+              title="Acessar Meus Jogos & Conferidor"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Gerenciar & Conferir</span>
+            </button>
+          </div>
         </div>
       ) : (
-        <>
+        <div className="space-y-6">
+          {/* Totalizador de Custos dos Jogos Gerados com Botão de Atalho 'Gerenciar & Conferir' */}
+          <TotalizadorDeCustos
+            preset={FECHAMENTO_PRESETS['18_14_15']}
+            targetCount={tickets[0]?.dezenas?.length || 18}
+            totalJogos={tickets.length}
+            isGenerated={true}
+            title="Totalizador de Custos dos Jogos Gerados"
+            subtitle={`Investimento total calculado: ${tickets.length} jogos × R$ 3,50 = R$ ${(
+              tickets.length * VALOR_APOSTA_LOTOFACIL
+            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            shortcutButtonLabel="Gerenciar & Conferir"
+            onGoToGamesManager={handleGoToGamesManager}
+          />
+
           {/* Simulation Scope Selector */}
           <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2">
@@ -313,9 +362,21 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               </div>
             </div>
 
-            <div className="text-slate-400 font-mono">
-              Bilhetes Prontos: <strong className="text-white">{tickets.length}</strong> (Custo base:{' '}
-              R$ {(tickets.length * 3).toFixed(2)})
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="text-slate-400 font-mono">
+                Bilhetes Prontos: <strong className="text-white">{tickets.length}</strong> (Custo oficial:{' '}
+                <span className="text-emerald-400 font-bold">R$ {(tickets.length * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>)
+              </div>
+              <button
+                type="button"
+                onClick={handleGoToGamesManager}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-bold text-xs transition cursor-pointer shadow-sm active:scale-95"
+                title="Acessar Meus Jogos & Conferidor"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Gerenciar & Conferir</span>
+                <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+              </button>
             </div>
           </div>
 
@@ -446,7 +507,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             })()}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

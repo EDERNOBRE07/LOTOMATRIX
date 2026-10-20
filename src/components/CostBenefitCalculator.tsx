@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Zap,
   Info,
+  Download,
   ArrowRight,
 } from 'lucide-react';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -302,6 +303,24 @@ export const CostBenefitCalculator: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Shortcut bar to Gerenciar & Conferir */}
+      <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-emerald-500/20">
+        <div className="flex items-center gap-2.5 text-xs text-slate-300">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>Deseja conferir e exportar os jogos gerados da sua matriz atual?</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }))}
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
+          title="Navegar para Meus Jogos & Conferidor"
+        >
+          <Download className="w-3.5 h-3.5 text-slate-950" />
+          <span>Gerenciar & Conferir</span>
+          <ArrowRight className="w-3.5 h-3.5 text-slate-950" />
+        </button>
       </div>
     </div>
   );
