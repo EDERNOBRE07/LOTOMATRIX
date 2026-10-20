@@ -7,6 +7,8 @@ import {
   ShieldCheck,
   Zap,
   Info,
+  Download,
+  ArrowRight,
 } from 'lucide-react';
 import { FechamentoPreset, FechamentoMode } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -19,19 +21,30 @@ export interface TotalizadorDeCustosProps {
   isGenerated?: boolean;
   title?: string;
   subtitle?: string;
+  onGoToGamesManager?: () => void;
 }
 
 export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
   preset,
+  mode,
   targetCount,
   totalJogos,
   isGenerated = false,
   title = 'Totalizador de Custos',
   subtitle,
+  onGoToGamesManager,
 }) => {
   const [teimosinhaConcursos, setTeimosinhaConcursos] = useState<number>(1);
   const [numCotistas, setNumCotistas] = useState<number>(5);
   const [showBolaoCalc, setShowBolaoCalc] = useState<boolean>(false);
+
+  const handleGoToGamesManager = () => {
+    if (onGoToGamesManager) {
+      onGoToGamesManager();
+    } else {
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+    }
+  };
 
   // Valor oficial por aposta simples da Lotofácil Caixa: R$ 3,50
   const valorUnitario = VALOR_APOSTA_LOTOFACIL; // 3.50
@@ -112,21 +125,36 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
           </div>
         </div>
 
-        {/* Big Investment Card Highlight */}
-        <div className="bg-slate-950 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-right self-start sm:self-center shadow-lg shadow-emerald-500/5 min-w-[200px]">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
-            {isGenerated ? 'Investimento Final dos Jogos:' : 'Investimento Total do Fechamento:'}
-          </span>
-          <div className="flex items-baseline gap-1 justify-end">
-            <span className="text-xs font-bold text-emerald-400">R$</span>
-            <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
-              {custoTotalTeimosinha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        {/* Right side: Investment Card and Shortcut Button */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Big Investment Card Highlight */}
+          <div className="bg-slate-950 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-right shadow-lg shadow-emerald-500/5 min-w-[190px]">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">
+              {isGenerated ? 'Investimento Final dos Jogos:' : 'Investimento Total do Fechamento:'}
+            </span>
+            <div className="flex items-baseline gap-1 justify-end">
+              <span className="text-xs font-bold text-emerald-400">R$</span>
+              <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+                {custoTotalTeimosinha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono block">
+              {totalJogos} {totalJogos === 1 ? 'jogo' : 'jogos'} × R$ 3,50
+              {teimosinhaConcursos > 1 && ` × ${teimosinhaConcursos} conc.`}
             </span>
           </div>
-          <span className="text-[10px] text-slate-400 font-mono block">
-            {totalJogos} {totalJogos === 1 ? 'jogo' : 'jogos'} × R$ 3,50
-            {teimosinhaConcursos > 1 && ` × ${teimosinhaConcursos} conc.`}
-          </span>
+
+          {/* Botão de Atalho para o Gerenciador de Jogos, Exportador & Conferidor */}
+          <button
+            type="button"
+            onClick={handleGoToGamesManager}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+            title="Acessar o Gerenciador de Jogos, Exportador & Conferidor"
+          >
+            <Download className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>Gerenciador de Jogos, Exportador & Conferidor</span>
+            <ArrowRight className="w-4 h-4 text-slate-950 shrink-0" />
+          </button>
         </div>
       </div>
 
@@ -333,6 +361,31 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Bottom shortcut bar to Gerenciador de Jogos, Exportador & Conferidor */}
+      <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-emerald-500/25">
+        <div className="flex items-center gap-2.5 text-xs text-slate-300">
+          <span className="p-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          </span>
+          <span>
+            {isGenerated
+              ? 'Matriz pronta! Exporte para ferramentas de apostas em CSV/TXT, imprima volantes oficiais da Lotofácil em PDF ou confira os acertos instantaneamente.'
+              : 'Acesse o Gerenciador para exportar bilhetes salvos, imprimir volantes oficiais ou conferir acertos em concursos passados.'}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoToGamesManager}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
+          title="Acessar o Gerenciador de Jogos, Exportador & Conferidor"
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>Gerenciador de Jogos, Exportador & Conferidor</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

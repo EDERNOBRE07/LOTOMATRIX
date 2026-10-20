@@ -101,6 +101,25 @@ export default function App() {
     }
   }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo]);
 
+  // Listener para navegação rápida entre abas acionada por componentes filhos
+  useEffect(() => {
+    const handleSwitchTab = (e: any) => {
+      const detail = e.detail;
+      if (typeof detail === 'string') {
+        setActiveTab(detail as any);
+      } else if (detail && typeof detail === 'object') {
+        if (detail.tickets && Array.isArray(detail.tickets)) {
+          setSavedTickets(detail.tickets);
+        }
+        if (detail.tab) {
+          setActiveTab(detail.tab);
+        }
+      }
+    };
+    window.addEventListener('switch-tab', handleSwitchTab);
+    return () => window.removeEventListener('switch-tab', handleSwitchTab);
+  }, []);
+
   // Real-time synchronization function: triggered on every app open
   const runAutoUpdate = async (forceFresh: boolean = false) => {
     setIsSyncing(true);
@@ -418,6 +437,10 @@ export default function App() {
             aiPrediction={aiPrediction}
             onSaveTickets={(tickets) => setSavedTickets(tickets)}
             onGoToSimulator={handleGoToSimulator}
+            onGoToGamesManager={(tickets) => {
+              if (tickets && tickets.length > 0) setSavedTickets(tickets);
+              setActiveTab('jogos');
+            }}
             isAILoading={isAILoading}
           />
         )}

@@ -54,6 +54,7 @@ interface FechamentoTabProps {
   aiPrediction: AIPredictionResponse | null;
   onSaveTickets: (tickets: GameTicket[]) => void;
   onGoToSimulator: (tickets: GameTicket[]) => void;
+  onGoToGamesManager?: (tickets?: GameTicket[]) => void;
   isAILoading: boolean;
 }
 
@@ -64,6 +65,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   aiPrediction,
   onSaveTickets,
   onGoToSimulator,
+  onGoToGamesManager,
   isAILoading,
 }) => {
   const [mode, setMode] = useState<FechamentoMode>('18_14_15');
@@ -467,6 +469,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         mode={mode}
         targetCount={targetCount}
         totalJogos={generatedTickets.length || preset.jogosMaximos}
+        onGoToGamesManager={onGoToGamesManager ? () => onGoToGamesManager(generatedTickets) : undefined}
       />
 
       {/* Success Notification for Document Strategy Pool */}
@@ -845,6 +848,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             subtitle={`Investimento total calculado automaticamente: ${generatedTickets.length} jogos × R$ 3,50 = R$ ${(
               generatedTickets.length * VALOR_APOSTA_LOTOFACIL
             ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            onGoToGamesManager={onGoToGamesManager ? () => onGoToGamesManager(generatedTickets) : undefined}
           />
 
           {/* Feedback de Filtro Ativo do Monitoramento */}
