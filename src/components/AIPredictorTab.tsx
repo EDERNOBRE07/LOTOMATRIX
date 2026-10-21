@@ -17,6 +17,7 @@ import { DailyInsightsWidget } from './DailyInsightsWidget';
 import { HistoricalProbability500Module } from './HistoricalProbability500Module';
 import { D3AIAccuracyComparisonChart } from './D3AIAccuracyComparisonChart';
 import { MonteCarloHeatmap5Concursos } from './MonteCarloHeatmap5Concursos';
+import { TrendRadarPublicFeed } from './TrendRadarPublicFeed';
 import {
   Sparkles,
   Cpu,
@@ -307,6 +308,16 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       {/* SIMULAÇÃO MONTE CARLO: GRÁFICO DE CALOR NOS PRÓXIMOS 5 CONCURSOS (HEATMAP) */}
       {/* ========================================================================= */}
       <MonteCarloHeatmap5Concursos
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        onApplyNumbers={onApplyRecommendation}
+      />
+
+      {/* ========================================================================= */}
+      {/* TREND RADAR: FEED PÚBLICO DE TENDÊNCIAS (APOSTA DE MANADA VS SMART MONEY) */}
+      {/* ========================================================================= */}
+      <TrendRadarPublicFeed
         latestDraw={latestDraw}
         dynamicStats={dynamicStats}
         cyclePendingNumbers={cyclePendingNumbers}
