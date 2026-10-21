@@ -10,6 +10,7 @@ import { SettingsTab } from './components/SettingsTab';
 import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
+import { NavigationMenu } from './components/NavigationMenu';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -32,10 +33,18 @@ import {
   Flame,
 } from 'lucide-react';
 
+export type TabType =
+  | 'fechamento'
+  | 'conferencia'
+  | 'ia_preditor'
+  | 'estatisticas'
+  | 'simulador'
+  | 'jogos'
+  | 'configuracoes'
+  | 'hostinger';
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<
-    'fechamento' | 'conferencia' | 'ia_preditor' | 'estatisticas' | 'simulador' | 'jogos' | 'configuracoes' | 'hostinger'
-  >('fechamento');
+  const [activeTab, setActiveTab] = useState<TabType>('fechamento');
 
   // Guided Tour modal state (opens on first load or on demand)
   const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
@@ -318,127 +327,14 @@ export default function App() {
           </div>
         )}
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto text-xs">
-          <button
-            onClick={() => setActiveTab('fechamento')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'fechamento'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Fechamentos & 14 Pontos</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('conferencia')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'conferencia'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            <span>Conferência de Jogos</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-950 text-emerald-400">
-              24
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('ia_preditor')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'ia_preditor'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>Preditor de IA em Tempo Real</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('estatisticas')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'estatisticas'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Estatísticas & Atrasos</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('simulador')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'simulador'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Award className="w-4 h-4" />
-            <span>Simulador & Backtest</span>
-            {savedTickets.length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-950 text-emerald-400">
-                {savedTickets.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('jogos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'jogos'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Download className="w-4 h-4" />
-            <span>Meus Jogos & Conferidor</span>
-            {savedTickets.length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-950 text-emerald-400">
-                {savedTickets.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('configuracoes')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'configuracoes'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Configurações & Dados</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('hostinger')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'hostinger'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Globe className="w-4 h-4 text-indigo-400" />
-            <span>Publicar no Hostinger</span>
-          </button>
-
-          {/* Botão de Tour Guiado Interativo */}
-          <button
-            onClick={() => setIsTourOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-bold transition ml-auto whitespace-nowrap cursor-pointer shrink-0"
-            title="Abrir Tutorial Guiado do LotoSniper"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tour Guiado</span>
-          </button>
-        </div>
+        {/* Navigation Tabs Menu: Design Vibrante, Botões Animados e Localização Facilitada */}
+        <NavigationMenu
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          savedTickets={savedTickets}
+          onOpenTour={() => setIsTourOpen(true)}
+          concursoAtualNumero={latestDraw?.concurso}
+        />
 
         {/* Tab Viewport */}
         {activeTab === 'fechamento' && (
