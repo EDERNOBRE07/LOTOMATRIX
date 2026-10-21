@@ -22,6 +22,8 @@ import {
   Lock,
   Layers,
   HelpCircle,
+  Calculator,
+  Square,
 } from 'lucide-react';
 
 interface FilterControlsProps {
@@ -214,17 +216,27 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* GRID 2x2: FILTROS OBRIGATÓRIOS (LINHA 1) & FILTROS AVANÇADOS (LINHA 2)     */}
+      {/* GRID: FILTROS OBRIGATÓRIOS (SOMA, PARES/ÍMPARES) & FILTROS AVANÇADOS       */}
       {/* ========================================================================= */}
-      <div className="space-y-5">
-        {/* ==================== LINHA 1: FILTROS OBRIGATÓRIOS ==================== */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="p-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 font-mono">
-              Filtros Obrigatórios (Soma Canônica & Paridade Estrutural)
+      <div className="space-y-6">
+        {/* ==================== SEÇÃO 1: FILTROS OBRIGATÓRIOS ==================== */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-emerald-500/30">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                <Lock className="w-4 h-4 text-emerald-400" />
+              </span>
+              <div>
+                <span className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono">
+                  Filtros Obrigatórios (Soma Canônica & Paridade de Pares/Ímpares)
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  Restrições matemáticas basilares que evitam jogos estatisticamente inviáveis na Lotofácil.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold uppercase shrink-0">
+              Obrigatório
             </span>
           </div>
 
@@ -234,7 +246,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                    <TrendingUp className="w-4 h-4" />
+                    <Calculator className="w-4 h-4" />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
@@ -397,14 +409,24 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
           </div>
         </div>
 
-        {/* ==================== LINHA 2: FILTROS AVANÇADOS ==================== */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="p-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              <Binary className="w-3.5 h-3.5 text-amber-400" />
-            </span>
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400 font-mono">
-              Filtros Avançados (Repetidas, Moldura, Primos & Fibonacci)
+        {/* ==================== SEÇÃO 2: FILTROS AVANÇADOS ==================== */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-amber-500/30">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                <Binary className="w-4 h-4 text-amber-400" />
+              </span>
+              <div>
+                <span className="text-sm font-black uppercase tracking-wider text-amber-400 font-mono">
+                  Filtros Avançados (Repetidas, Moldura, Primos & Fibonacci)
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  Condicionais probabilísticos calibrados com base no Concurso #{latestDraw.concurso} para refinar a assertividade.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold uppercase shrink-0">
+              Avançado
             </span>
           </div>
 
@@ -443,7 +465,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <Square className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white">Dezenas na Moldura</span>
                 </div>
                 <span className="font-mono text-xs font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">

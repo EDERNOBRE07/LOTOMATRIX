@@ -10,7 +10,7 @@ import { SettingsTab } from './components/SettingsTab';
 import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
-import { GameTicket, AIPredictionResponse, LotofacilDraw } from './types/lotofacil';
+import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
 import { buildOptimal18Pool } from './services/combinatorics';
@@ -66,6 +66,15 @@ export default function App() {
   } | null>(null);
 
   const [savedTickets, setSavedTickets] = useState<GameTicket[]>([]);
+  const [activeFechamentoMeta, setActiveFechamentoMeta] = useState<FechamentoExportMeta | null>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_active_fechamento_meta');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [pendingFixedNumbers, setPendingFixedNumbers] = useState<number[]>([]);
   const [aiPrediction, setAiPrediction] = useState<AIPredictionResponse | null>(null);
   const [isAILoading, setIsAILoading] = useState<boolean>(false);
 
@@ -225,6 +234,9 @@ export default function App() {
   };
 
   const handleApplyAIRecsToFechamento = (numbers: number[]) => {
+    if (numbers && numbers.length > 0) {
+      setPendingFixedNumbers(numbers);
+    }
     setActiveTab('fechamento');
   };
 
@@ -435,10 +447,25 @@ export default function App() {
             dynamicStats={dynamicStats}
             cyclePendingNumbers={dezenasPendentesCiclo}
             aiPrediction={aiPrediction}
-            onSaveTickets={(tickets) => setSavedTickets(tickets)}
+            initialFixedNumbers={pendingFixedNumbers}
+            onSaveTickets={(tickets, meta) => {
+              setSavedTickets(tickets);
+              if (meta) {
+                setActiveFechamentoMeta(meta);
+                try {
+                  localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
+                } catch {}
+              }
+            }}
             onGoToSimulator={handleGoToSimulator}
-            onGoToGamesManager={(tickets) => {
+            onGoToGamesManager={(tickets, meta) => {
               if (tickets && tickets.length > 0) setSavedTickets(tickets);
+              if (meta) {
+                setActiveFechamentoMeta(meta);
+                try {
+                  localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
+                } catch {}
+              }
               setActiveTab('jogos');
             }}
             isAILoading={isAILoading}
@@ -508,6 +535,7 @@ export default function App() {
           <GamesManagerTab
             tickets={savedTickets}
             latestDraw={latestDraw}
+            fechamentoMeta={activeFechamentoMeta}
             onClearTickets={() => setSavedTickets([])}
             onGoToGenerator={() => setActiveTab('fechamento')}
           />

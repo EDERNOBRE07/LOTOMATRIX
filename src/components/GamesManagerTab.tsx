@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { GameTicket, LotofacilDraw } from '../types/lotofacil';
+import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches } from '../services/combinatorics';
+import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
@@ -29,6 +30,7 @@ import {
 interface GamesManagerTabProps {
   tickets: GameTicket[];
   latestDraw?: LotofacilDraw;
+  fechamentoMeta?: FechamentoExportMeta | null;
   onClearTickets: () => void;
   onGoToGenerator: () => void;
 }
@@ -36,6 +38,7 @@ interface GamesManagerTabProps {
 export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   tickets,
   latestDraw = CONCURSO_ATUAL,
+  fechamentoMeta,
   onClearTickets,
   onGoToGenerator,
 }) => {
@@ -211,27 +214,28 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }
   };
 
-  // Export TXT
+  // Export TXT com cabeçalho técnico completo: estratégia, filtros obrigatórios e avançados
   const handleExportTXT = () => {
     const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
     const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
     if (listToExport.length === 0) return;
 
-    const content =
-      `# LOTOSNIPER - MATRIZ DE FECHAMENTO LOTOFÁCIL (ALVO 15)\n` +
-      `# Total de Bilhetes: ${listToExport.length}\n` +
-      `# Concurso Base: #${latestDraw.concurso} (${latestDraw.data})\n` +
-      `# Gerado em: ${new Date().toLocaleString('pt-BR')}\n` +
-      `# ------------------------------------------------------------\n` +
-      listToExport
-        .map((t) => {
-          const tags = ticketTags[t.id || `ticket-${t.index}`] || [];
-          const tagStr = tags.length > 0 ? ` [Tags: ${tags.join(', ')}]` : '';
-          return `Jogo ${t.index.toString().padStart(2, '0')}: ${t.dezenas
-            .map((n) => n.toString().padStart(2, '0'))
-            .join(' ')}${tagStr}`;
-        })
-        .join('\n');
+    let metaToUse = fechamentoMeta;
+    if (!metaToUse) {
+      try {
+        const savedMeta = localStorage.getItem('lotosniper_active_fechamento_meta');
+        if (savedMeta) {
+          metaToUse = JSON.parse(savedMeta);
+        }
+      } catch {}
+    }
+
+    const content = generateFechamentoTxtContent({
+      tickets: listToExport,
+      latestDraw,
+      meta: metaToUse,
+      ticketTags,
+    });
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);

@@ -420,6 +420,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </table>
           </div>
         </div>
+
+        {/* Módulo Especial: Pares de Ouro (Identificação Automática de Duplas de Alta Afinidade) */}
+        <ParesDeOuroModule
+          latestDraw={latestDraw}
+          onApplyPairAsFilter={(pair) => {
+            if (onApplyNumbers) onApplyNumbers([pair[0], pair[1]]);
+          }}
+        />
       </div>
       )}
 
@@ -433,61 +441,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       )}
 
-      {/* SUBTAB 2: DUPLAS AMIGAS */}
+      {/* SUBTAB 2: DUPLAS AMIGAS / PARES DE OURO */}
       {activeSubTab === 'duplas' && (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-2">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Flame className="w-4 h-4 text-emerald-400" />
-                <span>As Duplas de Dezenas que Mais Saíram Juntas na História</span>
-              </h3>
-              <p className="text-xs text-slate-400">
-                Pares de dezenas com altíssima frequência estatística e correlação positiva.
-              </p>
-            </div>
-            <span className="text-xs text-slate-400 bg-slate-800 px-3 py-1 rounded-lg">
-              300 Duplas Monitoradas
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {TOP_DUPLAS.map((dupla, idx) => (
-              <div
-                key={idx}
-                className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition"
-              >
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="font-mono text-slate-500 font-bold">#{idx + 1}</span>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    {dupla.vezes} vezes
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 justify-center py-1">
-                  <span className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-sm font-bold flex items-center justify-center">
-                    {dupla.dupla[0].toString().padStart(2, '0')}
-                  </span>
-                  <span className="text-slate-500 font-mono font-bold">+</span>
-                  <span className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-sm font-bold flex items-center justify-center">
-                    {dupla.dupla[1].toString().padStart(2, '0')}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mt-2.5 pt-2 border-t border-slate-850">
-                  <span>Atraso atual:</span>
-                  <strong
-                    className={
-                      dupla.atrasoAtual === 0 ? 'text-emerald-400' : 'text-slate-300'
-                    }
-                  >
-                    {dupla.atrasoAtual} conc.
-                  </strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ParesDeOuroModule
+          latestDraw={latestDraw}
+          onApplyPairAsFilter={(pair) => {
+            if (onApplyNumbers) onApplyNumbers([pair[0], pair[1]]);
+          }}
+        />
       )}
 
       {/* SUBTAB 3: CICLOS DA LOTOFÁCIL */}

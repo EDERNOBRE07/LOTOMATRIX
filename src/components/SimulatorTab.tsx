@@ -7,6 +7,7 @@ import { CostBenefitCalculator } from './CostBenefitCalculator';
 import { AnimatedDrawChecker } from './AnimatedDrawChecker';
 import { EfficiencyReportModal } from './EfficiencyReportModal';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
+import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
 import {
   Play,
   RotateCcw,
@@ -45,7 +46,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
     }
   };
-  const [activeSubTab, setActiveSubTab] = useState<'backtest' | 'calculadora' | 'animacao' | 'espelho'>('backtest');
+  const [activeSubTab, setActiveSubTab] = useState<
+    'backtest' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
+  >('backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
     'concurso_3803' | 'concurso_3802' | 'concurso_3801' | 'ultimos_15' | 'monte_carlo_1000'
@@ -174,6 +177,27 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('evolucao_saldo')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'evolucao_saldo'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Evolução do Saldo</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'evolucao_saldo'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-400/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              50 CONCURSOS
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('calculadora')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
               activeSubTab === 'calculadora'
@@ -233,7 +257,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       />
 
       {/* Render Subtab Views */}
-      {activeSubTab === 'calculadora' ? (
+      {activeSubTab === 'evolucao_saldo' ? (
+        <EvolucaoSaldoChart tickets={tickets} latestDraw={latestDraw} />
+      ) : activeSubTab === 'calculadora' ? (
         <CostBenefitCalculator />
       ) : activeSubTab === 'animacao' ? (
         tickets.length > 0 ? (
@@ -507,6 +533,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             })()}
             </div>
           )}
+
+          {/* Componente Visual 'Evolução do Saldo' Recharts (Últimos 50 Concursos) */}
+          <EvolucaoSaldoChart tickets={tickets} latestDraw={latestDraw} />
         </div>
       )}
     </div>

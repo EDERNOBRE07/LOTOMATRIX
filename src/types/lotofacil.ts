@@ -130,3 +130,17 @@ export interface AIPredictionResponse {
     repetidas: string;
   };
 }
+
+export interface FechamentoExportMeta {
+  strategyName?: string;
+  modeName?: string;
+  garantia?: string;
+  targetCount?: number;
+  selectedNumbers?: number[];
+  fixedNumbers?: number[];
+  excludedNumbers?: number[];
+  filters?: FilterCriteria;
+  concurso?: number;
+  dataConcurso?: string;
+  timestamp?: number;
+}

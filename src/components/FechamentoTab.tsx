@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FechamentoMode,
   FilterCriteria,
@@ -6,6 +6,7 @@ import {
   AIPredictionResponse,
   LotofacilDraw,
   DezenaStats,
+  FechamentoExportMeta,
 } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import { VolanteSelector } from './VolanteSelector';
@@ -52,9 +53,10 @@ interface FechamentoTabProps {
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];
   aiPrediction: AIPredictionResponse | null;
-  onSaveTickets: (tickets: GameTicket[]) => void;
+  initialFixedNumbers?: number[];
+  onSaveTickets: (tickets: GameTicket[], meta?: FechamentoExportMeta) => void;
   onGoToSimulator: (tickets: GameTicket[]) => void;
-  onGoToGamesManager?: (tickets?: GameTicket[]) => void;
+  onGoToGamesManager?: (tickets?: GameTicket[], meta?: FechamentoExportMeta) => void;
   isAILoading: boolean;
 }
 
@@ -63,6 +65,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   dynamicStats = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
   aiPrediction,
+  initialFixedNumbers,
   onSaveTickets,
   onGoToSimulator,
   onGoToGamesManager,
@@ -71,6 +74,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [mode, setMode] = useState<FechamentoMode>('18_14_15');
   const preset = FECHAMENTO_PRESETS[mode];
   const targetCount = preset.dezenasNecessarias;
+
+  const [strategyName, setStrategyName] = useState<string>(
+    '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
+  );
 
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>(() => {
     try {
@@ -92,6 +99,28 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
   const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci'>('matriz');
+
+  // Listener para aplicação automática de Dezenas Fixas / Par de Ouro
+  useEffect(() => {
+    if (initialFixedNumbers && initialFixedNumbers.length > 0) {
+      setFixedNumbers((prev) =>
+        Array.from(new Set([...prev, ...initialFixedNumbers])).sort((a, b) => a - b)
+      );
+      setSelectedNumbers((prev) => {
+        const union = Array.from(new Set([...initialFixedNumbers, ...prev])).sort((a, b) => a - b);
+        return union.slice(0, targetCount);
+      });
+      setStrategyName(
+        `Par de Ouro [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
+      );
+      setDocumentMessage(
+        `Par de Ouro [${initialFixedNumbers
+          .map((n) => n.toString().padStart(2, '0'))
+          .join(', ')}] aplicado com sucesso como restrição fixa no Fechamento!`
+      );
+      setTimeout(() => setDocumentMessage(null), 6000);
+    }
+  }, [initialFixedNumbers, targetCount]);
 
   // Notificação sonora opcional para jogos fora da zona de ouro (190-210)
   const [soundAlertEnabled, setSoundAlertEnabled] = useState<boolean>(() => {
@@ -260,8 +289,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           aiPrediction?.scores
         );
 
+        const exportMeta: FechamentoExportMeta = {
+          strategyName,
+          modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
+          garantia: preset.garantia,
+          targetCount: targetCount,
+          selectedNumbers: selectedNumbers,
+          fixedNumbers: fixedNumbers,
+          excludedNumbers: excludedNumbers,
+          filters: fullFilters,
+          concurso: latestDraw.concurso,
+          dataConcurso: latestDraw.data,
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+        } catch {}
+
         setGeneratedTickets(tickets);
-        onSaveTickets(tickets);
+        onSaveTickets(tickets, exportMeta);
         setGenerationType('matriz');
         saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
 
@@ -294,8 +340,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           aiPrediction?.scores
         );
 
+        const fiboMeta: FechamentoExportMeta = {
+          strategyName: 'Distribuição de Fibonacci Otimizada (Zona de Ouro)',
+          modeName: '5 Bilhetes Fibonacci Otimizados',
+          garantia: 'Pelo menos 3 jogos na Regra de Ouro (soma 190-210)',
+          targetCount: 15,
+          selectedNumbers: latestDraw.dezenas,
+          fixedNumbers: [],
+          excludedNumbers: [],
+          filters,
+          concurso: latestDraw.concurso,
+          dataConcurso: latestDraw.data,
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(fiboMeta));
+        } catch {}
+
         setGeneratedTickets(tickets);
-        onSaveTickets(tickets);
+        onSaveTickets(tickets, fiboMeta);
         setGenerationType('fibonacci');
         saveToAutoSave(tickets, mode, selectedNumbers, filters, 'fibonacci');
 
@@ -345,6 +408,26 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     targetCount === 15 ? 1 : targetCount === 16 ? 16 : targetCount === 17 ? 136 : targetCount === 18 ? 816 : targetCount === 19 ? 3876 : targetCount === 20 ? 15504 : 54264;
   const rawCaixaCost = rawPermutations * VALOR_APOSTA_LOTOFACIL;
   const savings = Math.max(0, rawCaixaCost - totalCost);
+
+  const getCurrentExportMeta = (): FechamentoExportMeta => {
+    return {
+      strategyName,
+      modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
+      garantia: preset.garantia,
+      targetCount: targetCount,
+      selectedNumbers: selectedNumbers,
+      fixedNumbers: fixedNumbers,
+      excludedNumbers: excludedNumbers,
+      filters: {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      },
+      concurso: latestDraw.concurso,
+      dataConcurso: latestDraw.data,
+      timestamp: Date.now(),
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -469,7 +552,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         mode={mode}
         targetCount={targetCount}
         totalJogos={generatedTickets.length || preset.jogosMaximos}
-        onGoToGamesManager={onGoToGamesManager ? () => onGoToGamesManager(generatedTickets) : undefined}
+        onGoToGamesManager={
+          onGoToGamesManager
+            ? () => onGoToGamesManager(generatedTickets, getCurrentExportMeta())
+            : undefined
+        }
       />
 
       {/* Success Notification for Document Strategy Pool */}
@@ -501,6 +588,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         onSetFixed={handleSetFixed}
         onSetExcluded={handleSetExcluded}
         onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+        onStrategySelect={(stratName) => setStrategyName(stratName)}
         onClear={() => {
           setSelectedNumbers([]);
           setFixedNumbers([]);
@@ -848,7 +936,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             subtitle={`Investimento total calculado automaticamente: ${generatedTickets.length} jogos × R$ 3,50 = R$ ${(
               generatedTickets.length * VALOR_APOSTA_LOTOFACIL
             ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            onGoToGamesManager={onGoToGamesManager ? () => onGoToGamesManager(generatedTickets) : undefined}
+            onGoToGamesManager={
+              onGoToGamesManager
+                ? () => onGoToGamesManager(generatedTickets, getCurrentExportMeta())
+                : undefined
+            }
           />
 
           {/* Feedback de Filtro Ativo do Monitoramento */}
