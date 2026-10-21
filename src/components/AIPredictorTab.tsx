@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { DailyInsightsWidget } from './DailyInsightsWidget';
 import { HistoricalProbability500Module } from './HistoricalProbability500Module';
+import { D3AIAccuracyComparisonChart } from './D3AIAccuracyComparisonChart';
 import {
   Sparkles,
   Cpu,
@@ -293,163 +294,13 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* HISTORICAL AI CONFIDENCE EVOLUTION CHART (RECHARTS - LAST 10 DRAWS)     */}
+      {/* GRÁFICO COMPARATIVO D3.JS: PRECISÃO HISTÓRICA IA VS RESULTADOS REAIS      */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <Activity className="w-4 h-4" />
-              </div>
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <span>Evolução Histórica da Taxa de Confiança da IA</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Últimos 10 Concursos
-                </span>
-              </h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Visualização analítica da taxa de assertividade e calibração probabilística do modelo neural LotoSniper.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Concurso Atual: <strong className="text-emerald-400">#{latestDraw.concurso}</strong></span>
-            </span>
-          </div>
-        </div>
-
-        {/* KPI Mini-Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              Confiança Atual
-            </span>
-            <div className="text-xl font-black font-mono text-emerald-400 mt-0.5">
-              {currentConfidence.toFixed(1)}%
-            </div>
-            <span className="text-[10px] text-emerald-500/80 font-medium">
-              Concurso #{latestDraw.concurso}
-            </span>
-          </div>
-
-          <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              Média (10 Concursos)
-            </span>
-            <div className="text-xl font-black font-mono text-cyan-300 mt-0.5">
-              {avgConfidence.toFixed(1)}%
-            </div>
-            <span className="text-[10px] text-slate-500 font-medium">
-              Calibração contínua
-            </span>
-          </div>
-
-          <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              Pico Máximo
-            </span>
-            <div className="text-xl font-black font-mono text-amber-300 mt-0.5">
-              {maxConfidence.toFixed(1)}%
-            </div>
-            <span className="text-[10px] text-amber-400/80 font-medium">
-              Recorde de precisão
-            </span>
-          </div>
-
-          <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-              Acertos Médios (Top 18)
-            </span>
-            <div className="text-xl font-black font-mono text-purple-300 mt-0.5">
-              13.9 <span className="text-xs text-slate-500">/ 15</span>
-            </div>
-            <span className="text-[10px] text-purple-400/80 font-medium">
-              92.7% de cobertura
-            </span>
-          </div>
-        </div>
-
-        {/* Recharts Area Chart */}
-        <div className="h-64 sm:h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={historicalConfidenceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="aiConfidenceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-              <XAxis
-                dataKey="label"
-                stroke="#64748b"
-                tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
-                tickLine={false}
-              />
-              <YAxis
-                domain={[85, 100]}
-                stroke="#64748b"
-                tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
-                tickLine={false}
-                tickFormatter={(val) => `${val}%`}
-              />
-              <Tooltip content={<CustomConfidenceTooltip />} />
-              <ReferenceLine
-                y={95}
-                stroke="#10b981"
-                strokeDasharray="4 4"
-                label={{
-                  value: 'Limiar de Alta Confiança (95%)',
-                  fill: '#10b981',
-                  fontSize: 10,
-                  position: 'insideTopLeft',
-                  offset: 8,
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="taxaConfianca"
-                name="Taxa de Confiança"
-                stroke="#10b981"
-                strokeWidth={3}
-                fillOpacity={1}
-                fill="url(#aiConfidenceGradient)"
-                activeDot={{ r: 6, fill: '#34d399', stroke: '#064e3b', strokeWidth: 2 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="assertividade"
-                name="Assertividade Real"
-                stroke="#06b6d4"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-                dot={{ r: 3, fill: '#06b6d4' }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Chart Legend & Explanation */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block shadow-sm shadow-emerald-500/50"></span>
-              <span className="text-slate-300 font-medium">Taxa de Confiança da IA (%)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-4 h-0.5 border-t-2 border-dashed border-cyan-400 inline-block"></span>
-              <span className="text-slate-300 font-medium">Assertividade Real no Top 18 (%)</span>
-            </div>
-          </div>
-          <span className="text-[11px] text-slate-500 font-mono">
-            Dados mapeados nos 10 últimos concursos oficiais da Caixa
-          </span>
-        </div>
-      </div>
+      <D3AIAccuracyComparisonChart
+        latestDraw={latestDraw}
+        recomendadas18={recomendadas18}
+        currentTaxaConfianca={currentConfidence}
+      />
 
       {/* Grid: 25 Dezenas Heatmap & 3 Golden Tickets */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -24,6 +24,7 @@ import {
   Sparkles,
   Info,
 } from 'lucide-react';
+import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
 export type CheckInterval = 'startup_only' | '1h' | '4h' | '12h';
@@ -329,9 +330,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* SUBTAB 1: CONEXÃO, SINCRONIZAÇÃO & NOTIFICAÇÕES                             */}
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Seletor do Modo de Conexão */}
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
+        <div className="space-y-5">
+          {/* Central de Alertas Customizados por Push e Som para 14 e 15 Pontos */}
+          <JackpotAlertConfigModule
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenConferidor={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }))}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Seletor do Modo de Conexão */}
+            <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
             <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
               <Wifi className="w-5 h-5 text-emerald-400" />
               <div>
@@ -507,6 +516,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ========================================================================= */}

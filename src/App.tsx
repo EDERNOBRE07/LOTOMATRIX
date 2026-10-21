@@ -14,7 +14,8 @@ import { NavigationMenu } from './components/NavigationMenu';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
-import { buildOptimal18Pool } from './services/combinatorics';
+import { buildOptimal18Pool, countMatches } from './services/combinatorics';
+import { soundService } from './services/soundAlert';
 import {
   Layers,
   Sparkles,
@@ -74,7 +75,31 @@ export default function App() {
     data: string;
   } | null>(null);
 
-  const [savedTickets, setSavedTickets] = useState<GameTicket[]>([]);
+  const [savedTickets, setSavedTickets] = useState<GameTicket[]>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_saved_tickets');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Salvar no localStorage sempre que novos jogos forem gerados
+  useEffect(() => {
+    if (savedTickets.length > 0) {
+      try {
+        localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
+      } catch {}
+    }
+  }, [savedTickets]);
+
+  const [jackpotHitNotice, setJackpotHitNotice] = useState<{
+    concurso: number;
+    maxHits: number;
+    winningTicketsCount: number;
+    bestTicketIndex: number;
+  } | null>(null);
+
   const [activeFechamentoMeta, setActiveFechamentoMeta] = useState<FechamentoExportMeta | null>(() => {
     try {
       const saved = localStorage.getItem('lotosniper_active_fechamento_meta');
@@ -138,6 +163,66 @@ export default function App() {
     return () => window.removeEventListener('switch-tab', handleSwitchTab);
   }, []);
 
+  // Disparo automático de alertas sonoros e push para 14 e 15 acertos ao atualizar o concurso da Caixa
+  const triggerAutomaticJackpotAlerts = (draw: LotofacilDraw, ticketsToCheck: GameTicket[]) => {
+    if (!ticketsToCheck || ticketsToCheck.length === 0 || !draw?.dezenas) return;
+
+    const alertEnabled = localStorage.getItem('lotosniper_alert_14_15_enabled') !== 'false';
+    if (!alertEnabled) return;
+
+    const soundEnabled = localStorage.getItem('lotosniper_alert_sound_enabled') !== 'false';
+    const pushEnabled = localStorage.getItem('lotosniper_alert_push_enabled') !== 'false';
+    const threshold = (localStorage.getItem('lotosniper_alert_threshold') as '15_only' | '14_and_15' | '13_plus') || '14_and_15';
+
+    let maxHits = 0;
+    let winningCount = 0;
+    let bestIdx = 1;
+
+    ticketsToCheck.forEach((t) => {
+      const hits = countMatches(t.dezenas, draw.dezenas);
+      if (hits > maxHits) {
+        maxHits = hits;
+        bestIdx = t.index;
+      }
+      if (hits >= 13) winningCount++;
+    });
+
+    const isTriggered =
+      (threshold === '15_only' && maxHits >= 15) ||
+      (threshold === '14_and_15' && maxHits >= 14) ||
+      (threshold === '13_plus' && maxHits >= 13);
+
+    if (isTriggered) {
+      // 1. Tocar áudio festivo correspondente
+      if (soundEnabled) {
+        if (maxHits >= 15) {
+          soundService.play15PontosJackpotSound();
+        } else if (maxHits >= 14) {
+          soundService.play14PontosCelebrationSound();
+        } else {
+          soundService.playGoldenZoneSuccessChime();
+        }
+      }
+
+      // 2. Disparar notificação push no navegador se autorizada
+      if (pushEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        const title = maxHits >= 15 ? '🎉 GRAND JACKPOT: 15 PONTOS NA LOTOFÁCIL!' : `🏆 ${maxHits} PONTOS DETECTADOS!`;
+        const body = `Seu Jogo #${bestIdx} em 'Meus Jogos' cravou ${maxHits} PONTOS no Concurso Caixa #${draw.concurso}! Toque para auditar.`;
+        try {
+          new Notification(title, { body, icon: '/favicon.ico' });
+        } catch {}
+      }
+
+      // 3. Exibir banner de premiação no topo da tela
+      setJackpotHitNotice({
+        concurso: draw.concurso,
+        maxHits,
+        winningTicketsCount: winningCount,
+        bestTicketIndex: bestIdx,
+      });
+    }
+  };
+
   // Real-time synchronization function: triggered on every app open
   const runAutoUpdate = async (forceFresh: boolean = false) => {
     setIsSyncing(true);
@@ -151,6 +236,15 @@ export default function App() {
         concurso: result.draw.concurso,
         data: result.draw.data,
       });
+
+      // Dispara auditoria automática nos bilhetes de 'Meus Jogos & Conferidor'
+      const ticketsToCheck = savedTickets.length > 0 ? savedTickets : (() => {
+        try {
+          const s = localStorage.getItem('lotosniper_saved_tickets');
+          return s ? JSON.parse(s) : [];
+        } catch { return []; }
+      })();
+      triggerAutomaticJackpotAlerts(result.draw, ticketsToCheck);
 
       // After updating latest draw, trigger AI prediction optimization with the newly loaded draw
       fetchAIPrediction(result.draw);
@@ -324,6 +418,53 @@ export default function App() {
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* Banner Comemorativo de 14 ou 15 Acertos Disparado Automaticamente */}
+        {jackpotHitNotice && (
+          <div className="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 rounded-2xl p-4 text-slate-950 shadow-2xl border-2 border-yellow-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-slate-950 text-amber-400 rounded-2xl shadow-xl flex items-center justify-center shrink-0">
+                <Award className="w-7 h-7" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-slate-950 text-yellow-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider">
+                    {jackpotHitNotice.maxHits === 15 ? '🔥 15 PONTOS - JACKPOT MÁXIMO!' : '⚡ 14 PONTOS CONFIRMADOS!'}
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-900">
+                    Concurso Caixa #{jackpotHitNotice.concurso}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black tracking-tight mt-0.5">
+                  Parabéns! Seu Jogo #{jackpotHitNotice.bestTicketIndex} cravou {jackpotHitNotice.maxHits} ACERTOS!
+                </h3>
+                <p className="text-xs font-medium text-slate-900/90">
+                  {jackpotHitNotice.winningTicketsCount} bilhete(s) na faixa de premiação alta em 'Meus Jogos & Conferidor'.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                onClick={() => {
+                  setActiveTab('jogos');
+                  setJackpotHitNotice(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-900 text-yellow-300 font-black text-xs shadow-lg transition cursor-pointer flex items-center gap-2"
+              >
+                <span>Conferir em Meus Jogos</span>
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setJackpotHitNotice(null)}
+                className="p-2 rounded-xl bg-slate-950/20 hover:bg-slate-950/40 text-slate-950 transition cursor-pointer"
+                title="Fechar notificação"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 

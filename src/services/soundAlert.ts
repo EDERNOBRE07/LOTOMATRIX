@@ -70,9 +70,72 @@ class SoundService {
         osc.start(now + idx * 0.08);
         osc.stop(now + idx * 0.08 + 0.36);
       });
-    } catch (e) {
-      // Audio ignore
-    }
+    } catch (e) {}
+  }
+
+  // Play celebratory audio for 14 Pontos (Ascending major fanfare)
+  play14PontosCelebrationSound() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      // C5, E5, G5, C6 triumph fanfare
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+        gain.gain.setValueAtTime(0.18, now + idx * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.45);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.12);
+        osc.stop(now + idx * 0.12 + 0.48);
+      });
+    } catch (e) {}
+  }
+
+  // Play epic celebratory fanfare for 15 Pontos (Grand Jackpot)
+  play15PontosJackpotSound() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      // Majestic triumphant arpeggio sequence
+      const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+
+        gain.gain.setValueAtTime(0.2, now + idx * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.55);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.09);
+        osc.stop(now + idx * 0.09 + 0.58);
+      });
+    } catch (e) {}
+  }
+
+  // Test current alert sound configuration
+  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' = '14_pontos') {
+    if (type === '15_pontos') this.play15PontosJackpotSound();
+    else if (type === '14_pontos') this.play14PontosCelebrationSound();
+    else this.playGoldenZoneSuccessChime();
   }
 }
 
