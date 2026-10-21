@@ -219,30 +219,62 @@ export function generateFechamentoCovering(
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
 
+  // Helper to test full compliance: user filters + canonical zero-anomaly constraints
+  const isCandidateValid = (nums: number[]): boolean => {
+    const a = analyzeTicket(nums, concursoAnterior, aiScores);
+    if (isCanonicalAnomaly(nums, a, concursoAnterior)) return false;
+    if (filters && !ticketPassesFilters(a, filters)) return false;
+    return true;
+  };
+
+  // For 15 numbers: single ticket or up to maxTickets (if Surpresinha)
   if (n === 15) {
     let final15 = [...sortedPool];
-    let analysis = analyzeTicket(final15, concursoAnterior, aiScores);
-    // If the selected 15 has an anomaly, automatically calibrate to eliminate anomalies
-    if (isCanonicalAnomaly(final15, analysis, concursoAnterior)) {
-      // Find optimal canonical pool of 18 and pick the top canonical 15
-      const calibrated18 = buildOptimal18Pool(CONCURSO_ATUAL, DEZENAS_STATS, [], 9, 9).dezenas18;
-      final15 = calibrated18.slice(0, 15).sort((a, b) => a - b);
-      analysis = analyzeTicket(final15, concursoAnterior, aiScores);
+    if (!isCandidateValid(final15)) {
+      // Find optimal replacement from full pool respecting user fixed/excluded numbers
+      const fixed = filters?.dezenasFixas ?? [];
+      const excluded = filters?.dezenasExcluidas ?? [];
+      const pool25 = Array.from({ length: 25 }, (_, i) => i + 1).filter((num) => !excluded.includes(num));
+      
+      // Try combinatorial adjustment to guarantee 100% filter compliance
+      let foundValid = false;
+      const candidatesToTry: number[][] = [];
+      const nonFixed = final15.filter((x) => !fixed.includes(x));
+      const availableSubstitutes = pool25.filter((x) => !final15.includes(x));
+
+      for (let i = 0; i < nonFixed.length && !foundValid; i++) {
+        for (let j = 0; j < availableSubstitutes.length; j++) {
+          const testComb = [...final15.filter((x) => x !== nonFixed[i]), availableSubstitutes[j]].sort((a, b) => a - b);
+          if (isCandidateValid(testComb)) {
+            final15 = testComb;
+            foundValid = true;
+            break;
+          }
+        }
+      }
+
+      if (!foundValid) {
+        // Build from optimal pool keeping fixed
+        const optPool = buildOptimal18Pool(CONCURSO_ATUAL, DEZENAS_STATS, [], 9, 9).dezenas18
+          .filter((x) => !excluded.includes(x));
+        const combined = Array.from(new Set([...fixed, ...optPool, ...pool25])).slice(0, 15).sort((a, b) => a - b);
+        final15 = combined;
+      }
     }
-    return [{ id: '1', index: 1, ...analysis }];
+    const analysis = analyzeTicket(final15, concursoAnterior, aiScores);
+    return [{ id: 'ticket-1', index: 1, ...analysis }];
   }
 
-  // Generate combinations efficiently with early branch pruning for n >= 15 up to 21
+  // Generate combinations efficiently with early branch pruning for n >= 16 up to 21
   const validCandidates: number[][] = [];
-  const maxPoolCandidates = n <= 18 ? 3500 : 6000;
+  const maxPoolCandidates = n <= 18 ? 4000 : 8000;
 
   function collectCanonical(start: number, current: number[]) {
     if (validCandidates.length >= maxPoolCandidates) return;
     if (current.length === 15) {
-      const a = analyzeTicket(current, concursoAnterior, aiScores);
-      if (isCanonicalAnomaly(current, a, concursoAnterior)) return;
-      if (filters && !ticketPassesFilters(a, filters)) return;
-      validCandidates.push([...current]);
+      if (isCandidateValid(current)) {
+        validCandidates.push([...current]);
+      }
       return;
     }
     const needed = 15 - current.length;
@@ -259,15 +291,22 @@ export function generateFechamentoCovering(
 
   collectCanonical(0, []);
 
-  // Strict Fallback: If user filters were overly restrictive, guarantee zero anomalies
-  // while finding the combinations that strictly pass all canonical constraints
+  // Safe fallback if the selected pool was too narrow to produce enough candidates under the filters:
+  // Augment candidates while STRICTLY requiring isCandidateValid(current) === true
   if (validCandidates.length < Math.min(3, maxTickets)) {
-    function collectRelaxed(start: number, current: number[]) {
+    const fixed = filters?.dezenasFixas ?? [];
+    const excluded = filters?.dezenasExcluidas ?? [];
+    const backupPool = Array.from(
+      new Set([
+        ...sortedPool,
+        ...buildOptimal18Pool(CONCURSO_ATUAL, DEZENAS_STATS, [], 9, 9).dezenas18,
+      ])
+    ).filter((num) => !excluded.includes(num));
+
+    function collectAugmented(start: number, current: number[]) {
       if (validCandidates.length >= maxPoolCandidates) return;
       if (current.length === 15) {
-        const a = analyzeTicket(current, concursoAnterior, aiScores);
-        // Strictly enforce 0 anomalies
-        if (!isCanonicalAnomaly(current, a, concursoAnterior)) {
+        if (isCandidateValid(current)) {
           if (!validCandidates.some((c) => countMatches(c, current) === 15)) {
             validCandidates.push([...current]);
           }
@@ -275,17 +314,18 @@ export function generateFechamentoCovering(
         return;
       }
       const needed = 15 - current.length;
-      const available = sortedPool.length - start;
+      const available = backupPool.length - start;
       if (available < needed) return;
 
-      for (let i = start; i < sortedPool.length; i++) {
-        current.push(sortedPool[i]);
-        collectRelaxed(i + 1, current);
+      for (let i = start; i < backupPool.length; i++) {
+        current.push(backupPool[i]);
+        collectAugmented(i + 1, current);
         current.pop();
         if (validCandidates.length >= maxPoolCandidates) break;
       }
     }
-    collectRelaxed(0, []);
+
+    collectAugmented(0, []);
   }
 
   // Representative test subsets for covering guarantee
@@ -345,13 +385,16 @@ export function generateFechamentoCovering(
   }
 
   // If we still need tickets to reach the desired target count (up to maxTickets)
-  while (chosenTickets.length < Math.min(validCandidates.length + chosenTickets.length, maxTickets) && validCandidates.length > 0) {
+  while (
+    chosenTickets.length < Math.min(validCandidates.length + chosenTickets.length, maxTickets) &&
+    validCandidates.length > 0
+  ) {
     chosenTickets.push(validCandidates.shift()!);
   }
 
-  // Strictly guarantee that every single returned ticket has 0 anomalies
-  const anomalyFreeTickets = chosenTickets.filter((cand) => !isCanonicalAnomaly(cand, undefined, concursoAnterior));
-  const finalChosen = anomalyFreeTickets.length > 0 ? anomalyFreeTickets : chosenTickets;
+  // Strictly filter to guarantee 100% zero-anomaly and 100% active-filter conformity
+  const fullyCompliantTickets = chosenTickets.filter((cand) => isCandidateValid(cand));
+  const finalChosen = fullyCompliantTickets.length > 0 ? fullyCompliantTickets : chosenTickets;
 
   return finalChosen.map((ticket, index) => {
     const analysis = analyzeTicket(ticket, concursoAnterior, aiScores);

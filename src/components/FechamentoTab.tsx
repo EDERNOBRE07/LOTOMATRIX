@@ -44,6 +44,7 @@ import {
   Filter,
   History,
   RotateCcw,
+  RefreshCw,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -215,6 +216,65 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
     return generatedTickets;
   }, [generatedTickets, fechamentoFilter, fechamentoMonitoringSummary]);
+
+  // Modelo de Prognóstico Ativo
+  const [activeModel, setActiveModel] = useState<string>(
+    '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
+  );
+
+  const applyStrategyModel = (modelType: string, overrideTargetCount?: number) => {
+    const tCount = overrideTargetCount ?? targetCount;
+    setActiveModel(modelType);
+
+    if (modelType.includes('Documento')) {
+      const optimal = buildOptimalPool(tCount, latestDraw, dynamicStats, cyclePendingNumbers);
+      setSelectedNumbers(optimal.dezenas.slice(0, tCount));
+      const name = '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)';
+      setStrategyName(name);
+      setDocumentMessage(optimal.explicacao);
+      setTimeout(() => setDocumentMessage(null), 6000);
+    } else if (modelType.includes('Top') || modelType.includes('IA')) {
+      const sorted = [...dynamicStats]
+        .sort((a, b) => {
+          const scoreA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
+          const scoreB = aiPrediction?.scores ? aiPrediction.scores[b.numero - 1] : b.vezes / 24 + b.atrasoAtual * 5;
+          return scoreB - scoreA;
+        })
+        .slice(0, tCount)
+        .map((s) => s.numero)
+        .sort((a, b) => a - b);
+      setSelectedNumbers(sorted);
+      const name = tCount === 18 ? 'Top 18 IA' : `Top 18 IA (Top ${tCount} Dezenas)`;
+      setStrategyName(name);
+      setDocumentMessage(`Top ${tCount} IA aplicado: dezenas ranqueadas com maior índice preditivo.`);
+      setTimeout(() => setDocumentMessage(null), 5000);
+    } else if (modelType.includes('Fechar Ciclo')) {
+      const cycleFocus = Array.from(
+        new Set([
+          2, 7, 10,
+          ...cyclePendingNumbers,
+          ...dynamicStats.filter((s) => s.atrasoAcimaDaMedia).map((s) => s.numero),
+          11, 20, 25, 13, 24, 1, 4, 3, 5, 9, 12, 14, 15, 19, 21, 22, 23,
+        ])
+      )
+        .slice(0, tCount)
+        .sort((a, b) => a - b);
+      setSelectedNumbers(cycleFocus);
+      const name = 'Fechar Ciclo (2, 7, 10)';
+      setStrategyName(name);
+      setDocumentMessage(`Modelo Fechar Ciclo (2, 7, 10) aplicado: foco na conclusão do ciclo atual da Lotofácil.`);
+      setTimeout(() => setDocumentMessage(null), 5000);
+    } else if (modelType.includes('Equilíbrio')) {
+      const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25]
+        .slice(0, tCount)
+        .sort((a, b) => a - b);
+      setSelectedNumbers(eq);
+      const name = 'Equilíbrio Canônico';
+      setStrategyName(name);
+      setDocumentMessage(`Equilíbrio Canônico aplicado: harmonia exata de moldura, miolo, primos e fibonacci.`);
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
 
   // Apply Document Strategy (Calibrated pool dynamically scaled to targetCount)
   const handleApplyOptimalDocumentPool = (repCount?: number, ausCount?: number) => {
@@ -491,13 +551,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
-      {/* Mode Selection Carousel */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl">
-        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2.5">
-          Selecione a Estratégia de Fechamento:
-        </label>
+      {/* Mode Selection Carousel (15 a 21 Dezenas) */}
+      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+            1. Selecione a Estratégia de Fechamento (15 a 21 Números):
+          </label>
+          <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full self-start sm:self-auto">
+            Matriz Selecionada: {targetCount} Dezenas ({preset.jogosMaximos} Jogos • Garantia {preset.garantia})
+          </span>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-          {(Object.keys(FECHAMENTO_PRESETS) as FechamentoMode[]).map((key) => {
+          {(
+            [
+              'surpresinha_inteligente',
+              '16_14_15',
+              '17_14_15',
+              '18_14_15',
+              '18_13_14',
+              '19_14_15',
+              '20_14_15',
+              '21_13_15',
+            ] as FechamentoMode[]
+          ).map((key) => {
             const p = FECHAMENTO_PRESETS[key];
             const isSelected = mode === key;
             const custoFechamento = p.jogosMaximos * VALOR_APOSTA_LOTOFACIL;
@@ -507,13 +584,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 type="button"
                 onClick={() => {
                   setMode(key);
-                  // Adjust number selection count if needed
-                  if (selectedNumbers.length < p.dezenasNecessarias) {
-                    const pool = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 19, 20, 21, 22, 24, 25];
-                    setSelectedNumbers(pool.slice(0, p.dezenasNecessarias));
-                  } else if (selectedNumbers.length > p.dezenasNecessarias) {
-                    setSelectedNumbers(selectedNumbers.slice(0, p.dezenasNecessarias));
-                  }
+                  applyStrategyModel(activeModel, p.dezenasNecessarias);
                 }}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   isSelected
@@ -543,6 +614,132 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Seletor de Modelos de Prognósticos & Estratégias */}
+      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+            2. Selecione o Modelo de Prognóstico da Matriz ({targetCount} Dezenas):
+          </label>
+          <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full self-start sm:self-auto">
+            Modelo Ativo: {strategyName}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* Modelo 1: ⚡ Estratégia Documento */}
+          <button
+            type="button"
+            onClick={() => applyStrategyModel('⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)')}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+              strategyName.includes('Documento')
+                ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                <Zap className="w-4 h-4 fill-current" />
+              </span>
+              <div>
+                <span className="font-bold text-xs sm:text-sm text-white block">
+                  Estratégia Documento
+                </span>
+                <span className="text-[10px] font-mono font-bold text-emerald-400">
+                  9 Repetidas + 9 Ausentes
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Captura proporcional de 9 das ausentes do Concurso anterior e repetidas de alta frequência.
+            </p>
+          </button>
+
+          {/* Modelo 2: 🤖 Top 18 IA */}
+          <button
+            type="button"
+            onClick={() => applyStrategyModel('Top 18 IA')}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+              strategyName.includes('Top')
+                ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/40">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold text-xs sm:text-sm text-white block">
+                  Top 18 IA
+                </span>
+                <span className="text-[10px] font-mono font-bold text-teal-400">
+                  Calor & Probabilidade IA
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Seleção das melhores dezenas ordenadas pelos scores de inteligência artificial e urgência estatística.
+            </p>
+          </button>
+
+          {/* Modelo 3: 🔄 Fechar Ciclo */}
+          <button
+            type="button"
+            onClick={() => applyStrategyModel('Fechar Ciclo (2, 7, 10)')}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+              strategyName.includes('Fechar Ciclo')
+                ? 'bg-amber-500/15 border-amber-400 shadow-md shadow-amber-500/20 ring-1 ring-amber-400'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                <RefreshCw className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold text-xs sm:text-sm text-white block">
+                  Fechar Ciclo (2, 7, 10)
+                </span>
+                <span className="text-[10px] font-mono font-bold text-amber-400">
+                  Dezenas de Alta Pressão
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Prioriza as dezenas pendentes para fechar o Ciclo da Lotofácil mais as dezenas mais frequentes.
+            </p>
+          </button>
+
+          {/* Modelo 4: ⚖️ Equilíbrio Canônico */}
+          <button
+            type="button"
+            onClick={() => applyStrategyModel('Equilíbrio Canônico')}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+              strategyName.includes('Equilíbrio Canônico')
+                ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/40">
+                <ShieldCheck className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold text-xs sm:text-sm text-white block">
+                  Equilíbrio Canônico
+                </span>
+                <span className="text-[10px] font-mono font-bold text-indigo-400">
+                  Harmonia 100% Canônica
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Distribuição harmônica de moldura, miolo, primos e fibonacci calibrada para a Zona de Ouro (190-210).
+            </p>
+          </button>
         </div>
       </div>
 
@@ -588,7 +785,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         onSetFixed={handleSetFixed}
         onSetExcluded={handleSetExcluded}
         onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
-        onStrategySelect={(stratName) => setStrategyName(stratName)}
+        onStrategySelect={(stratName) => {
+          setStrategyName(stratName);
+          setActiveModel(stratName);
+        }}
+        activeStrategy={strategyName}
         onClear={() => {
           setSelectedNumbers([]);
           setFixedNumbers([]);
@@ -922,6 +1123,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               onSelectGame={(gameId) => setFechamentoFilter(gameId)}
               title="Sistema de Monitoramento dos Fechamentos Gerados"
               subtitle="Auditoria matemática de probabilidade avaliando todos os bilhetes da matriz recém-gerada"
+              activeFiltersConfig={filters}
             />
           )}
 

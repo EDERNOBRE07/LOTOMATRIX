@@ -7,7 +7,7 @@ import {
   CONCURSO_ATUAL,
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
-import { buildOptimal18Pool } from '../services/combinatorics';
+import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics';
 import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap } from 'lucide-react';
 
 interface VolanteSelectorProps {
@@ -25,6 +25,7 @@ interface VolanteSelectorProps {
   onClear: () => void;
   targetCount?: number;
   onStrategySelect?: (strategyName: string) => void;
+  activeStrategy?: string;
 }
 
 export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
@@ -42,6 +43,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   onClear,
   targetCount = 18,
   onStrategySelect,
+  activeStrategy,
 }) => {
   const [visualMode, setVisualMode] = useState<
     'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia'
@@ -61,32 +63,34 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       .map((s) => s.numero)
       .sort((a, b) => a - b);
     onSelectSet(sorted);
-    onStrategySelect?.(`Top ${targetCount} IA`);
+    const name = targetCount === 18 ? 'Top 18 IA' : `Top 18 IA (Top ${targetCount} Dezenas)`;
+    onStrategySelect?.(name);
   };
 
-  const handleSelectDocumentStrategy = (qtdRep: number = 9, qtdAus: number = 9) => {
-    const optimal = buildOptimal18Pool(latestDraw, statsList, cyclePendingNumbers, qtdRep, qtdAus);
-    onSelectSet(optimal.dezenas18.slice(0, targetCount));
+  const handleSelectDocumentStrategy = () => {
+    const optimal = buildOptimalPool(targetCount, latestDraw, statsList, cyclePendingNumbers);
+    onSelectSet(optimal.dezenas.slice(0, targetCount));
     onStrategySelect?.('⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)');
   };
 
   const handleSelectCycleClosure = () => {
-    // Urgent pending cycle numbers + top recurring
+    // Urgent pending cycle numbers (2, 7, 10, etc.) + top recurring
     const cycleFocus = Array.from(
       new Set([
+        2, 7, 10,
         ...cyclePendingNumbers,
-        ...statsList.filter(s => s.atrasoAcimaDaMedia).map(s => s.numero),
-        11, 20, 25, 10, 13, 24, 1, 4, 2, 3, 5, 7, 9, 12, 14, 15, 19, 21, 22, 23
+        ...statsList.filter((s) => s.atrasoAcimaDaMedia).map((s) => s.numero),
+        11, 20, 25, 13, 24, 1, 4, 3, 5, 9, 12, 14, 15, 19, 21, 22, 23,
       ])
     );
-    onSelectSet(cycleFocus.slice(0, targetCount));
-    onStrategySelect?.(`Fechar Ciclo (${cyclePendingNumbers.slice(0, 3).join(', ')})`);
+    onSelectSet(cycleFocus.slice(0, targetCount).sort((a, b) => a - b));
+    onStrategySelect?.('Fechar Ciclo (2, 7, 10)');
   };
 
   const handleSelectEquilibrio = () => {
-    // 10 moldura + 5 miolo + 5 primos
+    // Balanced distribution: moldura + miolo + primos + fibonacci
     const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25];
-    onSelectSet(eq.slice(0, targetCount));
+    onSelectSet(eq.slice(0, targetCount).sort((a, b) => a - b));
     onStrategySelect?.('Equilíbrio Canônico');
   };
 
@@ -349,28 +353,48 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => handleSelectDocumentStrategy(9, 9)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400 text-emerald-300 text-xs font-bold transition shadow-sm shadow-emerald-500/20 cursor-pointer"
+            type="button"
+            onClick={handleSelectDocumentStrategy}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${
+              activeStrategy?.includes('Documento')
+                ? 'bg-emerald-500 text-slate-950 border border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30'
+                : 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/60 text-emerald-300'
+            }`}
           >
-            <Zap className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+            <Zap className="w-3.5 h-3.5 fill-current" />
             <span>⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)</span>
           </button>
           <button
+            type="button"
             onClick={handleSelectTop18AI}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+              activeStrategy?.includes('Top')
+                ? 'bg-emerald-500 text-slate-950 font-bold border border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30'
+                : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200'
+            }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Top {targetCount} IA</span>
+            <span>Top 18 IA</span>
           </button>
           <button
+            type="button"
             onClick={handleSelectCycleClosure}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-medium transition cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+              activeStrategy?.includes('Fechar Ciclo')
+                ? 'bg-amber-400 text-slate-950 font-bold border border-amber-300 ring-2 ring-amber-300/50 shadow-amber-400/30'
+                : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300'
+            }`}
           >
-            <span>Fechar Ciclo ({cyclePendingNumbers.slice(0, 3).join(', ')})</span>
+            <span>Fechar Ciclo (2, 7, 10)</span>
           </button>
           <button
+            type="button"
             onClick={handleSelectEquilibrio}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+              activeStrategy?.includes('Equilíbrio Canônico')
+                ? 'bg-emerald-500 text-slate-950 font-bold border border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30'
+                : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200'
+            }`}
           >
             <span>Equilíbrio Canônico</span>
           </button>
