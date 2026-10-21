@@ -16,6 +16,7 @@ import {
 import { DailyInsightsWidget } from './DailyInsightsWidget';
 import { HistoricalProbability500Module } from './HistoricalProbability500Module';
 import { D3AIAccuracyComparisonChart } from './D3AIAccuracyComparisonChart';
+import { MonteCarloHeatmap5Concursos } from './MonteCarloHeatmap5Concursos';
 import {
   Sparkles,
   Cpu,
@@ -300,6 +301,16 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         latestDraw={latestDraw}
         recomendadas18={recomendadas18}
         currentTaxaConfianca={currentConfidence}
+      />
+
+      {/* ========================================================================= */}
+      {/* SIMULAÇÃO MONTE CARLO: GRÁFICO DE CALOR NOS PRÓXIMOS 5 CONCURSOS (HEATMAP) */}
+      {/* ========================================================================= */}
+      <MonteCarloHeatmap5Concursos
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        onApplyNumbers={onApplyRecommendation}
       />
 
       {/* Grid: 25 Dezenas Heatmap & 3 Golden Tickets */}

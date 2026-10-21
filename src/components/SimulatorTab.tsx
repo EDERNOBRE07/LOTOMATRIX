@@ -8,6 +8,7 @@ import { AnimatedDrawChecker } from './AnimatedDrawChecker';
 import { EfficiencyReportModal } from './EfficiencyReportModal';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
+import { AlgorithmDuelSimulator } from './AlgorithmDuelSimulator';
 import {
   Play,
   RotateCcw,
@@ -24,6 +25,7 @@ import {
   BarChart3,
   Download,
   ArrowRight,
+  Swords,
 } from 'lucide-react';
 
 interface SimulatorTabProps {
@@ -47,7 +49,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     }
   };
   const [activeSubTab, setActiveSubTab] = useState<
-    'backtest' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
+    'backtest' | 'duelo_algoritmos' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
   >('backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
@@ -177,6 +179,27 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('duelo_algoritmos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'duelo_algoritmos'
+                ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 font-black'
+                : 'text-rose-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Swords className="w-4 h-4" />
+            <span>Duelo de Algoritmos</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'duelo_algoritmos'
+                  ? 'bg-rose-950 text-rose-200 border border-rose-400/40'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+              }`}
+            >
+              ROI DUAL
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('evolucao_saldo')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
               activeSubTab === 'evolucao_saldo'
@@ -257,7 +280,15 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       />
 
       {/* Render Subtab Views */}
-      {activeSubTab === 'evolucao_saldo' ? (
+      {activeSubTab === 'duelo_algoritmos' ? (
+        <AlgorithmDuelSimulator
+          latestDraw={latestDraw}
+          userSavedTickets={tickets}
+          onApplyStrategy={(winningPool) => {
+            onGoToGenerator();
+          }}
+        />
+      ) : activeSubTab === 'evolucao_saldo' ? (
         <EvolucaoSaldoChart tickets={tickets} latestDraw={latestDraw} />
       ) : activeSubTab === 'calculadora' ? (
         <CostBenefitCalculator />
