@@ -18,6 +18,7 @@ import { EvolucaoPontuacaoChart } from './EvolucaoPontuacaoChart';
 import { AnaliseVarianciaComponent } from './AnaliseVarianciaComponent';
 import { ROIForecastComponent } from './ROIForecastComponent';
 import { EspelhamentoDezenasModule } from './EspelhamentoDezenasModule';
+import { SazonalidadeDezenasModule } from './SazonalidadeDezenasModule';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -38,6 +39,7 @@ import {
   Lightbulb,
   Scale,
   Link2,
+  Calendar,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -63,6 +65,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'atrasos'
     | 'roi_forecast'
     | 'espelhamento'
+    | 'sazonalidade'
     | 'variancia'
     | 'radar_ouro'
     | 'ascensao'
@@ -130,6 +133,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Espelhamento (Pares & Trios)</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
               CO-OCORRÊNCIA
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('sazonalidade')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'sazonalidade'
+                ? 'bg-gradient-to-r from-purple-500 via-indigo-600 to-pink-500 text-white shadow-md shadow-purple-500/25 font-black'
+                : 'text-purple-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Sazonalidade de Dezenas</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono">
+              10 ANOS
             </span>
           </button>
 
@@ -564,6 +582,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         <EspelhamentoDezenasModule
           latestDraw={latestDraw}
           statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+        />
+      )}
+
+      {/* SUBTAB: SAZONALIDADE DE DEZENAS (HISTÓRICO 10 ANOS) */}
+      {activeSubTab === 'sazonalidade' && (
+        <SazonalidadeDezenasModule
+          latestDraw={latestDraw}
           onApplyNumbers={onApplyNumbers}
         />
       )}

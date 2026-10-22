@@ -28,6 +28,8 @@ import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
+import { TurboGeneratorModal } from './TurboGeneratorModal';
+import { TurboResult } from '../services/turboBruteForce';
 import { soundService } from '../services/soundAlert';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
@@ -104,7 +106,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
-  const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci'>('matriz');
+  const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci' | 'turbo'>('matriz');
+  const [isTurboModalOpen, setIsTurboModalOpen] = useState(false);
   const [generationError, setGenerationError] = useState<{
     title: string;
     summary: string;
@@ -516,6 +519,44 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setIsGenerating(false);
       }
     }, 150);
+  };
+
+  const handleApplyTurbo = (tickets: GameTicket[], turboRes: TurboResult) => {
+    setGenerationError(null);
+    setGeneratedTickets(tickets);
+    setGenerationType('turbo');
+    setGenerationTimeMs(turboRes.elapsedMs);
+    setStrategyName(`⚡ Gerador Turbo (Força Bruta 14 Pts • ${turboRes.elapsedMs}ms)`);
+
+    const exportMeta: FechamentoExportMeta = {
+      strategyName: `⚡ Gerador Turbo Força Bruta (${turboRes.elapsedMs}ms)`,
+      modeName: `Turbo 14 Pontos (${tickets.length} Jogos - Garantia 100% de 14)`,
+      garantia: '14 Pontos',
+      targetCount: turboRes.poolSize,
+      selectedNumbers: selectedNumbers.length >= 16 ? selectedNumbers : tickets[0]?.numeros || [],
+      fixedNumbers,
+      excludedNumbers,
+      filters: {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      },
+      concurso: latestDraw.concurso,
+      dataConcurso: latestDraw.data,
+      timestamp: Date.now(),
+    };
+
+    try {
+      localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+    } catch {}
+
+    onSaveTickets(tickets, exportMeta);
+    saveToAutoSave(tickets, mode, selectedNumbers, filters, 'matriz');
+
+    setDocumentMessage(
+      `✓ Fechamento Turbo gerado em ${turboRes.elapsedMs}ms com 100% de garantia de 14 pontos (${tickets.length} jogos salvos)!`
+    );
+    setTimeout(() => setDocumentMessage(null), 6000);
   };
 
   const handleDownloadTXT = () => {
@@ -1149,6 +1190,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Botão Gerador Turbo (Força Bruta 14 Pts < 2s via Web Worker) */}
+              <button
+                type="button"
+                onClick={() => setIsTurboModalOpen(true)}
+                className="flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-amber-500 via-yellow-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer border border-amber-300 font-black whitespace-nowrap"
+                title="Gera fechamento com garantia matemática de 14 pontos em menos de 2 segundos utilizando força bruta paralela em Web Worker"
+              >
+                <Zap className="w-4 h-4 fill-current text-slate-950 shrink-0" />
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm">
+                    <span>GERADOR TURBO</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 font-bold border border-amber-400/40">
+                      &lt; 2s • WEB WORKER
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-900 font-semibold block">
+                    Força Bruta 14 Pts • 100% Auditado
+                  </span>
+                </div>
+              </button>
+
               {/* Botão Gerador de Sequências Otimizadas (Fibonacci + Regra de Ouro) */}
               <button
                 type="button"
@@ -1594,6 +1656,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL DO GERADOR TURBO (FORÇA BRUTA 14 PONTOS EM WEB WORKER) */}
+      <TurboGeneratorModal
+        isOpen={isTurboModalOpen}
+        onClose={() => setIsTurboModalOpen(false)}
+        selectedNumbers={selectedNumbers}
+        fixedNumbers={fixedNumbers}
+        excludedNumbers={excludedNumbers}
+        latestDraw={latestDraw}
+        onApplyTickets={handleApplyTurbo}
+      />
     </div>
   );
 };
