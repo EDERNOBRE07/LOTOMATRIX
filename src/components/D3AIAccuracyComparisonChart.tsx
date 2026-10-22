@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   Info,
 } from 'lucide-react';
+import { ExpertTip } from './ExpertTip';
 
 interface D3AIAccuracyComparisonChartProps {
   latestDraw?: LotofacilDraw;
@@ -368,11 +369,18 @@ export const D3AIAccuracyComparisonChart: React.FC<D3AIAccuracyComparisonChartPr
             <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               <TrendingUp className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-black text-white flex items-center gap-2">
+            <h3 className="text-base font-black text-white flex items-center gap-2 flex-wrap">
               <span>Gráfico Comparativo D3: Precisão Histórica da IA vs Resultados Reais</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 D3.js Vector Engine
               </span>
+              <ExpertTip
+                title="Convergência Preditiva IA vs Resultados Caixa"
+                ruleCategory="Validação Histórica Contínua"
+                content="O motor D3 traça o percentual de dezenas sorteadas que estavam previstas no grupo Top 18 gerado pelo algoritmo do LotoSniper."
+                impact14Pontos="Ao acertar 14 ou 15 das 15 dezenas sorteadas dentro do grupo de 18 recomendadas, qualquer matriz matemática com garantia de 14 pontos (como 18-15-14-15) premiará invariavelmente pelo menos um bilhete com 14 pontos."
+                recommendation="Monitore se a assertividade real se mantém acima de 86,7% (13 acertos no grupo de 18); quando estiver acima de 93,3%, a probabilidade de cravar 14 pontos no fechamento é máxima."
+              />
             </h3>
           </div>
           <p className="text-xs text-slate-400 mt-1">

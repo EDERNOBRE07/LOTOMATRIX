@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Sparkles,
 } from 'lucide-react';
+import { ExpertTip } from './ExpertTip';
 
 interface FrequencyDelayChartProps {
   statsList: DezenaStats[];
@@ -191,11 +192,18 @@ export const FrequencyDelayChart: React.FC<FrequencyDelayChartProps> = ({
       {/* Top Header & Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pb-3 border-b border-slate-800">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <BarChart3 className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-base font-bold text-white">
-              Gráfico Dinâmico de Frequência Histórica & Atraso (Recharts)
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>Gráfico Dinâmico de Frequência Histórica & Atraso (Recharts)</span>
             </h3>
+            <ExpertTip
+              title="Mapeamento de Frequência & Atraso Crítico"
+              ruleCategory="Dinâmica de Atraso e Ciclos"
+              content="Dezenas da Lotofácil raramente ultrapassam 5 a 6 concursos consecutivos sem serem sorteadas. O atraso médio de qualquer dezena é de apenas 1,67 concursos."
+              impact14Pontos="Quando uma dezena atinge atraso ≥ 4, a probabilidade condicional de retorno nos próximos 2 concursos sobe para 86,5% devido ao fechamento dos Ciclos de Dezenas. Não incluir essas dezenas em pelo menos uma fração dos seus jogos invalida a garantia de 14 pontos da matriz."
+              recommendation="Fixe no desdobramento as dezenas pendentes no Ciclo atual e balanceie com 9 a 10 dezenas repetentes do concurso anterior."
+            />
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
             Destaques em <span className="text-emerald-400 font-bold">Verde</span> (Mais Sorteadas),{' '}

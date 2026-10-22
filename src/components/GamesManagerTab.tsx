@@ -7,6 +7,11 @@ import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
 import {
+  SavedGamesFilterMenu,
+  PrimosFilterOption,
+  SomaFilterOption,
+} from './SavedGamesFilterMenu';
+import {
   Download,
   Copy,
   Printer,
@@ -25,6 +30,7 @@ import {
   Filter,
   CheckSquare,
   Square,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface GamesManagerTabProps {
@@ -61,6 +67,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [activeTagFilter, setActiveTagFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [newTagInput, setNewTagInput] = useState<{ [ticketId: string]: string }>({});
+
+  // Menu de Filtros Dinâmicos (Dezenas específicas, Primos fora da curva, Soma fora do comum)
+  const [selectedFilterDezenas, setSelectedFilterDezenas] = useState<number[]>([]);
+  const [dezenaMatchMode, setDezenaMatchMode] = useState<'and' | 'or'>('and');
+  const [primosFilter, setPrimosFilter] = useState<PrimosFilterOption>('all');
+  const [somaFilter, setSomaFilter] = useState<SomaFilterOption>('all');
 
   // Seleção de múltiplos jogos para exportação em lote
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(() => {
@@ -126,29 +138,89 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     return Array.from(new Set([...defaultTags, ...customTags]));
   }, [ticketTags]);
 
-  // Jogos filtrados por Tag e Busca
+  const handleToggleFilterDezena = (num: number) => {
+    setSelectedFilterDezenas((prev) =>
+      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]
+    );
+  };
+
+  const handleClearFilterDezenas = () => {
+    setSelectedFilterDezenas([]);
+  };
+
+  const handleResetAllFilters = () => {
+    setSelectedFilterDezenas([]);
+    setDezenaMatchMode('and');
+    setPrimosFilter('all');
+    setSomaFilter('all');
+    setActiveTagFilter('all');
+    setSearchQuery('');
+  };
+
+  // Jogos filtrados por Tag, Busca e Menu de Filtros Dinâmicos
   const filteredTickets = React.useMemo(() => {
     return tickets.filter((t) => {
       const id = t.id || `ticket-${t.index}`;
       const tags = ticketTags[id] || [];
 
-      // Filtro de tag
+      // 1. Filtro de tag
       if (activeTagFilter !== 'all' && !tags.includes(activeTagFilter)) {
         return false;
       }
 
-      // Filtro de busca (por número de dezenas ou label)
+      // 2. Filtro de busca (por número de dezenas ou label)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const hasTag = tags.some((tg) => tg.toLowerCase().includes(q));
         const hasNumber = t.dezenas.some((n) => n.toString() === q || n.toString().padStart(2, '0') === q);
         const hasLabel = `jogo ${t.index}`.includes(q);
-        return hasTag || hasNumber || hasLabel;
+        if (!hasTag && !hasNumber && !hasLabel) return false;
+      }
+
+      // 3. Filtro de dezenas específicas
+      if (selectedFilterDezenas.length > 0) {
+        if (dezenaMatchMode === 'and') {
+          const hasAll = selectedFilterDezenas.every((num) => t.dezenas.includes(num));
+          if (!hasAll) return false;
+        } else {
+          const hasAny = selectedFilterDezenas.some((num) => t.dezenas.includes(num));
+          if (!hasAny) return false;
+        }
+      }
+
+      // 4. Filtro de Primos fora da curva (fora de 4-7)
+      if (primosFilter === 'fora_da_curva') {
+        if (t.primos >= 4 && t.primos <= 7) return false;
+      } else if (primosFilter === 'canonico') {
+        if (t.primos < 4 || t.primos > 7) return false;
+      }
+
+      // 5. Filtro de Soma fora do intervalo comum (175-220)
+      if (somaFilter === 'fora_do_comum') {
+        if (t.soma >= 175 && t.soma <= 220) return false;
+      } else if (somaFilter === 'comum') {
+        if (t.soma < 175 || t.soma > 220) return false;
+      } else if (somaFilter === 'zona_ouro') {
+        if (t.soma < 190 || t.soma > 210) return false;
       }
 
       return true;
     });
-  }, [tickets, ticketTags, activeTagFilter, searchQuery]);
+  }, [
+    tickets,
+    ticketTags,
+    activeTagFilter,
+    searchQuery,
+    selectedFilterDezenas,
+    dezenaMatchMode,
+    primosFilter,
+    somaFilter,
+  ]);
+
+  const handleSelectOnlyFiltered = () => {
+    const ids = new Set(filteredTickets.map((t) => t.id || `ticket-${t.index}`));
+    setSelectedTicketIds(ids);
+  };
 
   // Tickets formatados com tags para o PDF e CSV
   const ticketsWithTags: GameTicket[] = React.useMemo(() => {
@@ -452,6 +524,26 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         </div>
       )}
 
+      {/* Menu de Filtros Dinâmicos (Dezenas específicas, Primos fora da curva, Soma fora do comum) */}
+      {tickets.length > 0 && (
+        <SavedGamesFilterMenu
+          tickets={tickets}
+          selectedDezenas={selectedFilterDezenas}
+          onToggleDezena={handleToggleFilterDezena}
+          onClearDezenas={handleClearFilterDezenas}
+          dezenaMatchMode={dezenaMatchMode}
+          onChangeDezenaMatchMode={setDezenaMatchMode}
+          primosFilter={primosFilter}
+          onChangePrimosFilter={setPrimosFilter}
+          somaFilter={somaFilter}
+          onChangeSomaFilter={setSomaFilter}
+          totalFilteredCount={filteredTickets.length}
+          totalTicketsCount={tickets.length}
+          onResetAllFilters={handleResetAllFilters}
+          onSelectOnlyFiltered={handleSelectOnlyFiltered}
+        />
+      )}
+
       {tickets.length === 0 ? (
         <div className="space-y-6">
           <div className="bg-slate-900/60 rounded-2xl border border-slate-800 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -564,9 +656,29 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </div>
             </div>
 
-            {/* List of Tickets with Tags and Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
-              {filteredTickets.map((t) => {
+            {/* List of Tickets with Tags and Selection or Filter Empty State */}
+            {filteredTickets.length === 0 ? (
+              <div className="bg-slate-950 p-8 rounded-2xl border border-slate-800 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-white">
+                  Nenhum bilhete corresponde aos filtros aplicados
+                </h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  Não encontramos jogos que atendam simultaneamente às dezenas selecionadas, critério de primos e intervalo de soma configurados.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResetAllFilters}
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-400/20"
+                >
+                  Restaurar Todos os Bilhetes ({tickets.length})
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
+                {filteredTickets.map((t) => {
                 const id = t.id || `ticket-${t.index}`;
                 const hits = countMatches(t.dezenas, conferirDezenas);
                 const isAwarded = hits >= 11;
@@ -705,6 +817,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 );
               })}
             </div>
+            )}
           </div>
         </>
       )}

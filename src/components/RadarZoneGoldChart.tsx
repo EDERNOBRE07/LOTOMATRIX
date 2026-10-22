@@ -12,6 +12,7 @@ import {
 import { LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, PRIMOS, MOLDURA, FIBONACCI } from '../data/lotofacilData';
 import { ShieldCheck, Compass, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ExpertTip } from './ExpertTip';
 
 interface RadarZoneGoldChartProps {
   latestDraw?: LotofacilDraw;
@@ -120,11 +121,18 @@ export const RadarZoneGoldChart: React.FC<RadarZoneGoldChartProps> = ({
             <Compass className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
               <span>Gráfico de Radar: Perfil Estatístico vs Zona de Ouro</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 uppercase">
                 Aderência 0–100%
               </span>
+              <ExpertTip
+                title="Conformidade Pentagonal com a Zona de Ouro"
+                ruleCategory="Diagnóstico Multidimensional de Volante"
+                content="Avalia 5 pilares estruturais simultaneamente: Faixa de Soma (190–210), Paridade (7 a 8 Pares), Moldura Externa (9 a 11), Primos (4 a 6) e Repetidas do Concurso Anterior (8 a 10)."
+                impact14Pontos="Bilhetes com aderência inferior a 70% no radar descartam as maiores probabilidades da distribuição combinatória. Bilhetes na Zona de Ouro (aderência ≥ 90%) aumentam em até 4,7x o retorno sobre o investimento em apostas múltiplas."
+                recommendation="Ajuste qualquer dezena com discrepância no radar até atingir um índice de aderência global superior a 85% antes de registrar o bilhete."
+              />
             </h3>
             <p className="text-xs text-slate-400">
               Mede a consonância matemática do jogo em análise contra o padrão ideal da Lotofácil.

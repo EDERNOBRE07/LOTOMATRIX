@@ -56,6 +56,18 @@ export default function App() {
     }
   });
 
+  // Theme initialization ('slate' or 'gold')
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('lotosniper_theme');
+      if (savedTheme === 'gold') {
+        document.documentElement.classList.add('theme-gold');
+      } else {
+        document.documentElement.classList.remove('theme-gold');
+      }
+    } catch {}
+  }, []);
+
   // Notificação de brinde (toast) ao detectar fechamento ou início de ciclo das 25 dezenas
   const [cycleToast, setCycleToast] = useState<{
     type: 'closed' | 'started' | 'urgent';
@@ -594,6 +606,8 @@ export default function App() {
             cyclePendingNumbers={dezenasPendentesCiclo}
             concursosNoCiclo={concursosNoCiclo}
             onApplyNumbers={handleApplyAIRecsToFechamento}
+            savedTickets={savedTickets}
+            fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
           />
         )}
 

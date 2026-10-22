@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   HelpCircle,
 } from 'lucide-react';
+import { ExpertTip } from './ExpertTip';
 
 interface TrendRadarPublicFeedProps {
   latestDraw?: LotofacilDraw;
@@ -199,12 +200,19 @@ export const TrendRadarPublicFeed: React.FC<TrendRadarPublicFeedProps> = ({
               <Radio className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
                 <span>Trend Radar: Feed de Tendências das Comunidades de Loteria</span>
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                   LIVE FEED
                 </span>
+                <ExpertTip
+                  title="Trend Radar: Aposta de Manada vs Smart Money"
+                  ruleCategory="Análise Comportamental & Divisão de Prêmios"
+                  content="A maioria dos apostadores amadores repete datas de aniversário (números de 01 a 31) ou padrões geométricos fáceis no volante (colunas, diagonais). O Trend Radar isola esse viés."
+                  impact14Pontos="Acertar 14 ou 15 pontos em um jogo de 'aposta de manada' divide o rateio com dezenas ou centenas de outros bilhetes, reduzindo drasticamente o retorno financeiro. Os 'Jogos Profissionais' (Smart Money) exploram dezenas 'esquecidas' com alto valor esperado (EV positivo)."
+                  recommendation="Equilibre seus volantes incluindo dezenas com selo 'Alpha Puro' e evite concentrar mais de 10 dezenas em alta temperatura de manada."
+                />
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Mapeamento em tempo real de {totalSampledBets.toLocaleString('pt-BR')} bilhetes públicos em fóruns,

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
+import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
@@ -339,6 +340,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
         <div className="space-y-5">
+          {/* Seletor de Tema: Modo Escuro Padrão vs Modo Gold Imperial */}
+          <ThemeSelectorModule />
+
           {/* Central de Alertas Customizados por Push e Som para 14 e 15 Pontos */}
           <JackpotAlertConfigModule
             latestDraw={latestDraw}

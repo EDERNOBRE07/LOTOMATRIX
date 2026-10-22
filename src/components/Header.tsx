@@ -9,6 +9,7 @@ import {
   ArrowRight,
   BellRing,
   X,
+  Crown,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
@@ -35,6 +36,28 @@ export const Header: React.FC<HeaderProps> = ({
   aiStatus,
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
+  const [isGoldTheme, setIsGoldTheme] = useState(() => {
+    try {
+      return localStorage.getItem('lotosniper_theme') === 'gold';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTheme = () => {
+    const nextGold = !isGoldTheme;
+    setIsGoldTheme(nextGold);
+    try {
+      localStorage.setItem('lotosniper_theme', nextGold ? 'gold' : 'slate');
+      if (typeof document !== 'undefined') {
+        if (nextGold) {
+          document.documentElement.classList.add('theme-gold');
+        } else {
+          document.documentElement.classList.remove('theme-gold');
+        }
+      }
+    } catch {}
+  };
 
   // Reta final do ciclo: menos de 3 dezenas pendentes (1 ou 2 dezenas restantes, até 3)
   const isRetaFinalCiclo =
@@ -190,6 +213,21 @@ export const Header: React.FC<HeaderProps> = ({
               {aiStatus === 'loading' ? 'Otimizando...' : 'Online'}
             </strong>
           </div>
+
+          {/* Theme Quick Switcher */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer ${
+              isGoldTheme
+                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-400/20'
+                : 'bg-slate-800 text-amber-300 border-amber-500/40 hover:bg-slate-750'
+            }`}
+            title={isGoldTheme ? 'Alternar para Modo Escuro Padrão (Slate)' : 'Alternar para Modo Gold Imperial'}
+          >
+            <Crown className={`w-3.5 h-3.5 ${isGoldTheme ? 'fill-current' : 'text-amber-400'}`} />
+            <span className="hidden sm:inline">{isGoldTheme ? 'Gold Ativo' : 'Tema Gold'}</span>
+          </button>
 
           {onQuickOptimize && (
             <button

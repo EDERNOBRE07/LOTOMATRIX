@@ -16,6 +16,8 @@ import { DicasDeOuroPanel } from './DicasDeOuroPanel';
 import { ParesDeOuroModule } from './ParesDeOuroModule';
 import { EvolucaoPontuacaoChart } from './EvolucaoPontuacaoChart';
 import { AnaliseVarianciaComponent } from './AnaliseVarianciaComponent';
+import { ROIForecastComponent } from './ROIForecastComponent';
+import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
   TrendingUp,
@@ -42,6 +44,8 @@ interface StatisticsTabProps {
   cyclePendingNumbers?: number[];
   concursosNoCiclo?: number;
   onApplyNumbers?: (numbers: number[]) => void;
+  savedTickets?: GameTicket[];
+  fechamentoNome?: string;
 }
 
 export const StatisticsTab: React.FC<StatisticsTabProps> = ({
@@ -50,9 +54,12 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   cyclePendingNumbers = [17, 22],
   concursosNoCiclo = 4,
   onApplyNumbers,
+  savedTickets = [],
+  fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'roi_forecast'
     | 'variancia'
     | 'radar_ouro'
     | 'ascensao'
@@ -91,6 +98,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('roi_forecast')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'roi_forecast'
+                ? 'bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/20 font-black'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>ROI Forecast (10 Concursos)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              RENTABILIDADE
+            </span>
           </button>
 
           <button
@@ -266,6 +288,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner ROI Forecast & Histórico de Rentabilidade (Últimos 10 Concursos) */}
+          <div className="bg-gradient-to-r from-emerald-950/60 via-teal-950/40 to-slate-900 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                <TrendingUp className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span>Simulador de Rentabilidade Histórica: ROI Forecast (10 Concursos)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {savedTickets.length > 0 ? `${savedTickets.length} JOGOS ATIVOS` : 'MATRIZ 24 JOGOS'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Calcule o custo bruto da aposta vs. retorno financeiro real (com prêmios de 11, 12, 13 e 14 pontos) nos últimos 10 concursos oficiais da Caixa.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('roi_forecast')}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
+            >
+              <span>Abrir ROI Forecast</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -453,6 +502,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: ROI FORECAST & RENTABILIDADE (ÚLTIMOS 10 CONCURSOS) */}
+      {activeSubTab === 'roi_forecast' && (
+        <ROIForecastComponent
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+          fechamentoNome={fechamentoNome}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB: SIMULAÇÃO DE MONTE CARLO (PRÓXIMOS 5 CONCURSOS) */}

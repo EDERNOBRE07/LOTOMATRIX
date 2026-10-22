@@ -4,6 +4,7 @@ import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { countMatches } from '../services/combinatorics';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
 import { Layers, Flame, Info, CheckCircle2, Sparkles } from 'lucide-react';
+import { ExpertTip } from './ExpertTip';
 
 interface D3CoverageHeatmapProps {
   tickets: GameTicket[];
@@ -200,11 +201,18 @@ export const D3CoverageHeatmap: React.FC<D3CoverageHeatmapProps> = ({
             <Flame className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
               <span>Mapa de Calor D3: Cobertura de Garantias em Tempo Real</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
                 D3.js Vector
               </span>
+              <ExpertTip
+                title="Cobertura de Garantias da Matriz Combinatória"
+                ruleCategory="Auditoria Matemática de Fechamento"
+                content="Mapeia o comportamento real dos seus 24 bilhetes gerados frente aos últimos 10 concursos oficiais da Caixa Econômica Federal."
+                impact14Pontos="Uma matriz bem estruturada com garantia 100% de 14 pontos deve apresentar múltiplos acertos na faixa de 11, 12 e 13 pontos em todos os concursos simulados, garantindo recuperação contínua do custo da aposta enquanto busca o prêmio máximo."
+                recommendation="Certifique-se de que não haja linhas totalmente zeradas nos concursos em que pelo menos 13 dezenas sorteadas estiveram contidas no seu volante base."
+              />
             </h3>
             <p className="text-xs text-slate-400">
               Distribuição de acertos simulados de 11, 12, 13, 14 e 15 pontos da matriz atual contra os últimos concursos oficiais.
