@@ -603,11 +603,13 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
-              onClick={handleLoadSample24}
-              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold transition cursor-pointer flex items-center gap-1.5"
+              onClick={handleClear}
+              disabled={!inputText.trim()}
+              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-rose-300 border border-rose-500/30 text-[11px] font-bold transition cursor-pointer flex items-center gap-1.5"
+              title="Limpar todos os jogos inseridos na conferência"
             >
-              <RefreshCw className="w-3 h-3 text-emerald-400" />
-              <span>Carregar os 24 Jogos de Exemplo</span>
+              <Trash2 className="w-3 h-3 text-rose-400" />
+              <span>Limpar jogos conferidos</span>
             </button>
 
             {inspectedVolanteNumbers && inspectedVolanteNumbers.length === 15 && (

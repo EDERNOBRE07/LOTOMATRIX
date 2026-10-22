@@ -15,6 +15,7 @@ import { DezenasAscensaoModule } from './DezenasAscensaoModule';
 import { DicasDeOuroPanel } from './DicasDeOuroPanel';
 import { ParesDeOuroModule } from './ParesDeOuroModule';
 import { EvolucaoPontuacaoChart } from './EvolucaoPontuacaoChart';
+import { AnaliseVarianciaComponent } from './AnaliseVarianciaComponent';
 import {
   BarChart,
   TrendingUp,
@@ -32,6 +33,7 @@ import {
   Target,
   Compass,
   Lightbulb,
+  Scale,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -51,6 +53,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'variancia'
     | 'radar_ouro'
     | 'ascensao'
     | 'dicas_ouro'
@@ -88,6 +91,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('variancia')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'variancia'
+                ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20 font-black'
+                : 'text-cyan-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            <span>Análise de Variância (13,0)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              INFLADO / DEFLADO
+            </span>
           </button>
 
           <button
@@ -265,6 +283,12 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
             latestDraw={latestDraw}
+          />
+
+          {/* Componente de Análise de Variância (Desvio de 13,0 • Concursos Inflados vs Deflados) */}
+          <AnaliseVarianciaComponent
+            latestDraw={latestDraw}
+            onApplyBiasRecommendation={onApplyNumbers}
           />
 
           {/* Detailed Statistics Table */}
@@ -614,6 +638,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: EVOLUÇÃO DA PONTUAÇÃO MÉDIA (ÚLTIMOS 10 CONCURSOS) */}
       {activeSubTab === 'evolucao' && (
         <EvolucaoPontuacaoChart latestDraw={latestDraw} />
+      )}
+
+      {/* SUBTAB: ANÁLISE DE VARIÂNCIA (DESVIO DA MÉDIA 13,0) */}
+      {activeSubTab === 'variancia' && (
+        <AnaliseVarianciaComponent
+          latestDraw={latestDraw}
+          onApplyBiasRecommendation={onApplyNumbers}
+        />
       )}
     </div>
   );

@@ -18,6 +18,7 @@ import { HistoricalProbability500Module } from './HistoricalProbability500Module
 import { D3AIAccuracyComparisonChart } from './D3AIAccuracyComparisonChart';
 import { MonteCarloHeatmap5Concursos } from './MonteCarloHeatmap5Concursos';
 import { TrendRadarPublicFeed } from './TrendRadarPublicFeed';
+import { Heatmap100Concursos } from './Heatmap100Concursos';
 import {
   Sparkles,
   Cpu,
@@ -321,6 +322,15 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         latestDraw={latestDraw}
         dynamicStats={dynamicStats}
         cyclePendingNumbers={cyclePendingNumbers}
+        onApplyNumbers={onApplyRecommendation}
+      />
+
+      {/* ========================================================================= */}
+      {/* MAPA DE CALOR INTERATIVO: FREQUÊNCIA DOS ÚLTIMOS 100 CONCURSOS (CINZA A NEON) */}
+      {/* ========================================================================= */}
+      <Heatmap100Concursos
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
         onApplyNumbers={onApplyRecommendation}
       />
 

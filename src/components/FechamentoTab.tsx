@@ -8,7 +8,7 @@ import {
   DezenaStats,
   FechamentoExportMeta,
 } from '../types/lotofacil';
-import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, DEZENAS_STATS, PRIMOS, MOLDURA } from '../data/lotofacilData';
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
 import {
@@ -20,6 +20,7 @@ import {
   buildOptimal18Pool,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
+import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
@@ -47,6 +48,10 @@ import {
   RefreshCw,
   Volume2,
   VolumeX,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -100,6 +105,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
   const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci'>('matriz');
+  const [generationError, setGenerationError] = useState<{
+    title: string;
+    summary: string;
+    reasons: string[];
+    suggestions: string[];
+  } | null>(null);
 
   // Listener para aplicação automática de Dezenas Fixas / Par de Ouro
   useEffect(() => {
@@ -328,8 +339,95 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   };
 
+  const diagnoseGenerationFailure = (
+    pool: number[],
+    fixed: number[],
+    excluded: number[],
+    activeFilters: FilterCriteria,
+    targetNeeded: number,
+    draw: LotofacilDraw
+  ) => {
+    const reasons: string[] = [];
+    const suggestions: string[] = [];
+
+    if (pool.length < targetNeeded) {
+      reasons.push(`Você selecionou ${pool.length} dezenas no volante, mas a modalidade '${preset.nome}' requer exatamente ${targetNeeded} dezenas.`);
+      suggestions.push(`Marque mais ${targetNeeded - pool.length} dezenas no volante acima ou utilize uma das estratégias de calibração automática.`);
+    }
+
+    if (fixed.length > 15) {
+      reasons.push(`Foram marcadas ${fixed.length} dezenas fixas. O bilhete da Lotofácil é composto por exatamente 15 dezenas.`);
+      suggestions.push('Reduza a quantidade de dezenas fixas para no máximo 10 ou 12.');
+    }
+
+    const overlap = fixed.filter((n) => excluded.includes(n));
+    if (overlap.length > 0) {
+      reasons.push(`Conflito de regras: a(s) dezena(s) [${overlap.map(n => n.toString().padStart(2, '0')).join(', ')}] estão simultaneamente marcadas como Fixas e Excluídas.`);
+      suggestions.push('Desmarque a exclusão das dezenas que você deseja manter fixas.');
+    }
+
+    const effectivePool = pool.filter((n) => !excluded.includes(n));
+    if (effectivePool.length < 15) {
+      reasons.push(`Após aplicar as dezenas excluídas, restaram apenas ${effectivePool.length} dezenas disponíveis no volante (são necessárias no mínimo 15).`);
+      suggestions.push('Remova algumas dezenas excluídas para permitir a formação de bilhetes válidos.');
+    }
+
+    if (activeFilters.somaMin > activeFilters.somaMax) {
+      reasons.push(`Faixa de soma inválida: o valor mínimo (${activeFilters.somaMin}) é maior que o valor máximo (${activeFilters.somaMax}).`);
+      suggestions.push('Ajuste o intervalo de soma para os padrões oficiais (ex: 175 a 220).');
+    }
+
+    const sortedPool = [...pool].sort((a, b) => a - b);
+    if (sortedPool.length >= 15) {
+      const minPossibleSum = sortedPool.slice(0, 15).reduce((a, b) => a + b, 0);
+      const maxPossibleSum = sortedPool.slice(-15).reduce((a, b) => a + b, 0);
+
+      if (activeFilters.somaMin > maxPossibleSum) {
+        reasons.push(`A soma mínima configurada (${activeFilters.somaMin}) é superior à soma máxima possível de qualquer combinação das suas dezenas selecionadas (${maxPossibleSum}).`);
+        suggestions.push(`Reduza o limite de soma mínima para ${Math.min(220, maxPossibleSum)} ou inclua dezenas de numeração mais alta.`);
+      }
+
+      if (activeFilters.somaMax < minPossibleSum) {
+        reasons.push(`A soma máxima configurada (${activeFilters.somaMax}) é inferior à menor soma possível com as suas dezenas selecionadas (${minPossibleSum}).`);
+        suggestions.push(`Aumente o limite de soma máxima para ${Math.max(175, minPossibleSum)} ou inclua dezenas menores.`);
+      }
+    }
+
+    const totalEven = pool.filter((n) => n % 2 === 0).length;
+    if (activeFilters.paresMin > totalEven) {
+      reasons.push(`O filtro de pares exige no mínimo ${activeFilters.paresMin} pares, porém seu pool só contém ${totalEven} dezenas pares.`);
+      suggestions.push(`Reduza o mínimo de pares para no máximo ${totalEven} ou marque mais números pares no volante.`);
+    }
+
+    const totalPrimes = pool.filter((n) => PRIMOS.includes(n)).length;
+    if (activeFilters.primosMin > totalPrimes) {
+      reasons.push(`O filtro de primos exige no mínimo ${activeFilters.primosMin} primos, porém seu pool só contém ${totalPrimes} números primos.`);
+      suggestions.push(`Diminua a restrição de primos ou adicione números primos (2, 3, 5, 7, 11, 13, 17, 19, 23).`);
+    }
+
+    const totalMoldura = pool.filter((n) => MOLDURA.includes(n)).length;
+    if (activeFilters.molduraMin > totalMoldura) {
+      reasons.push(`O filtro de moldura exige no mínimo ${activeFilters.molduraMin} dezenas na borda, mas seu pool só contém ${totalMoldura}.`);
+      suggestions.push(`Ajuste o filtro da moldura para no máximo ${totalMoldura} ou selecione mais números da borda do volante.`);
+    }
+
+    if (reasons.length === 0) {
+      reasons.push('A combinação simultânea de múltiplos filtros estritos (Soma, Pares, Primos, Moldura, Fibonacci e Sequências Consecutivas) podou 100% das combinações combinatórias possíveis do fechamento.');
+      suggestions.push('Clique em "Restaurar Filtros Padrão" para aplicar as janelas de tolerância canônicas da Lotofácil (175–220 soma, 6–9 pares, 4–7 primos, 8–11 moldura).');
+      suggestions.push('Verifique se as dezenas fixas escolhidas não entram em conflito com as faixas de soma ou paridade.');
+    }
+
+    return {
+      title: 'Não foi possível gerar jogos com a configuração atual',
+      summary: 'O motor combinatório do LotoSniper não conseguiu gerar jogos válidos porque os filtros e restrições ativas descartaram todas as combinações possíveis.',
+      reasons,
+      suggestions,
+    };
+  };
+
   const handleGenerate = () => {
     setIsGenerating(true);
+    setGenerationError(null);
     const start = performance.now();
 
     setTimeout(() => {
@@ -349,6 +447,22 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           aiPrediction?.scores
         );
 
+        if (!tickets || tickets.length === 0) {
+          const diag = diagnoseGenerationFailure(
+            selectedNumbers,
+            fixedNumbers,
+            excludedNumbers,
+            fullFilters,
+            targetCount,
+            latestDraw
+          );
+          setGenerationError(diag);
+          setGeneratedTickets([]);
+          return;
+        }
+
+        // Sucesso comprovado
+        setGenerationError(null);
         const exportMeta: FechamentoExportMeta = {
           strategyName,
           modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
@@ -381,10 +495,67 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
         console.error(err);
+        const diag = diagnoseGenerationFailure(
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          {
+            ...filters,
+            dezenasFixas: fixedNumbers,
+            dezenasExcluidas: excludedNumbers,
+          },
+          targetCount,
+          latestDraw
+        );
+        if (err?.message && !diag.reasons.includes(err.message)) {
+          diag.reasons.unshift(err.message);
+        }
+        setGenerationError(diag);
+        setGeneratedTickets([]);
       } finally {
         setIsGenerating(false);
       }
     }, 150);
+  };
+
+  const handleDownloadTXT = () => {
+    if (generatedTickets.length === 0) return;
+
+    const fullFilters: FilterCriteria = {
+      ...filters,
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    };
+
+    const exportMeta: FechamentoExportMeta = {
+      strategyName,
+      modeName: `${preset.nome} (${generatedTickets.length} Jogos - Garantia ${preset.garantia})`,
+      garantia: preset.garantia,
+      targetCount: targetCount,
+      selectedNumbers: selectedNumbers,
+      fixedNumbers: fixedNumbers,
+      excludedNumbers: excludedNumbers,
+      filters: fullFilters,
+      concurso: latestDraw.concurso,
+      dataConcurso: latestDraw.data,
+      timestamp: Date.now(),
+    };
+
+    const content = generateFechamentoTxtContent({
+      tickets: generatedTickets,
+      latestDraw,
+      meta: exportMeta,
+    });
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lotosniper_fechamento_concurso_${latestDraw.concurso}_${generatedTickets.length}_jogos.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Gerador de Sequências Otimizadas baseado em distribuições de Fibonacci
@@ -1033,6 +1204,95 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
+      {/* AVISO EXPLICATIVO QUANDO NÃO FOR POSSÍVEL GERAR JOGOS */}
+      {generationError && (
+        <div className="bg-gradient-to-br from-rose-950/40 via-slate-900 to-amber-950/30 rounded-2xl border-2 border-rose-500/50 p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300">
+          <div className="flex items-start justify-between gap-3 pb-3 border-b border-rose-500/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 shrink-0">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>{generationError.title}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold uppercase">
+                    Diagnóstico LotoSniper
+                  </span>
+                </h3>
+                <p className="text-xs text-rose-200/80 mt-0.5">
+                  {generationError.summary}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setGenerationError(null)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="Fechar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {/* O que aconteceu */}
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-rose-500/20 space-y-2">
+              <span className="font-mono font-bold text-rose-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                O que causou o bloqueio da geração:
+              </span>
+              <ul className="space-y-1.5 text-slate-300">
+                {generationError.reasons.map((reason, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="text-rose-400 font-bold leading-tight">•</span>
+                    <span className="leading-relaxed">{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Como resolver */}
+            <div className="bg-slate-950/80 p-4 rounded-xl border border-emerald-500/20 space-y-2">
+              <span className="font-mono font-bold text-emerald-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                Como ajustar para gerar com sucesso:
+              </span>
+              <ul className="space-y-1.5 text-slate-300">
+                {generationError.suggestions.map((sugg, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="text-emerald-400 font-bold leading-tight">✓</span>
+                    <span className="leading-relaxed">{sugg}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800 text-xs">
+            <span className="text-slate-400 text-[11px]">
+              Dica: As faixas canônicas oficiais do LotoSniper asseguram combinações estatisticamente favoráveis com alta garantia.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters(DEFAULT_FILTERS);
+                  setFixedNumbers(cyclePendingNumbers.slice(0, 2));
+                  setExcludedNumbers([]);
+                  setGenerationError(null);
+                  setDocumentMessage('Filtros padrão restaurados! Tente processar a matriz novamente.');
+                  setTimeout(() => setDocumentMessage(null), 5000);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition cursor-pointer shadow-sm"
+              >
+                Restaurar Filtros Padrão & Limpar Restrições
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Generated Games Table Display */}
       {generatedTickets.length > 0 && (
         <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
@@ -1071,7 +1331,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleCopyAll}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition cursor-pointer"
@@ -1087,6 +1347,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     <span>Copiar Todos (TXT)</span>
                   </>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadTXT}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20"
+                title="Fazer download do relatório completo da matriz gerada em arquivo .txt"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-950" />
+                <span>Baixar TXT</span>
               </button>
               <button
                 onClick={() => onGoToSimulator(generatedTickets)}
