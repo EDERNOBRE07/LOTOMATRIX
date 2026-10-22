@@ -131,10 +131,103 @@ class SoundService {
     } catch (e) {}
   }
 
+  // Play crisp acoustic tick during countdown
+  playTickCountdown() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now); // A5 tick
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch (e) {}
+  }
+
+  // Play sound effect when a ball is drawn in the virtual draw animation
+  playBallPop(isMatch: boolean = false, step: number = 1) {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      if (isMatch) {
+        // High sparkling bell chime when the drawn number matches the active ticket
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const baseFreq = 659.25 + step * 25; // E5 climbing frequency
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(baseFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.18);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.23);
+      } else {
+        // Natural popping sphere sound for drawn ball
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.12);
+
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+    } catch (e) {}
+  }
+
+  // Play Opportunity Alert tone (Dual harmonic chime for hiatus break or cycle < 3)
+  playOpportunityAlert() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const notes = [659.25, 880.0, 1174.66]; // E5, A5, D6 triumphant alert
+
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+
+        gain.gain.setValueAtTime(0.14, now + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.35);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.1);
+        osc.stop(now + idx * 0.1 + 0.36);
+      });
+    } catch (e) {}
+  }
+
   // Test current alert sound configuration
-  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' = '14_pontos') {
+  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' = '14_pontos') {
     if (type === '15_pontos') this.play15PontosJackpotSound();
     else if (type === '14_pontos') this.play14PontosCelebrationSound();
+    else if (type === 'oportunidade') this.playOpportunityAlert();
     else this.playGoldenZoneSuccessChime();
   }
 }

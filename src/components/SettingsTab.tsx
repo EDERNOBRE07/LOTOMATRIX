@@ -25,6 +25,8 @@ import {
   Info,
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
+import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
+import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
 export type CheckInterval = 'startup_only' | '1h' | '4h' | '12h';
@@ -38,6 +40,9 @@ interface SettingsTabProps {
   onRestoreFilters?: (filters: FilterCriteria) => void;
   onSyncNow?: () => void;
   isSyncing?: boolean;
+  statsList?: DezenaStats[];
+  cyclePendingNumbers?: number[];
+  concursosNoCiclo?: number;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -48,6 +53,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onRestoreFilters,
   onSyncNow,
   isSyncing = false,
+  statsList = [],
+  cyclePendingNumbers = [],
+  concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'geral' | 'dados' | 'cache'>('geral');
 
@@ -336,6 +344,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             latestDraw={latestDraw}
             savedTickets={savedTickets}
             onOpenConferidor={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }))}
+          />
+
+          {/* Painel de Alertas de Oportunidade (Atrasos Críticos & Ciclo < 3 Ausentes) */}
+          <OpportunityAlertsPanel
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

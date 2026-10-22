@@ -11,7 +11,7 @@ import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
-import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta } from './types/lotofacil';
+import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
 import { buildOptimal18Pool, countMatches } from './services/combinatorics';
@@ -223,6 +223,40 @@ export default function App() {
     }
   };
 
+  // Auditoria passiva de Alertas de Oportunidade (Atrasos Críticos & Ciclo < 3 ausentes)
+  const triggerAutomaticOpportunityAlerts = (draw: LotofacilDraw, stats: DezenaStats[], pendingCycle: number[]) => {
+    try {
+      const cfgRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
+      if (!cfgRaw) return;
+      const cfg = JSON.parse(cfgRaw);
+      if (!cfg.enabled) return;
+
+      const delayedNums = stats.filter((s) => {
+        const isTarget = cfg.monitorMode === 'all' || (cfg.customNumbers || []).includes(s.numero);
+        return isTarget && s.atrasoAtual >= (cfg.criticalDelayThreshold || 5);
+      });
+
+      const cycleTriggered = cfg.cycleAlertEnabled && pendingCycle.length > 0 && pendingCycle.length < 3;
+
+      if (delayedNums.length > 0 || cycleTriggered) {
+        if (cfg.soundEnabled) {
+          soundService.playOpportunityAlert();
+        }
+        if (cfg.pushEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          const body = cycleTriggered
+            ? `Ciclo das 25 Dezenas em iminência de fechar: restam apenas ${pendingCycle.join(', ')}!`
+            : `Alerta de Atraso Crítico: ${delayedNums.length} dezenas em hiato (${delayedNums.map(d => d.numero.toString().padStart(2, '0')).slice(0, 3).join(', ')}).`;
+          new Notification('🎯 LotoSniper • Alerta de Oportunidade', {
+            body,
+            icon: '/favicon.ico',
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao avaliar alerta de oportunidade:', e);
+    }
+  };
+
   // Real-time synchronization function: triggered on every app open
   const runAutoUpdate = async (forceFresh: boolean = false) => {
     setIsSyncing(true);
@@ -245,6 +279,10 @@ export default function App() {
         } catch { return []; }
       })();
       triggerAutomaticJackpotAlerts(result.draw, ticketsToCheck);
+
+      // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Ciclo < 3)
+      const { stats: newStats, dezenasPendentesCiclo: newPending } = computeDynamicStats(result.draw, RECENT_DRAWS);
+      triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending);
 
       // After updating latest draw, trigger AI prediction optimization with the newly loaded draw
       fetchAIPrediction(result.draw);
@@ -585,6 +623,9 @@ export default function App() {
             onRestoreTickets={(t) => setSavedTickets(t)}
             onSyncNow={() => runAutoUpdate(true)}
             isSyncing={isSyncing}
+            statsList={dynamicStats}
+            cyclePendingNumbers={dezenasPendentesCiclo}
+            concursosNoCiclo={concursosNoCiclo}
           />
         )}
 
