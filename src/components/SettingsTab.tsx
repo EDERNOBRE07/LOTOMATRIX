@@ -27,6 +27,7 @@ import {
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
 import { ThemeSelectorModule } from './ThemeSelectorModule';
+import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
 import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
@@ -58,7 +59,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   cyclePendingNumbers = [],
   concursosNoCiclo = 3,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'geral' | 'dados' | 'cache'>('geral');
+  const [activeSubTab, setActiveSubTab] = useState<'geral' | 'backtesting' | 'dados' | 'cache'>('geral');
 
   // 1. Modo de Conexão
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => {
@@ -295,6 +296,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             Conexão & Notificações
+          </button>
+          <button
+            onClick={() => setActiveSubTab('backtesting')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'backtesting'
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'text-amber-300 hover:text-white'
+            }`}
+          >
+            <span>Backtesting Histórico (100)</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              100 Sorteios
+            </span>
           </button>
           <button
             onClick={() => setActiveSubTab('dados')}
@@ -540,7 +554,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB 2: CONFIGURAÇÕES DE DADOS (IMPORTAR/EXPORTAR & BACKUP)             */}
+      {/* SUBTAB 2: BACKTESTING HISTÓRICO DE FECHAMENTOS (100 CONCURSOS CAIXA)       */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'backtesting' && (
+        <BacktestingHistoricoModule
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB 3: CONFIGURAÇÕES DE DADOS (IMPORTAR/EXPORTAR & BACKUP)             */}
       {/* ========================================================================= */}
       {activeSubTab === 'dados' && (
         <div className="space-y-5">

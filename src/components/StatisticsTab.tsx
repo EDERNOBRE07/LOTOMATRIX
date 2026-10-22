@@ -17,6 +17,7 @@ import { ParesDeOuroModule } from './ParesDeOuroModule';
 import { EvolucaoPontuacaoChart } from './EvolucaoPontuacaoChart';
 import { AnaliseVarianciaComponent } from './AnaliseVarianciaComponent';
 import { ROIForecastComponent } from './ROIForecastComponent';
+import { EspelhamentoDezenasModule } from './EspelhamentoDezenasModule';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -36,6 +37,7 @@ import {
   Compass,
   Lightbulb,
   Scale,
+  Link2,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -60,6 +62,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
     | 'roi_forecast'
+    | 'espelhamento'
     | 'variancia'
     | 'radar_ouro'
     | 'ascensao'
@@ -112,6 +115,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>ROI Forecast (10 Concursos)</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               RENTABILIDADE
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('espelhamento')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'espelhamento'
+                ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-md shadow-indigo-500/25 font-black'
+                : 'text-indigo-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Link2 className="w-4 h-4" />
+            <span>Espelhamento (Pares & Trios)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+              CO-OCORRÊNCIA
             </span>
           </button>
 
@@ -319,6 +337,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </button>
           </div>
 
+          {/* Banner Espelhamento de Dezenas (Co-ocorrência de Pares & Trios) */}
+          <div className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-slate-900 border border-indigo-500/40 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shrink-0">
+                <Link2 className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span>Espelhamento de Dezenas: Afinidade e Co-ocorrência (Pares & Trios)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    SINERGIA MATRICIAL
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Identifique pares e trios de dezenas que mais frequentemente aparecem juntos nos concursos oficiais para fixação e agrupamento estratégico nos fechamentos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('espelhamento')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-indigo-500/20 flex items-center gap-1.5 justify-center"
+            >
+              <span>Explorar Espelhamento</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Módulo Especial: Sequências de Quentes (Últimos 3 Concursos) e Frias (> 5 Concursos Ausentes) */}
           <QuentesFriasModule
             latestDraw={latestDraw}
@@ -510,6 +555,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           latestDraw={latestDraw}
           savedTickets={savedTickets}
           fechamentoNome={fechamentoNome}
+          onApplyNumbers={onApplyNumbers}
+        />
+      )}
+
+      {/* SUBTAB: ESPELHAMENTO DE DEZENAS (CO-OCORRÊNCIA DE PARES & TRIOS) */}
+      {activeSubTab === 'espelhamento' && (
+        <EspelhamentoDezenasModule
+          latestDraw={latestDraw}
+          statsList={statsList}
           onApplyNumbers={onApplyNumbers}
         />
       )}
