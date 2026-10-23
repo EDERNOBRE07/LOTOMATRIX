@@ -21,6 +21,7 @@ import { EspelhamentoDezenasModule } from './EspelhamentoDezenasModule';
 import { SazonalidadeDezenasModule } from './SazonalidadeDezenasModule';
 import { LinhaDoTempoCiclosComponent } from './LinhaDoTempoCiclosComponent';
 import { AnaliseEspelhamentoConcursoModule } from './AnaliseEspelhamentoConcursoModule';
+import { RadarTendenciasQuentesComponent } from './RadarTendenciasQuentesComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -66,6 +67,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'radar_quentes'
     | 'roi_forecast'
     | 'espelhamento'
     | 'analise_espelho'
@@ -109,6 +111,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('radar_quentes')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'radar_quentes'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md shadow-orange-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-400" />
+            <span>Radar Tendências Quentes</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              EMA TOP 3
+            </span>
           </button>
 
           <button
@@ -359,6 +376,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Radar de Tendências Quentes (Média Móvel Exponencial EMA • Top 3 Força 1 a 100) */}
+          <div className="bg-gradient-to-r from-amber-950/70 via-orange-950/50 to-slate-900 border border-amber-500/50 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                <Flame className="w-5 h-5 text-amber-400 animate-pulse" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span>Radar de Tendências Quentes (Média Móvel Exponencial EMA)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+                    TOP 3 NOS PRÓXIMOS 5 CONCURSOS
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Algoritmo preditivo de momentum exponencial que calcula a probabilidade e a força (1 a 100) para os próximos 5 concursos da Lotofácil.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('radar_quentes')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-amber-500/20 flex items-center gap-1.5 justify-center"
+            >
+              <span>Abrir Radar EMA</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -657,6 +701,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: RADAR DE TENDÊNCIAS QUENTES (MÉDIA MÓVEL EXPONENCIAL EMA) */}
+      {activeSubTab === 'radar_quentes' && (
+        <RadarTendenciasQuentesComponent
+          latestDraw={latestDraw}
+          statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB: ROI FORECAST & RENTABILIDADE (ÚLTIMOS 10 CONCURSOS) */}

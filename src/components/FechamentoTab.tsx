@@ -54,6 +54,9 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  Award,
+  Activity,
+  Lightbulb,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -288,6 +291,94 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setDocumentMessage(`Equilíbrio Canônico aplicado: harmonia exata de moldura, miolo, primos e fibonacci.`);
       setTimeout(() => setDocumentMessage(null), 5000);
     }
+  };
+
+  // 1. Aplicar Top 18 no Fechamento
+  const handleApplyTop18 = () => {
+    setMode('18_14_15');
+    const sorted18 = [...dynamicStats]
+      .sort((a, b) => {
+        const scoreA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
+        const scoreB = aiPrediction?.scores ? aiPrediction.scores[b.numero - 1] : b.vezes / 24 + b.atrasoAtual * 5;
+        return scoreB - scoreA;
+      })
+      .slice(0, 18)
+      .map((s) => s.numero)
+      .sort((a, b) => a - b);
+
+    setSelectedNumbers(sorted18);
+    setStrategyName('Top 18 IA');
+    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada no Fechamento!');
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
+  // 2. Aplicar Pares de Ouro
+  const handleApplyParesDeOuro = () => {
+    const goldenPair = [11, 20];
+    setFixedNumbers((prev) => Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b));
+    setSelectedNumbers((prev) => {
+      const merged = Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b);
+      return merged.slice(0, targetCount);
+    });
+    setStrategyName('Par de Ouro [11, 20]');
+    setDocumentMessage('✓ Par de Ouro [11, 20] fixado com sucesso no Fechamento!');
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
+  // 3. Aplicar Preditor em Tempo Real da Lotofácil
+  const handleApplyRealTimePredictor = () => {
+    const ranked = [...dynamicStats]
+      .sort((a, b) => {
+        const probA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes;
+        const probB = aiPrediction?.scores ? aiPrediction.scores[b.numero - 1] : b.vezes;
+        return probB - probA;
+      })
+      .slice(0, targetCount)
+      .map((s) => s.numero)
+      .sort((a, b) => a - b);
+
+    setSelectedNumbers(ranked);
+    setStrategyName('Preditor em Tempo Real da Lotofácil');
+    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas à matriz de ${targetCount} dezenas!`);
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
+  // 4. Aplicar Insights Diários da IA
+  const handleApplyDailyAIInsights = () => {
+    const pool = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, 9, 9).dezenas18.slice(0, targetCount);
+    setSelectedNumbers(pool);
+    setStrategyName('Insights Diários da IA');
+    setDocumentMessage('✓ Insights Diários da IA incorporados na matriz de fechamento!');
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
+  // 5. Garantir Incorporação dos Filtros Canônicos
+  const handleEnsureFilters = () => {
+    setFilters({
+      ...DEFAULT_FILTERS,
+      somaMin: 185,
+      somaMax: 215,
+      paresMin: 5,
+      paresMax: 9,
+      primosMin: 4,
+      primosMax: 7,
+      molduraMin: 8,
+      molduraMax: 11,
+      repetidasMin: 8,
+      repetidasMax: 10,
+      maxConsecutivas: 5,
+      fibonacciMin: 3,
+      fibonacciMax: 5,
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    });
+    setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no Fechamento!');
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
   };
 
   // Apply Document Strategy (Calibrated pool dynamically scaled to targetCount)
@@ -983,6 +1074,114 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           </button>
         </div>
       )}
+
+      {/* Centro de Sugestões Estratégicas & Incorporação de Filtros na Matriz */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <span>Sugestões Estratégicas & Incorporação na Matriz</span>
+                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  CONCURSO #{latestDraw.concurso}
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Incorpore instantaneamente as recomendações da IA, Pares de Ouro, Preditor e calibração de filtros na matriz de fechamento.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            {selectedNumbers.length}/{targetCount} dezenas selecionadas
+          </span>
+        </div>
+
+        {/* 5 Botões de Ação Rápida */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+          <button
+            type="button"
+            onClick={handleApplyTop18}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-amber-500/30 hover:border-amber-400 text-left transition group cursor-pointer shadow-sm"
+          >
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 group-hover:scale-105 transition shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>⚡ Top 18 IA</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">18 dezenas ponderadas</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleApplyParesDeOuro}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-yellow-500/30 hover:border-yellow-400 text-left transition group cursor-pointer shadow-sm"
+          >
+            <div className="p-2 rounded-lg bg-yellow-500/20 text-yellow-300 group-hover:scale-105 transition shrink-0">
+              <Award className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>🏆 Pares de Ouro</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">Fixa [11, 20] afinidade</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleApplyRealTimePredictor}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-400 text-left transition group cursor-pointer shadow-sm"
+          >
+            <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-300 group-hover:scale-105 transition shrink-0">
+              <Activity className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>🔮 Preditor Real</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">Motor estocástico</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleApplyDailyAIInsights}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-purple-500/30 hover:border-purple-400 text-left transition group cursor-pointer shadow-sm"
+          >
+            <div className="p-2 rounded-lg bg-purple-500/20 text-purple-300 group-hover:scale-105 transition shrink-0">
+              <Lightbulb className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>💡 Insights IA</span>
+              </div>
+              <p className="text-[10px] text-slate-400 truncate">9 rep. + ausentes chave</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleEnsureFilters}
+            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-emerald-500/40 hover:border-emerald-400 text-left transition group cursor-pointer shadow-sm"
+          >
+            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300 group-hover:scale-105 transition shrink-0">
+              <Filter className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>🛡️ Garantir Filtros</span>
+              </div>
+              <p className="text-[10px] text-emerald-400 truncate">Zona de Ouro (185-215)</p>
+            </div>
+          </button>
+        </div>
+      </div>
 
       {/* Volante 5x5 Grid */}
       <VolanteSelector

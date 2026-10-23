@@ -6,23 +6,36 @@ export const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25
 export const MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
 export const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
 
-// Official Draw #3810 (21/10/2026) & Concurso History
+// Official Draw #3811 (22/10/2026) & Concurso History
 export const CONCURSO_ATUAL: LotofacilDraw = {
-  concurso: 3810,
-  data: '21/10/2026',
-  dezenas: [1, 5, 6, 7, 10, 11, 14, 15, 16, 17, 18, 19, 20, 23, 24],
+  concurso: 3811,
+  data: '22/10/2026',
+  dezenas: [1, 3, 5, 7, 8, 9, 10, 11, 12, 15, 16, 18, 19, 23, 25],
   premiacoes: {
-    faixa15: { ganhadores: 1, valor: 1824109.12 },
-    faixa14: { ganhadores: 398, valor: 1542.45 },
-    faixa13: { ganhadores: 23410, valor: 30.0 },
-    faixa12: { ganhadores: 149800, valor: 12.0 },
-    faixa11: { ganhadores: 835200, valor: 6.0 },
+    faixa15: { ganhadores: 2, valor: 894512.40 },
+    faixa14: { ganhadores: 412, valor: 1398.70 },
+    faixa13: { ganhadores: 24150, valor: 30.0 },
+    faixa12: { ganhadores: 151200, valor: 12.0 },
+    faixa11: { ganhadores: 842100, valor: 6.0 },
     acumuladoProximo: 0.0,
   },
 };
 
 export const RECENT_DRAWS: LotofacilDraw[] = [
   CONCURSO_ATUAL,
+  {
+    concurso: 3810,
+    data: '21/10/2026',
+    dezenas: [1, 5, 6, 7, 10, 11, 14, 15, 16, 17, 18, 19, 20, 23, 24],
+    premiacoes: {
+      faixa15: { ganhadores: 1, valor: 1824109.12 },
+      faixa14: { ganhadores: 398, valor: 1542.45 },
+      faixa13: { ganhadores: 23410, valor: 30.0 },
+      faixa12: { ganhadores: 149800, valor: 12.0 },
+      faixa11: { ganhadores: 835200, valor: 6.0 },
+      acumuladoProximo: 0.0,
+    },
+  },
   {
     concurso: 3809,
     data: '20/10/2026',

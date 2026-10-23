@@ -46,11 +46,11 @@ export const HISTORICO_10_CICLOS: CicloHistoricoItem[] = [
     ciclo: 804,
     concursoInicio: 3807,
     concursoFim: null, // em aberto
-    duracao: 4, // 3807, 3808, 3809, 3810
+    duracao: 5, // 3807, 3808, 3809, 3810, 3811
     dezenasFechamento: [17, 22],
     status: 'aberto',
     tipoVelocidade: 'normal',
-    dataPeriodo: '17/10/2026 - Atual',
+    dataPeriodo: '17/10/2026 - Concurso #3811',
   },
   {
     ciclo: 803,

@@ -1,0 +1,1056 @@
+================================================================================
+LOTOSNIPER - CONSOLIDAÇÃO GERAL DOS CONCURSOS E FECHAMENTOS (LOTOFÁCIL CAIXA)
+================================================================================
+
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [1/10]: lotosniper_fechamento_concurso_3810_10_jogos.txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:21:20
+# Total de Jogos Exportados: 10 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 35,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA (Top 17 Dezenas)
+• Modalidade / Matriz: 17 Dezenas (Garantia 14 se 15) (10 Jogos - Garantia 14 Pontos)
+• Garantia Matemática: 14 Pontos
+• Universo de Dezenas (17 números): 01 03 04 05 06 07 09 10 11 13 15 16 17 20 22 23 24
+• Dezenas Fixas: 02 03
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (10 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 03 04 05 10 12 13 14 17 20 22 23 24 25 [Soma: 195 | 8P/7I | 6 Primos | 11 Moldura | 5 Fibo]
+Jogo 02: 01 02 03 04 05 07 09 13 14 16 17 20 22 23 24 [Soma: 180 | 7P/8I | 7 Primos | 10 Moldura | 5 Fibo]
+Jogo 03: 01 02 03 04 05 09 10 11 12 14 17 20 22 23 24 [Soma: 177 | 8P/7I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 04: 01 02 03 04 05 07 09 10 14 17 20 22 23 24 25 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 05: 01 02 03 04 06 07 09 10 13 17 20 22 23 24 25 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 06: 01 02 03 04 05 09 10 13 14 16 17 20 22 24 25 [Soma: 185 | 8P/7I | 5 Primos | 11 Moldura | 5 Fibo]
+Jogo 07: 01 02 03 04 05 07 11 12 13 14 20 22 23 24 25 [Soma: 186 | 7P/8I | 7 Primos | 11 Moldura | 5 Fibo]
+Jogo 08: 01 02 03 04 05 07 09 10 12 16 17 20 22 23 24 [Soma: 175 | 8P/7I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 09: 01 02 03 04 06 07 09 11 13 14 17 20 22 23 24 [Soma: 176 | 7P/8I | 7 Primos | 10 Moldura | 4 Fibo]
+Jogo 10: 01 02 03 04 05 11 12 13 14 16 17 20 22 23 24 [Soma: 187 | 8P/7I | 7 Primos | 11 Moldura | 5 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 03 04 05 10 12 13 14 17 20 22 23 24 25
+01 02 03 04 05 07 09 13 14 16 17 20 22 23 24
+01 02 03 04 05 09 10 11 12 14 17 20 22 23 24
+01 02 03 04 05 07 09 10 14 17 20 22 23 24 25
+01 02 03 04 06 07 09 10 13 17 20 22 23 24 25
+01 02 03 04 05 09 10 13 14 16 17 20 22 24 25
+01 02 03 04 05 07 11 12 13 14 20 22 23 24 25
+01 02 03 04 05 07 09 10 12 16 17 20 22 23 24
+01 02 03 04 06 07 09 11 13 14 17 20 22 23 24
+01 02 03 04 05 11 12 13 14 16 17 20 22 23 24
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [2/10]: lotosniper_fechamento_concurso_3810_12_jogos.txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:23:05
+# Total de Jogos Exportados: 12 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 42,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA
+• Modalidade / Matriz: 18 Dezenas Econômico (Garantia 13 se 14) (12 Jogos - Garantia 13 Pontos se 14 (e 14 se 15))
+• Garantia Matemática: 13 Pontos se 14 (e 14 se 15)
+• Universo de Dezenas (18 números): 03 04 05 06 07 09 10 11 13 15 16 17 19 20 22 23 24 25
+• Dezenas Fixas: 01 04 06 09 10 13 15 20
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (12 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 03 04 06 09 10 12 13 15 17 19 20 22 23 24 [Soma: 198 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 02: 01 03 04 05 06 09 10 13 14 15 17 20 22 24 25 [Soma: 188 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 03: 01 03 04 05 06 09 10 12 13 15 16 19 20 22 25 [Soma: 180 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 04: 01 03 04 05 06 09 10 13 14 15 17 20 21 22 24 [Soma: 184 | 7P/8I | 4 Primos | 11 Moldura | 5 Fibo]
+Jogo 05: 01 03 04 05 06 09 10 13 14 15 16 19 20 22 23 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 06: 01 03 04 05 06 09 10 13 14 15 16 19 20 21 22 [Soma: 178 | 7P/8I | 4 Primos | 11 Moldura | 5 Fibo]
+Jogo 07: 01 04 05 06 07 09 10 13 15 16 19 20 21 22 24 [Soma: 192 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 08: 01 02 03 04 06 07 09 10 13 14 15 20 23 24 25 [Soma: 176 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 09: 01 03 04 06 07 09 10 13 14 15 16 20 22 23 24 [Soma: 187 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 10: 01 03 04 05 06 09 10 12 13 15 16 17 20 22 23 [Soma: 176 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 11: 01 03 04 05 06 09 10 12 13 15 17 20 22 24 25 [Soma: 186 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 12: 01 02 04 05 06 07 09 10 13 14 15 20 23 24 25 [Soma: 178 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 03 04 06 09 10 12 13 15 17 19 20 22 23 24
+01 03 04 05 06 09 10 13 14 15 17 20 22 24 25
+01 03 04 05 06 09 10 12 13 15 16 19 20 22 25
+01 03 04 05 06 09 10 13 14 15 17 20 21 22 24
+01 03 04 05 06 09 10 13 14 15 16 19 20 22 23
+01 03 04 05 06 09 10 13 14 15 16 19 20 21 22
+01 04 05 06 07 09 10 13 15 16 19 20 21 22 24
+01 02 03 04 06 07 09 10 13 14 15 20 23 24 25
+01 03 04 06 07 09 10 13 14 15 16 20 22 23 24
+01 03 04 05 06 09 10 12 13 15 16 17 20 22 23
+01 03 04 05 06 09 10 12 13 15 17 20 22 24 25
+01 02 04 05 06 07 09 10 13 14 15 20 23 24 25
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [3/10]: lotosniper_fechamento_concurso_3810_4_jogos (3).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 13:22:24
+# Total de Jogos Exportados: 4 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 14,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: ⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)
+• Modalidade / Matriz: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (4 Jogos - Garantia 14 Pontos (com 35% de chance de 15))
+• Garantia Matemática: 14 Pontos (com 35% de chance de 15)
+• Universo de Dezenas (18 números): 01 02 03 04 05 09 10 11 12 13 14 15 20 21 22 23 24 25
+• Dezenas Fixas: 02 03
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (4 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 03 04 05 09 10 12 13 14 15 20 22 23 24 [Soma: 177 | 8P/7I | 5 Primos | 11 Moldura | 5 Fibo]
+Jogo 02: 01 02 03 04 05 09 11 12 13 14 15 20 22 23 24 [Soma: 178 | 7P/8I | 6 Primos | 11 Moldura | 5 Fibo]
+Jogo 03: 01 02 03 04 05 09 10 12 13 14 15 20 23 24 25 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 5 Fibo]
+Jogo 04: 01 02 03 05 09 10 12 13 14 15 20 22 23 24 25 [Soma: 198 | 7P/8I | 5 Primos | 11 Moldura | 5 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 03 04 05 09 10 12 13 14 15 20 22 23 24
+01 02 03 04 05 09 11 12 13 14 15 20 22 23 24
+01 02 03 04 05 09 10 12 13 14 15 20 23 24 25
+01 02 03 05 09 10 12 13 14 15 20 22 23 24 25
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [4/10]: lotosniper_fechamento_concurso_3810_24_jogos (2).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:21:59
+# Total de Jogos Exportados: 24 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 84,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA
+• Modalidade / Matriz: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15))
+• Garantia Matemática: 14 Pontos (com 35% de chance de 15)
+• Universo de Dezenas (18 números): 03 04 05 06 07 09 10 11 13 15 16 17 18 19 20 22 23 24
+• Dezenas Fixas: 01 04 06 09 10 11 13 15 20 24 25
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (24 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 04 06 09 10 11 13 14 15 18 19 20 24 25 [Soma: 191 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 02: 01 02 04 06 09 10 11 12 13 15 17 18 20 24 25 [Soma: 187 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 03: 01 02 04 06 07 09 10 11 13 14 15 20 22 24 25 [Soma: 183 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 04: 01 02 04 06 09 10 11 12 13 15 16 19 20 24 25 [Soma: 187 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 05: 01 03 04 06 07 09 10 11 12 13 15 18 20 24 25 [Soma: 178 | 7P/8I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 06: 01 03 04 06 09 10 11 13 14 15 16 17 20 24 25 [Soma: 188 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 07: 01 04 05 06 09 10 11 13 15 18 19 20 22 24 25 [Soma: 202 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 08: 01 04 05 06 09 10 11 12 13 15 17 20 22 24 25 [Soma: 194 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 09: 01 02 04 06 07 09 10 11 12 13 15 16 20 24 25 [Soma: 175 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 10: 01 03 04 06 09 10 11 13 15 18 19 20 22 24 25 [Soma: 200 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 11: 01 02 04 06 09 10 11 13 14 15 17 20 22 24 25 [Soma: 193 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 12: 01 03 04 05 06 09 10 11 13 14 15 18 20 24 25 [Soma: 178 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 13: 01 02 04 06 07 09 10 11 13 15 18 20 23 24 25 [Soma: 188 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 14: 01 03 04 05 06 09 10 11 12 13 15 18 20 24 25 [Soma: 176 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 15: 01 03 04 06 07 09 10 11 13 15 18 20 22 24 25 [Soma: 188 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 16: 01 03 04 06 07 09 10 11 13 14 15 20 22 24 25 [Soma: 184 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 17: 01 03 04 06 09 10 11 13 15 17 18 20 22 24 25 [Soma: 198 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 18: 01 03 04 06 09 10 11 13 14 15 17 20 22 24 25 [Soma: 194 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 19: 01 03 04 06 09 10 11 13 14 15 19 20 22 24 25 [Soma: 196 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 20: 01 04 05 06 07 09 10 11 13 15 18 20 22 24 25 [Soma: 190 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 21: 01 04 05 06 07 09 10 11 13 14 15 20 22 24 25 [Soma: 186 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 22: 01 04 05 06 09 10 11 13 15 17 18 20 22 24 25 [Soma: 200 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 23: 01 04 05 06 09 10 11 13 14 15 17 20 22 24 25 [Soma: 196 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 24: 01 04 05 06 09 10 11 13 14 15 19 20 22 24 25 [Soma: 198 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 04 06 09 10 11 13 14 15 18 19 20 24 25
+01 02 04 06 09 10 11 12 13 15 17 18 20 24 25
+01 02 04 06 07 09 10 11 13 14 15 20 22 24 25
+01 02 04 06 09 10 11 12 13 15 16 19 20 24 25
+01 03 04 06 07 09 10 11 12 13 15 18 20 24 25
+01 03 04 06 09 10 11 13 14 15 16 17 20 24 25
+01 04 05 06 09 10 11 13 15 18 19 20 22 24 25
+01 04 05 06 09 10 11 12 13 15 17 20 22 24 25
+01 02 04 06 07 09 10 11 12 13 15 16 20 24 25
+01 03 04 06 09 10 11 13 15 18 19 20 22 24 25
+01 02 04 06 09 10 11 13 14 15 17 20 22 24 25
+01 03 04 05 06 09 10 11 13 14 15 18 20 24 25
+01 02 04 06 07 09 10 11 13 15 18 20 23 24 25
+01 03 04 05 06 09 10 11 12 13 15 18 20 24 25
+01 03 04 06 07 09 10 11 13 15 18 20 22 24 25
+01 03 04 06 07 09 10 11 13 14 15 20 22 24 25
+01 03 04 06 09 10 11 13 15 17 18 20 22 24 25
+01 03 04 06 09 10 11 13 14 15 17 20 22 24 25
+01 03 04 06 09 10 11 13 14 15 19 20 22 24 25
+01 04 05 06 07 09 10 11 13 15 18 20 22 24 25
+01 04 05 06 07 09 10 11 13 14 15 20 22 24 25
+01 04 05 06 09 10 11 13 15 17 18 20 22 24 25
+01 04 05 06 09 10 11 13 14 15 17 20 22 24 25
+01 04 05 06 09 10 11 13 14 15 19 20 22 24 25
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [5/10]: lotosniper_fechamento_concurso_3810_24_jogos (3).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 13:33:37
+# Total de Jogos Exportados: 24 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 84,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Equilíbrio Canônico
+• Modalidade / Matriz: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15))
+• Garantia Matemática: 14 Pontos (com 35% de chance de 15)
+• Universo de Dezenas (18 números): 01 02 03 05 07 08 10 11 13 14 15 19 20 21 22 23 24 25
+• Dezenas Fixas: 02 03
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 190 a 210 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 4 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 9 a 10 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 6 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (24 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 03 07 08 10 12 14 15 19 20 22 23 24 25 [Soma: 205 | 8P/7I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 02: 02 03 05 07 08 09 10 12 14 15 19 20 23 24 25 [Soma: 196 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 03: 02 03 04 07 08 10 12 14 15 19 20 21 23 24 25 [Soma: 207 | 8P/7I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 04: 01 02 03 05 07 09 10 12 14 19 20 22 23 24 25 [Soma: 196 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 05: 01 02 03 04 07 10 12 13 14 15 19 20 23 24 25 [Soma: 192 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 06: 02 03 05 07 09 10 12 13 14 15 19 20 22 24 25 [Soma: 200 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 07: 01 02 03 07 08 10 13 14 15 19 20 22 23 24 25 [Soma: 206 | 7P/8I | 6 Primos | 10 Moldura | 5 Fibo]
+Jogo 08: 02 03 05 07 08 11 12 14 15 19 20 21 22 24 25 [Soma: 208 | 7P/8I | 6 Primos | 10 Moldura | 5 Fibo]
+Jogo 09: 02 03 04 07 08 09 10 14 15 19 20 22 23 24 25 [Soma: 205 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 10: 02 03 04 07 09 10 12 13 14 15 19 20 21 23 24 [Soma: 196 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 11: 01 02 03 07 08 09 11 12 14 19 20 22 23 24 25 [Soma: 200 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 12: 02 03 05 07 08 09 10 12 14 15 19 20 21 22 24 [Soma: 191 | 8P/7I | 5 Primos | 9 Moldura | 5 Fibo]
+Jogo 13: 01 02 03 07 08 10 12 14 15 19 20 21 22 24 25 [Soma: 203 | 8P/7I | 4 Primos | 10 Moldura | 5 Fibo]
+Jogo 14: 01 02 03 05 09 10 12 13 14 15 19 20 22 23 24 [Soma: 192 | 7P/8I | 6 Primos | 10 Moldura | 5 Fibo]
+Jogo 15: 02 03 04 05 07 09 10 12 14 15 19 20 23 24 25 [Soma: 192 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 16: 02 03 04 07 08 11 12 14 15 19 20 22 23 24 25 [Soma: 209 | 8P/7I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 17: 01 02 03 07 08 09 10 12 14 19 20 21 23 24 25 [Soma: 198 | 7P/8I | 5 Primos | 9 Moldura | 5 Fibo]
+Jogo 18: 02 03 04 08 09 10 11 13 14 15 19 20 22 23 24 [Soma: 197 | 8P/7I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 19: 01 02 03 07 08 10 11 12 14 15 19 20 22 23 24 [Soma: 191 | 8P/7I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 20: 02 03 04 05 08 09 10 13 14 15 19 20 23 24 25 [Soma: 194 | 7P/8I | 6 Primos | 10 Moldura | 5 Fibo]
+Jogo 21: 02 03 04 07 08 10 11 13 14 15 19 20 22 24 25 [Soma: 197 | 8P/7I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 22: 01 02 03 07 09 10 12 14 15 19 20 22 23 24 25 [Soma: 206 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 23: 02 03 04 07 09 10 11 12 14 15 19 20 21 23 24 [Soma: 194 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 24: 02 03 05 07 08 09 10 12 14 15 20 22 23 24 25 [Soma: 199 | 8P/7I | 5 Primos | 10 Moldura | 4 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 03 07 08 10 12 14 15 19 20 22 23 24 25
+02 03 05 07 08 09 10 12 14 15 19 20 23 24 25
+02 03 04 07 08 10 12 14 15 19 20 21 23 24 25
+01 02 03 05 07 09 10 12 14 19 20 22 23 24 25
+01 02 03 04 07 10 12 13 14 15 19 20 23 24 25
+02 03 05 07 09 10 12 13 14 15 19 20 22 24 25
+01 02 03 07 08 10 13 14 15 19 20 22 23 24 25
+02 03 05 07 08 11 12 14 15 19 20 21 22 24 25
+02 03 04 07 08 09 10 14 15 19 20 22 23 24 25
+02 03 04 07 09 10 12 13 14 15 19 20 21 23 24
+01 02 03 07 08 09 11 12 14 19 20 22 23 24 25
+02 03 05 07 08 09 10 12 14 15 19 20 21 22 24
+01 02 03 07 08 10 12 14 15 19 20 21 22 24 25
+01 02 03 05 09 10 12 13 14 15 19 20 22 23 24
+02 03 04 05 07 09 10 12 14 15 19 20 23 24 25
+02 03 04 07 08 11 12 14 15 19 20 22 23 24 25
+01 02 03 07 08 09 10 12 14 19 20 21 23 24 25
+02 03 04 08 09 10 11 13 14 15 19 20 22 23 24
+01 02 03 07 08 10 11 12 14 15 19 20 22 23 24
+02 03 04 05 08 09 10 13 14 15 19 20 23 24 25
+02 03 04 07 08 10 11 13 14 15 19 20 22 24 25
+01 02 03 07 09 10 12 14 15 19 20 22 23 24 25
+02 03 04 07 09 10 11 12 14 15 19 20 21 23 24
+02 03 05 07 08 09 10 12 14 15 20 22 23 24 25
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [6/10]: lotosniper_fechamento_concurso_3810_24_jogos (4).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 13:35:11
+# Total de Jogos Exportados: 24 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 84,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA
+• Modalidade / Matriz: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15))
+• Garantia Matemática: 14 Pontos (com 35% de chance de 15)
+• Universo de Dezenas (18 números): 01 03 04 05 06 07 09 10 11 13 15 16 17 19 20 22 23 24
+• Dezenas Fixas: Nenhuma dezena fixa
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 190 a 210 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 4 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 9 a 10 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 6 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (24 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 03 04 05 09 10 12 13 14 17 19 20 22 24 25 [Soma: 198 | 7P/8I | 5 Primos | 9 Moldura | 4 Fibo]
+Jogo 02: 01 03 04 05 09 12 13 14 16 17 19 20 22 23 24 [Soma: 202 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 03: 01 03 04 06 07 09 10 13 14 16 19 20 22 24 25 [Soma: 193 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 04: 01 03 04 06 07 09 13 14 16 17 20 22 23 24 25 [Soma: 204 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 05: 01 03 04 05 07 10 12 13 14 17 20 22 23 24 25 [Soma: 200 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 06: 01 03 04 06 07 10 12 13 16 17 19 20 22 23 24 [Soma: 197 | 8P/7I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 07: 01 03 04 05 09 10 12 14 16 17 19 20 22 23 24 [Soma: 199 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 08: 01 03 04 06 07 09 10 12 13 19 20 22 23 24 25 [Soma: 198 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 09: 01 03 04 05 06 09 12 13 14 17 19 20 22 23 24 [Soma: 192 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 10: 01 03 04 05 07 10 13 14 16 17 19 20 21 22 24 [Soma: 196 | 7P/8I | 6 Primos | 10 Moldura | 5 Fibo]
+Jogo 11: 01 03 04 05 07 09 12 13 14 16 19 20 22 23 24 [Soma: 192 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 12: 01 03 04 05 10 12 13 14 16 17 19 20 22 23 25 [Soma: 204 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 13: 01 03 04 05 09 10 12 13 14 16 19 20 23 24 25 [Soma: 198 | 7P/8I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 14: 01 03 04 05 09 11 12 13 14 16 17 19 20 22 24 [Soma: 190 | 7P/8I | 6 Primos | 9 Moldura | 4 Fibo]
+Jogo 15: 01 03 04 05 07 10 13 14 16 17 19 20 22 24 25 [Soma: 200 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 16: 01 03 04 05 06 09 13 14 16 17 19 20 22 24 25 [Soma: 198 | 7P/8I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 17: 01 03 04 06 07 10 13 14 16 17 19 20 22 23 25 [Soma: 200 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 18: 01 03 04 05 09 10 12 13 14 16 19 22 23 24 25 [Soma: 200 | 7P/8I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 19: 01 03 04 06 07 09 10 13 14 17 19 20 22 24 25 [Soma: 194 | 7P/8I | 5 Primos | 9 Moldura | 3 Fibo]
+Jogo 20: 01 03 04 05 09 10 12 13 16 17 19 20 21 22 24 [Soma: 196 | 7P/8I | 5 Primos | 10 Moldura | 5 Fibo]
+Jogo 21: 01 03 04 05 06 10 12 13 14 17 19 20 22 23 24 [Soma: 193 | 8P/7I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 22: 01 03 04 06 07 09 13 14 15 16 19 20 22 23 24 [Soma: 196 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 23: 01 03 04 06 07 09 10 13 14 16 17 22 23 24 25 [Soma: 194 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 24: 01 03 04 05 07 10 12 13 14 15 19 20 22 23 24 [Soma: 192 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 03 04 05 09 10 12 13 14 17 19 20 22 24 25
+01 03 04 05 09 12 13 14 16 17 19 20 22 23 24
+01 03 04 06 07 09 10 13 14 16 19 20 22 24 25
+01 03 04 06 07 09 13 14 16 17 20 22 23 24 25
+01 03 04 05 07 10 12 13 14 17 20 22 23 24 25
+01 03 04 06 07 10 12 13 16 17 19 20 22 23 24
+01 03 04 05 09 10 12 14 16 17 19 20 22 23 24
+01 03 04 06 07 09 10 12 13 19 20 22 23 24 25
+01 03 04 05 06 09 12 13 14 17 19 20 22 23 24
+01 03 04 05 07 10 13 14 16 17 19 20 21 22 24
+01 03 04 05 07 09 12 13 14 16 19 20 22 23 24
+01 03 04 05 10 12 13 14 16 17 19 20 22 23 25
+01 03 04 05 09 10 12 13 14 16 19 20 23 24 25
+01 03 04 05 09 11 12 13 14 16 17 19 20 22 24
+01 03 04 05 07 10 13 14 16 17 19 20 22 24 25
+01 03 04 05 06 09 13 14 16 17 19 20 22 24 25
+01 03 04 06 07 10 13 14 16 17 19 20 22 23 25
+01 03 04 05 09 10 12 13 14 16 19 22 23 24 25
+01 03 04 06 07 09 10 13 14 17 19 20 22 24 25
+01 03 04 05 09 10 12 13 16 17 19 20 21 22 24
+01 03 04 05 06 10 12 13 14 17 19 20 22 23 24
+01 03 04 06 07 09 13 14 15 16 19 20 22 23 24
+01 03 04 06 07 09 10 13 14 16 17 22 23 24 25
+01 03 04 05 07 10 12 13 14 15 19 20 22 23 24
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [7/10]: lotosniper_fechamento_concurso_3810_24_jogos (5).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 13:42:28
+# Total de Jogos Exportados: 24 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 84,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA
+• Modalidade / Matriz: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15))
+• Garantia Matemática: 14 Pontos (com 35% de chance de 15)
+• Universo de Dezenas (18 números): 01 03 04 05 06 07 09 10 11 13 15 16 17 19 20 22 23 24
+• Dezenas Fixas: Nenhuma dezena fixa
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (24 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 03 04 05 06 07 09 10 13 16 17 19 20 22 23 24 [Soma: 198 | 7P/8I | 7 Primos | 10 Moldura | 3 Fibo]
+Jogo 02: 01 03 04 06 09 10 11 13 15 16 17 19 20 22 24 [Soma: 190 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 03: 01 03 04 06 07 09 10 13 16 17 19 20 22 23 24 [Soma: 194 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 04: 03 04 05 06 07 09 10 11 13 15 16 17 20 22 24 [Soma: 182 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 05: 03 04 05 06 07 09 10 11 13 16 17 20 22 23 24 [Soma: 190 | 7P/8I | 7 Primos | 11 Moldura | 3 Fibo]
+Jogo 06: 03 04 05 06 07 09 10 11 13 16 19 20 22 23 24 [Soma: 192 | 7P/8I | 7 Primos | 11 Moldura | 3 Fibo]
+Jogo 07: 03 04 05 06 09 10 11 13 16 17 19 20 22 23 24 [Soma: 202 | 7P/8I | 7 Primos | 11 Moldura | 3 Fibo]
+Jogo 08: 01 03 04 05 06 07 09 10 13 16 17 20 22 23 24 [Soma: 180 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 09: 01 03 04 05 06 07 09 10 13 16 19 20 22 23 24 [Soma: 182 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 10: 01 03 04 05 06 09 10 11 13 16 17 19 20 22 24 [Soma: 180 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 11: 01 03 04 05 06 09 10 13 16 17 19 20 22 23 24 [Soma: 192 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 12: 01 03 04 06 07 09 10 11 13 16 17 20 22 23 24 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 13: 01 03 04 06 07 09 10 11 13 16 19 20 22 23 24 [Soma: 188 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 14: 01 03 04 06 09 10 11 13 16 17 19 20 22 23 24 [Soma: 198 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 15: 03 04 05 06 07 09 10 11 13 15 16 19 20 22 24 [Soma: 184 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 16: 03 04 05 06 07 09 10 11 13 16 17 19 20 22 24 [Soma: 186 | 7P/8I | 7 Primos | 10 Moldura | 3 Fibo]
+Jogo 17: 03 04 05 06 07 09 10 13 15 16 17 20 22 23 24 [Soma: 194 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 18: 03 04 05 06 07 09 10 13 15 16 19 20 22 23 24 [Soma: 196 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 19: 03 04 05 06 09 10 11 13 15 16 17 19 20 22 24 [Soma: 194 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 20: 03 04 05 06 09 10 13 15 16 17 19 20 22 23 24 [Soma: 206 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 21: 01 03 04 05 06 07 09 10 13 16 17 19 20 22 24 [Soma: 176 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 22: 01 03 04 05 06 09 10 13 15 16 17 19 20 22 24 [Soma: 184 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 23: 01 03 04 06 07 09 10 11 13 15 16 17 20 22 24 [Soma: 178 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 24: 01 03 04 06 07 09 10 11 13 15 16 19 20 22 24 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+03 04 05 06 07 09 10 13 16 17 19 20 22 23 24
+01 03 04 06 09 10 11 13 15 16 17 19 20 22 24
+01 03 04 06 07 09 10 13 16 17 19 20 22 23 24
+03 04 05 06 07 09 10 11 13 15 16 17 20 22 24
+03 04 05 06 07 09 10 11 13 16 17 20 22 23 24
+03 04 05 06 07 09 10 11 13 16 19 20 22 23 24
+03 04 05 06 09 10 11 13 16 17 19 20 22 23 24
+01 03 04 05 06 07 09 10 13 16 17 20 22 23 24
+01 03 04 05 06 07 09 10 13 16 19 20 22 23 24
+01 03 04 05 06 09 10 11 13 16 17 19 20 22 24
+01 03 04 05 06 09 10 13 16 17 19 20 22 23 24
+01 03 04 06 07 09 10 11 13 16 17 20 22 23 24
+01 03 04 06 07 09 10 11 13 16 19 20 22 23 24
+01 03 04 06 09 10 11 13 16 17 19 20 22 23 24
+03 04 05 06 07 09 10 11 13 15 16 19 20 22 24
+03 04 05 06 07 09 10 11 13 16 17 19 20 22 24
+03 04 05 06 07 09 10 13 15 16 17 20 22 23 24
+03 04 05 06 07 09 10 13 15 16 19 20 22 23 24
+03 04 05 06 09 10 11 13 15 16 17 19 20 22 24
+03 04 05 06 09 10 13 15 16 17 19 20 22 23 24
+01 03 04 05 06 07 09 10 13 16 17 19 20 22 24
+01 03 04 05 06 09 10 13 15 16 17 19 20 22 24
+01 03 04 06 07 09 10 11 13 15 16 17 20 22 24
+01 03 04 06 07 09 10 11 13 15 16 19 20 22 24
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [8/10]: lotosniper_fechamento_concurso_3810_32_jogos (1).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:25:45
+# Total de Jogos Exportados: 32 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 112,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA (Top 21 Dezenas)
+• Modalidade / Matriz: 21 Dezenas Amplo (Garantia 13 se 15) (32 Jogos - Garantia 13 Pontos se 15)
+• Garantia Matemática: 13 Pontos se 15
+• Universo de Dezenas (21 números): 02 03 04 05 06 07 09 10 11 13 14 15 16 17 18 19 20 22 23 24 25
+• Dezenas Fixas: 01 04 09 10 11 13 15 20 24
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (32 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 04 09 10 11 13 15 17 18 19 20 22 23 24 [Soma: 208 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 02: 01 02 04 05 09 10 11 13 14 15 18 20 22 24 25 [Soma: 193 | 8P/7I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 03: 01 02 04 07 09 10 11 13 14 15 16 20 22 23 24 [Soma: 191 | 8P/7I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 04: 01 02 04 09 10 11 13 15 17 18 20 22 23 24 25 [Soma: 214 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 05: 01 02 04 05 09 10 11 13 15 16 18 19 20 22 24 [Soma: 189 | 8P/7I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 06: 01 02 03 04 09 10 11 13 15 16 17 18 20 22 24 [Soma: 185 | 8P/7I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 07: 01 02 03 04 09 10 11 13 14 15 19 20 22 24 25 [Soma: 192 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 08: 01 02 04 06 07 09 10 11 13 15 19 20 22 23 24 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 09: 01 02 04 07 09 10 11 13 15 18 20 22 23 24 25 [Soma: 204 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 10: 01 03 04 06 09 10 11 13 14 15 18 20 21 23 24 [Soma: 192 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 11: 01 02 04 05 09 10 11 12 13 15 17 20 22 23 24 [Soma: 188 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 12: 01 02 03 04 09 10 11 13 15 16 17 19 20 22 24 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 13: 01 02 04 05 09 10 11 13 15 18 19 20 22 24 25 [Soma: 198 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 14: 01 02 04 05 07 09 10 11 13 15 17 18 20 22 24 [Soma: 178 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 15: 01 02 03 04 09 10 11 13 14 15 17 20 22 24 25 [Soma: 190 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 16: 01 03 04 06 09 10 11 12 13 15 19 20 22 24 25 [Soma: 194 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 17: 01 04 05 06 09 10 11 13 14 15 17 20 21 22 24 [Soma: 192 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 18: 01 03 04 07 09 10 11 12 13 15 16 20 22 24 25 [Soma: 192 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 19: 01 02 03 04 07 09 10 11 13 15 16 18 20 23 24 [Soma: 176 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 20: 01 03 04 09 10 11 12 13 15 16 17 20 22 24 25 [Soma: 202 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 21: 01 02 03 04 07 09 10 11 13 15 18 19 20 22 24 [Soma: 178 | 7P/8I | 6 Primos | 10 Moldura | 4 Fibo]
+Jogo 22: 01 02 03 04 07 09 10 11 13 14 15 20 22 24 25 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 23: 01 02 04 05 07 09 10 11 13 15 16 17 20 22 24 [Soma: 176 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 24: 01 02 04 07 09 10 11 13 15 16 19 20 22 23 24 [Soma: 196 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 25: 01 03 04 06 07 09 10 11 12 13 15 20 22 24 25 [Soma: 182 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 26: 01 03 04 09 10 11 12 13 15 16 19 20 22 24 25 [Soma: 204 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 27: 01 03 04 06 09 10 11 13 14 15 16 19 20 22 24 [Soma: 187 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 28: 01 02 03 04 06 09 10 11 13 15 17 19 20 22 24 [Soma: 176 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 29: 01 02 03 04 06 09 10 11 13 15 17 18 20 23 24 [Soma: 176 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 30: 01 03 04 06 07 09 10 11 13 14 15 16 20 24 25 [Soma: 178 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 31: 01 02 03 04 06 09 10 11 13 15 18 19 20 23 24 [Soma: 178 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 32: 01 03 04 06 09 10 11 12 13 15 16 17 20 23 24 [Soma: 184 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 04 09 10 11 13 15 17 18 19 20 22 23 24
+01 02 04 05 09 10 11 13 14 15 18 20 22 24 25
+01 02 04 07 09 10 11 13 14 15 16 20 22 23 24
+01 02 04 09 10 11 13 15 17 18 20 22 23 24 25
+01 02 04 05 09 10 11 13 15 16 18 19 20 22 24
+01 02 03 04 09 10 11 13 15 16 17 18 20 22 24
+01 02 03 04 09 10 11 13 14 15 19 20 22 24 25
+01 02 04 06 07 09 10 11 13 15 19 20 22 23 24
+01 02 04 07 09 10 11 13 15 18 20 22 23 24 25
+01 03 04 06 09 10 11 13 14 15 18 20 21 23 24
+01 02 04 05 09 10 11 12 13 15 17 20 22 23 24
+01 02 03 04 09 10 11 13 15 16 17 19 20 22 24
+01 02 04 05 09 10 11 13 15 18 19 20 22 24 25
+01 02 04 05 07 09 10 11 13 15 17 18 20 22 24
+01 02 03 04 09 10 11 13 14 15 17 20 22 24 25
+01 03 04 06 09 10 11 12 13 15 19 20 22 24 25
+01 04 05 06 09 10 11 13 14 15 17 20 21 22 24
+01 03 04 07 09 10 11 12 13 15 16 20 22 24 25
+01 02 03 04 07 09 10 11 13 15 16 18 20 23 24
+01 03 04 09 10 11 12 13 15 16 17 20 22 24 25
+01 02 03 04 07 09 10 11 13 15 18 19 20 22 24
+01 02 03 04 07 09 10 11 13 14 15 20 22 24 25
+01 02 04 05 07 09 10 11 13 15 16 17 20 22 24
+01 02 04 07 09 10 11 13 15 16 19 20 22 23 24
+01 03 04 06 07 09 10 11 12 13 15 20 22 24 25
+01 03 04 09 10 11 12 13 15 16 19 20 22 24 25
+01 03 04 06 09 10 11 13 14 15 16 19 20 22 24
+01 02 03 04 06 09 10 11 13 15 17 19 20 22 24
+01 02 03 04 06 09 10 11 13 15 17 18 20 23 24
+01 03 04 06 07 09 10 11 13 14 15 16 20 24 25
+01 02 03 04 06 09 10 11 13 15 18 19 20 23 24
+01 03 04 06 09 10 11 12 13 15 16 17 20 23 24
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [9/10]: lotosniper_fechamento_concurso_3810_48_jogos (1).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:24:01
+# Total de Jogos Exportados: 48 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 168,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA (Top 19 Dezenas)
+• Modalidade / Matriz: 19 Dezenas (Garantia 14 se 15) (48 Jogos - Garantia 14 Pontos)
+• Garantia Matemática: 14 Pontos
+• Universo de Dezenas (19 números): 02 04 05 06 07 09 10 11 13 15 16 17 18 19 20 22 23 24 25
+• Dezenas Fixas: 01 04 06 09 11 13 15 16 20 24
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (48 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 03 04 06 09 11 12 13 15 16 18 19 20 22 24 [Soma: 193 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 02: 01 02 04 06 07 09 11 13 15 16 17 20 21 22 24 [Soma: 188 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 03: 01 02 04 06 09 11 12 13 15 16 17 19 20 23 24 [Soma: 192 | 7P/8I | 6 Primos | 10 Moldura | 3 Fibo]
+Jogo 04: 01 02 04 06 09 11 13 14 15 16 19 20 21 22 24 [Soma: 197 | 8P/7I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 05: 01 04 05 06 09 11 12 13 15 16 17 20 21 22 24 [Soma: 196 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 06: 01 02 03 04 06 09 11 13 15 16 18 19 20 24 25 [Soma: 186 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 07: 01 02 04 06 09 10 11 12 13 15 16 17 20 24 25 [Soma: 185 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 08: 01 03 04 06 09 11 12 13 15 16 18 20 21 23 24 [Soma: 196 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 09: 01 03 04 06 09 11 13 14 15 16 17 20 22 23 24 [Soma: 198 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 10: 01 02 04 06 07 09 11 13 15 16 18 20 22 24 25 [Soma: 193 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 11: 01 02 04 05 06 09 11 13 15 16 18 19 20 21 24 [Soma: 184 | 7P/8I | 5 Primos | 11 Moldura | 5 Fibo]
+Jogo 12: 01 03 04 06 07 09 11 13 15 16 18 20 21 22 24 [Soma: 190 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 13: 01 04 06 07 09 10 11 12 13 15 16 19 20 21 24 [Soma: 188 | 7P/8I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 14: 01 02 04 06 09 11 13 14 15 16 19 20 22 24 25 [Soma: 201 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 15: 01 03 04 06 09 10 11 13 15 16 17 19 20 22 24 [Soma: 190 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 16: 01 03 04 05 06 09 11 12 13 15 16 18 20 24 25 [Soma: 182 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 17: 01 02 04 06 07 09 11 12 13 15 16 20 22 23 24 [Soma: 185 | 8P/7I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 18: 01 02 04 06 09 11 13 15 16 17 18 20 21 23 24 [Soma: 200 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 19: 01 03 04 06 07 09 10 11 13 14 15 16 20 24 25 [Soma: 178 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 20: 01 02 04 05 06 09 11 13 14 15 16 17 20 24 25 [Soma: 182 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 21: 01 04 05 06 09 11 12 13 15 16 19 20 22 24 25 [Soma: 202 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 22: 01 03 04 06 09 10 11 12 13 15 16 17 20 21 24 [Soma: 182 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 23: 01 02 03 04 06 09 11 13 14 15 16 19 20 21 24 [Soma: 178 | 7P/8I | 5 Primos | 11 Moldura | 5 Fibo]
+Jogo 24: 01 04 05 06 07 09 11 12 13 15 16 19 20 22 24 [Soma: 184 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 25: 01 02 04 06 07 09 11 12 13 15 16 20 23 24 25 [Soma: 188 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 26: 01 03 04 06 09 11 13 15 16 17 18 20 22 24 25 [Soma: 204 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 27: 01 02 04 05 06 09 11 13 15 16 17 18 20 22 24 [Soma: 183 | 8P/7I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 28: 01 03 04 06 07 09 11 13 14 15 16 20 21 22 24 [Soma: 186 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 29: 01 02 04 06 07 09 11 13 15 16 18 19 20 22 24 [Soma: 187 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 30: 01 03 04 06 07 09 11 12 13 15 16 17 18 20 24 [Soma: 176 | 7P/8I | 5 Primos | 9 Moldura | 3 Fibo]
+Jogo 31: 01 02 04 06 07 09 11 13 15 16 18 20 21 23 24 [Soma: 190 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 32: 01 03 04 05 06 09 11 13 14 15 16 18 20 22 24 [Soma: 181 | 8P/7I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 33: 01 03 04 06 07 09 10 11 12 13 15 16 20 24 25 [Soma: 176 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 34: 01 02 03 04 06 09 11 12 13 15 16 18 20 23 24 [Soma: 177 | 8P/7I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 35: 01 02 04 06 09 11 13 15 16 17 18 20 23 24 25 [Soma: 204 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 36: 01 02 04 06 09 10 11 13 14 15 16 17 20 21 24 [Soma: 183 | 8P/7I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 37: 01 03 04 06 09 10 11 12 13 15 16 18 19 20 24 [Soma: 181 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 38: 01 04 05 06 07 09 11 12 13 15 16 18 20 22 24 [Soma: 183 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 39: 01 02 04 06 07 09 10 11 13 14 15 16 20 24 25 [Soma: 177 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 40: 01 03 04 05 06 09 11 12 13 15 16 17 20 22 24 [Soma: 178 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 41: 01 04 05 06 07 09 11 13 15 16 18 20 22 24 25 [Soma: 196 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 42: 01 03 04 05 06 09 11 13 14 15 16 18 20 24 25 [Soma: 184 | 7P/8I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 43: 01 02 04 05 06 09 11 12 13 15 16 19 20 24 25 [Soma: 182 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 44: 01 03 04 06 07 09 10 11 13 15 16 17 20 22 24 [Soma: 178 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 45: 01 03 04 06 07 09 10 11 13 15 16 19 20 22 24 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 46: 01 03 04 05 06 09 11 13 15 16 17 18 20 22 24 [Soma: 184 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 47: 01 03 04 05 06 09 11 13 14 15 16 17 20 22 24 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 48: 01 03 04 05 06 09 11 13 15 16 18 19 20 22 24 [Soma: 186 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 03 04 06 09 11 12 13 15 16 18 19 20 22 24
+01 02 04 06 07 09 11 13 15 16 17 20 21 22 24
+01 02 04 06 09 11 12 13 15 16 17 19 20 23 24
+01 02 04 06 09 11 13 14 15 16 19 20 21 22 24
+01 04 05 06 09 11 12 13 15 16 17 20 21 22 24
+01 02 03 04 06 09 11 13 15 16 18 19 20 24 25
+01 02 04 06 09 10 11 12 13 15 16 17 20 24 25
+01 03 04 06 09 11 12 13 15 16 18 20 21 23 24
+01 03 04 06 09 11 13 14 15 16 17 20 22 23 24
+01 02 04 06 07 09 11 13 15 16 18 20 22 24 25
+01 02 04 05 06 09 11 13 15 16 18 19 20 21 24
+01 03 04 06 07 09 11 13 15 16 18 20 21 22 24
+01 04 06 07 09 10 11 12 13 15 16 19 20 21 24
+01 02 04 06 09 11 13 14 15 16 19 20 22 24 25
+01 03 04 06 09 10 11 13 15 16 17 19 20 22 24
+01 03 04 05 06 09 11 12 13 15 16 18 20 24 25
+01 02 04 06 07 09 11 12 13 15 16 20 22 23 24
+01 02 04 06 09 11 13 15 16 17 18 20 21 23 24
+01 03 04 06 07 09 10 11 13 14 15 16 20 24 25
+01 02 04 05 06 09 11 13 14 15 16 17 20 24 25
+01 04 05 06 09 11 12 13 15 16 19 20 22 24 25
+01 03 04 06 09 10 11 12 13 15 16 17 20 21 24
+01 02 03 04 06 09 11 13 14 15 16 19 20 21 24
+01 04 05 06 07 09 11 12 13 15 16 19 20 22 24
+01 02 04 06 07 09 11 12 13 15 16 20 23 24 25
+01 03 04 06 09 11 13 15 16 17 18 20 22 24 25
+01 02 04 05 06 09 11 13 15 16 17 18 20 22 24
+01 03 04 06 07 09 11 13 14 15 16 20 21 22 24
+01 02 04 06 07 09 11 13 15 16 18 19 20 22 24
+01 03 04 06 07 09 11 12 13 15 16 17 18 20 24
+01 02 04 06 07 09 11 13 15 16 18 20 21 23 24
+01 03 04 05 06 09 11 13 14 15 16 18 20 22 24
+01 03 04 06 07 09 10 11 12 13 15 16 20 24 25
+01 02 03 04 06 09 11 12 13 15 16 18 20 23 24
+01 02 04 06 09 11 13 15 16 17 18 20 23 24 25
+01 02 04 06 09 10 11 13 14 15 16 17 20 21 24
+01 03 04 06 09 10 11 12 13 15 16 18 19 20 24
+01 04 05 06 07 09 11 12 13 15 16 18 20 22 24
+01 02 04 06 07 09 10 11 13 14 15 16 20 24 25
+01 03 04 05 06 09 11 12 13 15 16 17 20 22 24
+01 04 05 06 07 09 11 13 15 16 18 20 22 24 25
+01 03 04 05 06 09 11 13 14 15 16 18 20 24 25
+01 02 04 05 06 09 11 12 13 15 16 19 20 24 25
+01 03 04 06 07 09 10 11 13 15 16 17 20 22 24
+01 03 04 06 07 09 10 11 13 15 16 19 20 22 24
+01 03 04 05 06 09 11 13 15 16 17 18 20 22 24
+01 03 04 05 06 09 11 13 14 15 16 17 20 22 24
+01 03 04 05 06 09 11 13 15 16 18 19 20 22 24
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
+
+
+################################################################################
+# ARQUIVO CONSOLIDADO [10/10]: lotosniper_fechamento_concurso_3810_64_jogos (1).txt
+################################################################################
+
+================================================================================
+LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)
+================================================================================
+# Concurso Base: #3810 (21/10/2026)
+# Dezenas do Concurso Base: 01 05 06 07 10 11 14 15 16 17 18 19 20 23 24
+# Data e Hora de Exportação: 22/10/2026, 11:24:48
+# Total de Jogos Exportados: 64 apostas de 15 dezenas
+# Investimento Oficial Total: R$ 224,00 (R$ 3,50 por aposta na Caixa Econômica Federal)
+
+--------------------------------------------------------------------------------
+1. DADOS DO FECHAMENTO & ESTRATÉGIA
+--------------------------------------------------------------------------------
+• Tipo de Fechamento: Top 18 IA (Top 20 Dezenas)
+• Modalidade / Matriz: 20 Dezenas (Garantia 14 se 15) (64 Jogos - Garantia 14 Pontos)
+• Garantia Matemática: 14 Pontos
+• Universo de Dezenas (20 números): 03 04 05 06 07 09 10 11 13 14 15 16 17 18 19 20 22 23 24 25
+• Dezenas Fixas: 01 04 09 10 11 13 16 19 20 24 25
+• Dezenas Excluídas: Nenhuma dezena excluída
+
+--------------------------------------------------------------------------------
+2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)
+--------------------------------------------------------------------------------
+• Faixa de Soma das 15 Dezenas: 175 a 220 (Zona de Ouro Canônica: 190 a 210)
+• Paridade Estrutural (Pares/Ímpares): 7 a 8 Pares / 7 a 8 Ímpares (Canônico: 7P/8I ou 8P/7I)
+• Sequência Máxima Consecutiva: Até 5 dezenas consecutivas
+• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas
+
+--------------------------------------------------------------------------------
+3. FILTROS AVANÇADOS (PROBABILIDADE CONDICIONAL)
+--------------------------------------------------------------------------------
+• Repetidas do Concurso Anterior (#3810): 8 a 10 dezenas repetidas
+• Dezenas na Moldura (16 externas): 8 a 11 dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+• Números Primos: 4 a 7 dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+• Sequência Fibonacci: 3 a 5 dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+
+================================================================================
+4. RELAÇÃO DOS JOGOS GERADOS (64 BILHETES PARA APOSTA)
+================================================================================
+Jogo 01: 01 02 03 04 09 10 11 13 14 16 18 19 20 24 25 [Soma: 189 | 8P/7I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 02: 01 02 04 05 09 10 11 12 13 16 18 19 20 24 25 [Soma: 189 | 8P/7I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 03: 01 02 04 07 09 10 11 13 14 16 19 20 22 24 25 [Soma: 197 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 04: 01 02 04 06 09 10 11 12 13 16 17 19 20 24 25 [Soma: 189 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 05: 01 03 04 06 09 10 11 13 16 18 19 20 22 24 25 [Soma: 201 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 06: 01 04 05 06 09 10 11 12 13 16 19 20 22 24 25 [Soma: 197 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 07: 01 02 04 06 09 10 11 13 14 16 19 20 21 24 25 [Soma: 195 | 8P/7I | 4 Primos | 11 Moldura | 4 Fibo]
+Jogo 08: 01 02 04 07 09 10 11 13 16 18 19 20 21 24 25 [Soma: 200 | 7P/8I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 09: 01 04 05 09 10 11 13 14 16 18 19 20 22 24 25 [Soma: 211 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 10: 01 02 04 09 10 11 12 13 15 16 19 20 23 24 25 [Soma: 204 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 11: 01 02 04 09 10 11 13 14 16 17 19 20 22 24 25 [Soma: 207 | 8P/7I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 12: 01 03 04 09 10 11 12 13 16 18 19 20 22 24 25 [Soma: 207 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 13: 01 03 04 06 09 10 11 13 14 16 19 20 22 24 25 [Soma: 197 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 14: 01 02 04 06 09 10 11 13 16 18 19 20 23 24 25 [Soma: 201 | 8P/7I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 15: 01 03 04 06 07 09 10 11 12 13 16 19 20 24 25 [Soma: 180 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 16: 01 04 06 07 09 10 11 13 16 19 20 21 22 24 25 [Soma: 208 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 17: 01 02 03 04 05 09 10 11 13 14 16 19 20 24 25 [Soma: 176 | 7P/8I | 6 Primos | 11 Moldura | 5 Fibo]
+Jogo 18: 01 02 04 07 09 10 11 13 15 16 19 20 22 24 25 [Soma: 198 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 19: 01 04 06 09 10 11 13 16 18 19 20 21 23 24 25 [Soma: 220 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 20: 01 03 04 05 09 10 11 13 14 16 19 20 22 24 25 [Soma: 196 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 21: 01 03 04 05 09 10 11 13 16 18 19 20 22 24 25 [Soma: 200 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 22: 01 03 04 09 10 11 13 14 16 19 20 22 23 24 25 [Soma: 214 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 23: 01 03 04 09 10 11 13 16 18 19 20 22 23 24 25 [Soma: 218 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 24: 01 04 05 09 10 11 13 14 16 19 20 22 23 24 25 [Soma: 216 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 25: 01 04 05 09 10 11 13 16 18 19 20 22 23 24 25 [Soma: 220 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 26: 01 03 04 05 09 10 11 12 13 16 19 20 22 24 25 [Soma: 194 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 27: 01 03 04 09 10 11 12 13 16 19 20 22 23 24 25 [Soma: 212 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 28: 01 04 05 09 10 11 12 13 16 19 20 22 23 24 25 [Soma: 214 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 29: 01 03 04 06 07 09 10 11 13 16 19 20 22 24 25 [Soma: 190 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 30: 01 03 04 06 09 10 11 13 16 17 19 20 22 24 25 [Soma: 200 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 31: 01 04 05 06 07 09 10 11 13 16 19 20 22 24 25 [Soma: 192 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 32: 01 04 05 06 09 10 11 13 16 17 19 20 22 24 25 [Soma: 202 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 33: 01 03 04 05 06 09 10 11 13 14 16 19 20 24 25 [Soma: 180 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 34: 01 03 04 05 06 09 10 11 13 16 18 19 20 24 25 [Soma: 184 | 7P/8I | 5 Primos | 11 Moldura | 4 Fibo]
+Jogo 35: 01 03 04 06 09 10 11 13 14 16 19 20 23 24 25 [Soma: 198 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 36: 01 03 04 06 09 10 11 13 16 18 19 20 23 24 25 [Soma: 202 | 7P/8I | 5 Primos | 11 Moldura | 3 Fibo]
+Jogo 37: 01 03 04 07 09 10 11 13 14 16 19 20 22 24 25 [Soma: 198 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 38: 01 03 04 07 09 10 11 13 16 18 19 20 22 24 25 [Soma: 202 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 39: 01 03 04 09 10 11 13 14 15 16 19 20 22 24 25 [Soma: 206 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 40: 01 03 04 09 10 11 13 14 16 17 19 20 22 24 25 [Soma: 208 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 41: 01 03 04 09 10 11 13 15 16 18 19 20 22 24 25 [Soma: 210 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 42: 01 03 04 09 10 11 13 16 17 18 19 20 22 24 25 [Soma: 212 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 43: 01 04 05 06 09 10 11 13 14 16 19 20 22 24 25 [Soma: 199 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 44: 01 04 05 06 09 10 11 13 16 18 19 20 22 24 25 [Soma: 203 | 8P/7I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 45: 01 04 05 07 09 10 11 13 14 16 19 20 22 24 25 [Soma: 200 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 46: 01 04 05 07 09 10 11 13 16 18 19 20 22 24 25 [Soma: 204 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 47: 01 04 05 09 10 11 13 14 15 16 19 20 22 24 25 [Soma: 208 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 48: 01 04 05 09 10 11 13 14 16 17 19 20 22 24 25 [Soma: 210 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 49: 01 04 05 09 10 11 13 15 16 18 19 20 22 24 25 [Soma: 212 | 7P/8I | 4 Primos | 11 Moldura | 3 Fibo]
+Jogo 50: 01 04 05 09 10 11 13 16 17 18 19 20 22 24 25 [Soma: 214 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 51: 01 03 04 05 09 10 11 13 14 16 18 19 20 24 25 [Soma: 192 | 7P/8I | 5 Primos | 10 Moldura | 4 Fibo]
+Jogo 52: 01 03 04 09 10 11 13 14 16 18 19 20 23 24 25 [Soma: 210 | 7P/8I | 5 Primos | 10 Moldura | 3 Fibo]
+Jogo 53: 01 02 03 04 07 09 10 11 13 16 19 20 22 24 25 [Soma: 186 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 54: 01 03 04 09 10 11 13 14 16 18 19 20 22 24 25 [Soma: 209 | 8P/7I | 4 Primos | 10 Moldura | 3 Fibo]
+Jogo 55: 01 02 03 04 09 10 11 13 16 17 19 20 22 24 25 [Soma: 196 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 56: 01 02 04 05 07 09 10 11 13 16 19 20 22 24 25 [Soma: 188 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 57: 01 02 04 05 09 10 11 13 16 17 19 20 22 24 25 [Soma: 198 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 58: 01 02 04 07 09 10 11 13 16 19 20 22 23 24 25 [Soma: 206 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 59: 01 02 04 09 10 11 13 16 17 19 20 22 23 24 25 [Soma: 216 | 7P/8I | 6 Primos | 11 Moldura | 3 Fibo]
+Jogo 60: 01 02 03 04 05 09 10 11 13 16 18 19 20 24 25 [Soma: 180 | 7P/8I | 6 Primos | 11 Moldura | 5 Fibo]
+Jogo 61: 01 02 03 04 09 10 11 13 14 16 19 20 23 24 25 [Soma: 194 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 62: 01 02 03 04 09 10 11 13 16 18 19 20 23 24 25 [Soma: 198 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 63: 01 02 04 05 09 10 11 13 14 16 19 20 23 24 25 [Soma: 196 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+Jogo 64: 01 02 04 05 09 10 11 13 16 18 19 20 23 24 25 [Soma: 200 | 7P/8I | 6 Primos | 11 Moldura | 4 Fibo]
+
+--------------------------------------------------------------------------------
+5. FORMATO SIMPLES (PRONTO PARA TERMINAL LOTÉRICO OU IMPORTAÇÃO)
+--------------------------------------------------------------------------------
+01 02 03 04 09 10 11 13 14 16 18 19 20 24 25
+01 02 04 05 09 10 11 12 13 16 18 19 20 24 25
+01 02 04 07 09 10 11 13 14 16 19 20 22 24 25
+01 02 04 06 09 10 11 12 13 16 17 19 20 24 25
+01 03 04 06 09 10 11 13 16 18 19 20 22 24 25
+01 04 05 06 09 10 11 12 13 16 19 20 22 24 25
+01 02 04 06 09 10 11 13 14 16 19 20 21 24 25
+01 02 04 07 09 10 11 13 16 18 19 20 21 24 25
+01 04 05 09 10 11 13 14 16 18 19 20 22 24 25
+01 02 04 09 10 11 12 13 15 16 19 20 23 24 25
+01 02 04 09 10 11 13 14 16 17 19 20 22 24 25
+01 03 04 09 10 11 12 13 16 18 19 20 22 24 25
+01 03 04 06 09 10 11 13 14 16 19 20 22 24 25
+01 02 04 06 09 10 11 13 16 18 19 20 23 24 25
+01 03 04 06 07 09 10 11 12 13 16 19 20 24 25
+01 04 06 07 09 10 11 13 16 19 20 21 22 24 25
+01 02 03 04 05 09 10 11 13 14 16 19 20 24 25
+01 02 04 07 09 10 11 13 15 16 19 20 22 24 25
+01 04 06 09 10 11 13 16 18 19 20 21 23 24 25
+01 03 04 05 09 10 11 13 14 16 19 20 22 24 25
+01 03 04 05 09 10 11 13 16 18 19 20 22 24 25
+01 03 04 09 10 11 13 14 16 19 20 22 23 24 25
+01 03 04 09 10 11 13 16 18 19 20 22 23 24 25
+01 04 05 09 10 11 13 14 16 19 20 22 23 24 25
+01 04 05 09 10 11 13 16 18 19 20 22 23 24 25
+01 03 04 05 09 10 11 12 13 16 19 20 22 24 25
+01 03 04 09 10 11 12 13 16 19 20 22 23 24 25
+01 04 05 09 10 11 12 13 16 19 20 22 23 24 25
+01 03 04 06 07 09 10 11 13 16 19 20 22 24 25
+01 03 04 06 09 10 11 13 16 17 19 20 22 24 25
+01 04 05 06 07 09 10 11 13 16 19 20 22 24 25
+01 04 05 06 09 10 11 13 16 17 19 20 22 24 25
+01 03 04 05 06 09 10 11 13 14 16 19 20 24 25
+01 03 04 05 06 09 10 11 13 16 18 19 20 24 25
+01 03 04 06 09 10 11 13 14 16 19 20 23 24 25
+01 03 04 06 09 10 11 13 16 18 19 20 23 24 25
+01 03 04 07 09 10 11 13 14 16 19 20 22 24 25
+01 03 04 07 09 10 11 13 16 18 19 20 22 24 25
+01 03 04 09 10 11 13 14 15 16 19 20 22 24 25
+01 03 04 09 10 11 13 14 16 17 19 20 22 24 25
+01 03 04 09 10 11 13 15 16 18 19 20 22 24 25
+01 03 04 09 10 11 13 16 17 18 19 20 22 24 25
+01 04 05 06 09 10 11 13 14 16 19 20 22 24 25
+01 04 05 06 09 10 11 13 16 18 19 20 22 24 25
+01 04 05 07 09 10 11 13 14 16 19 20 22 24 25
+01 04 05 07 09 10 11 13 16 18 19 20 22 24 25
+01 04 05 09 10 11 13 14 15 16 19 20 22 24 25
+01 04 05 09 10 11 13 14 16 17 19 20 22 24 25
+01 04 05 09 10 11 13 15 16 18 19 20 22 24 25
+01 04 05 09 10 11 13 16 17 18 19 20 22 24 25
+01 03 04 05 09 10 11 13 14 16 18 19 20 24 25
+01 03 04 09 10 11 13 14 16 18 19 20 23 24 25
+01 02 03 04 07 09 10 11 13 16 19 20 22 24 25
+01 03 04 09 10 11 13 14 16 18 19 20 22 24 25
+01 02 03 04 09 10 11 13 16 17 19 20 22 24 25
+01 02 04 05 07 09 10 11 13 16 19 20 22 24 25
+01 02 04 05 09 10 11 13 16 17 19 20 22 24 25
+01 02 04 07 09 10 11 13 16 19 20 22 23 24 25
+01 02 04 09 10 11 13 16 17 19 20 22 23 24 25
+01 02 03 04 05 09 10 11 13 16 18 19 20 24 25
+01 02 03 04 09 10 11 13 14 16 19 20 23 24 25
+01 02 03 04 09 10 11 13 16 18 19 20 23 24 25
+01 02 04 05 09 10 11 13 14 16 19 20 23 24 25
+01 02 04 05 09 10 11 13 16 18 19 20 23 24 25
+
+================================================================================
+LotoSniper © 2026 - Precisão Cirúrgica Matemática na Lotofácil Caixa
+================================================================================
