@@ -23,6 +23,7 @@ import { LinhaDoTempoCiclosComponent } from './LinhaDoTempoCiclosComponent';
 import { AnaliseEspelhamentoConcursoModule } from './AnaliseEspelhamentoConcursoModule';
 import { RadarTendenciasQuentesComponent } from './RadarTendenciasQuentesComponent';
 import { CurvaAbcDezenasComponent } from './CurvaAbcDezenasComponent';
+import { RastreadorPerformanceHistoricaComponent } from './RastreadorPerformanceHistoricaComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -68,6 +69,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'performance_historica'
     | 'curva_abc'
     | 'radar_quentes'
     | 'roi_forecast'
@@ -113,6 +115,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('performance_historica')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'performance_historica'
+                ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-md shadow-indigo-500/25 font-black'
+                : 'text-indigo-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 text-indigo-400" />
+            <span>Performance dos Jogos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+              10 CONCURSOS
+            </span>
           </button>
 
           <button
@@ -393,6 +410,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Performance Histórica dos Jogos & Auditoria de Estratégias */}
+          <div className="bg-gradient-to-r from-indigo-950/80 via-purple-950/50 to-slate-900 border-2 border-indigo-500/60 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-indigo-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/30 shrink-0">
+                <TrendingUp className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-indigo-300 font-black">Performance Histórica dos Jogos & Auditoria de Estratégias</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+                    ÚLTIMOS 10 CONCURSOS
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Rastreie a média de acertos concurso a concurso e identifique quais estratégias de fechamento entregam o melhor ROI estatístico.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('performance_historica')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-indigo-500/30 flex items-center gap-1.5 justify-center active:scale-95"
+            >
+              <span>Ver Performance & ROI</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -745,6 +789,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: PERFORMANCE HISTÓRICA DOS JOGOS (MÉDIA DE ACERTOS & ROI 10 CONCURSOS) */}
+      {activeSubTab === 'performance_historica' && (
+        <RastreadorPerformanceHistoricaComponent
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+          statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB: CURVA ABC DAS DEZENAS (PRINCÍPIO DE PARETO 80/20) */}

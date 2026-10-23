@@ -411,14 +411,14 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Baixar TXT</span>
             </button>
 
-            {/* Exportar CSV em Lote (com contagem de selecionados) */}
+            {/* Exportar CSV Profissional (Lotéricas & Plataformas de Apostas) */}
             <button
               onClick={() => setIsCSVModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-emerald-500/10"
-              title="Exportar CSV em lote formatado para ferramentas de aposta ou Excel"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-black transition cursor-pointer shadow-md shadow-emerald-500/15"
+              title="Exportação CSV profissional com metadados para casas lotéricas ou plataformas de apostas"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Exportar CSV em Lote ({selectedTicketIds.size})</span>
+              <span>Exportar CSV Profissional ({selectedTicketIds.size})</span>
             </button>
 
             {/* Exportar PDF Formatado para Volantes da Lotofácil */}
@@ -822,14 +822,17 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         </>
       )}
 
-      {/* Modal de Exportação CSV em Lote para Volantes e Excel */}
+      {/* Modal de Exportação CSV Profissional para Casas Lotéricas e Plataformas de Apostas */}
       <ExportCSVModal
         isOpen={isCSVModalOpen}
         onClose={() => setIsCSVModalOpen(false)}
         games={csvExportGames}
         concursoRef={selectedConcurso}
-        title={`Exportar ${csvExportGames.length} Jogos Selecionados em CSV`}
-        defaultFilename={`lotosniper_lote_${csvExportGames.length}_jogos.csv`}
+        dataConcurso={latestDraw.data}
+        fechamentoMeta={fechamentoMeta}
+        estrategia={fechamentoMeta?.strategyName || fechamentoMeta?.modeName || 'Estratégia Pro LotoSniper'}
+        title={`Exportação CSV Profissional (${csvExportGames.length} Jogos)`}
+        defaultFilename={`lotosniper_concurso_${selectedConcurso}_${csvExportGames.length}_jogos.csv`}
       />
 
       {/* Modal de Exportação em PDF Formatado para Volantes da Lotofácil */}
