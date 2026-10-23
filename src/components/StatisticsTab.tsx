@@ -26,10 +26,12 @@ import { CurvaAbcDezenasComponent } from './CurvaAbcDezenasComponent';
 import { RastreadorPerformanceHistoricaComponent } from './RastreadorPerformanceHistoricaComponent';
 import { MapaCalorVaziosComponent } from './MapaCalorVaziosComponent';
 import { DashboardDesempenhoFinanceiroComponent } from './DashboardDesempenhoFinanceiroComponent';
+import { SimulacaoBacktestingComponent } from './SimulacaoBacktestingComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
   TrendingUp,
+  Play,
   Clock,
   Flame,
   Award,
@@ -73,6 +75,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'simulacao_backtest'
     | 'mapa_vazios'
     | 'desempenho_financeiro'
     | 'performance_historica'
@@ -121,6 +124,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('simulacao_backtest')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'simulacao_backtest'
+                ? 'bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 text-slate-950 shadow-md shadow-cyan-500/25 font-black'
+                : 'text-cyan-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Play className="w-4 h-4" />
+            <span>Simulação de Backtesting</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              REAL VS PROJETADO
+            </span>
           </button>
 
           <button
@@ -446,6 +464,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Simulação de Backtesting: Real vs Projetado */}
+          <div className="bg-gradient-to-r from-cyan-950/80 via-blue-950/50 to-slate-900 border-2 border-cyan-500/60 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-cyan-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/30 shrink-0">
+                <Play className="w-5 h-5 text-slate-950" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-cyan-300 font-black">Simulação de Backtesting: Desempenho Real vs Projetado</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+                    VALIDAÇÃO DO MODELO
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Audite o desempenho real de qualquer fechamento contra períodos históricos passados (10, 25, 50 ou 100 sorteios) confrontando com a projeção teórica do LotoSniper.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('simulacao_backtest')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-cyan-500/30 flex items-center gap-1.5 justify-center active:scale-95"
+            >
+              <span>Abrir Backtesting</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -879,6 +924,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: SIMULAÇÃO DE BACKTESTING (DESEMPENHO REAL VS PROJETADO) */}
+      {activeSubTab === 'simulacao_backtest' && (
+        <SimulacaoBacktestingComponent
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+          statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+          onGoToFechamento={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+            }
+          }}
+        />
       )}
 
       {/* SUBTAB: MAPA DE CALOR DE VAZIOS (COMBINAÇÕES ANTI-AFINIDADE 10 CONCURSOS) */}

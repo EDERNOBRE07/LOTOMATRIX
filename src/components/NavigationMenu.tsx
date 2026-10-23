@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   ClipboardCheck,
@@ -15,9 +15,12 @@ import {
   TrendingUp,
   Sliders,
   ChevronRight,
+  Bell,
 } from 'lucide-react';
 import { TabType } from '../App';
 import { GameTicket } from '../types/lotofacil';
+import { getUnreadAlertsCount } from '../services/notificationService';
+import { IntelligentPushNotificationModal } from './IntelligentPushNotificationModal';
 
 interface NavigationMenuProps {
   activeTab: TabType;
@@ -49,6 +52,17 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
   onOpenTour,
   concursoAtualNumero,
 }) => {
+  const [unreadAlerts, setUnreadAlerts] = useState<number>(() => getUnreadAlertsCount());
+  const [isAlertsModalOpen, setIsAlertsModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleAlertsUpdate = () => {
+      setUnreadAlerts(getUnreadAlertsCount());
+    };
+    window.addEventListener('lotosniper-alerts-updated', handleAlertsUpdate);
+    return () => window.removeEventListener('lotosniper-alerts-updated', handleAlertsUpdate);
+  }, []);
+
   // 6 Módulos Principais solicitados pelo usuário com cores vibrantes e identidades exclusivas
   const primaryTabs: NavItemConfig[] = [
     {
@@ -101,7 +115,8 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
       id: 'estatisticas',
       label: 'Estatísticas & Atrasos',
       shortLabel: 'Estatísticas',
-      badge: 'Pares de Ouro',
+      badge: unreadAlerts > 0 ? 'Radar Alerta' : 'Pares de Ouro',
+      badgeValue: unreadAlerts > 0 ? `${unreadAlerts} novo(s)` : undefined,
       subtitle: 'Frequências históricas, atrasos atuais, Pares de Ouro e status do ciclo das 25 dezenas',
       icon: BarChart3,
       activeColorClass:
@@ -178,6 +193,22 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
 
           {/* Atalhos Rápidos Utilitários no Topo Direito */}
           <div className="flex items-center gap-1.5">
+            {/* Botão de Notificações Push Inteligentes com Badge */}
+            <button
+              type="button"
+              onClick={() => setIsAlertsModalOpen(true)}
+              className="relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-rose-500/50 shadow-sm"
+              title="Notificações Push Inteligentes (Radar > 90% e Novos Ciclos)"
+            >
+              <Bell className={`w-3.5 h-3.5 ${unreadAlerts > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">Alertas Push</span>
+              {unreadAlerts > 0 && (
+                <span className="flex items-center justify-center px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-mono text-[9px] font-black animate-pulse shadow-sm shadow-rose-500/50">
+                  {unreadAlerts}
+                </span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => onTabChange('configuracoes')}
@@ -304,6 +335,13 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
           </div>
         )}
       </nav>
+
+      {/* Modal de Configuração e Histórico de Notificações Push Inteligentes */}
+      <IntelligentPushNotificationModal
+        isOpen={isAlertsModalOpen}
+        onClose={() => setIsAlertsModalOpen(false)}
+        onAlertsChanged={() => setUnreadAlerts(getUnreadAlertsCount())}
+      />
     </div>
   );
 };
