@@ -53,6 +53,8 @@ export interface FilterCriteria {
   maxConsecutivas: number;
   dezenasFixas: number[];
   dezenasExcluidas: number[];
+  curvaAbcAtiva?: boolean;
+  minDezenasClasseA?: number;
 }
 
 export type FechamentoMode = 

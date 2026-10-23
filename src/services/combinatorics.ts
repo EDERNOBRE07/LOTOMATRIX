@@ -15,6 +15,7 @@ import {
   LotofacilDraw,
   DezenaStats,
 } from '../types/lotofacil';
+import { countClasseADezenas } from './curvaAbcService';
 
 // Helper: Check if number is prime
 export function isPrimo(n: number): boolean {
@@ -167,6 +168,12 @@ export function ticketPassesFilters(
     for (const exc of filters.dezenasExcluidas) {
       if (ticket.dezenas.includes(exc)) return false;
     }
+  }
+
+  // Check Curva ABC (Classe A - 80% Frequência Histórica)
+  if (filters.curvaAbcAtiva && filters.minDezenasClasseA !== undefined) {
+    const countA = countClasseADezenas(ticket.dezenas);
+    if (countA < filters.minDezenasClasseA) return false;
   }
 
   return true;
@@ -657,6 +664,8 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   maxConsecutivas: 5, // Calibrated: Concurso 3804 had 6 consecutive numbers (14-19); limit set to 5 for safety
   dezenasFixas: [],
   dezenasExcluidas: [],
+  curvaAbcAtiva: false,
+  minDezenasClasseA: 11,
 };
 
 /**

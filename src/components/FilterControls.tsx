@@ -24,7 +24,9 @@ import {
   HelpCircle,
   Calculator,
   Square,
+  Award,
 } from 'lucide-react';
+import { saveCurvaAbcFilterConfig } from '../services/curvaAbcService';
 
 interface FilterControlsProps {
   filters: FilterCriteria;
@@ -574,6 +576,72 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   onChange={(e) => update({ fibonacciMax: parseInt(e.target.value, 10) })}
                   className="w-full accent-cyan-400 cursor-pointer"
                 />
+              </div>
+            </div>
+
+            {/* 2.5 SELETOR DE CURVA ABC (CLASSE A - 80% FREQUÊNCIA HISTÓRICA) */}
+            <div className="bg-gradient-to-br from-amber-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-amber-500/40 space-y-3 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-bold text-white">
+                    Filtro de Curva ABC (Classe A - 80% Frequência Histórica)
+                  </span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
+                    PARETO 80/20
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextActive = !filters.curvaAbcAtiva;
+                    const minA = filters.minDezenasClasseA || 11;
+                    update({ curvaAbcAtiva: nextActive, minDezenasClasseA: minA });
+                    saveCurvaAbcFilterConfig({ ativo: nextActive, minClasseA: minA });
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition cursor-pointer flex items-center gap-1.5 ${
+                    filters.curvaAbcAtiva
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.curvaAbcAtiva ? '✓ Filtro Ativo' : 'Ativar Filtro'}
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                Garante que todos os jogos gerados contenham o volume mínimo estipulado de dezenas da <strong className="text-amber-300">Classe A</strong> (as 20 dezenas mais frequentes que somam 80% das ocorrências históricas).
+              </p>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-300">Mínimo de Classe A por jogo:</span>
+                  <div className="flex items-center gap-1">
+                    {[10, 11, 12, 13].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          update({ curvaAbcAtiva: true, minDezenasClasseA: num });
+                          saveCurvaAbcFilterConfig({ ativo: true, minClasseA: num });
+                        }}
+                        className={`px-2.5 py-1 text-xs rounded-lg font-mono font-bold transition cursor-pointer ${
+                          filters.minDezenasClasseA === num && filters.curvaAbcAtiva
+                            ? 'bg-amber-500 text-slate-950 shadow-sm'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <span className="text-[11px] font-mono text-amber-400/90 font-semibold">
+                  {filters.curvaAbcAtiva
+                    ? `Exigindo min. ${filters.minDezenasClasseA || 11} dezenas da Classe A`
+                    : 'Filtro inativo (padrão flexível)'}
+                </span>
               </div>
             </div>
           </div>

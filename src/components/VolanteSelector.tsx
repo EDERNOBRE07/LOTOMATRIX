@@ -8,7 +8,8 @@ import {
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap } from 'lucide-react';
+import { calculateCurvaAbc } from '../services/curvaAbcService';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award } from 'lucide-react';
 
 interface VolanteSelectorProps {
   selectedNumbers: number[];
@@ -46,11 +47,19 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   activeStrategy,
 }) => {
   const [visualMode, setVisualMode] = useState<
-    'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia'
+    'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc'
   >('normal');
   const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude'>('select');
 
+  // Curva ABC data
+  const curvaAbcSummary = React.useMemo(() => calculateCurvaAbc(statsList), [statsList]);
+
   // Fast preset selections
+  const handleSelectClasseA = () => {
+    onSelectSet(curvaAbcSummary.classeANumeros.slice(0, targetCount));
+    onStrategySelect?.(`Classe A Curva ABC (${curvaAbcSummary.classeANumeros.slice(0, targetCount).length} Dezenas)`);
+  };
+
   const handleSelectTop18AI = () => {
     // Top sorted by AI score or delay urgency
     const sorted = [...statsList]
@@ -239,6 +248,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             <Sparkles className="w-3 h-3 text-emerald-400" />
             Calor IA
           </button>
+          <button
+            onClick={() => setVisualMode('curva_abc')}
+            className={`px-2.5 py-1 rounded-lg transition text-[11px] cursor-pointer flex items-center gap-1 ${
+              visualMode === 'curva_abc'
+                ? 'bg-amber-500/25 text-amber-300 border border-amber-400 font-semibold'
+                : 'bg-slate-800/60 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Award className="w-3 h-3 text-amber-400" />
+            Curva ABC
+          </button>
         </div>
       </div>
 
@@ -276,6 +296,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               if (scoreIA >= 80) bgStyle = 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200';
               else if (scoreIA >= 60) bgStyle = 'bg-teal-950/40 border-teal-500/30 text-teal-200';
               else bgStyle = 'bg-slate-950/50 border-slate-800 text-slate-400';
+            } else if (visualMode === 'curva_abc') {
+              if (curvaAbcSummary.classeANumeros.includes(num)) {
+                borderStyle = 'border-amber-400 shadow-sm shadow-amber-500/20';
+                if (!isSelected) bgStyle = 'bg-amber-950/30 text-amber-200 border-amber-500/50';
+              } else if (curvaAbcSummary.classeBNumeros.includes(num)) {
+                borderStyle = 'border-cyan-500/50';
+                if (!isSelected) bgStyle = 'bg-cyan-950/20 text-cyan-200 border-cyan-500/40';
+              } else {
+                borderStyle = 'border-purple-500/50';
+                if (!isSelected) bgStyle = 'bg-purple-950/20 text-purple-200 border-purple-500/40';
+              }
             }
 
             // Selection overrides
@@ -343,6 +374,23 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                     {Math.round(scoreIA)}%
                   </span>
                 )}
+                {visualMode === 'curva_abc' && (
+                  <span
+                    className={`absolute -top-1.5 -right-1.5 font-black text-[9px] px-1 rounded-full shadow ${
+                      curvaAbcSummary.classeANumeros.includes(num)
+                        ? 'bg-amber-400 text-slate-950 font-black'
+                        : curvaAbcSummary.classeBNumeros.includes(num)
+                        ? 'bg-cyan-500 text-slate-950 font-bold'
+                        : 'bg-purple-500 text-white font-bold'
+                    }`}
+                  >
+                    {curvaAbcSummary.classeANumeros.includes(num)
+                      ? 'A'
+                      : curvaAbcSummary.classeBNumeros.includes(num)
+                      ? 'B'
+                      : 'C'}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -352,6 +400,18 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       {/* Preset Action Buttons */}
       <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSelectClasseA}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${
+              activeStrategy?.includes('Classe A')
+                ? 'bg-amber-500 text-slate-950 border border-amber-400 ring-2 ring-amber-400/50 shadow-amber-500/30 font-black'
+                : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 text-amber-400" />
+            <span>Classe A (Curva ABC 80%)</span>
+          </button>
           <button
             type="button"
             onClick={handleSelectDocumentStrategy}

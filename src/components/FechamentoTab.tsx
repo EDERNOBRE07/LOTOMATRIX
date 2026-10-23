@@ -33,6 +33,11 @@ import { TurboResult } from '../services/turboBruteForce';
 import { soundService } from '../services/soundAlert';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
+  calculateCurvaAbc,
+  getCurvaAbcFilterConfig,
+  saveCurvaAbcFilterConfig,
+} from '../services/curvaAbcService';
+import {
   Sparkles,
   Zap,
   Copy,
@@ -101,7 +106,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const [fixedNumbers, setFixedNumbers] = useState<number[]>(cyclePendingNumbers.slice(0, 2));
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
-  const [filters, setFilters] = useState<FilterCriteria>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<FilterCriteria>(() => {
+    const curvaAbcConfig = getCurvaAbcFilterConfig();
+    return {
+      ...DEFAULT_FILTERS,
+      curvaAbcAtiva: curvaAbcConfig.ativo,
+      minDezenasClasseA: curvaAbcConfig.minClasseA,
+    };
+  });
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
   const [fechamentoFilter, setFechamentoFilter] = useState<'all' | 'improbable' | string>('all');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -377,6 +389,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasExcluidas: excludedNumbers,
     });
     setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no Fechamento!');
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
+  // 6. Aplicar Curva ABC (Classe A - 80% Frequência Histórica)
+  const handleApplyCurvaAbcClasseA = () => {
+    const abc = calculateCurvaAbc(dynamicStats);
+    const pool = abc.classeANumeros.slice(0, targetCount);
+    setSelectedNumbers(pool);
+    setFilters((prev) => ({
+      ...prev,
+      curvaAbcAtiva: true,
+      minDezenasClasseA: 11,
+    }));
+    saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+    setStrategyName('Curva ABC (Classe A - 80% Pareto)');
+    setDocumentMessage(
+      `✓ Dezenas da Classe A (${pool.length} dezenas) aplicadas no volante e Filtro de Curva ABC ativado permanentemente!`
+    );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -1099,8 +1130,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           </span>
         </div>
 
-        {/* 5 Botões de Ação Rápida */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+        {/* 6 Botões de Ação Rápida com Curva ABC */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
+          <button
+            type="button"
+            onClick={handleApplyCurvaAbcClasseA}
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition group cursor-pointer shadow-sm ${
+              filters.curvaAbcAtiva
+                ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/30'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-amber-500/40 hover:border-amber-300'
+            }`}
+          >
+            <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-400 text-slate-950 group-hover:scale-105 transition shrink-0 font-black">
+              <Award className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>⭐ Curva ABC (A)</span>
+              </div>
+              <p className="text-[10px] text-amber-300 truncate">
+                {filters.curvaAbcAtiva ? 'Filtro Ativo (Mín. 11)' : 'Dominância 80%'}
+              </p>
+            </div>
+          </button>
+
           <button
             type="button"
             onClick={handleApplyTop18}

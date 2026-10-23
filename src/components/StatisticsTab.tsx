@@ -22,6 +22,7 @@ import { SazonalidadeDezenasModule } from './SazonalidadeDezenasModule';
 import { LinhaDoTempoCiclosComponent } from './LinhaDoTempoCiclosComponent';
 import { AnaliseEspelhamentoConcursoModule } from './AnaliseEspelhamentoConcursoModule';
 import { RadarTendenciasQuentesComponent } from './RadarTendenciasQuentesComponent';
+import { CurvaAbcDezenasComponent } from './CurvaAbcDezenasComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -67,6 +68,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'curva_abc'
     | 'radar_quentes'
     | 'roi_forecast'
     | 'espelhamento'
@@ -111,6 +113,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('curva_abc')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'curva_abc'
+                ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-emerald-400 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>Curva ABC (Pareto)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              CLASSE A 80%
+            </span>
           </button>
 
           <button
@@ -376,6 +393,33 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Curva ABC (Princípio de Pareto 80/20 • Destaque Classe A) */}
+          <div className="bg-gradient-to-r from-amber-950/80 via-yellow-950/50 to-slate-900 border-2 border-amber-500/60 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-amber-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-400 text-slate-950 shadow-md shadow-amber-500/30 shrink-0">
+                <Award className="w-5 h-5 text-slate-950" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-amber-300 font-black">Curva ABC das Dezenas (Princípio de Pareto 80/20)</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+                    CLASSE A = 80% DAS BOLAS
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Estratificação das 25 dezenas com base nas 57.000 bolas dos 3.800+ concursos. A Classe A concentra 80% da frequência histórica e define os melhores fechamentos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('curva_abc')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-amber-500/30 flex items-center gap-1.5 justify-center active:scale-95"
+            >
+              <span>Abrir Curva ABC</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -701,6 +745,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: CURVA ABC DAS DEZENAS (PRINCÍPIO DE PARETO 80/20) */}
+      {activeSubTab === 'curva_abc' && (
+        <CurvaAbcDezenasComponent
+          statsList={statsList}
+          latestDraw={latestDraw}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB: RADAR DE TENDÊNCIAS QUENTES (MÉDIA MÓVEL EXPONENCIAL EMA) */}
