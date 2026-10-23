@@ -38,6 +38,10 @@ import {
   saveCurvaAbcFilterConfig,
 } from '../services/curvaAbcService';
 import {
+  getVoidExclusionConfig,
+  saveVoidExclusionConfig,
+} from '../services/vaziosService';
+import {
   Sparkles,
   Zap,
   Copy,
@@ -108,10 +112,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [filters, setFilters] = useState<FilterCriteria>(() => {
     const curvaAbcConfig = getCurvaAbcFilterConfig();
+    const voidConfig = getVoidExclusionConfig();
     return {
       ...DEFAULT_FILTERS,
       curvaAbcAtiva: curvaAbcConfig.ativo,
       minDezenasClasseA: curvaAbcConfig.minClasseA,
+      vaziosAtivos: voidConfig.ativo,
+      combinacoesVazioExcluidas: voidConfig.paresExcluidos,
     };
   });
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
@@ -151,6 +158,28 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setTimeout(() => setDocumentMessage(null), 6000);
     }
   }, [initialFixedNumbers, targetCount]);
+
+  // Listener para aplicação dinâmica de Filtros de Combinações de Vazio
+  useEffect(() => {
+    const handleVoidChanged = (e: any) => {
+      const cfg = e.detail;
+      if (cfg) {
+        setFilters((prev) => ({
+          ...prev,
+          vaziosAtivos: cfg.ativo,
+          combinacoesVazioExcluidas: cfg.paresExcluidos,
+        }));
+        if (cfg.ativo && cfg.paresExcluidos && cfg.paresExcluidos.length > 0) {
+          setDocumentMessage(
+            `Filtro de ${cfg.paresExcluidos.length} Combinações de Vazio ativado com sucesso no Fechamento!`
+          );
+          setTimeout(() => setDocumentMessage(null), 6000);
+        }
+      }
+    };
+    window.addEventListener('lotosniper-void-filter-changed', handleVoidChanged);
+    return () => window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
+  }, []);
 
   // Notificação sonora opcional para jogos fora da zona de ouro (190-210)
   const [soundAlertEnabled, setSoundAlertEnabled] = useState<boolean>(() => {

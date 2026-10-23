@@ -55,6 +55,8 @@ export interface FilterCriteria {
   dezenasExcluidas: number[];
   curvaAbcAtiva?: boolean;
   minDezenasClasseA?: number;
+  combinacoesVazioExcluidas?: [number, number][];
+  vaziosAtivos?: boolean;
 }
 
 export type FechamentoMode = 

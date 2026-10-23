@@ -25,8 +25,10 @@ import {
   Calculator,
   Square,
   Award,
+  ShieldAlert,
 } from 'lucide-react';
 import { saveCurvaAbcFilterConfig } from '../services/curvaAbcService';
+import { saveVoidExclusionConfig } from '../services/vaziosService';
 
 interface FilterControlsProps {
   filters: FilterCriteria;
@@ -642,6 +644,74 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                     ? `Exigindo min. ${filters.minDezenasClasseA || 11} dezenas da Classe A`
                     : 'Filtro inativo (padrão flexível)'}
                 </span>
+              </div>
+            </div>
+
+            {/* 2.6 SELETOR DE COMBINAÇÕES DE VAZIO (ANTI-AFINIDADE 10 CONCURSOS) */}
+            <div className="bg-gradient-to-br from-rose-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-rose-500/40 space-y-3 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  <span className="text-xs font-bold text-white">
+                    Filtro de Combinações de Vazio (Anti-Afinidade Histórica)
+                  </span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                    10 CONCURSOS
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextActive = !filters.vaziosAtivos;
+                    update({ vaziosAtivos: nextActive });
+                    saveVoidExclusionConfig({
+                      ativo: nextActive,
+                      paresExcluidos: filters.combinacoesVazioExcluidas || [],
+                      bloquearVaziosAbsolutos: true,
+                      bloquearVaziosRaros: false,
+                      dataAtualizacao: new Date().toISOString(),
+                    });
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition cursor-pointer flex items-center gap-1.5 ${
+                    filters.vaziosAtivos
+                      ? 'bg-rose-500 text-white border-rose-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.vaziosAtivos ? '✓ Filtro Ativo' : 'Ativar Filtro'}
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                Descarta automaticamente do fechamento bilhetes que contenham conjuntos de dezenas que historicamente nunca ou raramente saíram juntas nos últimos 10 concursos, evitando desperdício de apostas.
+              </p>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-300">Pares de Vazio Cadastrados:</span>
+                  <span className="px-2 py-0.5 rounded bg-slate-800 font-mono text-xs font-bold text-rose-400">
+                    {(filters.combinacoesVazioExcluidas || []).length} duplas
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-rose-300/90 font-semibold">
+                    {filters.vaziosAtivos
+                      ? `Eliminando jogos com duplas de vazio cadastradas`
+                      : 'Filtro desativado'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'estatisticas' }));
+                      }
+                    }}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 underline font-bold"
+                  >
+                    Editar no Mapa de Vazios
+                  </button>
+                </div>
               </div>
             </div>
           </div>

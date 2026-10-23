@@ -24,6 +24,8 @@ import { AnaliseEspelhamentoConcursoModule } from './AnaliseEspelhamentoConcurso
 import { RadarTendenciasQuentesComponent } from './RadarTendenciasQuentesComponent';
 import { CurvaAbcDezenasComponent } from './CurvaAbcDezenasComponent';
 import { RastreadorPerformanceHistoricaComponent } from './RastreadorPerformanceHistoricaComponent';
+import { MapaCalorVaziosComponent } from './MapaCalorVaziosComponent';
+import { DashboardDesempenhoFinanceiroComponent } from './DashboardDesempenhoFinanceiroComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -46,6 +48,8 @@ import {
   Link2,
   Calendar,
   RotateCcw,
+  DollarSign,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -69,6 +73,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'mapa_vazios'
+    | 'desempenho_financeiro'
     | 'performance_historica'
     | 'curva_abc'
     | 'radar_quentes'
@@ -115,6 +121,36 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('mapa_vazios')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'mapa_vazios'
+                ? 'bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 text-slate-950 shadow-md shadow-rose-500/25 font-black'
+                : 'text-rose-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Mapa de Calor de Vazios</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+              ANTI-AFINIDADE
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('desempenho_financeiro')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'desempenho_financeiro'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Desempenho Financeiro</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              ROI ACUMULADO
+            </span>
           </button>
 
           <button
@@ -410,6 +446,60 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/20 flex items-center gap-1.5 justify-center"
             >
               <span>Ver Simulação Monte Carlo</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Mapa de Calor de Vazios & Combinações Anti-Afinidade */}
+          <div className="bg-gradient-to-r from-rose-950/80 via-orange-950/50 to-slate-900 border-2 border-rose-500/60 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-rose-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 text-white shadow-md shadow-rose-500/30 shrink-0">
+                <ShieldAlert className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-rose-300 font-black">Mapa de Calor de Vazios & Combinações Anti-Afinidade</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+                    ÚLTIMOS 10 CONCURSOS
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Visualização de duplas e trios que historicamente raramente saem juntas. Aplique filtros de exclusão inteligentes baseados em combinações de vazio para proteger seu fechamento.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('mapa_vazios')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 text-slate-950 font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-rose-500/30 flex items-center gap-1.5 justify-center active:scale-95"
+            >
+              <span>Abrir Mapa de Vazios</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Banner Dashboard de Desempenho Financeiro (Custo Gerenciador vs Retorno Teórico) */}
+          <div className="bg-gradient-to-r from-emerald-950/80 via-teal-950/50 to-slate-900 border-2 border-emerald-500/60 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-emerald-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/30 shrink-0">
+                <DollarSign className="w-5 h-5 text-slate-950" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2 flex-wrap">
+                  <span className="text-emerald-300 font-black">Dashboard de Desempenho Financeiro & ROI Acumulado</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+                    GERENCIADOR VS RETORNO
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Calcule o ROI acumulado de todas as estratégias comparando o custo real das apostas registradas versus o retorno teórico de prêmios históricos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveSubTab('desempenho_financeiro')}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs transition cursor-pointer shrink-0 shadow-md shadow-emerald-500/30 flex items-center gap-1.5 justify-center active:scale-95"
+            >
+              <span>Ver Dashboard Financeiro</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -789,6 +879,39 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: MAPA DE CALOR DE VAZIOS (COMBINAÇÕES ANTI-AFINIDADE 10 CONCURSOS) */}
+      {activeSubTab === 'mapa_vazios' && (
+        <MapaCalorVaziosComponent
+          latestDraw={latestDraw}
+          statsList={statsList}
+          onApplyExclusionsToFechamento={(pairs) => {
+            if (onApplyNumbers && pairs.length > 0) {
+              onApplyNumbers([pairs[0][0], pairs[0][1]]);
+            }
+          }}
+          onGoToFechamento={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+            }
+          }}
+        />
+      )}
+
+      {/* SUBTAB: DASHBOARD DE DESEMPENHO FINANCEIRO (GERENCIADOR VS RETORNO TEÓRICO) */}
+      {activeSubTab === 'desempenho_financeiro' && (
+        <DashboardDesempenhoFinanceiroComponent
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+          statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+          onGoToGamesManager={() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+            }
+          }}
+        />
       )}
 
       {/* SUBTAB: PERFORMANCE HISTÓRICA DOS JOGOS (MÉDIA DE ACERTOS & ROI 10 CONCURSOS) */}

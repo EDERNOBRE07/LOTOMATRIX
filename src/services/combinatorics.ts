@@ -176,6 +176,19 @@ export function ticketPassesFilters(
     if (countA < filters.minDezenasClasseA) return false;
   }
 
+  // Check Combinações de Vazio (Conjuntos de dezenas com anti-afinidade / vazios históricos)
+  if (
+    filters.vaziosAtivos &&
+    filters.combinacoesVazioExcluidas &&
+    filters.combinacoesVazioExcluidas.length > 0
+  ) {
+    for (const [a, b] of filters.combinacoesVazioExcluidas) {
+      if (ticket.dezenas.includes(a) && ticket.dezenas.includes(b)) {
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -666,6 +679,8 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   dezenasExcluidas: [],
   curvaAbcAtiva: false,
   minDezenasClasseA: 11,
+  combinacoesVazioExcluidas: [],
+  vaziosAtivos: false,
 };
 
 /**
