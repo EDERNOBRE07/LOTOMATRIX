@@ -608,9 +608,11 @@ export const SazonalidadeDezenasModule: React.FC<SazonalidadeDezenasModuleProps>
 
       {/* Dica do Especialista em Sazonalidade */}
       <ExpertTip
-        tipNumber="14"
         title="O Fenômeno da Sazonalidade e Concursos Especiais da Caixa"
-        content="Mesmo com sorteios fisicamente aleatórios, períodos comissionados de apostas em massa (como a Lotofácil da Independência ou o final de ano) acumulam dinâmicas únicas de bilhetes e volume. Em 10 anos de histórico, dezenas como 03, 10, 20, 22 e 25 mantêm desvios de frequência superiores a 65% em setembro e dezembro. Incorporar ao menos 3 a 5 dezenas com viés super-sazonal positivo em seus fechamentos reforça o alinhamento probabilístico contra anomalias sazonais."
+        ruleCategory="Sazonalidade & Concursos Especiais"
+        impact14Pontos="Mesmo com sorteios fisicamente aleatórios, períodos comissionados de apostas em massa (como a Lotofácil da Independência ou o final de ano) acumulam dinâmicas únicas de bilhetes e volume. Em 10 anos de histórico, dezenas como 03, 10, 20, 22 e 25 mantêm desvios de frequência superiores a 65% em setembro e dezembro."
+        recommendation="Incorporar ao menos 3 a 5 dezenas com viés super-sazonal positivo em seus fechamentos reforça o alinhamento probabilístico contra anomalias sazonais."
+        badgeLabel="Dica 14 Pts"
       />
     </div>
   );

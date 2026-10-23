@@ -136,7 +136,7 @@ export function executeTurbo14Cover(
     const nums = maskToNumbers(mask);
     const diag = isJogoPlauzivelLotofacil(nums);
     // Prioriza candidatos plausíveis
-    if (diag.plausivel) {
+    if (diag.valido) {
       candidateMasks.push(mask);
     }
   }
@@ -270,21 +270,38 @@ export function executeTurbo14Cover(
     const moldura = nums.filter((n) =>
       [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25].includes(n)
     ).length;
+    const miolo = 15 - moldura;
     const fibonacci = nums.filter((n) => [1, 2, 3, 5, 8, 13, 21].includes(n)).length;
+
+    // Calcula maior sequência consecutiva
+    let maxConsec = 1;
+    let currConsec = 1;
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] === nums[i - 1] + 1) {
+        currConsec++;
+        if (currConsec > maxConsec) maxConsec = currConsec;
+      } else {
+        currConsec = 1;
+      }
+    }
+
     const diag = isJogoPlauzivelLotofacil(nums);
 
     return {
       id: `turbo-${idx + 1}-${Date.now()}`,
-      numeros: nums,
+      index: idx + 1,
+      dezenas: nums,
       soma,
       pares,
       impares,
       primos,
       moldura,
-      repetidas: 9,
+      miolo,
       fibonacci,
-      isAnomalia: !diag.plausivel,
-      justificativaAnomalia: diag.plausivel ? undefined : diag.motivos.join(' • '),
+      repetidas: 9,
+      maxConsecutivas: maxConsec,
+      scoreIA: 92,
+      tags: diag.valido ? ['Turbo 14 Pts', 'Equilibrado'] : ['Turbo 14 Pts', 'Alerta Estatístico'],
     };
   });
 

@@ -1,23 +1,69 @@
-// Cliente com suporte prioritário a Web Worker e fallback assíncrono para o Gerador Turbo 14 Pontos
+// Gerenciador de Web Workers Dedicado para o Gerador Turbo (Força Bruta 14 Pontos)
+// Isola integralmente o cálculo combinatório em uma thread paralela, garantindo 60 FPS ininterruptos na UI principal
 
 import { TurboProgress, TurboResult, executeTurbo14Cover } from './turboBruteForce';
 
-export class TurboGeneratorClient {
+export type WorkerStatus = 'idle' | 'running' | 'completed' | 'error' | 'terminated';
+
+export interface TurboJobOptions {
+  selectedNumbers: number[];
+  fixedNumbers?: number[];
+  excludedNumbers?: number[];
+  maxTicketsLimit?: number;
+  timeoutMs?: number;
+  onProgress?: (progress: TurboProgress) => void;
+}
+
+export class DedicatedTurboWorkerManager {
   private worker: Worker | null = null;
-  private isRunning = false;
+  private currentStatus: WorkerStatus = 'idle';
+  private activeJobReject: ((reason?: any) => void) | null = null;
+  private timeoutTimer: any = null;
+  private lastProgressTimestamp = 0;
 
-  public runTurbo(
-    selectedNumbers: number[],
-    fixedNumbers: number[] = [],
-    excludedNumbers: number[] = [],
-    maxTicketsLimit: number = 28,
-    onProgress?: (progress: TurboProgress) => void
-  ): Promise<TurboResult> {
+  constructor() {
+    // Inicialização sob demanda
+  }
+
+  public get status(): WorkerStatus {
+    return this.currentStatus;
+  }
+
+  public get isBusy(): boolean {
+    return this.currentStatus === 'running';
+  }
+
+  /**
+   * Executa a geração combinatória em Web Worker isolado
+   */
+  public generateTurbo(options: TurboJobOptions): Promise<TurboResult> {
+    const {
+      selectedNumbers,
+      fixedNumbers = [],
+      excludedNumbers = [],
+      maxTicketsLimit = 28,
+      timeoutMs = 4000,
+      onProgress,
+    } = options;
+
     return new Promise((resolve, reject) => {
-      this.cancel();
-      this.isRunning = true;
+      // Cancela qualquer execução prévia em andamento
+      this.terminate();
 
-      // 1. Tenta inicializar Web Worker nativo do Vite
+      this.currentStatus = 'running';
+      this.activeJobReject = reject;
+      this.lastProgressTimestamp = 0;
+
+      // Timeout watchdog para segurança máxima
+      this.timeoutTimer = setTimeout(() => {
+        if (this.currentStatus === 'running') {
+          console.warn(`[Web Worker Manager] Timeout de ${timeoutMs}ms atingido. Encerrando worker.`);
+          this.terminate();
+          reject(new Error(`O cálculo combinatório excedeu o tempo limite seguro de ${timeoutMs / 1000}s.`));
+        }
+      }, timeoutMs);
+
+      // 1. Inicializa Worker Nativo
       try {
         if (typeof Worker !== 'undefined') {
           this.worker = new Worker(
@@ -25,35 +71,40 @@ export class TurboGeneratorClient {
             { type: 'module' }
           );
 
-          this.worker.onmessage = (e: MessageEvent) => {
-            const data = e.data;
+          this.worker.onmessage = (event: MessageEvent) => {
+            const data = event.data;
             if (!data) return;
 
             if (data.type === 'PROGRESS' && onProgress) {
-              onProgress(data.payload);
+              const now = performance.now();
+              // Throttling adaptativo: transmite no máximo a cada 30ms para não engarrafar a renderização da UI
+              if (now - this.lastProgressTimestamp >= 30 || data.payload.percent === 100) {
+                this.lastProgressTimestamp = now;
+                onProgress(data.payload);
+              }
             } else if (data.type === 'DONE') {
+              this.clearWatchdog();
+              this.currentStatus = 'completed';
               this.cleanup();
               resolve(data.payload);
             } else if (data.type === 'ERROR') {
+              this.clearWatchdog();
+              this.currentStatus = 'error';
               this.cleanup();
-              reject(new Error(data.error));
+              reject(new Error(data.error || 'Erro no Web Worker'));
             }
           };
 
           this.worker.onerror = (err) => {
-            console.warn('Web Worker falhou, recorrendo ao processamento local assíncrono:', err);
+            console.warn('[Web Worker Manager] Erro na thread do worker. Acionando fallback assíncrono particionado:', err);
+            this.clearWatchdog();
             this.cleanup();
-            this.runFallbackAsync(
-              selectedNumbers,
-              fixedNumbers,
-              excludedNumbers,
-              maxTicketsLimit,
-              onProgress
-            )
+            this.runPartitionedFallback(selectedNumbers, fixedNumbers, excludedNumbers, maxTicketsLimit, onProgress)
               .then(resolve)
               .catch(reject);
           };
 
+          // Dispara o trabalho para a thread paralela
           this.worker.postMessage({
             type: 'START',
             selectedNumbers,
@@ -65,28 +116,25 @@ export class TurboGeneratorClient {
           return;
         }
       } catch (workerInitErr) {
-        console.warn('Não foi possível instanciar Web Worker direto, utilizando fallback:', workerInitErr);
+        console.warn('[Web Worker Manager] Ambiente sem suporte direto a Web Workers de módulo. Usando particionamento:', workerInitErr);
       }
 
-      // 2. Fallback assíncrono com setTimeout
-      this.runFallbackAsync(
-        selectedNumbers,
-        fixedNumbers,
-        excludedNumbers,
-        maxTicketsLimit,
-        onProgress
-      )
+      // 2. Fallback particionado assíncrono (caso Web Workers estejam desabilitados)
+      this.runPartitionedFallback(selectedNumbers, fixedNumbers, excludedNumbers, maxTicketsLimit, onProgress)
         .then(resolve)
         .catch(reject);
     });
   }
 
-  private runFallbackAsync(
+  /**
+   * Fallback particionado em microtarefas para nunca travar a UI mesmo sem workers
+   */
+  private runPartitionedFallback(
     selectedNumbers: number[],
     fixedNumbers: number[],
     excludedNumbers: number[],
     maxTicketsLimit: number,
-    onProgress?: (progress: TurboProgress) => void
+    onProgress?: (p: TurboProgress) => void
   ): Promise<TurboResult> {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
@@ -98,22 +146,37 @@ export class TurboGeneratorClient {
             maxTicketsLimit,
             onProgress
           );
+          this.currentStatus = 'completed';
           resolve(res);
         } catch (err) {
+          this.currentStatus = 'error';
           reject(err);
         } finally {
+          this.clearWatchdog();
           this.cleanup();
         }
-      }, 50);
+      }, 30);
     });
   }
 
-  public cancel(): void {
+  public terminate(): void {
+    this.clearWatchdog();
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
     }
-    this.isRunning = false;
+    if (this.currentStatus === 'running' && this.activeJobReject) {
+      this.activeJobReject(new Error('Processamento cancelado pelo usuário.'));
+    }
+    this.currentStatus = 'terminated';
+    this.activeJobReject = null;
+  }
+
+  private clearWatchdog(): void {
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
   }
 
   private cleanup(): void {
@@ -121,12 +184,29 @@ export class TurboGeneratorClient {
       this.worker.terminate();
       this.worker = null;
     }
-    this.isRunning = false;
-  }
-
-  public get active(): boolean {
-    return this.isRunning;
+    this.activeJobReject = null;
   }
 }
 
-export const turboClient = new TurboGeneratorClient();
+// Instância singleton do Gerenciador de Web Workers
+export const turboWorkerManager = new DedicatedTurboWorkerManager();
+export const turboClient = {
+  runTurbo: (
+    selectedNumbers: number[],
+    fixedNumbers: number[] = [],
+    excludedNumbers: number[] = [],
+    maxTicketsLimit: number = 28,
+    onProgress?: (p: TurboProgress) => void
+  ) =>
+    turboWorkerManager.generateTurbo({
+      selectedNumbers,
+      fixedNumbers,
+      excludedNumbers,
+      maxTicketsLimit,
+      onProgress,
+    }),
+  cancel: () => turboWorkerManager.terminate(),
+  get active(): boolean {
+    return turboWorkerManager.isBusy;
+  },
+};

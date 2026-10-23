@@ -100,8 +100,8 @@ export const TurboGeneratorModal: React.FC<TurboGeneratorModalProps> = ({
     const txt = result.tickets
       .map(
         (t, idx) =>
-          `Jogo ${String(idx + 1).padStart(2, '0')}: ${t.numeros
-            .map((n) => String(n).padStart(2, '0'))
+          `Jogo ${String(idx + 1).padStart(2, '0')}: ${t.dezenas
+            .map((n: number) => String(n).padStart(2, '0'))
             .join(' ')} (Soma: ${t.soma})`
       )
       .join('\n');
@@ -335,7 +335,7 @@ export const TurboGeneratorModal: React.FC<TurboGeneratorModalProps> = ({
                         #{idx + 1}
                       </span>
                       <div className="flex flex-wrap gap-1">
-                        {ticket.numeros.map((n) => (
+                        {ticket.dezenas.map((n: number) => (
                           <span
                             key={n}
                             className="font-mono text-[10px] font-bold text-slate-200 px-1 rounded bg-slate-800"

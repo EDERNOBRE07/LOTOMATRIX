@@ -533,7 +533,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       modeName: `Turbo 14 Pontos (${tickets.length} Jogos - Garantia 100% de 14)`,
       garantia: '14 Pontos',
       targetCount: turboRes.poolSize,
-      selectedNumbers: selectedNumbers.length >= 16 ? selectedNumbers : tickets[0]?.numeros || [],
+      selectedNumbers: selectedNumbers.length >= 16 ? selectedNumbers : tickets[0]?.dezenas || [],
       fixedNumbers,
       excludedNumbers,
       filters: {

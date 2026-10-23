@@ -174,6 +174,15 @@ export const AnaliseVarianciaComponent: React.FC<AnaliseVarianciaComponentProps>
   // Latest contest telemetry
   const latestContestData = varianceList[0] || null;
 
+  // Inspected contest for dynamic ruler (selected or latest)
+  const inspectedContest = useMemo(() => {
+    if (selectedConcurso) {
+      const found = varianceList.find((c) => c.concurso === selectedConcurso);
+      if (found) return found;
+    }
+    return latestContestData;
+  }, [selectedConcurso, varianceList, latestContestData]);
+
   return (
     <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl space-y-6">
       {/* Header */}
@@ -225,6 +234,199 @@ export const AnaliseVarianciaComponent: React.FC<AnaliseVarianciaComponentProps>
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* RÉGUA DINÂMICA DE VARIÂNCIA & DESVIO PADRÃO (μ = 13,00) */}
+      <div className="bg-slate-950 p-5 rounded-2xl border-2 border-cyan-500/40 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                <Sliders className="w-4 h-4" />
+              </span>
+              <h4 className="text-sm font-black text-white tracking-wide uppercase">
+                Régua Dinâmica de Variância: Concursos Inflados vs Deflados
+              </h4>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+                CENTRO GRAVITACIONAL μ = 13,00
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Escala métrica de dispersão das dezenas sorteadas. Concurso auditado:{' '}
+              <strong className="text-white font-mono">#{inspectedContest?.concurso} ({inspectedContest?.data})</strong>
+            </p>
+          </div>
+
+          {/* Seletor rápido de concursos para teste na régua */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <span className="text-[11px] text-slate-400 shrink-0 font-semibold">Testar:</span>
+            {varianceList.slice(0, 5).map((c) => (
+              <button
+                key={c.concurso}
+                type="button"
+                onClick={() => setSelectedConcurso(c.concurso)}
+                className={`px-2 py-1 rounded-lg font-mono text-[11px] font-bold transition cursor-pointer shrink-0 ${
+                  (selectedConcurso === c.concurso || (!selectedConcurso && c.concurso === latestContestData?.concurso))
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-md font-black'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                #{c.concurso}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Display Visual da Régua */}
+        <div className="pt-3 pb-2 px-2 sm:px-4 space-y-3">
+          {/* Marcador Superior Dinâmico (Needle / Pino Indicador) */}
+          <div className="relative h-10 w-full">
+            <div
+              className="absolute top-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300"
+              style={{
+                left: `${Math.min(96, Math.max(4, (((inspectedContest?.media ?? 13.0) - 10.0) / 6.0) * 100))}%`,
+              }}
+            >
+              <div
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-black shadow-xl flex items-center gap-1.5 border whitespace-nowrap ${
+                  inspectedContest?.status === 'inflado'
+                    ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-amber-500/30'
+                    : inspectedContest?.status === 'deflado'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-300 shadow-cyan-500/30'
+                    : 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-emerald-500/30'
+                }`}
+              >
+                <span>μ = {inspectedContest?.media.toFixed(2)}</span>
+                <span className="text-[10px] opacity-90">
+                  ({(inspectedContest?.desvio ?? 0) >= 0 ? '+' : ''}{inspectedContest?.desvio.toFixed(2)})
+                </span>
+              </div>
+              <div
+                className={`w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] mt-0.5 ${
+                  inspectedContest?.status === 'inflado'
+                    ? 'border-t-amber-500'
+                    : inspectedContest?.status === 'deflado'
+                    ? 'border-t-cyan-500'
+                    : 'border-t-emerald-500'
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* Barra Graduada da Régua com Setores de Inflação/Deflação */}
+          <div className="relative">
+            <div className="h-6 w-full rounded-xl overflow-hidden flex border border-slate-700 shadow-inner">
+              {/* Setor 1: Super Deflado (< 12.0) - 33.3% */}
+              <div className="w-[33.3%] bg-gradient-to-r from-blue-700 via-cyan-600 to-cyan-500 flex items-center justify-center text-[10px] font-bold text-white tracking-wider">
+                DEFLADO SEVERO (&lt; 12,0)
+              </div>
+              {/* Setor 2: Deflado Leve (12.0 a 12.75) - 12.5% */}
+              <div className="w-[12.5%] bg-teal-500/90 flex items-center justify-center text-[9px] font-bold text-slate-950">
+                LEVE
+              </div>
+              {/* Setor 3: Equilíbrio Áureo (12.75 a 13.25) - 8.3% */}
+              <div className="w-[8.4%] bg-emerald-400 flex items-center justify-center text-[9px] font-black text-slate-950 border-x-2 border-white shadow-[0_0_10px_rgba(52,211,153,0.8)]">
+                13,0
+              </div>
+              {/* Setor 4: Inflado Leve (13.25 a 14.0) - 12.5% */}
+              <div className="w-[12.5%] bg-amber-400/90 flex items-center justify-center text-[9px] font-bold text-slate-950">
+                LEVE
+              </div>
+              {/* Setor 5: Super Inflado (> 14.0) - 33.3% */}
+              <div className="w-[33.3%] bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 flex items-center justify-center text-[10px] font-bold text-white tracking-wider">
+                INFLADO SEVERO (&gt; 14,0)
+              </div>
+            </div>
+
+            {/* Linha de Marco Zero Central 13,00 */}
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_8px_#ffffff] z-10 pointer-events-none"
+              style={{ left: '50%' }}
+            />
+
+            {/* Faixa de Dispersão do Desvio Padrão (Intervalo [μ - σ, μ + σ]) */}
+            {inspectedContest && (
+              <div
+                className="absolute -bottom-2.5 h-1.5 bg-white/60 rounded-full border border-white transition-all duration-300"
+                style={{
+                  left: `${Math.max(0, (((inspectedContest.media - inspectedContest.desvioPadrao) - 10.0) / 6.0) * 100)}%`,
+                  width: `${Math.min(100, ((inspectedContest.desvioPadrao * 2) / 6.0) * 100)}%`,
+                }}
+                title={`Faixa de Dispersão ±1σ (${(inspectedContest.media - inspectedContest.desvioPadrao).toFixed(2)} a ${(inspectedContest.media + inspectedContest.desvioPadrao).toFixed(2)})`}
+              />
+            )}
+          </div>
+
+          {/* Marcadores Numéricos da Régua (10.0 a 16.0) */}
+          <div className="flex justify-between text-[10px] font-mono text-slate-400 pt-2 px-1">
+            <span>10,00</span>
+            <span>11,00</span>
+            <span>12,00</span>
+            <span className="text-emerald-400 font-bold">12,75</span>
+            <span className="text-white font-black underline decoration-emerald-400">13,00 (Meta)</span>
+            <span className="text-amber-400 font-bold">13,25</span>
+            <span>14,00</span>
+            <span>15,00</span>
+            <span>16,00</span>
+          </div>
+
+          {/* Telemetria Analítica do Concurso Inspecionado */}
+          {inspectedContest && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Média Aritmética (μ)</span>
+                <strong className="text-white font-mono text-sm">{inspectedContest.media.toFixed(2)}</strong>
+                <span className="text-[10px] text-slate-500 block">Soma: {inspectedContest.soma}</span>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Desvio de 13,0 (Δ)</span>
+                <strong className={`font-mono text-sm ${inspectedContest.desvio >= 0 ? 'text-amber-400' : 'text-cyan-400'}`}>
+                  {inspectedContest.desvio >= 0 ? `+${inspectedContest.desvio.toFixed(2)}` : inspectedContest.desvio.toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-slate-500 block">
+                  {inspectedContest.status === 'inflado' ? 'Acima da média' : inspectedContest.status === 'deflado' ? 'Abaixo da média' : 'Equilíbrio'}
+                </span>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Desvio Padrão (σ)</span>
+                <strong className="text-purple-300 font-mono text-sm">±{inspectedContest.desvioPadrao.toFixed(2)}</strong>
+                <span className="text-[10px] text-slate-500 block">Variância: {inspectedContest.variancia.toFixed(2)}</span>
+              </div>
+
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Diagnóstico de Viés</span>
+                <strong
+                  className={`text-xs uppercase font-bold block ${
+                    inspectedContest.status === 'inflado'
+                      ? 'text-amber-400'
+                      : inspectedContest.status === 'deflado'
+                      ? 'text-cyan-400'
+                      : 'text-emerald-400'
+                  }`}
+                >
+                  {inspectedContest.statusLabel}
+                </strong>
+                {onApplyBiasRecommendation && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Se inflado, sugere bloco baixo (01 a 12); se deflado, bloco alto (14 a 25)
+                      const biasGroup = inspectedContest.status === 'inflado'
+                        ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                        : [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+                      onApplyBiasRecommendation(biasGroup);
+                    }}
+                    className="text-[10px] text-cyan-300 hover:underline font-semibold mt-0.5 inline-block cursor-pointer"
+                  >
+                    {inspectedContest.status === 'inflado' ? '→ Aplicar 01-12 no Fechamento' : '→ Aplicar 14-25 no Fechamento'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

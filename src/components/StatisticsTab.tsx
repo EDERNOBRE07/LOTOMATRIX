@@ -19,6 +19,8 @@ import { AnaliseVarianciaComponent } from './AnaliseVarianciaComponent';
 import { ROIForecastComponent } from './ROIForecastComponent';
 import { EspelhamentoDezenasModule } from './EspelhamentoDezenasModule';
 import { SazonalidadeDezenasModule } from './SazonalidadeDezenasModule';
+import { LinhaDoTempoCiclosComponent } from './LinhaDoTempoCiclosComponent';
+import { AnaliseEspelhamentoConcursoModule } from './AnaliseEspelhamentoConcursoModule';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -40,6 +42,7 @@ import {
   Scale,
   Link2,
   Calendar,
+  RotateCcw,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -65,8 +68,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'atrasos'
     | 'roi_forecast'
     | 'espelhamento'
+    | 'analise_espelho'
     | 'sazonalidade'
     | 'variancia'
+    | 'ciclos_timeline'
     | 'radar_ouro'
     | 'ascensao'
     | 'dicas_ouro'
@@ -137,6 +142,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('analise_espelho')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'analise_espelho'
+                ? 'bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 text-slate-950 shadow-md shadow-cyan-500/25 font-black'
+                : 'text-cyan-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Análise do Espelho</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              10 AUSENTES
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('sazonalidade')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'sazonalidade'
@@ -162,7 +182,22 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <Scale className="w-4 h-4" />
             <span>Análise de Variância (13,0)</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
-              INFLADO / DEFLADO
+              RÉGUA DINÂMICA
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('ciclos_timeline')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'ciclos_timeline'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                : 'text-amber-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <RotateCw className="w-4 h-4" />
+            <span>Linha do Tempo de Ciclos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              10 CICLOS
             </span>
           </button>
 
@@ -382,6 +417,63 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             </button>
           </div>
 
+          {/* Quick Dual Navigation: Análise do Espelho & Linha do Tempo de Ciclos */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Card 1: Análise do Espelho (10 Ausentes) */}
+            <div className="bg-gradient-to-r from-cyan-950/50 via-slate-900 to-teal-950/40 border border-cyan-500/40 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-white">Análise do Espelho (10 Dezenas Ausentes)</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono">
+                      RETORNO IMINENTE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Audita a taxa de retorno das dezenas não sorteadas para o próximo sorteio e compara a correlação com ausentes de ciclos passados.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveSubTab('analise_espelho')}
+                className="self-end px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-cyan-500/20 flex items-center gap-1.5"
+              >
+                <span>Ver Análise do Espelho</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Card 2: Linha do Tempo de Ciclos */}
+            <div className="bg-gradient-to-r from-amber-950/50 via-slate-900 to-orange-950/40 border border-amber-500/40 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                  <RotateCw className="w-5 h-5 animate-spin-slow" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-white">Linha do Tempo dos Ciclos (Últimos 10)</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                      ACELERAÇÃO & RETARDO
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Visualize a duração dos ciclos anteriores e a pressão de fechamento do Ciclo 804 (dezenas 17 e 22 pendentes).
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveSubTab('ciclos_timeline')}
+                className="self-end px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/20 flex items-center gap-1.5"
+              >
+                <span>Ver Linha do Tempo</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
           {/* Módulo Especial: Sequências de Quentes (Últimos 3 Concursos) e Frias (> 5 Concursos Ausentes) */}
           <QuentesFriasModule
             latestDraw={latestDraw}
@@ -586,11 +678,28 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       )}
 
+      {/* SUBTAB: ANÁLISE DE ESPELHAMENTO DO CONCURSO (DEZENAS AUSENTES & CORRELAÇÃO) */}
+      {activeSubTab === 'analise_espelho' && (
+        <AnaliseEspelhamentoConcursoModule
+          latestDraw={latestDraw}
+          statsList={statsList}
+          onApplyNumbers={onApplyNumbers}
+        />
+      )}
+
       {/* SUBTAB: SAZONALIDADE DE DEZENAS (HISTÓRICO 10 ANOS) */}
       {activeSubTab === 'sazonalidade' && (
         <SazonalidadeDezenasModule
           latestDraw={latestDraw}
           onApplyNumbers={onApplyNumbers}
+        />
+      )}
+
+      {/* SUBTAB: LINHA DO TEMPO DE CICLOS (ÚLTIMOS 10 CICLOS) */}
+      {activeSubTab === 'ciclos_timeline' && (
+        <LinhaDoTempoCiclosComponent
+          latestDraw={latestDraw}
+          onApplyCycleNumbers={onApplyNumbers}
         />
       )}
 
