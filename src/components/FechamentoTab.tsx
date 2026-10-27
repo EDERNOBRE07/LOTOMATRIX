@@ -18,6 +18,7 @@ import {
   DEFAULT_FILTERS,
   buildOptimalPool,
   buildOptimal18Pool,
+  buildFilterCompliantPool,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
@@ -40,6 +41,7 @@ import {
 import {
   getVoidExclusionConfig,
   saveVoidExclusionConfig,
+  computeVoidHeatmap,
 } from '../services/vaziosService';
 import {
   Sparkles,
@@ -178,8 +180,38 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       }
     };
     window.addEventListener('lotosniper-void-filter-changed', handleVoidChanged);
-    return () => window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
-  }, []);
+
+    const handleAIPresetApplied = (e: any) => {
+      const presetFilters = e.detail;
+      if (presetFilters) {
+        setFilters(presetFilters);
+        const calibrated = buildFilterCompliantPool({
+          targetCount,
+          filters: presetFilters,
+          previousDraw: latestDraw,
+          dynamicStats,
+          cyclePending: cyclePendingNumbers,
+          aiScores: aiPrediction?.scores,
+          currentSelected: selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+        });
+        setSelectedNumbers(calibrated.dezenas);
+        setStrategyName('Insights Diários da IA (Filtros & Matriz 5×5)');
+        setDocumentMessage(
+          `✓ Insights Diários da IA: todos os filtros presetados aplicados e matriz 5×5 (${targetCount} dezenas) calibrada!`
+        );
+        soundService.playGoldenZoneSuccessChime();
+        setTimeout(() => setDocumentMessage(null), 6000);
+      }
+    };
+    window.addEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
+
+    return () => {
+      window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
+      window.removeEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
+    };
+  }, [targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 
   // Notificação sonora opcional para jogos fora da zona de ouro (190-210)
   const [soundAlertEnabled, setSoundAlertEnabled] = useState<boolean>(() => {
@@ -275,6 +307,57 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     return generatedTickets;
   }, [generatedTickets, fechamentoFilter, fechamentoMonitoringSummary]);
 
+  // Atualização Automática da Matriz 5x5 quando qualquer filtro for alterado
+  const handleFiltersChange = (newFilters: FilterCriteria, updateMatrix = true) => {
+    setFilters(newFilters);
+    if (updateMatrix) {
+      const calibrated = buildFilterCompliantPool({
+        targetCount,
+        filters: newFilters,
+        previousDraw: latestDraw,
+        dynamicStats,
+        cyclePending: cyclePendingNumbers,
+        aiScores: aiPrediction?.scores,
+        currentSelected: selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+      });
+      setSelectedNumbers(calibrated.dezenas);
+      setDocumentMessage(`✓ Matriz 5×5 calibrada com o novo filtro: ${calibrated.motivoAjuste}`);
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
+
+  // Selecionar a Estratégia de Fechamento (15 a 21 Números) carregando com os filtros selecionados
+  const handleSelectClosingStrategy = (key: FechamentoMode) => {
+    const p = FECHAMENTO_PRESETS[key];
+    const newTarget = p.dezenasNecessarias;
+    setMode(key);
+
+    // Carrega a estratégia de fechamento preservando 100% dos filtros selecionados
+    const calibrated = buildFilterCompliantPool({
+      targetCount: newTarget,
+      filters,
+      previousDraw: latestDraw,
+      dynamicStats,
+      cyclePending: cyclePendingNumbers,
+      aiScores: aiPrediction?.scores,
+      currentSelected: selectedNumbers,
+      fixedNumbers,
+      excludedNumbers,
+    });
+
+    setSelectedNumbers(calibrated.dezenas);
+    const newName = `${p.nome} (Filtros Ativos)`;
+    setStrategyName(newName);
+    setActiveModel(newName);
+    setDocumentMessage(
+      `✓ Estratégia ${p.nome} (${newTarget} dezenas) carregada com todos os filtros selecionados: ${calibrated.motivoAjuste}`
+    );
+    soundService.playGoldenZoneSuccessChime();
+    setTimeout(() => setDocumentMessage(null), 6000);
+  };
+
   // Modelo de Prognóstico Ativo
   const [activeModel, setActiveModel] = useState<string>(
     '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
@@ -285,11 +368,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setActiveModel(modelType);
 
     if (modelType.includes('Documento')) {
-      const optimal = buildOptimalPool(tCount, latestDraw, dynamicStats, cyclePendingNumbers);
-      setSelectedNumbers(optimal.dezenas.slice(0, tCount));
-      const name = '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)';
+      const optimal = buildFilterCompliantPool({
+        targetCount: tCount,
+        filters,
+        previousDraw: latestDraw,
+        dynamicStats,
+        cyclePending: cyclePendingNumbers,
+        aiScores: aiPrediction?.scores,
+        currentSelected: selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+      });
+      setSelectedNumbers(optimal.dezenas);
+      const name = '⚡ Estratégia Documento (Filtros & Proporções Canônicas)';
       setStrategyName(name);
-      setDocumentMessage(optimal.explicacao);
+      setDocumentMessage(`Estratégia Documento aplicada com filtros ativos: ${optimal.motivoAjuste}`);
       setTimeout(() => setDocumentMessage(null), 6000);
     } else if (modelType.includes('Top') || modelType.includes('IA')) {
       const sorted = [...dynamicStats]
@@ -387,19 +480,76 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setTimeout(() => setDocumentMessage(null), 5000);
   };
 
-  // 4. Aplicar Insights Diários da IA
+  // 4. Aplicar Insights Diários da IA (Carrega TODOS os Filtros Presetados e calibra a matriz 5x5)
   const handleApplyDailyAIInsights = () => {
-    const pool = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, 9, 9).dezenas18.slice(0, targetCount);
-    setSelectedNumbers(pool);
-    setStrategyName('Insights Diários da IA');
-    setDocumentMessage('✓ Insights Diários da IA incorporados na matriz de fechamento!');
+    let voidPairs = filters.combinacoesVazioExcluidas || [];
+    try {
+      if (voidPairs.length === 0) {
+        const voidAnalysis = computeVoidHeatmap();
+        voidPairs = voidAnalysis.vaziosAbsolutos.slice(0, 6).map((v) => v.pair);
+      }
+    } catch (e) {
+      console.warn('Falha ao calcular mapa de vazios:', e);
+    }
+
+    const fullPresetFilters: FilterCriteria = {
+      ...filters,
+      paresMin: 7,
+      paresMax: 8,
+      primosMin: 4,
+      primosMax: 6,
+      somaMin: 190,
+      somaMax: 210,
+      molduraMin: 9,
+      molduraMax: 10,
+      fibonacciMin: 3,
+      fibonacciMax: 5,
+      repetidasMin: 8,
+      repetidasMax: 10,
+      maxConsecutivas: 4,
+      curvaAbcAtiva: true,
+      minDezenasClasseA: 11,
+      vaziosAtivos: true,
+      combinacoesVazioExcluidas: voidPairs,
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    };
+
+    saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+    saveVoidExclusionConfig({
+      ativo: true,
+      paresExcluidos: voidPairs,
+      bloquearVaziosAbsolutos: true,
+      bloquearVaziosRaros: false,
+      dataAtualizacao: new Date().toISOString(),
+    });
+
+    setFilters(fullPresetFilters);
+
+    const calibrated = buildFilterCompliantPool({
+      targetCount,
+      filters: fullPresetFilters,
+      previousDraw: latestDraw,
+      dynamicStats,
+      cyclePending: cyclePendingNumbers,
+      aiScores: aiPrediction?.scores,
+      currentSelected: selectedNumbers,
+      fixedNumbers,
+      excludedNumbers,
+    });
+
+    setSelectedNumbers(calibrated.dezenas);
+    setStrategyName('Insights Diários da IA (Todos os Filtros Presetados)');
+    setDocumentMessage(
+      `✓ Insights Diários da IA: todos os filtros presetados carregados e matriz 5×5 (${targetCount} dezenas) calibrada na Zona de Ouro (190–210), 7–8 Pares e Classe A!`
+    );
     soundService.playGoldenZoneSuccessChime();
-    setTimeout(() => setDocumentMessage(null), 5000);
+    setTimeout(() => setDocumentMessage(null), 6000);
   };
 
   // 5. Garantir Incorporação dos Filtros Canônicos
   const handleEnsureFilters = () => {
-    setFilters({
+    const updatedFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 185,
       somaMax: 215,
@@ -416,7 +566,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       fibonacciMax: 5,
       dezenasFixas: fixedNumbers,
       dezenasExcluidas: excludedNumbers,
-    });
+    };
+    handleFiltersChange(updatedFilters, true);
     setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
@@ -424,18 +575,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // 6. Aplicar Curva ABC (Classe A - 80% Frequência Histórica)
   const handleApplyCurvaAbcClasseA = () => {
-    const abc = calculateCurvaAbc(dynamicStats);
-    const pool = abc.classeANumeros.slice(0, targetCount);
-    setSelectedNumbers(pool);
-    setFilters((prev) => ({
-      ...prev,
+    const updatedFilters: FilterCriteria = {
+      ...filters,
       curvaAbcAtiva: true,
       minDezenasClasseA: 11,
-    }));
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    };
     saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+    handleFiltersChange(updatedFilters, true);
     setStrategyName('Curva ABC (Classe A - 80% Pareto)');
     setDocumentMessage(
-      `✓ Dezenas da Classe A (${pool.length} dezenas) aplicadas no volante e Filtro de Curva ABC ativado permanentemente!`
+      `✓ Dezenas da Classe A aplicadas no volante 5×5 e Filtro de Curva ABC ativado permanentemente!`
     );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
@@ -945,10 +1096,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <button
                 key={key}
                 type="button"
-                onClick={() => {
-                  setMode(key);
-                  applyStrategyModel(activeModel, p.dezenasNecessarias);
-                }}
+                onClick={() => handleSelectClosingStrategy(key)}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-400'
@@ -1294,7 +1442,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}
       <EquilibrioEstruturalSelector
         filters={filters}
-        onChange={setFilters}
+        onChange={(f) => handleFiltersChange(f, true)}
         selectedNumbers={selectedNumbers}
         latestDraw={latestDraw}
       />
@@ -1302,8 +1450,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       {/* 2. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (GRID 2X2 COM FIBONACCI E ALERTA SONORO) */}
       <FilterControls
         filters={filters}
-        onChange={setFilters}
-        onReset={() => setFilters(DEFAULT_FILTERS)}
+        onChange={(f) => handleFiltersChange(f, true)}
+        onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
         latestDraw={latestDraw}
         soundAlertEnabled={soundAlertEnabled}
         onToggleSoundAlert={handleToggleSoundAlert}
@@ -1323,7 +1471,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         currentSomaMin={filters.somaMin}
         currentSomaMax={filters.somaMax}
         onApplySomaRange={(min, max) =>
-          setFilters((prev) => ({ ...prev, somaMin: min, somaMax: max }))
+          handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
         }
       />
 

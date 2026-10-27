@@ -28,7 +28,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { saveCurvaAbcFilterConfig } from '../services/curvaAbcService';
-import { saveVoidExclusionConfig } from '../services/vaziosService';
+import { saveVoidExclusionConfig, computeVoidHeatmap } from '../services/vaziosService';
 
 interface FilterControlsProps {
   filters: FilterCriteria;
@@ -55,7 +55,18 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
 
   // Insights Diários da IA para calibrar os Filtros Matemáticos & Restrições Canônicas
   const applyAIDailyInsightsPreset = () => {
-    onChange({
+    // Carregar combinações de vazio padrão recomendadas
+    let voidPairs = filters.combinacoesVazioExcluidas || [];
+    try {
+      if (voidPairs.length === 0) {
+        const voidAnalysis = computeVoidHeatmap();
+        voidPairs = voidAnalysis.vaziosAbsolutos.slice(0, 6).map((v) => v.pair);
+      }
+    } catch (e) {
+      console.warn('Falha ao calcular mapa de vazios:', e);
+    }
+
+    const fullPresetFilters: FilterCriteria = {
       ...filters,
       paresMin: 7,
       paresMax: 8,
@@ -70,11 +81,48 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       repetidasMin: 8,
       repetidasMax: 10,
       maxConsecutivas: 4,
+      curvaAbcAtiva: true,
+      minDezenasClasseA: 11,
+      vaziosAtivos: true,
+      combinacoesVazioExcluidas: voidPairs,
+    };
+
+    saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+    saveVoidExclusionConfig({
+      ativo: true,
+      paresExcluidos: voidPairs,
+      bloquearVaziosAbsolutos: true,
+      bloquearVaziosRaros: false,
+      dataAtualizacao: new Date().toISOString(),
     });
+
+    onChange(fullPresetFilters);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-void-filter-changed', {
+          detail: {
+            ativo: true,
+            paresExcluidos: voidPairs,
+          },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-curva-abc-changed', {
+          detail: { ativo: true, minClasseA: 11 },
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-ai-insights-preset-applied', {
+          detail: fullPresetFilters,
+        })
+      );
+    }
+
     setAppliedNotice(
-      `Insights Diários da IA aplicados: Soma na Zona de Ouro (190–210), 4–6 Primos, 3–5 Fibonacci e 8–10 Repetidas do Concurso #${latestDraw.concurso}.`
+      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (190–210), 7–8 Pares, 4–6 Primos, 9–10 Moldura, 3–5 Fibonacci, 8–10 Repetidas, Curva ABC Classe A (Mín. 11) e Combinações de Vazio!`
     );
-    setTimeout(() => setAppliedNotice(null), 5000);
+    setTimeout(() => setAppliedNotice(null), 6000);
   };
 
   const applyStrictPreset = () => {

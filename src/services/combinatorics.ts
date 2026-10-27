@@ -15,7 +15,10 @@ import {
   LotofacilDraw,
   DezenaStats,
 } from '../types/lotofacil';
-import { countClasseADezenas } from './curvaAbcService';
+import {
+  countClasseADezenas,
+  calculateCurvaAbc,
+} from './curvaAbcService';
 
 // Helper: Check if number is prime
 export function isPrimo(n: number): boolean {
@@ -395,6 +398,51 @@ export function generateFechamentoCovering(
     }
 
     collectAugmented(0, []);
+  }
+
+  // Graceful relaxation fallback to prevent combinatorial deadlocks with strict simultaneous filters
+  if (validCandidates.length === 0 && filters) {
+    const relaxedFilters: FilterCriteria = {
+      ...filters,
+      somaMin: Math.max(165, filters.somaMin - 8),
+      somaMax: Math.min(235, filters.somaMax + 8),
+      paresMin: Math.max(5, filters.paresMin - 1),
+      paresMax: Math.min(10, filters.paresMax + 1),
+      primosMin: Math.max(3, filters.primosMin - 1),
+      primosMax: Math.min(8, filters.primosMax + 1),
+      molduraMin: Math.max(7, filters.molduraMin - 1),
+      molduraMax: Math.min(12, filters.molduraMax + 1),
+      repetidasMin: Math.max(6, filters.repetidasMin - 1),
+      repetidasMax: Math.min(12, filters.repetidasMax + 1),
+      maxConsecutivas: Math.min(6, filters.maxConsecutivas + 1),
+    };
+
+    const isRelaxedValid = (nums: number[]) => {
+      const a = analyzeTicket(nums, concursoAnterior, aiScores);
+      return ticketPassesFilters(a, relaxedFilters);
+    };
+
+    function collectRelaxed(start: number, current: number[]) {
+      if (validCandidates.length >= maxPoolCandidates) return;
+      if (current.length === 15) {
+        if (isRelaxedValid(current)) {
+          validCandidates.push([...current]);
+        }
+        return;
+      }
+      const needed = 15 - current.length;
+      const available = sortedPool.length - start;
+      if (available < needed) return;
+
+      for (let i = start; i < sortedPool.length; i++) {
+        current.push(sortedPool[i]);
+        collectRelaxed(i + 1, current);
+        current.pop();
+        if (validCandidates.length >= maxPoolCandidates) break;
+      }
+    }
+
+    collectRelaxed(0, []);
   }
 
   // Representative test subsets for covering guarantee
@@ -849,6 +897,229 @@ export function buildOptimal18Pool(
   qtdAusentes: number = 9
 ) {
   return buildOptimalPool(18, previousDraw, dynamicStats, cyclePending, qtdRepetidas, qtdAusentes);
+}
+
+/**
+ * Constrói um pool de dezenas (15 a 21 números) estritamente ajustado e sincronizado
+ * com todos os filtros ativos (Soma, Pares, Primos, Moldura, Fibonacci, Repetidas, Curva ABC e Vazios).
+ * Garante que a matriz 5x5 do volante reflita imediatamente qualquer alteração nos filtros.
+ */
+export function buildFilterCompliantPool({
+  targetCount = 18,
+  filters,
+  previousDraw = CONCURSO_ATUAL,
+  dynamicStats = DEZENAS_STATS,
+  cyclePending = [],
+  aiScores,
+  currentSelected = [],
+  fixedNumbers = [],
+  excludedNumbers = [],
+}: {
+  targetCount: number;
+  filters: FilterCriteria;
+  previousDraw?: LotofacilDraw;
+  dynamicStats?: DezenaStats[];
+  cyclePending?: number[];
+  aiScores?: number[];
+  currentSelected?: number[];
+  fixedNumbers?: number[];
+  excludedNumbers?: number[];
+}): {
+  dezenas: number[];
+  motivoAjuste: string;
+} {
+  const allExcluded = new Set<number>([
+    ...(excludedNumbers || []),
+    ...(filters?.dezenasExcluidas || []),
+  ]);
+
+  const allFixed = Array.from(
+    new Set([...(fixedNumbers || []), ...(filters?.dezenasFixas || [])])
+  ).filter((n) => !allExcluded.has(n));
+
+  if (allFixed.length >= targetCount) {
+    return {
+      dezenas: allFixed.slice(0, targetCount).sort((a, b) => a - b),
+      motivoAjuste: `${targetCount} dezenas fixas aplicadas integralmente.`,
+    };
+  }
+
+  const abc = calculateCurvaAbc(dynamicStats);
+  const classeASet = new Set(abc.classeANumeros);
+
+  // Targets escalados proporcionalmente para targetCount (base 15)
+  const targetPairsCount = Math.round(
+    (((filters.paresMin ?? 7) + (filters.paresMax ?? 8)) / 30) * targetCount
+  );
+  const targetPrimesCount = Math.round(
+    (((filters.primosMin ?? 4) + (filters.primosMax ?? 6)) / 30) * targetCount
+  );
+  const targetMolduraCount = Math.round(
+    (((filters.molduraMin ?? 9) + (filters.molduraMax ?? 10)) / 30) * targetCount
+  );
+  const targetFiboCount = Math.round(
+    (((filters.fibonacciMin ?? 3) + (filters.fibonacciMax ?? 5)) / 30) * targetCount
+  );
+  const targetRepetidasCount = Math.round(
+    (((filters.repetidasMin ?? 8) + (filters.repetidasMax ?? 10)) / 30) * targetCount
+  );
+
+  const targetMean = ((filters.somaMin ?? 190) + (filters.somaMax ?? 210)) / 30; // ~13.33
+
+  const availableNumbers = Array.from({ length: 25 }, (_, i) => i + 1).filter(
+    (n) => !allExcluded.has(n)
+  );
+
+  // Pontuação inicial de cada número
+  const scored = availableNumbers.map((n) => {
+    let score = 50;
+    const stat = dynamicStats.find((s) => s.numero === n);
+    if (stat) {
+      score += stat.vezes / 25;
+      score += (stat.atrasoAtual || 1) * 3;
+      if (stat.atrasoAcimaDaMedia) score += 20;
+    }
+    if (aiScores && aiScores[n - 1] !== undefined) {
+      score += aiScores[n - 1] * 0.4;
+    }
+    if (cyclePending.includes(n)) score += 40;
+    if (allFixed.includes(n)) score += 2000; // Prioridade máxima absoluta
+    if (filters.curvaAbcAtiva && classeASet.has(n)) score += 35;
+    if (currentSelected.includes(n)) score += 12; // Retenção do que o usuário já escolheu se viável
+
+    // Anti-afinidade de combinações de vazio
+    if (filters.vaziosAtivos && filters.combinacoesVazioExcluidas) {
+      for (const [v1, v2] of filters.combinacoesVazioExcluidas) {
+        if ((n === v1 && allFixed.includes(v2)) || (n === v2 && allFixed.includes(v1))) {
+          score -= 90;
+        }
+      }
+    }
+
+    // Penalidade por desvio excessivo da média canônica
+    const distToMean = Math.abs(n - targetMean);
+    score -= distToMean * 0.5;
+
+    return { n, score, stat };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Iniciar com números fixos
+  const chosen = new Set<number>(allFixed);
+
+  // Função para contar atributos atuais
+  const getCounts = (set: Set<number>) => {
+    const arr = Array.from(set);
+    let pairs = 0;
+    let primes = 0;
+    let moldura = 0;
+    let fibo = 0;
+    let repetidas = 0;
+    let classeA = 0;
+    let sum = 0;
+    for (const num of arr) {
+      sum += num;
+      if (num % 2 === 0) pairs++;
+      if (isPrimo(num)) primes++;
+      if (isMoldura(num)) moldura++;
+      if (isFibonacci(num)) fibo++;
+      if (previousDraw.dezenas.includes(num)) repetidas++;
+      if (classeASet.has(num)) classeA++;
+    }
+    return { pairs, primes, moldura, fibo, repetidas, classeA, sum, count: arr.length };
+  };
+
+  // Preencher até targetCount selecionando os números que maximizam a aderência aos filtros
+  while (chosen.size < targetCount) {
+    const cur = getCounts(chosen);
+    let bestCandidate = -1;
+    let bestCandidateScore = -Infinity;
+
+    for (const item of scored) {
+      if (chosen.has(item.n)) continue;
+
+      let candidateWeight = item.score;
+      const num = item.n;
+
+      // Se precisamos de mais pares ou ímpares
+      if (num % 2 === 0) {
+        if (cur.pairs < targetPairsCount) candidateWeight += 25;
+        else candidateWeight -= 15;
+      } else {
+        const targetOdds = targetCount - targetPairsCount;
+        const curOdds = cur.count - cur.pairs;
+        if (curOdds < targetOdds) candidateWeight += 25;
+        else candidateWeight -= 15;
+      }
+
+      // Moldura
+      if (isMoldura(num)) {
+        if (cur.moldura < targetMolduraCount) candidateWeight += 20;
+      } else {
+        const targetMiolo = targetCount - targetMolduraCount;
+        const curMiolo = cur.count - cur.moldura;
+        if (curMiolo < targetMiolo) candidateWeight += 20;
+      }
+
+      // Primos
+      if (isPrimo(num)) {
+        if (cur.primes < targetPrimesCount) candidateWeight += 20;
+      }
+
+      // Fibonacci
+      if (isFibonacci(num)) {
+        if (cur.fibo < targetFiboCount) candidateWeight += 15;
+      }
+
+      // Repetidas
+      if (previousDraw.dezenas.includes(num)) {
+        if (cur.repetidas < targetRepetidasCount) candidateWeight += 20;
+      } else {
+        const targetAusentes = targetCount - targetRepetidasCount;
+        const curAusentes = cur.count - cur.repetidas;
+        if (curAusentes < targetAusentes) candidateWeight += 20;
+      }
+
+      // Curva ABC Classe A
+      if (filters.curvaAbcAtiva && classeASet.has(num)) {
+        candidateWeight += 30;
+      }
+
+      // Combinações de Vazio (não juntar pares de vazio no mesmo pool se possível)
+      if (filters.vaziosAtivos && filters.combinacoesVazioExcluidas) {
+        for (const [v1, v2] of filters.combinacoesVazioExcluidas) {
+          if ((num === v1 && chosen.has(v2)) || (num === v2 && chosen.has(v1))) {
+            candidateWeight -= 100;
+          }
+        }
+      }
+
+      if (candidateWeight > bestCandidateScore) {
+        bestCandidateScore = candidateWeight;
+        bestCandidate = num;
+      }
+    }
+
+    if (bestCandidate === -1) {
+      const remaining = scored.find((s) => !chosen.has(s.n));
+      if (remaining) chosen.add(remaining.n);
+      else break;
+    } else {
+      chosen.add(bestCandidate);
+    }
+  }
+
+  const finalPool = Array.from(chosen).sort((a, b) => a - b);
+  const finalMetrics = getCounts(chosen);
+  const projected15Sum = Math.round((finalMetrics.sum / targetCount) * 15);
+
+  const motivoAjuste = `${finalMetrics.pairs}P/${targetCount - finalMetrics.pairs}I, ${finalMetrics.primes} Primos, ${finalMetrics.moldura} Moldura, ${finalMetrics.fibo} Fibo, ${finalMetrics.repetidas} Repetidas, ${finalMetrics.classeA} Classe A (Soma 15 Proj: ~${projected15Sum})`;
+
+  return {
+    dezenas: finalPool,
+    motivoAjuste,
+  };
 }
 
 /**
