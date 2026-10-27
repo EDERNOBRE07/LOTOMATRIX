@@ -28,6 +28,7 @@ import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
 import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
+import { RegrasAlertaHibridoComponent } from './RegrasAlertaHibridoComponent';
 import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
@@ -56,10 +57,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onSyncNow,
   isSyncing = false,
   statsList = [],
-  cyclePendingNumbers = [],
+  cyclePendingNumbers = [17, 22],
   concursosNoCiclo = 3,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'geral' | 'backtesting' | 'dados' | 'cache'>('geral');
+  const [activeSubTab, setActiveSubTab] = useState<'geral' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'>('geral');
 
   // 1. Modo de Conexão
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => {
@@ -286,7 +287,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
 
         {/* Subtab Navigation Pills */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setActiveSubTab('geral')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
@@ -296,6 +297,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             Conexão & Notificações
+          </button>
+          <button
+            onClick={() => setActiveSubTab('regras_hibridas')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'regras_hibridas'
+                ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                : 'text-cyan-400 hover:text-white'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Regras de Alerta Híbrido (E/OU)</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">
+              Novo
+            </span>
           </button>
           <button
             onClick={() => setActiveSubTab('backtesting')}
@@ -549,8 +564,60 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Painel Integrado de Regras de Alerta Híbrido */}
+          <RegrasAlertaHibridoComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cicloAusentes={cyclePendingNumbers}
+            onApplyDezenasToClosing={(dezenas) => {
+              try {
+                localStorage.setItem('lotosniper_canonical_fixed_dezenas', JSON.stringify(dezenas));
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(
+                    new CustomEvent('lotosniper-canonical-restrictions-updated', {
+                      detail: { dezenas, source: 'regras_hibridas' },
+                    })
+                  );
+                }
+                setNotificationSuccessNotice(
+                  `${dezenas.length} dezenas (${dezenas.map((d) => d.toString().padStart(2, '0')).join(', ')}) enviadas para as Restrições Canônicas do Fechamento!`
+                );
+                setTimeout(() => setNotificationSuccessNotice(null), 5000);
+              } catch {}
+            }}
+          />
         </div>
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: REGRAS DE ALERTA HÍBRIDO (E / OU)                                 */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'regras_hibridas' && (
+        <div className="space-y-5">
+          <RegrasAlertaHibridoComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cicloAusentes={cyclePendingNumbers}
+            onApplyDezenasToClosing={(dezenas) => {
+              try {
+                localStorage.setItem('lotosniper_canonical_fixed_dezenas', JSON.stringify(dezenas));
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(
+                    new CustomEvent('lotosniper-canonical-restrictions-updated', {
+                      detail: { dezenas, source: 'regras_hibridas' },
+                    })
+                  );
+                }
+                setNotificationSuccessNotice(
+                  `${dezenas.length} dezenas (${dezenas.map((d) => d.toString().padStart(2, '0')).join(', ')}) enviadas para as Restrições Canônicas do Fechamento!`
+                );
+                setTimeout(() => setNotificationSuccessNotice(null), 5000);
+              } catch {}
+            }}
+          />
+        </div>
       )}
 
       {/* ========================================================================= */}

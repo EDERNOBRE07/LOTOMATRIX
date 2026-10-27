@@ -6,13 +6,38 @@ export interface IntelligentAlert {
   id: string;
   timestamp: number;
   dateStr: string;
-  type: 'radar_90' | 'new_cycle' | 'cycle_closed' | 'system';
+  type: 'radar_90' | 'new_cycle' | 'cycle_closed' | 'system' | 'hibrido';
   title: string;
   body: string;
   dezena?: number;
   probabilidade?: number;
   concurso?: number;
   read: boolean;
+  dezenasGatilho?: number[];
+  regraNome?: string;
+}
+
+export interface HybridAlertRule {
+  id: string;
+  nome: string;
+  ativa: boolean;
+  operador: 'E' | 'OU'; // AND ou OR entre Radar e Atraso Crítico
+  
+  // Condição Radar de Tendências Quentes
+  radarAtivo: boolean;
+  radarCriterio: 'forca_minima' | 'probabilidade_minima' | 'top3';
+  radarValor: number; // ex: 80%
+  
+  // Condição Atrasos Críticos
+  atrasoAtivo: boolean;
+  atrasoCriterio: 'atraso_minimo' | 'atraso_maior_medio' | 'pendente_ciclo';
+  atrasoValor: number; // ex: 2 ou 3 concursos
+  
+  // Conjunto de Dezenas Definido pelo Usuário
+  dezenasMonitoradas: number[]; // Dezenas selecionadas pelo usuário (1 a 25)
+  
+  criadoEm: number;
+  ultimoDisparo?: number;
 }
 
 export interface PushNotificationConfig {
@@ -22,6 +47,8 @@ export interface PushNotificationConfig {
   newCycleAlertEnabled: boolean;
   soundEnabled: boolean;
 }
+
+const HYBRID_RULES_KEY = 'lotosniper_hybrid_alert_rules';
 
 const CONFIG_KEY = 'lotosniper_push_notification_config';
 const ALERTS_KEY = 'lotosniper_push_alerts_history';
@@ -270,3 +297,224 @@ export function auditAndTriggerIntelligentAlerts(
     saveAlertsHistory([...newAlerts, ...existingAlerts]);
   }
 }
+
+export const DEFAULT_HYBRID_RULES: HybridAlertRule[] = [
+  {
+    id: 'regra-ciclo-retorno',
+    nome: 'Retorno Iminente no Ciclo (17 & 22)',
+    ativa: true,
+    operador: 'E',
+    radarAtivo: true,
+    radarCriterio: 'forca_minima',
+    radarValor: 60,
+    atrasoAtivo: true,
+    atrasoCriterio: 'pendente_ciclo',
+    atrasoValor: 1,
+    dezenasMonitoradas: [17, 22],
+    criadoEm: Date.now() - 3600000,
+  },
+  {
+    id: 'regra-pares-ouro-momentum',
+    nome: 'Pares de Ouro em Momentum Quente',
+    ativa: true,
+    operador: 'OU',
+    radarAtivo: true,
+    radarCriterio: 'top3',
+    radarValor: 3,
+    atrasoAtivo: true,
+    atrasoCriterio: 'atraso_minimo',
+    atrasoValor: 2,
+    dezenasMonitoradas: [11, 20, 1, 3],
+    criadoEm: Date.now() - 7200000,
+  },
+  {
+    id: 'regra-atraso-critico-radar-alto',
+    nome: 'Atraso Crítico Alto com Força Radar ≥ 75%',
+    ativa: true,
+    operador: 'E',
+    radarAtivo: true,
+    radarCriterio: 'forca_minima',
+    radarValor: 75,
+    atrasoAtivo: true,
+    atrasoCriterio: 'atraso_minimo',
+    atrasoValor: 2,
+    dezenasMonitoradas: [2, 4, 6, 8, 14, 17, 22],
+    criadoEm: Date.now() - 10800000,
+  },
+];
+
+export function getHybridAlertRules(): HybridAlertRule[] {
+  try {
+    const raw = localStorage.getItem(HYBRID_RULES_KEY);
+    if (!raw) {
+      saveHybridAlertRules(DEFAULT_HYBRID_RULES);
+      return DEFAULT_HYBRID_RULES;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_HYBRID_RULES;
+  } catch {
+    return DEFAULT_HYBRID_RULES;
+  }
+}
+
+export function saveHybridAlertRules(rules: HybridAlertRule[]): void {
+  try {
+    localStorage.setItem(HYBRID_RULES_KEY, JSON.stringify(rules));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-hybrid-rules-updated', { detail: rules }));
+    }
+  } catch (e) {
+    console.error('Falha ao salvar regras híbridas:', e);
+  }
+}
+
+export interface HybridEvaluationResult {
+  ruleId: string;
+  ruleName: string;
+  matched: boolean;
+  dezenasGatilho: number[];
+  detalhes: string[];
+}
+
+export function evaluateHybridRule(
+  rule: HybridAlertRule,
+  latestDraw: LotofacilDraw,
+  statsList: DezenaStats[] = [],
+  cicloAusentes: number[] = [17, 22],
+  radarData?: { dezena: number; probabilidade: number; forcaEma: number }[]
+): HybridEvaluationResult {
+  const radarMetrics = radarData || computeEmaTrends(latestDraw, RECENT_DRAWS);
+  const radarMap = new Map<number, { probabilidade: number; forcaEma: number }>();
+  radarMetrics.forEach((m) => radarMap.set(m.dezena, m));
+
+  const statsMap = new Map<number, DezenaStats>();
+  statsList.forEach((s) => statsMap.set(s.numero, s));
+
+  // Determine which dezenas are evaluated
+  const dezenasToTest = rule.dezenasMonitoradas && rule.dezenasMonitoradas.length > 0
+    ? rule.dezenasMonitoradas
+    : Array.from({ length: 25 }, (_, i) => i + 1);
+
+  const radarTop3Set = new Set(radarMetrics.slice(0, 3).map((r) => r.dezena));
+
+  const dezenasGatilho: number[] = [];
+  const detalhes: string[] = [];
+
+  dezenasToTest.forEach((num) => {
+    const radar = radarMap.get(num) || { probabilidade: 50, forcaEma: 50 };
+    const stat = statsMap.get(num);
+    const atrasoAtual = stat ? stat.atrasoAtual : (latestDraw.dezenas.includes(num) ? 0 : 1);
+    const mediaAtraso = stat ? stat.atrasoMedio : 1.6;
+
+    // Evaluate Radar Condition
+    let radarPass = false;
+    if (!rule.radarAtivo) {
+      radarPass = true;
+    } else {
+      if (rule.radarCriterio === 'forca_minima') {
+        radarPass = radar.forcaEma >= rule.radarValor;
+      } else if (rule.radarCriterio === 'probabilidade_minima') {
+        radarPass = radar.probabilidade >= rule.radarValor;
+      } else if (rule.radarCriterio === 'top3') {
+        radarPass = radarTop3Set.has(num);
+      }
+    }
+
+    // Evaluate Atraso Condition
+    let atrasoPass = false;
+    if (!rule.atrasoAtivo) {
+      atrasoPass = true;
+    } else {
+      if (rule.atrasoCriterio === 'atraso_minimo') {
+        atrasoPass = atrasoAtual >= rule.atrasoValor;
+      } else if (rule.atrasoCriterio === 'atraso_maior_medio') {
+        atrasoPass = atrasoAtual > mediaAtraso;
+      } else if (rule.atrasoCriterio === 'pendente_ciclo') {
+        atrasoPass = cicloAusentes.includes(num);
+      }
+    }
+
+    // Combine conditions with operator E (AND) or OU (OR)
+    let qualifies = false;
+    if (rule.operador === 'E') {
+      qualifies = radarPass && atrasoPass;
+    } else {
+      qualifies = radarPass || atrasoPass;
+    }
+
+    if (qualifies) {
+      dezenasGatilho.push(num);
+      const dezPad = num.toString().padStart(2, '0');
+      detalhes.push(`Dezena ${dezPad}: Força EMA ${radar.forcaEma}% | Atraso ${atrasoAtual} conc.`);
+    }
+  });
+
+  return {
+    ruleId: rule.id,
+    ruleName: rule.nome,
+    matched: dezenasGatilho.length > 0,
+    dezenasGatilho,
+    detalhes,
+  };
+}
+
+/**
+ * Audit all active hybrid alert rules and trigger push notifications & alerts
+ */
+export function auditAndTriggerHybridAlerts(
+  latestDraw: LotofacilDraw,
+  statsList: DezenaStats[] = [],
+  cicloAusentes: number[] = [17, 22]
+): HybridEvaluationResult[] {
+  const rules = getHybridAlertRules().filter((r) => r.ativa);
+  const config = getPushNotificationConfig();
+  const existingAlerts = getAlertsHistory();
+  const radarMetrics = computeEmaTrends(latestDraw, RECENT_DRAWS);
+  const now = Date.now();
+  const dateStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const newAlerts: IntelligentAlert[] = [];
+  const results: HybridEvaluationResult[] = [];
+
+  rules.forEach((rule) => {
+    const res = evaluateHybridRule(rule, latestDraw, statsList, cicloAusentes, radarMetrics);
+    results.push(res);
+
+    if (res.matched) {
+      const alertId = `hibrido_${rule.id}_${latestDraw.concurso}`;
+      const alreadyTriggered = existingAlerts.some((a) => a.id === alertId);
+
+      if (!alreadyTriggered) {
+        const dezStr = res.dezenasGatilho.map((d) => d.toString().padStart(2, '0')).join(', ');
+        const title = `⚡ Alerta Híbrido: ${rule.nome}`;
+        const body = `Condição '${rule.operador}' atendida para as dezenas [${dezStr}] no Concurso #${latestDraw.concurso}.`;
+
+        newAlerts.push({
+          id: alertId,
+          timestamp: now,
+          dateStr,
+          type: 'hibrido',
+          title,
+          body,
+          concurso: latestDraw.concurso,
+          read: false,
+          dezenasGatilho: res.dezenasGatilho,
+          regraNome: rule.nome,
+        });
+
+        if (config.pushEnabled) {
+          fireBrowserPushNotification(title, body);
+        }
+        if (config.soundEnabled) {
+          soundService.playGoldenZoneSuccessChime();
+        }
+      }
+    }
+  });
+
+  if (newAlerts.length > 0) {
+    saveAlertsHistory([...newAlerts, ...existingAlerts]);
+  }
+
+  return results;
+}
+

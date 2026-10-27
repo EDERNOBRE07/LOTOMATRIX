@@ -207,9 +207,33 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     window.addEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
 
+    const handleCanonicalRestrictionsUpdated = (e: any) => {
+      const incomingDezenas = e.detail?.dezenas;
+      if (Array.isArray(incomingDezenas)) {
+        const sorted = [...incomingDezenas].sort((a, b) => a - b);
+        setFixedNumbers(sorted);
+        setFilters((prev) => ({
+          ...prev,
+          dezenasFixas: sorted,
+        }));
+        setSelectedNumbers((prev) => {
+          const union = Array.from(new Set([...sorted, ...prev])).sort((a, b) => a - b);
+          return union.slice(0, targetCount);
+        });
+        const dezStr = sorted.map((d: number) => d.toString().padStart(2, '0')).join(', ');
+        setDocumentMessage(
+          `✓ ${sorted.length} Dezenas Fixas [${dezStr}] sincronizadas nas Restrições Canônicas do Fechamento!`
+        );
+        soundService.playGoldenZoneSuccessChime();
+        setTimeout(() => setDocumentMessage(null), 6000);
+      }
+    };
+    window.addEventListener('lotosniper-canonical-restrictions-updated', handleCanonicalRestrictionsUpdated);
+
     return () => {
       window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
       window.removeEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
+      window.removeEventListener('lotosniper-canonical-restrictions-updated', handleCanonicalRestrictionsUpdated);
     };
   }, [targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 

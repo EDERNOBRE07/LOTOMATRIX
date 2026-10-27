@@ -16,7 +16,7 @@ import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
 import { buildOptimal18Pool, countMatches } from './services/combinatorics';
 import { soundService } from './services/soundAlert';
-import { auditAndTriggerIntelligentAlerts } from './services/notificationService';
+import { auditAndTriggerIntelligentAlerts, auditAndTriggerHybridAlerts } from './services/notificationService';
 import {
   Layers,
   Sparkles,
@@ -158,7 +158,10 @@ export default function App() {
 
     // Dispara auditoria de Notificações Push Inteligentes (Radar > 90% e Início de Ciclos)
     auditAndTriggerIntelligentAlerts(latestDraw, dynamicStats, concursosNoCiclo);
-  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo, latestDraw, dynamicStats]);
+
+    // Dispara auditoria das Regras de Alerta Híbrido (E / OU: Radar + Atrasos Críticos)
+    auditAndTriggerHybridAlerts(latestDraw, dynamicStats, dezenasPendentesCiclo);
+  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo, latestDraw, dynamicStats, dezenasPendentesCiclo]);
 
   // Listener para navegação rápida entre abas acionada por componentes filhos
   useEffect(() => {
