@@ -318,24 +318,82 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Export CSV
+  // Export CSV formatado diretamente para planilhas externas (Excel, Google Sheets, Calc)
   const handleExportCSV = () => {
-    if (tickets.length === 0) return;
-    const header = 'Jogo,D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12,D13,D14,D15,Pares,Primos,Soma,Moldura,ScoreIA\n';
-    const rows = tickets
-      .map(
-        (t) =>
-          `${t.index},${t.dezenas.join(',')},${t.pares},${t.primos},${t.soma},${t.moldura},${t.scoreIA}`
-      )
-      .join('\n');
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+    if (listToExport.length === 0) return;
 
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
+    let metaToUse = fechamentoMeta;
+    if (!metaToUse) {
+      try {
+        const savedMeta = localStorage.getItem('lotosniper_active_fechamento_meta');
+        if (savedMeta) metaToUse = JSON.parse(savedMeta);
+      } catch {}
+    }
+
+    const estrategia = metaToUse?.strategyName || metaToUse?.modeName || 'Fechamento LotoSniper';
+    const concursoRef = metaToUse?.concurso || latestDraw.concurso;
+    const dataRef = metaToUse?.dataConcurso || latestDraw.data;
+
+    // Cabeçalho formatado com ponto e vírgula (padrão regional para planilhas)
+    const headers = [
+      'Jogo',
+      'Dezenas Formatadas',
+      'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D14', 'D15',
+      'Pares',
+      'Ímpares',
+      'Primos',
+      'Moldura',
+      'Fibonacci',
+      'Soma Total',
+      'Repetidas',
+      'Score IA',
+      'Tags',
+      'Estratégia',
+      'Concurso Referência',
+      'Data Concurso',
+    ];
+
+    const rows = listToExport.map((t) => {
+      const id = t.id || `ticket-${t.index}`;
+      const tags = (ticketTags[id] || []).join(' | ');
+      const sortedDez = [...t.dezenas].sort((a, b) => a - b);
+      const dezCols = sortedDez.map((n) => n.toString().padStart(2, '0'));
+      const formattedDez = sortedDez.map((n) => n.toString().padStart(2, '0')).join(' - ');
+
+      return [
+        `"Jogo ${t.index.toString().padStart(2, '0')}"`,
+        `"${formattedDez}"`,
+        ...dezCols,
+        t.pares,
+        t.impares ?? (15 - t.pares),
+        t.primos,
+        t.moldura,
+        t.fibonacci ?? 0,
+        t.soma,
+        t.repetidas ?? 0,
+        `"${(t.scoreIA || 0).toFixed(1)}"`,
+        `"${tags}"`,
+        `"${estrategia}"`,
+        concursoRef,
+        `"${dataRef}"`,
+      ].join(';');
+    });
+
+    // Adiciona UTF-8 BOM (\uFEFF) para garantir que Excel e planilhas abram com acentuação perfeita
+    const csvContent = '\uFEFF' + headers.join(';') + '\n' + rows.join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_fechamento.csv`;
+    link.download = `lotosniper_jogos_concurso_${concursoRef}_${listToExport.length}_apostas.csv`;
     link.click();
     URL.revokeObjectURL(url);
+
+    setCopiedFormat('csv');
+    setTimeout(() => setCopiedFormat(null), 3500);
   };
 
   // Print view
@@ -411,6 +469,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Baixar TXT</span>
             </button>
 
+            {/* Botão Exportar para CSV (Planilhas Externas: Excel & Google Sheets) */}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm hover:border-emerald-400"
+              title="Baixar lista atual de jogos em formato CSV formatado para planilhas externas (Excel / Google Sheets)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Exportar para CSV</span>
+            </button>
+
             {/* Exportar CSV Profissional (Lotéricas & Plataformas de Apostas) */}
             <button
               onClick={() => setIsCSVModalOpen(true)}
@@ -418,7 +486,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               title="Exportação CSV profissional com metadados para casas lotéricas ou plataformas de apostas"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Exportar CSV Profissional ({selectedTicketIds.size})</span>
+              <span>Configurar CSV ({selectedTicketIds.size})</span>
             </button>
 
             {/* Exportar PDF Formatado para Volantes da Lotofácil */}
@@ -433,6 +501,24 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Alerta de Confirmação de Download do CSV */}
+      {copiedFormat === 'csv' && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs px-4 py-2.5 rounded-xl flex items-center justify-between shadow-lg shadow-emerald-500/10 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              <strong>Download Concluído:</strong> A lista de jogos foi exportada com sucesso em arquivo CSV com codificação UTF-8 BOM, 100% compatível com Excel, Google Sheets e LibreOffice!
+            </span>
+          </div>
+          <button
+            onClick={() => setCopiedFormat(null)}
+            className="text-emerald-400 hover:text-white font-bold text-xs px-1.5 py-0.5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Barra de Filtros por Tags e Seleção em Lote */}
       {tickets.length > 0 && (
@@ -516,9 +602,20 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </button>
             </div>
 
-            <div className="text-slate-400 font-mono text-[11px]">
-              <strong className="text-emerald-400">{selectedTicketIds.size}</strong> de{' '}
-              <strong className="text-white">{tickets.length}</strong> jogos marcados para exportação
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 font-mono text-[11px]">
+                <strong className="text-emerald-400">{selectedTicketIds.size}</strong> de{' '}
+                <strong className="text-white">{tickets.length}</strong> jogos marcados
+              </span>
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                title="Exportar jogos selecionados diretamente para CSV"
+              >
+                <Download className="w-3 h-3 text-emerald-400" />
+                <span>Exportar para CSV ({selectedTicketIds.size})</span>
+              </button>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ import { RastreadorPerformanceHistoricaComponent } from './RastreadorPerformance
 import { MapaCalorVaziosComponent } from './MapaCalorVaziosComponent';
 import { DashboardDesempenhoFinanceiroComponent } from './DashboardDesempenhoFinanceiroComponent';
 import { SimulacaoBacktestingComponent } from './SimulacaoBacktestingComponent';
+import { FrequenciaVinteConcursosComponent } from './FrequenciaVinteConcursosComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -75,6 +76,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'frequencia_20'
     | 'simulacao_backtest'
     | 'mapa_vazios'
     | 'desempenho_financeiro'
@@ -124,6 +126,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('frequencia_20')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'frequencia_20'
+                ? 'bg-gradient-to-r from-orange-500 via-rose-500 to-amber-500 text-white shadow-md shadow-rose-500/25 font-black'
+                : 'text-orange-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 fill-current text-orange-400" />
+            <span>Frequência 20 Concursos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 border border-orange-500/40 font-mono">
+              QUENTES & FRIAS
+            </span>
           </button>
 
           <button
@@ -749,7 +766,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             onApplyNumbers={onApplyNumbers}
           />
 
-          {/* Dynamic Recharts Bar Chart */}
+          {/* Gráfico de Barras Recharts: Frequência das 25 Dezenas nos Últimos 20 Concursos (Quentes & Frias) */}
+          <FrequenciaVinteConcursosComponent
+            latestDraw={latestDraw}
+            dynamicStats={statsList}
+            onApplyNumbers={onApplyNumbers}
+          />
+
+          {/* Dynamic Recharts Bar Chart (Histórico 3.800 Concursos) */}
           <FrequencyDelayChart
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
@@ -924,6 +948,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: FREQUÊNCIA DAS 25 DEZENAS NOS ÚLTIMOS 20 CONCURSOS (RECHARTS • QUENTES & FRIAS) */}
+      {activeSubTab === 'frequencia_20' && (
+        <FrequenciaVinteConcursosComponent
+          latestDraw={latestDraw}
+          dynamicStats={statsList}
+          onApplyNumbers={onApplyNumbers}
+        />
       )}
 
       {/* SUBTAB: SIMULAÇÃO DE BACKTESTING (DESEMPENHO REAL VS PROJETADO) */}
