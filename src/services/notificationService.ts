@@ -1,5 +1,6 @@
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { soundService } from './soundAlert';
+import { RECENT_DRAWS } from '../data/lotofacilData';
 
 export interface IntelligentAlert {
   id: string;
@@ -129,6 +130,57 @@ export function fireBrowserPushNotification(title: string, body: string): void {
 }
 
 /**
+ * Computes EMA Trend metrics for all 25 numbers over the recent draws
+ */
+export function computeEmaTrends(
+  latestDraw: LotofacilDraw,
+  draws: LotofacilDraw[] = RECENT_DRAWS,
+  periodoEMA: number = 7
+): { dezena: number; probabilidade: number; forcaEma: number }[] {
+  const list = [latestDraw];
+  draws.forEach((d) => {
+    if (!list.some((existing) => existing.concurso === d.concurso)) {
+      list.push(d);
+    }
+  });
+  const chronological = list.slice(0, 30).reverse();
+  const alphaFast = 2 / (periodoEMA + 1);
+  const alphaSlow = 2 / (periodoEMA * 2 + 1);
+
+  const results: { dezena: number; probabilidade: number; forcaEma: number }[] = [];
+  for (let num = 1; num <= 25; num++) {
+    let emaFast = 0.6;
+    let emaSlow = 0.6;
+    let countLast5 = 0;
+
+    chronological.forEach((draw, idx) => {
+      const isPresent = draw.dezenas.includes(num) ? 1 : 0;
+      emaFast = alphaFast * isPresent + (1 - alphaFast) * emaFast;
+      emaSlow = alphaSlow * isPresent + (1 - alphaSlow) * emaSlow;
+      if (idx >= chronological.length - 5 && isPresent) {
+        countLast5++;
+      }
+    });
+
+    const momentumDelta = Number((emaFast - emaSlow).toFixed(3));
+    const atraso = latestDraw.dezenas.includes(num) ? 0 : 1;
+    let forcaRaw = emaFast * 65 + momentumDelta * 80 + (countLast5 / 5) * 20;
+    if (atraso === 0) forcaRaw += 6;
+    else if (atraso === 1) forcaRaw += 4;
+    else if (atraso >= 4) forcaRaw -= atraso * 2.5;
+
+    const medidorForca = Math.min(99, Math.max(12, Math.round(forcaRaw)));
+    const probabilidadeProximos5 = Math.min(98, Math.max(30, Math.round(medidorForca * 0.92 + 6)));
+    results.push({
+      dezena: num,
+      probabilidade: probabilidadeProximos5,
+      forcaEma: medidorForca,
+    });
+  }
+  return results.sort((a, b) => b.probabilidade - a.probabilidade);
+}
+
+/**
  * Checks all conditions and generates intelligent alerts when:
  * 1. Radar de Tendências Quentes detects a dezena with probability/strength > 90%
  * 2. A new cycle is started (concursosNoCiclo === 1 or 15 dezenas sorted)
@@ -147,9 +199,10 @@ export function auditAndTriggerIntelligentAlerts(
   const dateStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   // 1. Check Radar de Tendências Quentes > 90%
-  if (config.radarAlertEnabled && radarTopNumbers && radarTopNumbers.length > 0) {
+  const radarData = radarTopNumbers || computeEmaTrends(latestDraw, RECENT_DRAWS);
+  if (config.radarAlertEnabled && radarData && radarData.length > 0) {
     const threshold = config.radarThreshold || 90;
-    const hotNumbersOver90 = radarTopNumbers.filter((r) => r.probabilidade >= threshold || r.forcaEma >= threshold);
+    const hotNumbersOver90 = radarData.filter((r) => r.probabilidade >= threshold || r.forcaEma >= threshold);
 
     hotNumbersOver90.forEach((item) => {
       const dezenaPad = item.dezena.toString().padStart(2, '0');

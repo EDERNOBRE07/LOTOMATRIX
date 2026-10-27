@@ -16,6 +16,7 @@ import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
 import { buildOptimal18Pool, countMatches } from './services/combinatorics';
 import { soundService } from './services/soundAlert';
+import { auditAndTriggerIntelligentAlerts } from './services/notificationService';
 import {
   Layers,
   Sparkles,
@@ -154,7 +155,10 @@ export default function App() {
         concurso: latestDraw.concurso,
       });
     }
-  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo]);
+
+    // Dispara auditoria de Notificações Push Inteligentes (Radar > 90% e Início de Ciclos)
+    auditAndTriggerIntelligentAlerts(latestDraw, dynamicStats, concursosNoCiclo);
+  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo, latestDraw, dynamicStats]);
 
   // Listener para navegação rápida entre abas acionada por componentes filhos
   useEffect(() => {
@@ -293,8 +297,9 @@ export default function App() {
       triggerAutomaticJackpotAlerts(result.draw, ticketsToCheck);
 
       // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Ciclo < 3)
-      const { stats: newStats, dezenasPendentesCiclo: newPending } = computeDynamicStats(result.draw, RECENT_DRAWS);
+      const { stats: newStats, dezenasPendentesCiclo: newPending, concursosNoCiclo: newCicloNum } = computeDynamicStats(result.draw, RECENT_DRAWS);
       triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending);
+      auditAndTriggerIntelligentAlerts(result.draw, newStats, newCicloNum);
 
       // After updating latest draw, trigger AI prediction optimization with the newly loaded draw
       fetchAIPrediction(result.draw);
