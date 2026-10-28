@@ -29,6 +29,7 @@ import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
+import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
 import { TurboResult } from '../services/turboBruteForce';
 import { soundService } from '../services/soundAlert';
@@ -374,6 +375,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setTimeout(() => setDocumentMessage(null), 5000);
     }
   };
+
+  // Escuta calibragem do Índice de Moldura aplicada externamente
+  useEffect(() => {
+    const handleMolduraEvent = (e: any) => {
+      if (e?.detail) {
+        const { molduraMin, molduraMax } = e.detail;
+        handleFiltersChange(
+          {
+            ...filters,
+            molduraMin: molduraMin ?? 9,
+            molduraMax: molduraMax ?? 10,
+          },
+          true
+        );
+      }
+    };
+    window.addEventListener('lotosniper-moldura-filter-applied', handleMolduraEvent);
+    return () => {
+      window.removeEventListener('lotosniper-moldura-filter-applied', handleMolduraEvent);
+    };
+  }, [filters, targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 
   // Selecionar a Estratégia de Fechamento (15 a 21 Números) carregando com os filtros selecionados
   const handleSelectClosingStrategy = (key: FechamentoMode) => {
@@ -1588,6 +1610,22 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           setExcludedNumbers([]);
         }}
         targetCount={targetCount}
+      />
+
+      {/* MAPA DE CALOR INTERATIVO (ÚLTIMOS 50 CONCURSOS) - DIRETAMENTE ABAIXO DO VOLANTE OFICIAL */}
+      <MapaCalorVolante50Component
+        latestDraw={latestDraw}
+        selectedNumbers={selectedNumbers}
+        fixedNumbers={fixedNumbers}
+        excludedNumbers={excludedNumbers}
+        onToggleNumber={handleToggleNumber}
+        onSetFixed={handleSetFixed}
+        onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+        onClear={() => {
+          setSelectedNumbers([]);
+          setFixedNumbers([]);
+          setExcludedNumbers([]);
+        }}
       />
 
       {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}

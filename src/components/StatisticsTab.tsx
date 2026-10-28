@@ -29,6 +29,7 @@ import { DashboardDesempenhoFinanceiroComponent } from './DashboardDesempenhoFin
 import { SimulacaoBacktestingComponent } from './SimulacaoBacktestingComponent';
 import { FrequenciaVinteConcursosComponent } from './FrequenciaVinteConcursosComponent';
 import { CorrelacaoFrequenciaAtrasoD3Component } from './CorrelacaoFrequenciaAtrasoD3Component';
+import { IndiceMolduraUltimos10Card } from './IndiceMolduraUltimos10Card';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -794,6 +795,11 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           <FrequencyDelayChart
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
+            latestDraw={latestDraw}
+          />
+
+          {/* Card Estatístico de Índice de Moldura vs Centro (Últimos 10 Concursos) */}
+          <IndiceMolduraUltimos10Card
             latestDraw={latestDraw}
           />
 

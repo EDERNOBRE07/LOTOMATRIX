@@ -12,6 +12,7 @@ import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
 import { Top15FrequenciaUltimos10Card } from './components/Top15FrequenciaUltimos10Card';
+import { IndiceMolduraUltimos10Card } from './components/IndiceMolduraUltimos10Card';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -535,6 +536,14 @@ export default function App() {
             setActiveTab('fechamento');
           }}
           onFixTopDezenas={() => {
+            setActiveTab('fechamento');
+          }}
+        />
+
+        {/* Card Estatístico de Índice de Moldura vs Centro (Últimos 10 Concursos) */}
+        <IndiceMolduraUltimos10Card
+          latestDraw={latestDraw}
+          onNavigateToFechamento={() => {
             setActiveTab('fechamento');
           }}
         />
