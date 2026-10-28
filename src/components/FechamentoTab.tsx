@@ -139,6 +139,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     suggestions: string[];
   } | null>(null);
 
+  // Estado para sinalizar e iluminar com destaque o box escolhido em 'Sugestões Estratégicas'
+  const [activeStrategicBox, setActiveStrategicBox] = useState<
+    'curva_abc' | 'top_18' | 'pares_ouro' | 'preditor_real' | 'insights_ia' | 'garantir_filtros' | null
+  >(null);
+
   // Listener para aplicação automática de Dezenas Fixas / Par de Ouro
   useEffect(() => {
     if (initialFixedNumbers && initialFixedNumbers.length > 0) {
@@ -198,6 +203,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         });
         setSelectedNumbers(calibrated.dezenas);
         setStrategyName('Insights Diários da IA (Filtros & Matriz 5×5)');
+        setActiveStrategicBox('insights_ia');
         setDocumentMessage(
           `✓ Insights Diários da IA: todos os filtros presetados aplicados e matriz 5×5 (${targetCount} dezenas) calibrada!`
         );
@@ -470,6 +476,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // 1. Aplicar Top 18 no Fechamento
   const handleApplyTop18 = () => {
+    setActiveStrategicBox('top_18');
     setMode('18_14_15');
     const sorted18 = [...dynamicStats]
       .sort((a, b) => {
@@ -483,13 +490,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
     setSelectedNumbers(sorted18);
     setStrategyName('Top 18 IA');
-    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada no Fechamento!');
+    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada e iluminada no Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
 
   // 2. Aplicar Pares de Ouro
   const handleApplyParesDeOuro = () => {
+    setActiveStrategicBox('pares_ouro');
     const goldenPair = [11, 20];
     setFixedNumbers((prev) => Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b));
     setSelectedNumbers((prev) => {
@@ -497,13 +505,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       return merged.slice(0, targetCount);
     });
     setStrategyName('Par de Ouro [11, 20]');
-    setDocumentMessage('✓ Par de Ouro [11, 20] fixado com sucesso no Fechamento!');
+    setDocumentMessage('✓ Par de Ouro [11, 20] fixado e iluminado no Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
 
   // 3. Aplicar Preditor em Tempo Real da Lotofácil
   const handleApplyRealTimePredictor = () => {
+    setActiveStrategicBox('preditor_real');
     const ranked = [...dynamicStats]
       .sort((a, b) => {
         const probA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes;
@@ -516,13 +525,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
     setSelectedNumbers(ranked);
     setStrategyName('Preditor em Tempo Real da Lotofácil');
-    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas à matriz de ${targetCount} dezenas!`);
+    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas e iluminadas na matriz de ${targetCount} dezenas!`);
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
 
   // 4. Aplicar Insights Diários da IA (Carrega TODOS os Filtros Presetados e calibra a matriz 5x5)
   const handleApplyDailyAIInsights = () => {
+    setActiveStrategicBox('insights_ia');
     let voidPairs = filters.combinacoesVazioExcluidas || [];
     try {
       if (voidPairs.length === 0) {
@@ -590,6 +600,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // 5. Garantir Incorporação dos Filtros Canônicos
   const handleEnsureFilters = () => {
+    setActiveStrategicBox('garantir_filtros');
     const updatedFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 185,
@@ -616,6 +627,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // 6. Aplicar Curva ABC (Classe A - 80% Frequência Histórica)
   const handleApplyCurvaAbcClasseA = () => {
+    setActiveStrategicBox('curva_abc');
     const updatedFilters: FilterCriteria = {
       ...filters,
       curvaAbcAtiva: true,
@@ -1337,6 +1349,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   CONCURSO #{latestDraw.concurso}
                 </span>
+                {activeStrategicBox && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span>Estratégia Iluminada: <strong className="text-white">{strategyName}</strong></span>
+                  </span>
+                )}
               </h3>
               <p className="text-[11px] text-slate-400">
                 Incorpore instantaneamente as recomendações da IA, Pares de Ouro, Preditor e calibração de filtros na matriz de fechamento.
@@ -1348,107 +1366,199 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           </span>
         </div>
 
-        {/* 6 Botões de Ação Rápida com Curva ABC */}
+        {/* 6 Botões de Ação Rápida com Curva ABC e Iluminação Dinâmica do Box Escolhido */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
+          {/* 1. Curva ABC (A) */}
           <button
             type="button"
             onClick={handleApplyCurvaAbcClasseA}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition group cursor-pointer shadow-sm ${
-              filters.curvaAbcAtiva
-                ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/30'
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'curva_abc'
+                ? 'bg-gradient-to-br from-amber-500/35 via-yellow-500/25 to-slate-900 border-2 border-amber-300 ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(245,158,11,0.55)] scale-[1.02] z-10'
+                : filters.curvaAbcAtiva
+                ? 'bg-amber-500/15 border-amber-400/80 ring-1 ring-amber-400/40 shadow-sm'
                 : 'bg-slate-950/80 hover:bg-slate-800 border-amber-500/40 hover:border-amber-300'
             }`}
           >
-            <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-400 text-slate-950 group-hover:scale-105 transition shrink-0 font-black">
+            <div className={`p-2 rounded-lg transition shrink-0 font-black ${
+              activeStrategicBox === 'curva_abc'
+                ? 'bg-gradient-to-br from-amber-400 to-yellow-300 text-slate-950 shadow-md shadow-amber-500/50 scale-110 animate-pulse'
+                : 'bg-gradient-to-br from-amber-500 to-yellow-400 text-slate-950 group-hover:scale-105'
+            }`}>
               <Award className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>⭐ Curva ABC (A)</span>
+                {activeStrategicBox === 'curva_abc' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-amber-300 truncate">
-                {filters.curvaAbcAtiva ? 'Filtro Ativo (Mín. 11)' : 'Dominância 80%'}
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'curva_abc' ? 'text-amber-200 font-bold' : 'text-amber-300'}`}>
+                {activeStrategicBox === 'curva_abc' ? '★ ILUMINADO' : filters.curvaAbcAtiva ? 'Filtro Ativo (Mín. 11)' : 'Dominância 80%'}
               </p>
             </div>
           </button>
 
+          {/* 2. Top 18 IA */}
           <button
             type="button"
             onClick={handleApplyTop18}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-amber-500/30 hover:border-amber-400 text-left transition group cursor-pointer shadow-sm"
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'top_18'
+                ? 'bg-gradient-to-br from-amber-500/35 via-orange-500/25 to-slate-900 border-2 border-amber-300 ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(251,191,36,0.55)] scale-[1.02] z-10'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-amber-500/30 hover:border-amber-400 shadow-sm'
+            }`}
           >
-            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 group-hover:scale-105 transition shrink-0">
+            <div className={`p-2 rounded-lg transition shrink-0 ${
+              activeStrategicBox === 'top_18'
+                ? 'bg-gradient-to-br from-amber-400 to-orange-400 text-slate-950 shadow-md shadow-amber-500/50 scale-110 animate-pulse'
+                : 'bg-amber-500/20 text-amber-300 group-hover:scale-105'
+            }`}>
               <Sparkles className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>⚡ Top 18 IA</span>
+                {activeStrategicBox === 'top_18' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 truncate">18 dezenas ponderadas</p>
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'top_18' ? 'text-amber-200 font-bold' : 'text-slate-400'}`}>
+                {activeStrategicBox === 'top_18' ? '★ ILUMINADO' : '18 dezenas ponderadas'}
+              </p>
             </div>
           </button>
 
+          {/* 3. Pares de Ouro */}
           <button
             type="button"
             onClick={handleApplyParesDeOuro}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-yellow-500/30 hover:border-yellow-400 text-left transition group cursor-pointer shadow-sm"
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'pares_ouro'
+                ? 'bg-gradient-to-br from-yellow-500/35 via-amber-500/25 to-slate-900 border-2 border-yellow-300 ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(234,179,8,0.55)] scale-[1.02] z-10'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-yellow-500/30 hover:border-yellow-400 shadow-sm'
+            }`}
           >
-            <div className="p-2 rounded-lg bg-yellow-500/20 text-yellow-300 group-hover:scale-105 transition shrink-0">
+            <div className={`p-2 rounded-lg transition shrink-0 ${
+              activeStrategicBox === 'pares_ouro'
+                ? 'bg-gradient-to-br from-yellow-400 to-amber-400 text-slate-950 shadow-md shadow-yellow-500/50 scale-110 animate-pulse'
+                : 'bg-yellow-500/20 text-yellow-300 group-hover:scale-105'
+            }`}>
               <Award className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>🏆 Pares de Ouro</span>
+                {activeStrategicBox === 'pares_ouro' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-yellow-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 truncate">Fixa [11, 20] afinidade</p>
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'pares_ouro' ? 'text-yellow-200 font-bold' : 'text-slate-400'}`}>
+                {activeStrategicBox === 'pares_ouro' ? '★ FIXA [11, 20]' : 'Fixa [11, 20] afinidade'}
+              </p>
             </div>
           </button>
 
+          {/* 4. Preditor Real */}
           <button
             type="button"
             onClick={handleApplyRealTimePredictor}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-400 text-left transition group cursor-pointer shadow-sm"
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'preditor_real'
+                ? 'bg-gradient-to-br from-cyan-500/35 via-blue-500/25 to-slate-900 border-2 border-cyan-300 ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(6,182,212,0.6)] scale-[1.02] z-10'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-cyan-500/30 hover:border-cyan-400 shadow-sm'
+            }`}
           >
-            <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-300 group-hover:scale-105 transition shrink-0">
+            <div className={`p-2 rounded-lg transition shrink-0 ${
+              activeStrategicBox === 'preditor_real'
+                ? 'bg-gradient-to-br from-cyan-400 to-blue-400 text-slate-950 shadow-md shadow-cyan-500/50 scale-110 animate-pulse'
+                : 'bg-cyan-500/20 text-cyan-300 group-hover:scale-105'
+            }`}>
               <Activity className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>🔮 Preditor Real</span>
+                {activeStrategicBox === 'preditor_real' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-cyan-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 truncate">Motor estocástico</p>
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'preditor_real' ? 'text-cyan-200 font-bold' : 'text-slate-400'}`}>
+                {activeStrategicBox === 'preditor_real' ? '★ ILUMINADO' : 'Motor estocástico'}
+              </p>
             </div>
           </button>
 
+          {/* 5. Insights IA */}
           <button
             type="button"
             onClick={handleApplyDailyAIInsights}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-purple-500/30 hover:border-purple-400 text-left transition group cursor-pointer shadow-sm"
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'insights_ia'
+                ? 'bg-gradient-to-br from-purple-500/35 via-fuchsia-500/25 to-slate-900 border-2 border-purple-300 ring-2 ring-purple-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(168,85,247,0.6)] scale-[1.02] z-10'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-purple-500/30 hover:border-purple-400 shadow-sm'
+            }`}
           >
-            <div className="p-2 rounded-lg bg-purple-500/20 text-purple-300 group-hover:scale-105 transition shrink-0">
+            <div className={`p-2 rounded-lg transition shrink-0 ${
+              activeStrategicBox === 'insights_ia'
+                ? 'bg-gradient-to-br from-purple-400 to-fuchsia-400 text-slate-950 shadow-md shadow-purple-500/50 scale-110 animate-pulse'
+                : 'bg-purple-500/20 text-purple-300 group-hover:scale-105'
+            }`}>
               <Lightbulb className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>💡 Insights IA</span>
+                {activeStrategicBox === 'insights_ia' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-purple-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 truncate">9 rep. + ausentes chave</p>
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'insights_ia' ? 'text-purple-200 font-bold' : 'text-slate-400'}`}>
+                {activeStrategicBox === 'insights_ia' ? '★ PRESET ATIVO' : '9 rep. + ausentes chave'}
+              </p>
             </div>
           </button>
 
+          {/* 6. Garantir Filtros */}
           <button
             type="button"
             onClick={handleEnsureFilters}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-emerald-500/40 hover:border-emerald-400 text-left transition group cursor-pointer shadow-sm"
+            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
+              activeStrategicBox === 'garantir_filtros'
+                ? 'bg-gradient-to-br from-emerald-500/35 via-teal-500/25 to-slate-900 border-2 border-emerald-300 ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(16,185,129,0.6)] scale-[1.02] z-10'
+                : 'bg-slate-950/80 hover:bg-slate-800 border-emerald-500/40 hover:border-emerald-400 shadow-sm'
+            }`}
           >
-            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300 group-hover:scale-105 transition shrink-0">
+            <div className={`p-2 rounded-lg transition shrink-0 ${
+              activeStrategicBox === 'garantir_filtros'
+                ? 'bg-gradient-to-br from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/50 scale-110 animate-pulse'
+                : 'bg-emerald-500/20 text-emerald-300 group-hover:scale-105'
+            }`}>
               <Filter className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold text-white truncate flex items-center gap-1">
                 <span>🛡️ Garantir Filtros</span>
+                {activeStrategicBox === 'garantir_filtros' && (
+                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-emerald-400 text-slate-950 animate-pulse">
+                    ✓
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-emerald-400 truncate">Zona de Ouro (185-215)</p>
+              <p className={`text-[10px] truncate ${activeStrategicBox === 'garantir_filtros' ? 'text-emerald-200 font-bold' : 'text-emerald-400'}`}>
+                {activeStrategicBox === 'garantir_filtros' ? '★ INCORPORADOS' : 'Zona de Ouro (185-215)'}
+              </p>
             </div>
           </button>
         </div>
