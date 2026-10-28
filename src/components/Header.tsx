@@ -10,6 +10,7 @@ import {
   BellRing,
   X,
   Crown,
+  Contrast,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
@@ -36,25 +37,31 @@ export const Header: React.FC<HeaderProps> = ({
   aiStatus,
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
-  const [isGoldTheme, setIsGoldTheme] = useState(() => {
+  const [currentTheme, setCurrentTheme] = useState<'gold' | 'high_contrast' | 'slate'>(() => {
     try {
-      return localStorage.getItem('lotosniper_theme') === 'gold';
+      const saved = localStorage.getItem('lotosniper_theme');
+      if (saved === 'high_contrast') return 'high_contrast';
+      if (saved === 'gold') return 'gold';
+      return 'gold';
     } catch {
-      return false;
+      return 'gold';
     }
   });
 
   const toggleTheme = () => {
-    const nextGold = !isGoldTheme;
-    setIsGoldTheme(nextGold);
+    // Alterna entre o modo 'Gold' e 'Alto Contraste' (monocromático para leitura noturna prolongada)
+    const nextTheme = currentTheme === 'gold' ? 'high_contrast' : 'gold';
+    setCurrentTheme(nextTheme);
     try {
-      localStorage.setItem('lotosniper_theme', nextGold ? 'gold' : 'slate');
+      localStorage.setItem('lotosniper_theme', nextTheme);
       if (typeof document !== 'undefined') {
-        if (nextGold) {
+        document.documentElement.classList.remove('theme-gold', 'theme-high-contrast');
+        if (nextTheme === 'gold') {
           document.documentElement.classList.add('theme-gold');
-        } else {
-          document.documentElement.classList.remove('theme-gold');
+        } else if (nextTheme === 'high_contrast') {
+          document.documentElement.classList.add('theme-high-contrast');
         }
+        window.dispatchEvent(new CustomEvent('lotosniper-theme-changed', { detail: nextTheme }));
       }
     } catch {}
   };
@@ -214,19 +221,35 @@ export const Header: React.FC<HeaderProps> = ({
             </strong>
           </div>
 
-          {/* Theme Quick Switcher */}
+          {/* Theme Quick Switcher: Alternância entre Modo Gold e Alto Contraste (Monocromático) */}
           <button
             type="button"
             onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer ${
-              isGoldTheme
-                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-400/20'
-                : 'bg-slate-800 text-amber-300 border-amber-500/40 hover:bg-slate-750'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-black transition cursor-pointer shadow-sm active:scale-95 ${
+              currentTheme === 'high_contrast'
+                ? 'bg-zinc-100 text-zinc-950 border-white hover:bg-white ring-1 ring-white/50'
+                : 'bg-amber-400 text-slate-950 border-amber-300 shadow-amber-400/20 hover:bg-amber-300'
             }`}
-            title={isGoldTheme ? 'Alternar para Modo Escuro Padrão (Slate)' : 'Alternar para Modo Gold Imperial'}
+            title={
+              currentTheme === 'gold'
+                ? 'Alternar para Modo Alto Contraste (Monocromático para leitura prolongada em baixa luminosidade)'
+                : 'Alternar para Modo Gold Imperial'
+            }
           >
-            <Crown className={`w-3.5 h-3.5 ${isGoldTheme ? 'fill-current' : 'text-amber-400'}`} />
-            <span className="hidden sm:inline">{isGoldTheme ? 'Gold Ativo' : 'Tema Gold'}</span>
+            {currentTheme === 'high_contrast' ? (
+              <>
+                <Contrast className="w-3.5 h-3.5 text-zinc-950" />
+                <span>Alto Contraste</span>
+                <span className="text-[9px] font-mono uppercase bg-black text-white px-1 py-0.2 rounded font-black hidden sm:inline">
+                  P&B
+                </span>
+              </>
+            ) : (
+              <>
+                <Crown className="w-3.5 h-3.5 fill-current text-slate-950" />
+                <span>Modo Gold</span>
+              </>
+            )}
           </button>
 
           {onQuickOptimize && (

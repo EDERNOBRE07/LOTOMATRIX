@@ -11,6 +11,7 @@ import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
+import { Top15FrequenciaUltimos10Card } from './components/Top15FrequenciaUltimos10Card';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -57,14 +58,15 @@ export default function App() {
     }
   });
 
-  // Theme initialization ('slate' or 'gold')
+  // Theme initialization ('gold', 'high_contrast' or 'slate')
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem('lotosniper_theme');
-      if (savedTheme === 'gold') {
+      const savedTheme = localStorage.getItem('lotosniper_theme') || 'gold';
+      document.documentElement.classList.remove('theme-gold', 'theme-high-contrast');
+      if (savedTheme === 'high_contrast') {
+        document.documentElement.classList.add('theme-high-contrast');
+      } else if (savedTheme === 'gold') {
         document.documentElement.classList.add('theme-gold');
-      } else {
-        document.documentElement.classList.remove('theme-gold');
       }
     } catch {}
   }, []);
@@ -525,6 +527,17 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Card Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos (Recharts) */}
+        <Top15FrequenciaUltimos10Card
+          latestDraw={latestDraw}
+          onApplyTop15ToFechamento={() => {
+            setActiveTab('fechamento');
+          }}
+          onFixTopDezenas={() => {
+            setActiveTab('fechamento');
+          }}
+        />
 
         {/* Navigation Tabs Menu: Design Vibrante, Botões Animados e Localização Facilitada */}
         <NavigationMenu

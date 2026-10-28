@@ -121,3 +121,111 @@ html.theme-gold footer {
   background-color: #070604 !important;
   border-color: rgba(245, 158, 11, 0.2) !important;
 }
+
+/* ========================================================================= */
+/* THEME: ALTO CONTRASTE (MONOCROMÁTICO / ALTA LEGIBILIDADE NOTURNA)         */
+/* ========================================================================= */
+html.theme-high-contrast,
+body.theme-high-contrast,
+.theme-high-contrast {
+  --theme-bg-deep: #000000;
+  --theme-bg-surface: #0a0a0a;
+  --theme-bg-card: #121212;
+  --theme-border-hc: #52525b;
+}
+
+html.theme-high-contrast,
+html.theme-high-contrast body {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* Surfaces */
+html.theme-high-contrast .bg-slate-950,
+html.theme-high-contrast .bg-slate-950\/95,
+html.theme-high-contrast .bg-slate-950\/90,
+html.theme-high-contrast .bg-slate-950\/80,
+html.theme-high-contrast .bg-slate-950\/70,
+html.theme-high-contrast .bg-slate-950\/60,
+html.theme-high-contrast .bg-slate-900,
+html.theme-high-contrast .bg-slate-900\/95,
+html.theme-high-contrast .bg-slate-900\/90,
+html.theme-high-contrast .bg-slate-900\/80,
+html.theme-high-contrast .bg-slate-900\/60 {
+  background-color: #09090b !important;
+  border-color: #3f3f46 !important;
+}
+
+html.theme-high-contrast .bg-slate-850,
+html.theme-high-contrast .bg-slate-800,
+html.theme-high-contrast .bg-slate-800\/90,
+html.theme-high-contrast .bg-slate-800\/80,
+html.theme-high-contrast .bg-slate-800\/60 {
+  background-color: #18181b !important;
+  border-color: #52525b !important;
+}
+
+/* Borders */
+html.theme-high-contrast .border-slate-800,
+html.theme-high-contrast .border-slate-850,
+html.theme-high-contrast .border-slate-700,
+html.theme-high-contrast .border-amber-500\/50,
+html.theme-high-contrast .border-amber-500\/40,
+html.theme-high-contrast .border-amber-500\/30,
+html.theme-high-contrast .border-emerald-500\/40,
+html.theme-high-contrast .border-emerald-500\/30,
+html.theme-high-contrast .border-cyan-500\/40 {
+  border-color: #52525b !important;
+}
+
+/* Crisp text contrast */
+html.theme-high-contrast .text-slate-400 {
+  color: #d4d4d8 !important;
+}
+
+html.theme-high-contrast .text-slate-300 {
+  color: #e4e4e7 !important;
+}
+
+html.theme-high-contrast .text-slate-200 {
+  color: #f4f4f5 !important;
+}
+
+html.theme-high-contrast .text-emerald-400,
+html.theme-high-contrast .text-amber-400,
+html.theme-high-contrast .text-cyan-400,
+html.theme-high-contrast .text-amber-300,
+html.theme-high-contrast .text-yellow-300,
+html.theme-high-contrast .text-emerald-300 {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+/* High contrast primary buttons: crisp white button with black text for maximum visibility */
+html.theme-high-contrast .bg-emerald-500,
+html.theme-high-contrast .bg-amber-400,
+html.theme-high-contrast .bg-amber-500,
+html.theme-high-contrast .bg-cyan-500 {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 900 !important;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15) !important;
+}
+
+html.theme-high-contrast .hover\:bg-emerald-400:hover,
+html.theme-high-contrast .hover\:bg-amber-400:hover,
+html.theme-high-contrast .hover\:bg-cyan-400:hover {
+  background-color: #e4e4e7 !important;
+  color: #000000 !important;
+}
+
+html.theme-high-contrast header {
+  background-color: rgba(5, 5, 5, 0.98) !important;
+  border-color: #52525b !important;
+}
+
+html.theme-high-contrast footer {
+  background-color: #000000 !important;
+  border-color: #3f3f46 !important;
+}
+

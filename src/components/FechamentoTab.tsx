@@ -230,10 +230,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     window.addEventListener('lotosniper-canonical-restrictions-updated', handleCanonicalRestrictionsUpdated);
 
+    const handleApplyNumbers = (e: any) => {
+      const incomingNumbers = e.detail?.numbers;
+      const customStrat = e.detail?.strategyName;
+      if (Array.isArray(incomingNumbers) && incomingNumbers.length > 0) {
+        const sorted = [...incomingNumbers].sort((a, b) => a - b);
+        setSelectedNumbers(sorted.slice(0, targetCount));
+        if (customStrat) setStrategyName(customStrat);
+        setDocumentMessage(
+          `✓ ${sorted.length} dezenas carregadas na Matriz 5×5 (${customStrat || 'Top Frequência'})!`
+        );
+        soundService.playGoldenZoneSuccessChime();
+        setTimeout(() => setDocumentMessage(null), 6000);
+      }
+    };
+    window.addEventListener('lotosniper-apply-numbers-to-fechamento', handleApplyNumbers);
+
     return () => {
       window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
       window.removeEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
       window.removeEventListener('lotosniper-canonical-restrictions-updated', handleCanonicalRestrictionsUpdated);
+      window.removeEventListener('lotosniper-apply-numbers-to-fechamento', handleApplyNumbers);
     };
   }, [targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 
@@ -1832,6 +1849,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     Regra de Ouro (190–210) Ativa
                   </span>
                 )}
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  <span>0 Redundâncias • 100% Únicos • 0 Anomalias</span>
+                </span>
                 <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                   <span>Custo Total:</span>
                   <strong className="text-emerald-400">

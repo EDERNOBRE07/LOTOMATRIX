@@ -419,7 +419,7 @@ export function generateFechamentoCovering(
 
     const isRelaxedValid = (nums: number[]) => {
       const a = analyzeTicket(nums, concursoAnterior, aiScores);
-      return ticketPassesFilters(a, relaxedFilters);
+      return ticketPassesFilters(a, relaxedFilters) && !isCanonicalAnomaly(nums, a, concursoAnterior);
     };
 
     function collectRelaxed(start: number, current: number[]) {
@@ -501,17 +501,29 @@ export function generateFechamentoCovering(
     }
   }
 
-  // If we still need tickets to reach the desired target count (up to maxTickets)
-  while (
-    chosenTickets.length < Math.min(validCandidates.length + chosenTickets.length, maxTickets) &&
-    validCandidates.length > 0
-  ) {
-    chosenTickets.push(validCandidates.shift()!);
+  // Guarantee ZERO duplicate tickets across the entire generated closure (anti-redundancy guarantee)
+  const uniqueCandidateMap = new Map<string, number[]>();
+  for (const cand of chosenTickets) {
+    const sorted = [...cand].sort((a, b) => a - b);
+    const key = sorted.join('-');
+    const analysis = analyzeTicket(sorted, concursoAnterior, aiScores);
+    if (!uniqueCandidateMap.has(key) && isCandidateValid(sorted) && !isCanonicalAnomaly(sorted, analysis, concursoAnterior)) {
+      uniqueCandidateMap.set(key, sorted);
+    }
   }
 
-  // Strictly filter to guarantee 100% zero-anomaly and 100% active-filter conformity
-  const fullyCompliantTickets = chosenTickets.filter((cand) => isCandidateValid(cand));
-  const finalChosen = fullyCompliantTickets.length > 0 ? fullyCompliantTickets : chosenTickets;
+  // If we still need tickets to reach the desired target count, draw from valid candidates without duplicating
+  for (const cand of validCandidates) {
+    if (uniqueCandidateMap.size >= maxTickets) break;
+    const sorted = [...cand].sort((a, b) => a - b);
+    const key = sorted.join('-');
+    const analysis = analyzeTicket(sorted, concursoAnterior, aiScores);
+    if (!uniqueCandidateMap.has(key) && isCandidateValid(sorted) && !isCanonicalAnomaly(sorted, analysis, concursoAnterior)) {
+      uniqueCandidateMap.set(key, sorted);
+    }
+  }
+
+  const finalChosen = Array.from(uniqueCandidateMap.values());
 
   return finalChosen.map((ticket, index) => {
     const analysis = analyzeTicket(ticket, concursoAnterior, aiScores);
