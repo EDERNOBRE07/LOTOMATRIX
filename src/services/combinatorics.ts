@@ -19,6 +19,25 @@ import {
   countClasseADezenas,
   calculateCurvaAbc,
 } from './curvaAbcService';
+import {
+  calculateIndicePerformance,
+  calculateTicketPerformanceIndex,
+  getIntervalosRobustez50,
+  isCombinationRobust50,
+  generateFechamentoInteligentePonderado,
+} from './fechamentoPonderadoService';
+export {
+  calculateIndicePerformance,
+  calculateTicketPerformanceIndex,
+  getIntervalosRobustez50,
+  isCombinationRobust50,
+  generateFechamentoInteligentePonderado,
+};
+export type {
+  PerformanceIndexResult,
+  Robustez50Intervals,
+  FechamentoPonderadoResult,
+} from './fechamentoPonderadoService';
 
 // Helper: Check if number is prime
 export function isPrimo(n: number): boolean {
@@ -190,6 +209,21 @@ export function ticketPassesFilters(
         return false;
       }
     }
+  }
+
+  // NOVO: FILTRO DE ROBUSTEZ ESTATÍSTICA (BASE ÚLTIMAS 50 APURAÇÕES)
+  // Descarte automático de combinações com soma, paridade ou moldura fora do intervalo provável das 50 apurações
+  if (filters.robustezEstatisticaAtiva) {
+    const somaMin = filters.robustez50SomaMin ?? 180;
+    const somaMax = filters.robustez50SomaMax ?? 220;
+    const paresMin = filters.robustez50ParesMin ?? 6;
+    const paresMax = filters.robustez50ParesMax ?? 8;
+    const molduraMin = filters.robustez50MolduraMin ?? 9;
+    const molduraMax = filters.robustez50MolduraMax ?? 11;
+
+    if (ticket.soma < somaMin || ticket.soma > somaMax) return false;
+    if (ticket.pares < paresMin || ticket.pares > paresMax) return false;
+    if (ticket.moldura < molduraMin || ticket.moldura > molduraMax) return false;
   }
 
   return true;
@@ -741,6 +775,14 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   minDezenasClasseA: 11,
   combinacoesVazioExcluidas: [],
   vaziosAtivos: false,
+  robustezEstatisticaAtiva: false,
+  robustez50SomaMin: 180,
+  robustez50SomaMax: 220,
+  robustez50ParesMin: 6,
+  robustez50ParesMax: 8,
+  robustez50MolduraMin: 9,
+  robustez50MolduraMax: 11,
+  fechamentoPonderadoAtivo: false,
 };
 
 /**
@@ -990,6 +1032,12 @@ export function buildFilterCompliantPool({
       score += stat.vezes / 25;
       score += (stat.atrasoAtual || 1) * 3;
       if (stat.atrasoAcimaDaMedia) score += 20;
+
+      // Ponderação dinâmica pelo Índice de Performance (Frequência × Atraso)
+      if (filters.fechamentoPonderadoAtivo) {
+        const ip = calculateIndicePerformance(stat, dynamicStats).indicePerformance;
+        score += ip * 0.5;
+      }
     }
     if (aiScores && aiScores[n - 1] !== undefined) {
       score += aiScores[n - 1] * 0.4;

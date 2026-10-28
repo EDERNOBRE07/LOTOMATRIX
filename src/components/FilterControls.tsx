@@ -85,6 +85,8 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       minDezenasClasseA: 11,
       vaziosAtivos: true,
       combinacoesVazioExcluidas: voidPairs,
+      robustezEstatisticaAtiva: true,
+      fechamentoPonderadoAtivo: true,
     };
 
     saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });

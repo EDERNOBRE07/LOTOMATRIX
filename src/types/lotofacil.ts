@@ -57,6 +57,14 @@ export interface FilterCriteria {
   minDezenasClasseA?: number;
   combinacoesVazioExcluidas?: [number, number][];
   vaziosAtivos?: boolean;
+  robustezEstatisticaAtiva?: boolean;
+  robustez50SomaMin?: number;
+  robustez50SomaMax?: number;
+  robustez50ParesMin?: number;
+  robustez50ParesMax?: number;
+  robustez50MolduraMin?: number;
+  robustez50MolduraMax?: number;
+  fechamentoPonderadoAtivo?: boolean;
 }
 
 export type FechamentoMode = 

@@ -19,8 +19,10 @@ import {
   buildOptimalPool,
   buildOptimal18Pool,
   buildFilterCompliantPool,
+  generateFechamentoInteligentePonderado,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
+import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
@@ -52,6 +54,7 @@ import {
   TrendingDown,
   DollarSign,
   ShieldCheck,
+  Flame,
   Download,
   Play,
   Layers,
@@ -276,6 +279,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       localStorage.setItem('lotosniper_sound_alert', String(enabled));
     } catch {}
   };
+
+  // Telemetria de Combinações Descartadas pelo Filtro de Robustez Estatística
+  const [discardedByRobustezCount, setDiscardedByRobustezCount] = useState<number>(0);
+  const [totalCombinacoesAvaliadas, setTotalCombinacoesAvaliadas] = useState<number>(0);
 
   // Histórico de Auto-Save para as últimas 10 gerações
   const [autoSaveHistory, setAutoSaveHistory] = useState<any[]>(() => {
@@ -818,14 +825,31 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           dezenasExcluidas: excludedNumbers,
         };
 
-        const tickets = generateFechamentoCovering(
-          selectedNumbers,
-          mode.includes('13') ? 13 : 14,
-          preset.jogosMaximos,
-          fullFilters,
-          latestDraw.dezenas,
-          aiPrediction?.scores
-        );
+        let tickets: GameTicket[] = [];
+
+        if (fullFilters.fechamentoPonderadoAtivo) {
+          const result = generateFechamentoInteligentePonderado({
+            selectedNumbers,
+            targetHits: mode.includes('13') ? 13 : 14,
+            maxTickets: preset.jogosMaximos,
+            filters: fullFilters,
+            dynamicStats,
+            latestDraw,
+            aiScores: aiPrediction?.scores,
+          });
+          tickets = result.tickets;
+          setDiscardedByRobustezCount(result.discardedByRobustezCount);
+          setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
+        } else {
+          tickets = generateFechamentoCovering(
+            selectedNumbers,
+            mode.includes('13') ? 13 : 14,
+            preset.jogosMaximos,
+            fullFilters,
+            latestDraw.dezenas,
+            aiPrediction?.scores
+          );
+        }
 
         if (!tickets || tickets.length === 0) {
           const diag = diagnoseGenerationFailure(
@@ -890,6 +914,101 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         if (err?.message && !diag.reasons.includes(err.message)) {
           diag.reasons.unshift(err.message);
         }
+        setGenerationError(diag);
+        setGeneratedTickets([]);
+      } finally {
+        setIsGenerating(false);
+      }
+    }, 150);
+  };
+
+  // Gerador direto de Fechamento Inteligente Ponderado (Prioridade IP Frequência x Atraso & Robustez 50)
+  const handleGeneratePonderado = () => {
+    setIsGenerating(true);
+    setGenerationError(null);
+    const start = performance.now();
+
+    setTimeout(() => {
+      try {
+        const fullFilters: FilterCriteria = {
+          ...filters,
+          fechamentoPonderadoAtivo: true,
+          robustezEstatisticaAtiva: true,
+          dezenasFixas: fixedNumbers,
+          dezenasExcluidas: excludedNumbers,
+        };
+
+        const result = generateFechamentoInteligentePonderado({
+          selectedNumbers,
+          targetHits: mode.includes('13') ? 13 : 14,
+          maxTickets: preset.jogosMaximos,
+          filters: fullFilters,
+          dynamicStats,
+          latestDraw,
+          aiScores: aiPrediction?.scores,
+        });
+
+        if (!result.tickets || result.tickets.length === 0) {
+          const diag = diagnoseGenerationFailure(
+            selectedNumbers,
+            fixedNumbers,
+            excludedNumbers,
+            fullFilters,
+            targetCount,
+            latestDraw
+          );
+          setGenerationError(diag);
+          setGeneratedTickets([]);
+          return;
+        }
+
+        setDiscardedByRobustezCount(result.discardedByRobustezCount);
+        setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
+        setGeneratedTickets(result.tickets);
+
+        const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
+        setStrategyName(newStratName);
+
+        const exportMeta: FechamentoExportMeta = {
+          strategyName: newStratName,
+          modeName: `${preset.nome} (${result.tickets.length} Jogos - Ponderado IP)`,
+          garantia: preset.garantia,
+          targetCount: targetCount,
+          selectedNumbers: selectedNumbers,
+          fixedNumbers: fixedNumbers,
+          excludedNumbers: excludedNumbers,
+          filters: fullFilters,
+          concurso: latestDraw.concurso,
+          dataConcurso: latestDraw.data,
+          timestamp: Date.now(),
+        };
+
+        try {
+          localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+        } catch {}
+
+        onSaveTickets(result.tickets, exportMeta);
+        setGenerationType('matriz');
+        saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
+        soundService.playGoldenZoneSuccessChime();
+
+        setDocumentMessage(
+          `✓ Fechamento Inteligente Ponderado concluído! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. ${result.discardedByRobustezCount} combinações descartadas pela Robustez 50.`
+        );
+        setTimeout(() => setDocumentMessage(null), 6000);
+
+        const end = performance.now();
+        setGenerationTimeMs(Math.round(end - start));
+      } catch (err: any) {
+        console.error(err);
+        const diag = diagnoseGenerationFailure(
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          filters,
+          targetCount,
+          latestDraw
+        );
         setGenerationError(diag);
         setGeneratedTickets([]);
       } finally {
@@ -1636,6 +1755,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         latestDraw={latestDraw}
       />
 
+      {/* MÓDULO DE ROBUSTEZ ESTATÍSTICA (BASE 50 APURAÇÕES) & FECHAMENTO PONDERADO */}
+      <ModuloRobustezEstatistica
+        filters={filters}
+        onChange={(f) => handleFiltersChange(f, true)}
+        dynamicStats={dynamicStats}
+        latestDraw={latestDraw}
+        discardedByRobustezCount={discardedByRobustezCount}
+        totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
+        onGeneratePonderado={handleGeneratePonderado}
+        isGenerating={isGenerating}
+      />
+
       {/* 2. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (GRID 2X2 COM FIBONACCI E ALERTA SONORO) */}
       <FilterControls
         filters={filters}
@@ -1847,6 +1978,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </div>
                   <span className="text-[10px] text-cyan-200/80 font-normal block">
                     Padrões Fibonacci • ≥ 3 na Regra de Ouro (190–210)
+                  </span>
+                </div>
+              </button>
+
+              {/* Botão Fechamento Inteligente Ponderado */}
+              <button
+                type="button"
+                onClick={handleGeneratePonderado}
+                disabled={selectedNumbers.length < targetCount || isGenerating}
+                className={`flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer border border-amber-300 font-black whitespace-nowrap ${
+                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="Gera combinações priorizando dezenas com alto Índice de Performance (relação frequência x atraso) e descartando combinações fora do intervalo provável das 50 apurações"
+              >
+                <Flame className="w-4 h-4 fill-current text-slate-950 shrink-0" />
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm">
+                    <span>FECHAMENTO PONDERADO</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-950 text-amber-300 font-bold border border-amber-400/40">
+                      IP & ROBUSTEZ
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-900 font-semibold block">
+                    Frequência × Atraso • 50 Apurações
                   </span>
                 </div>
               </button>
