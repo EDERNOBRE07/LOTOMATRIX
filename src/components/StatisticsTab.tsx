@@ -32,6 +32,7 @@ import { CorrelacaoFrequenciaAtrasoD3Component } from './CorrelacaoFrequenciaAtr
 import { IndiceMolduraUltimos10Card } from './IndiceMolduraUltimos10Card';
 import { HistoricoParidadeVinteConcursosCard } from './HistoricoParidadeVinteConcursosCard';
 import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
+import { BacktestingEstrategias100Card } from './BacktestingEstrategias100Card';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -1012,19 +1013,32 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       )}
 
-      {/* SUBTAB: SIMULAÇÃO DE BACKTESTING (DESEMPENHO REAL VS PROJETADO) */}
+      {/* SUBTAB: SIMULAÇÃO DE BACKTESTING (DESEMPENHO REAL VS PROJETADO & 100 CONCURSOS REAIS) */}
       {activeSubTab === 'simulacao_backtest' && (
-        <SimulacaoBacktestingComponent
-          latestDraw={latestDraw}
-          savedTickets={savedTickets}
-          statsList={statsList}
-          onApplyNumbers={onApplyNumbers}
-          onGoToFechamento={() => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
-            }
-          }}
-        />
+        <div className="space-y-6">
+          <BacktestingEstrategias100Card
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            dynamicStats={statsList}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          <SimulacaoBacktestingComponent
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+            onGoToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+        </div>
       )}
 
       {/* SUBTAB: MAPA DE CALOR DE VAZIOS (COMBINAÇÕES ANTI-AFINIDADE 10 CONCURSOS) */}

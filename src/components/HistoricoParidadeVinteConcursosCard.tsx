@@ -14,6 +14,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
+import { useMetricGlow } from '../hooks/useMetricGlow';
 
 interface HistoricoParidadeVinteConcursosCardProps {
   latestDraw: LotofacilDraw;
@@ -42,6 +43,7 @@ export const HistoricoParidadeVinteConcursosCard: React.FC<HistoricoParidadeVint
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedConcurso, setSelectedConcurso] = useState<number | null>(null);
   const [appliedFeedback, setAppliedFeedback] = useState<string | null>(null);
+  const isGlowing = useMetricGlow(latestDraw.concurso);
 
   // Consolidate the last 20 draws (latestDraw + RECENT_DRAWS)
   const last20Draws = useMemo(() => {
@@ -159,7 +161,11 @@ export const HistoricoParidadeVinteConcursosCard: React.FC<HistoricoParidadeVint
     : null;
 
   return (
-    <div className="card-pro overflow-hidden border border-cyan-500/30 bg-slate-900/90 shadow-2xl backdrop-blur-md transition-all duration-300 hover:border-cyan-400/50 mb-6">
+    <div
+      className={`card-pro overflow-hidden border border-cyan-500/30 bg-slate-900/90 shadow-2xl backdrop-blur-md transition-all duration-500 hover:border-cyan-400/50 mb-6 ${
+        isGlowing ? 'animate-golden-glow ring-2 ring-amber-400/90' : ''
+      }`}
+    >
       {/* HEADER DO CARD */}
       <div className="p-4 sm:p-5 border-b border-cyan-500/20 bg-gradient-to-r from-cyan-950/40 via-slate-900/60 to-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -170,7 +176,13 @@ export const HistoricoParidadeVinteConcursosCard: React.FC<HistoricoParidadeVint
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-bold text-cyan-300 tracking-wide flex items-center gap-2">
                 Histórico de Paridade (Pares vs Ímpares)
-                <span className="text-[11px] font-normal uppercase px-2 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300">
+                <span
+                  className={`text-[11px] font-normal uppercase px-2 py-0.5 rounded-full border transition-all ${
+                    isGlowing
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold shadow-[0_0_15px_rgba(251,191,36,0.6)]'
+                      : 'bg-cyan-500/20 border-cyan-400/30 text-cyan-300'
+                  }`}
+                >
                   Últimos 20 Concursos
                 </span>
               </h3>

@@ -15,6 +15,7 @@ import { Top15FrequenciaUltimos10Card } from './components/Top15FrequenciaUltimo
 import { IndiceMolduraUltimos10Card } from './components/IndiceMolduraUltimos10Card';
 import { HistoricoParidadeVinteConcursosCard } from './components/HistoricoParidadeVinteConcursosCard';
 import { DistribuicaoPrimosCard } from './components/DistribuicaoPrimosCard';
+import { BacktestingEstrategias100Card } from './components/BacktestingEstrategias100Card';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -561,6 +562,16 @@ export default function App() {
         {/* Componente de Visualização de Distribuição de Números Primos (4 a 7 Primos por Volante) */}
         <DistribuicaoPrimosCard
           latestDraw={latestDraw}
+          onNavigateToFechamento={() => {
+            setActiveTab('fechamento');
+          }}
+        />
+
+        {/* Card de Backtesting de Estratégias contra os Últimos 100 Concursos Reais (13, 14 e 15 Pontos) */}
+        <BacktestingEstrategias100Card
+          latestDraw={latestDraw}
+          savedTickets={savedTickets}
+          dynamicStats={dynamicStats}
           onNavigateToFechamento={() => {
             setActiveTab('fechamento');
           }}

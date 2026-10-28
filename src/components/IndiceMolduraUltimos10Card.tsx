@@ -15,6 +15,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
+import { useMetricGlow } from '../hooks/useMetricGlow';
 
 interface IndiceMolduraUltimos10CardProps {
   latestDraw: LotofacilDraw;
@@ -44,6 +45,7 @@ export const IndiceMolduraUltimos10Card: React.FC<IndiceMolduraUltimos10CardProp
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedConcurso, setSelectedConcurso] = useState<number | null>(null);
   const [appliedFeedback, setAppliedFeedback] = useState<string | null>(null);
+  const isGlowing = useMetricGlow(latestDraw.concurso);
 
   // Consolidated list of last 10 draws
   const last10Draws = useMemo(() => {
@@ -161,7 +163,11 @@ export const IndiceMolduraUltimos10Card: React.FC<IndiceMolduraUltimos10CardProp
     : null;
 
   return (
-    <div className="card-pro overflow-hidden border border-amber-500/30 bg-slate-900/90 shadow-2xl backdrop-blur-md transition-all duration-300 hover:border-amber-400/50 mb-6">
+    <div
+      className={`card-pro overflow-hidden border border-amber-500/30 bg-slate-900/90 shadow-2xl backdrop-blur-md transition-all duration-500 hover:border-amber-400/50 mb-6 ${
+        isGlowing ? 'animate-golden-glow ring-2 ring-amber-400/90' : ''
+      }`}
+    >
       {/* HEADER DO CARD */}
       <div className="p-4 sm:p-5 border-b border-amber-500/20 bg-gradient-to-r from-amber-950/40 via-slate-900/60 to-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -172,7 +178,13 @@ export const IndiceMolduraUltimos10Card: React.FC<IndiceMolduraUltimos10CardProp
             <div className="flex items-center gap-2">
               <h3 className="text-base sm:text-lg font-bold text-amber-300 tracking-wide flex items-center gap-2">
                 Índice de Moldura vs Centro
-                <span className="text-[11px] font-normal uppercase px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300">
+                <span
+                  className={`text-[11px] font-normal uppercase px-2 py-0.5 rounded-full border transition-all ${
+                    isGlowing
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold shadow-[0_0_15px_rgba(251,191,36,0.6)]'
+                      : 'bg-amber-500/20 border-amber-400/30 text-amber-300'
+                  }`}
+                >
                   Últimos 10 Concursos
                 </span>
               </h3>

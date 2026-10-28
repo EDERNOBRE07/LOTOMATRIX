@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { isPrimo, isMoldura, isFibonacci } from '../services/combinatorics';
 import { soundService } from '../services/soundAlert';
+import { useMetricGlow } from '../hooks/useMetricGlow';
 
 interface Top15FrequenciaUltimos10CardProps {
   latestDraw: LotofacilDraw;
@@ -38,6 +39,7 @@ export const Top15FrequenciaUltimos10Card: React.FC<Top15FrequenciaUltimos10Card
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [copiedNotice, setCopiedNotice] = useState<string | null>(null);
+  const isGlowing = useMetricGlow(latestDraw.concurso);
 
   // Consolidated list of last 10 draws
   const last10Draws = useMemo(() => {
@@ -142,7 +144,11 @@ export const Top15FrequenciaUltimos10Card: React.FC<Top15FrequenciaUltimos10Card
   };
 
   return (
-    <div className="bg-slate-900/90 rounded-2xl border border-amber-500/30 p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all duration-300">
+    <div
+      className={`bg-slate-900/90 rounded-2xl border border-amber-500/30 p-4 sm:p-5 shadow-2xl relative overflow-hidden transition-all duration-500 ${
+        isGlowing ? 'animate-golden-glow ring-2 ring-amber-400/90' : ''
+      }`}
+    >
       {/* Decorative Glow */}
       <div className="absolute top-0 right-1/4 w-72 h-36 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -157,7 +163,13 @@ export const Top15FrequenciaUltimos10Card: React.FC<Top15FrequenciaUltimos10Card
               <h3 className="text-base font-black text-white tracking-wide flex items-center gap-1.5">
                 Top 15 Dezenas Mais Sorteadas
               </h3>
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              <span
+                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border transition-all ${
+                  isGlowing
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.6)]'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}
+              >
                 Últimos 10 Concursos (#{oldestConcurso} a #{newestConcurso})
               </span>
             </div>
