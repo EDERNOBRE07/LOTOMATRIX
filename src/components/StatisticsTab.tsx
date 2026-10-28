@@ -30,6 +30,8 @@ import { SimulacaoBacktestingComponent } from './SimulacaoBacktestingComponent';
 import { FrequenciaVinteConcursosComponent } from './FrequenciaVinteConcursosComponent';
 import { CorrelacaoFrequenciaAtrasoD3Component } from './CorrelacaoFrequenciaAtrasoD3Component';
 import { IndiceMolduraUltimos10Card } from './IndiceMolduraUltimos10Card';
+import { HistoricoParidadeVinteConcursosCard } from './HistoricoParidadeVinteConcursosCard';
+import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -800,6 +802,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
           {/* Card Estatístico de Índice de Moldura vs Centro (Últimos 10 Concursos) */}
           <IndiceMolduraUltimos10Card
+            latestDraw={latestDraw}
+          />
+
+          {/* Card Estatístico de Histórico de Paridade (Últimos 20 Concursos - 7/8 e 8/7) */}
+          <HistoricoParidadeVinteConcursosCard
+            latestDraw={latestDraw}
+          />
+
+          {/* Componente de Visualização de Distribuição de Números Primos (4 a 7 Primos por Volante) */}
+          <DistribuicaoPrimosCard
             latestDraw={latestDraw}
           />
 

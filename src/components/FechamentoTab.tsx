@@ -28,7 +28,6 @@ import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
 import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
-import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
@@ -383,7 +382,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   };
 
-  // Escuta calibragem do Índice de Moldura aplicada externamente
+  // Escuta calibragens aplicadas externamente (Moldura, Paridade, Primos)
   useEffect(() => {
     const handleMolduraEvent = (e: any) => {
       if (e?.detail) {
@@ -398,9 +397,43 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         );
       }
     };
+
+    const handleParidadeEvent = (e: any) => {
+      if (e?.detail) {
+        const { paresMin, paresMax } = e.detail;
+        handleFiltersChange(
+          {
+            ...filters,
+            paresMin: paresMin ?? 7,
+            paresMax: paresMax ?? 8,
+          },
+          true
+        );
+      }
+    };
+
+    const handlePrimosEvent = (e: any) => {
+      if (e?.detail) {
+        const { primosMin, primosMax } = e.detail;
+        handleFiltersChange(
+          {
+            ...filters,
+            primosMin: primosMin ?? 5,
+            primosMax: primosMax ?? 6,
+          },
+          true
+        );
+      }
+    };
+
     window.addEventListener('lotosniper-moldura-filter-applied', handleMolduraEvent);
+    window.addEventListener('lotosniper-paridade-filter-applied', handleParidadeEvent);
+    window.addEventListener('lotosniper-primos-filter-applied', handlePrimosEvent);
+
     return () => {
       window.removeEventListener('lotosniper-moldura-filter-applied', handleMolduraEvent);
+      window.removeEventListener('lotosniper-paridade-filter-applied', handleParidadeEvent);
+      window.removeEventListener('lotosniper-primos-filter-applied', handlePrimosEvent);
     };
   }, [filters, targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 
@@ -1775,14 +1808,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         latestDraw={latestDraw}
         soundAlertEnabled={soundAlertEnabled}
         onToggleSoundAlert={handleToggleSoundAlert}
-      />
-
-      {/* 3. SIMULAÇÃO EM TEMPO REAL DOS FILTROS PERSONALIZADOS (PRÉVIA DE 5 JOGOS) */}
-      <RealTimeFilterSimulation
-        filters={filters}
-        selectedNumbers={selectedNumbers}
-        latestDraw={latestDraw}
-        aiScores={aiPrediction?.scores}
       />
 
       {/* 4. GRÁFICO DE DISPERSÃO DE SOMAS DOS ÚLTIMOS 100 CONCURSOS & ZONA DE OURO (190–210) */}

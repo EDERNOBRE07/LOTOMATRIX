@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
-import { countMatches } from '../services/combinatorics';
+import { countMatches, DEFAULT_FILTERS } from '../services/combinatorics';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
+import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
 import {
@@ -427,6 +428,19 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     else if (hits === 11) total11++;
   }
 
+  // Filtros ativos e pool de dezenas para a Simulação em Tempo Real
+  const effectiveFilters = fechamentoMeta?.filters || DEFAULT_FILTERS;
+  const effectiveSelectedNumbers = React.useMemo(() => {
+    if (fechamentoMeta?.selectedNumbers && fechamentoMeta.selectedNumbers.length >= 15) {
+      return fechamentoMeta.selectedNumbers;
+    }
+    if (tickets.length > 0) {
+      const union = Array.from(new Set(tickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+      if (union.length >= 15) return union;
+    }
+    return latestDraw.dezenas;
+  }, [fechamentoMeta, tickets, latestDraw.dezenas]);
+
   return (
     <div className="space-y-6">
       {/* Top Export Bar */}
@@ -519,6 +533,13 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </button>
         </div>
       )}
+
+      {/* Simulação em Tempo Real dos Filtros Personalizados (Movido para Meus Jogos & Conferidor) */}
+      <RealTimeFilterSimulation
+        filters={effectiveFilters}
+        selectedNumbers={effectiveSelectedNumbers}
+        latestDraw={latestDraw}
+      />
 
       {/* Barra de Filtros por Tags e Seleção em Lote */}
       {tickets.length > 0 && (
