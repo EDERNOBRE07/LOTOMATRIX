@@ -36,18 +36,24 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Veto automático de bilhetes com alerta estatístico de soma < 180
+  const validTickets = tickets.filter((t) => {
+    const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
+    return soma >= 180;
+  });
+
   // Cálculo das métricas consolidadas do fechamento
-  const poolNumbers = Array.from(new Set(tickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
-  const totalCusto = (tickets.length * 3.5).toLocaleString('pt-BR', {
+  const poolNumbers = Array.from(new Set(validTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+  const totalCusto = (validTickets.length * 3.5).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   });
 
-  const avgSoma = tickets.length > 0 ? Math.round(tickets.reduce((acc, t) => acc + t.soma, 0) / tickets.length) : 200;
-  const avgPares = tickets.length > 0 ? (tickets.reduce((acc, t) => acc + t.pares, 0) / tickets.length).toFixed(1) : '7.5';
-  const avgPrimos = tickets.length > 0 ? (tickets.reduce((acc, t) => acc + t.primos, 0) / tickets.length).toFixed(1) : '5.3';
-  const avgMoldura = tickets.length > 0 ? (tickets.reduce((acc, t) => acc + t.moldura, 0) / tickets.length).toFixed(1) : '9.8';
-  const avgScore = tickets.length > 0 ? Math.round(tickets.reduce((acc, t) => acc + (t.scoreIA || 80), 0) / tickets.length) : 85;
+  const avgSoma = validTickets.length > 0 ? Math.round(validTickets.reduce((acc, t) => acc + t.soma, 0) / validTickets.length) : 200;
+  const avgPares = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.pares, 0) / validTickets.length).toFixed(1) : '7.5';
+  const avgPrimos = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.primos, 0) / validTickets.length).toFixed(1) : '5.3';
+  const avgMoldura = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.moldura, 0) / validTickets.length).toFixed(1) : '9.8';
+  const avgScore = validTickets.length > 0 ? Math.round(validTickets.reduce((acc, t) => acc + (t.scoreIA || 80), 0) / validTickets.length) : 85;
 
   const garantiaNome = fechamentoMeta?.garantia
     ? fechamentoMeta.garantia
@@ -305,7 +311,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   </div>
 
   <div class="slips-grid">
-    ${tickets
+    ${validTickets
       .map(
         (t) => `
       <div class="slip-card">
@@ -337,7 +343,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `volantes_lotosniper_${tickets.length}_jogos_concurso_${latestDraw.concurso}.html`;
+    link.download = `volantes_lotosniper_${validTickets.length}_jogos_concurso_${latestDraw.concurso}.html`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -427,7 +433,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                 <span className="text-slate-400 text-[10px] block uppercase font-bold">Total de Bilhetes</span>
-                <div className="text-base font-black font-mono text-white mt-0.5">{tickets.length} jogos</div>
+                <div className="text-base font-black font-mono text-white mt-0.5">{validTickets.length} jogos</div>
                 <span className="text-[10px] text-purple-400 font-medium">Volantes 15 dezenas</span>
               </div>
 
@@ -474,11 +480,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
               <span className="font-bold text-white uppercase tracking-wider text-[11px] font-mono">
                 Representação Visual dos Volantes (Pronto para Preenchimento)
               </span>
-              <span>{tickets.length} Volantes Gerados</span>
+              <span>{validTickets.length} Volantes Gerados (100% Zona de Ouro)</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {tickets.map((t) => (
+              {validTickets.map((t) => (
                 <div
                   key={t.id || t.index}
                   className="bg-slate-950 border-2 border-purple-500/40 rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-md"

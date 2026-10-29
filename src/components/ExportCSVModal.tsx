@@ -109,9 +109,17 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
     }
   };
 
+  // Filtrar e expurgar qualquer bilhete com alerta de soma < 180
+  const validGames = useMemo(() => {
+    return (games || []).filter((g) => {
+      const s = g.soma ?? g.dezenas.reduce((acc, curr) => acc + curr, 0);
+      return s >= 180;
+    });
+  }, [games]);
+
   // Generate CSV text content
   const csvContent = useMemo(() => {
-    if (!games || games.length === 0) return '';
+    if (!validGames || validGames.length === 0) return '';
 
     const formatNumber = (n: number) => (padZero ? n.toString().padStart(2, '0') : n.toString());
     const rows: string[] = [];
@@ -123,8 +131,8 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
       rows.push(`# CONCURSO_ID: #${resolvedConcurso}`);
       rows.push(`# DATA_CONCURSO: ${resolvedData}`);
       rows.push(`# ESTRATEGIA_FECHAMENTO: ${resolvedEstrategia}`);
-      rows.push(`# TOTAL_DE_JOGOS: ${games.length} apostas de 15 dezenas`);
-      rows.push(`# INVESTIMENTO_TOTAL: R$ ${custoTotal} (R$ 3,50 por aposta simples)`);
+      rows.push(`# TOTAL_DE_JOGOS: ${validGames.length} apostas de 15 dezenas (100% Zona de Ouro Soma ≥ 180)`);
+      rows.push(`# INVESTIMENTO_TOTAL: R$ ${(validGames.length * 3.5).toFixed(2).replace('.', ',')} (R$ 3,50 por aposta simples)`);
       rows.push(`# FORMATO_EXPORTACAO: ${formatType.toUpperCase()}`);
       rows.push(`# DATA_GERACAO: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`);
       rows.push('# ==============================================================================');
@@ -147,7 +155,7 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
         rows.push(headers.join(sep));
       }
 
-      games.forEach((g, idx) => {
+      validGames.forEach((g, idx) => {
         const sorted = [...g.dezenas].sort((a, b) => a - b);
         const gameLabel = g.label || (g.index !== undefined ? (g.index).toString().padStart(2, '0') : (idx + 1).toString().padStart(2, '0'));
         const dezenasCols = sorted.map(formatNumber);
@@ -179,7 +187,7 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
       if (includeHeader) {
         rows.push(Array.from({ length: 15 }, (_, i) => `D${(i + 1).toString().padStart(2, '0')}`).join(sep));
       }
-      games.forEach((g) => {
+      validGames.forEach((g) => {
         const sorted = [...g.dezenas].sort((a, b) => a - b);
         rows.push(sorted.map(formatNumber).join(sep));
       });
@@ -205,7 +213,7 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
         rows.push(headers.join(sep));
       }
 
-      games.forEach((g, idx) => {
+      validGames.forEach((g, idx) => {
         const sorted = [...g.dezenas].sort((a, b) => a - b);
         const gameLabel = g.label || `Jogo ${(g.index ?? idx + 1).toString().padStart(2, '0')}`;
         const dezenasCols = sorted.map(formatNumber);
@@ -241,7 +249,7 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
       if (includeHeader) {
         rows.push(Array.from({ length: 15 }, (_, i) => `D${(i + 1).toString().padStart(2, '0')}`).join(sep));
       }
-      games.forEach((g) => {
+      validGames.forEach((g) => {
         const sorted = [...g.dezenas].sort((a, b) => a - b);
         rows.push(sorted.map(formatNumber).join(sep));
       });
@@ -265,7 +273,7 @@ export const ExportCSVModal: React.FC<ExportCSVModalProps> = ({
       rows.push(headers.join(sep));
     }
 
-    games.forEach((g, idx) => {
+    validGames.forEach((g, idx) => {
       const sorted = [...g.dezenas].sort((a, b) => a - b);
       const gameLabel = g.label || `Jogo ${(g.index ?? idx + 1).toString().padStart(2, '0')}`;
       const dezenasCols = sorted.map(formatNumber);

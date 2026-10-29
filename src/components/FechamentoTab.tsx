@@ -256,11 +256,66 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     window.addEventListener('lotosniper-apply-numbers-to-fechamento', handleApplyNumbers);
 
+    const handleAggressivenessChanged = (e: any) => {
+      const level = e.detail;
+      if (level === 'conservadora') {
+        setFilters((prev) => ({
+          ...prev,
+          paresMin: 6,
+          paresMax: 8,
+          repetidasMin: 8,
+          repetidasMax: 10,
+          somaMin: 180,
+          somaMax: 220,
+        }));
+        setDocumentMessage('🛡️ Calibração Conservadora ativada: Paridade 6-8, Repetidas 8-10, Soma 180-220.');
+      } else if (level === 'balanceada') {
+        setFilters((prev) => ({
+          ...prev,
+          paresMin: 6,
+          paresMax: 9,
+          repetidasMin: 6,
+          repetidasMax: 10,
+          somaMin: 180,
+          somaMax: 220,
+          maxConsecutivas: 6,
+        }));
+        setDocumentMessage('⚖️ Calibração Balanceada (Zona de Ouro): Tolerância Ampla 6-9 Pares, 6-10 Repetidas, Sequências até 6.');
+      } else if (level === 'agressiva') {
+        setFilters((prev) => ({
+          ...prev,
+          paresMin: 7,
+          paresMax: 8,
+          repetidasMin: 7,
+          repetidasMax: 9,
+          somaMin: 185,
+          somaMax: 215,
+          maxConsecutivas: 5,
+        }));
+        setDocumentMessage('⚡ Calibração Agressiva: Redução de Espaço Amostral 500, Paridade 7-8, Repetidas 7-9.');
+      } else if (level === 'cirurgica') {
+        setFilters((prev) => ({
+          ...prev,
+          paresMin: 6,
+          paresMax: 9,
+          repetidasMin: 6,
+          repetidasMax: 10,
+          somaMin: 190,
+          somaMax: 215,
+          maxConsecutivas: 6,
+        }));
+        setDocumentMessage('🎯 Calibração Cirúrgica Sniper: Força de Ciclo Máxima, Zona de Ouro Estrita 190-215, Paridade Ampla 6-9.');
+      }
+      setTimeout(() => setDocumentMessage(null), 6000);
+    };
+    window.addEventListener('lotosniper-aggressiveness-change', handleAggressivenessChanged);
+
     return () => {
       window.removeEventListener('lotosniper-void-filter-changed', handleVoidChanged);
       window.removeEventListener('lotosniper-ai-insights-preset-applied', handleAIPresetApplied);
       window.removeEventListener('lotosniper-canonical-restrictions-updated', handleCanonicalRestrictionsUpdated);
       window.removeEventListener('lotosniper-apply-numbers-to-fechamento', handleApplyNumbers);
+      window.removeEventListener('lotosniper-aggressiveness-change', handleAggressivenessChanged);
     };
   }, [targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 

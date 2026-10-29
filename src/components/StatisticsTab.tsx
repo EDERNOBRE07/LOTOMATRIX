@@ -35,6 +35,7 @@ import { HistoricoParidadeVinteConcursosCard } from './HistoricoParidadeVinteCon
 import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
 import { BacktestingEstrategias100Card } from './BacktestingEstrategias100Card';
 import { RelatorioPerformanceDetalhadoModal } from './RelatorioPerformanceDetalhadoModal';
+import { RastreadorPrecisaoIA30DiasCard } from './RastreadorPrecisaoIA30DiasCard';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -529,6 +530,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
           {/* 4. Distribuição de Números Primos no Volante (4 a 7 Primos) */}
           <DistribuicaoPrimosCard
+            latestDraw={latestDraw}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          {/* 5. Rastreador de Precisão das Predições da IA (30 Dias) & Calibração de Agressividade */}
+          <RastreadorPrecisaoIA30DiasCard
             latestDraw={latestDraw}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {

@@ -28,11 +28,19 @@ export interface TxtExportOptions {
  * detalhando tipo de fechamento, filtros obrigatórios, filtros avançados e os bilhetes.
  */
 export function generateFechamentoTxtContent({
-  tickets,
+  tickets: rawTickets,
   latestDraw,
   meta,
   ticketTags = {},
 }: TxtExportOptions): string {
+  // Desativação e veto definitivo de bilhetes com Alerta Estatístico (soma < 180)
+  // Direcionando 100% do investimento financeiro para a Zona de Ouro (180 a 220)
+  const tickets = rawTickets.filter((t) => {
+    const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
+    return soma >= 180;
+  });
+  const vetadosSomaBaixa = rawTickets.length - tickets.length;
+
   const totalJogos = tickets.length;
   const custoTotal = totalJogos * VALOR_APOSTA_LOTOFACIL;
   const dataExportacao = new Date().toLocaleString('pt-BR');
@@ -135,6 +143,11 @@ export function generateFechamentoTxtContent({
     `• Sequência Máxima Consecutiva: Até ${filters.maxConsecutivas || 5} dezenas consecutivas`
   );
   lines.push('• Auditoria de Anomalias: Todos os bilhetes foram auditados com 0 anomalias estatísticas');
+  if (vetadosSomaBaixa > 0) {
+    lines.push(`• Filtro de Alerta Estatístico: ${vetadosSomaBaixa} bilhete(s) com soma < 180 vetados automaticamente para blindar o orçamento`);
+  } else {
+    lines.push('• Filtro de Alerta Estatístico: 100% dos bilhetes validados e blindados na Zona de Ouro (Soma ≥ 180)');
+  }
   lines.push('');
 
   // 4. FILTROS AVANÇADOS

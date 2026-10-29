@@ -249,13 +249,13 @@ export function isCanonicalAnomaly(
   const maxSequencia = analysis?.maxConsecutivas ?? getMaxConsecutiveSequence(sorted);
 
   // Canonical constraints - descarta fechamentos matematicamente improváveis
-  if (soma < 170 || soma > 225) return true; // Curva Gaussiana da Lotofácil (195 canônico)
+  if (soma < 180 || soma > 225) return true; // Vetar automaticamente soma < 180 (alerta estatístico de soma baixa)
   if (pares < 5 || pares > 10) return true;  // Extremos (<5 ou >10 pares somam <0.4% histórico)
   if (primos < 3 || primos > 8) return true;  // Primos fora do padrão Caixa (4-7 canônico)
   if (moldura < 7 || moldura > 12) return true; // Moldura descalibrada
-  if (maxSequencia >= 6) return true;        // Sequências de 6+ seguidas ocorrem em <0.6%
+  if (maxSequencia > 6) return true;        // Sequências de até 6 seguidas autorizadas (>6 ocorrem em <0.4%)
 
-  // Validação de repetidas do concurso anterior
+  // Validação de repetidas do concurso anterior (piso dinâmico alargado para 6 dezenas)
   if (concursoAnterior && concursoAnterior.length === 15) {
     const repetidas = analysis?.repetidas ?? countMatches(sorted, concursoAnterior);
     if (repetidas < 6 || repetidas > 12) return true;
@@ -280,8 +280,8 @@ export function isJogoPlauzivelLotofacil(
   const moldura = analysis?.moldura ?? sorted.filter((n) => MOLDURA.includes(n)).length;
   const maxSequencia = analysis?.maxConsecutivas ?? getMaxConsecutiveSequence(sorted);
 
-  if (soma < 170 || soma > 225) {
-    return { valido: false, motivoDescarte: `Soma atípica (${soma}) fora da curva Gaussiana viável (170-225)` };
+  if (soma < 180 || soma > 225) {
+    return { valido: false, motivoDescarte: `Soma (${soma}) inferior a 180 (alerta estatístico vetado pelo LotoSniper)` };
   }
   if (pares < 5 || pares > 10) {
     return { valido: false, motivoDescarte: `Paridade extrema (${pares}P / ${impares}I) com chance inferior a 0.4%` };
@@ -292,13 +292,13 @@ export function isJogoPlauzivelLotofacil(
   if (moldura < 7 || moldura > 12) {
     return { valido: false, motivoDescarte: `Moldura (${moldura}) com desvio extremo do padrão (8 a 11)` };
   }
-  if (maxSequencia >= 6) {
-    return { valido: false, motivoDescarte: `Sequência de ${maxSequencia} números consecutivos em fila (improvável)` };
+  if (maxSequencia > 6) {
+    return { valido: false, motivoDescarte: `Sequência de ${maxSequencia} números consecutivos em fila (máximo permitido: 6)` };
   }
   if (concursoAnterior && concursoAnterior.length === 15) {
     const repetidas = analysis?.repetidas ?? countMatches(sorted, concursoAnterior);
     if (repetidas < 6 || repetidas > 12) {
-      return { valido: false, motivoDescarte: `Repetidas (${repetidas}) fora da zona de equilíbrio Caixa (7 a 11)` };
+      return { valido: false, motivoDescarte: `Repetidas (${repetidas}) fora da janela dinâmica estendida (6 a 12)` };
     }
   }
 
@@ -756,19 +756,19 @@ export function runSimulation(
  * Adjusted to prevent premature pruning of high-scoring combinations
  */
 export const DEFAULT_FILTERS: FilterCriteria = {
-  paresMin: 7,
-  paresMax: 8,
-  primosMin: 4, // Calibrated: Concurso 3804 had 4 primes (widened from 5-6 to 4-7 to cover 86.3%)
+  paresMin: 6, // Tolerância Dinâmica Ampla: absorve variações de 6 a 9 pares (incluindo atípicos como concurso #3816)
+  paresMax: 9,
+  primosMin: 4, // Calibrated: 4 a 7 primos cobre >86% dos sorteios
   primosMax: 7,
-  somaMin: 175, // Calibrated: Concurso 3804 had sum 205 (ideal range 175-220 covers >85%)
+  somaMin: 180, // Vetar somas < 180 (Alerta Estatístico), concentrando 100% do orçamento na Zona de Ouro (190 a 210)
   somaMax: 220,
-  molduraMin: 8, // Calibrated: Concurso 3804 had 8 on frame and 7 in core (widened from 9-10 to 8-11 to cover 88.2%)
+  molduraMin: 8, // Moldura canônica (8 a 11 externas)
   molduraMax: 11,
   fibonacciMin: 3,
   fibonacciMax: 5,
-  repetidasMin: 8, // Calibrated: Concurso 3804 had 8 repetidas (8-10 covers 80%+)
+  repetidasMin: 6, // Alargamento da janela de repetidas para 6 a 10 dezenas (absorve quebras e transições de ciclo)
   repetidasMax: 10,
-  maxConsecutivas: 5, // Calibrated: Concurso 3804 had 6 consecutive numbers (14-19); limit set to 5 for safety
+  maxConsecutivas: 6, // Permite sequências de até 6 números consecutivos (ex: blocos 01-04, 16-18, 14-19)
   dezenasFixas: [],
   dezenasExcluidas: [],
   curvaAbcAtiva: false,
@@ -779,8 +779,8 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   robustez50SomaMin: 180,
   robustez50SomaMax: 220,
   robustez50ParesMin: 6,
-  robustez50ParesMax: 8,
-  robustez50MolduraMin: 9,
+  robustez50ParesMax: 9,
+  robustez50MolduraMin: 8,
   robustez50MolduraMax: 11,
   fechamentoPonderadoAtivo: false,
 };

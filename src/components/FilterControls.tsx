@@ -68,19 +68,19 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
 
     const fullPresetFilters: FilterCriteria = {
       ...filters,
-      paresMin: 7,
-      paresMax: 8,
+      paresMin: 6, // Tolerância Dinâmica Ampla (6 a 9 pares absorve oscilações atípicas)
+      paresMax: 9,
       primosMin: 4,
       primosMax: 6,
-      somaMin: 190, // Regra de Ouro da Soma recomendada pela IA
+      somaMin: 190, // Regra de Ouro da Soma centrada na Zona de Ouro (190 a 210)
       somaMax: 210,
-      molduraMin: 9,
-      molduraMax: 10,
+      molduraMin: 8,
+      molduraMax: 11,
       fibonacciMin: 3,
       fibonacciMax: 5,
-      repetidasMin: 8,
+      repetidasMin: 6, // Piso de 6 repetidas alargado para transição de ciclos
       repetidasMax: 10,
-      maxConsecutivas: 4,
+      maxConsecutivas: 6, // Autoriza sequências de até 6 números consecutivos
       curvaAbcAtiva: true,
       minDezenasClasseA: 11,
       vaziosAtivos: true,
@@ -122,7 +122,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     }
 
     setAppliedNotice(
-      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (190–210), 7–8 Pares, 4–6 Primos, 9–10 Moldura, 3–5 Fibonacci, 8–10 Repetidas, Curva ABC Classe A (Mín. 11) e Combinações de Vazio!`
+      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (190–210), Tolerância Dinâmica (6–9 Pares), 4–6 Primos, 8–11 Moldura, 3–5 Fibonacci, 6–10 Repetidas e Sequências até 6!`
     );
     setTimeout(() => setAppliedNotice(null), 6000);
   };
@@ -134,15 +134,15 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       paresMax: 8,
       primosMin: 5,
       primosMax: 6,
-      somaMin: 180,
+      somaMin: 190,
       somaMax: 210,
       molduraMin: 9,
       molduraMax: 10,
       fibonacciMin: 3,
       fibonacciMax: 5,
-      repetidasMin: 8,
+      repetidasMin: 7,
       repetidasMax: 10,
-      maxConsecutivas: 4,
+      maxConsecutivas: 5,
     });
   };
 
@@ -153,15 +153,15 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       paresMax: 9,
       primosMin: 4,
       primosMax: 7,
-      somaMin: 165,
+      somaMin: 180, // Vetar somas < 180
       somaMax: 225,
       molduraMin: 8,
       molduraMax: 11,
-      fibonacciMin: 2,
+      fibonacciMin: 3,
       fibonacciMax: 6,
-      repetidasMin: 7,
+      repetidasMin: 6, // Piso dinâmico 6
       repetidasMax: 11,
-      maxConsecutivas: 5,
+      maxConsecutivas: 6, // Sequências até 6
     });
   };
 
@@ -396,22 +396,33 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </p>
 
               <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => update({ paresMin: 6, paresMax: 9 })}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                      filters.paresMin === 6 && filters.paresMax === 9
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm font-black'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
+                    }`}
+                  >
+                    ⚡ 6 a 9 Pares (Tolerância Ampla)
+                  </button>
                   <button
                     type="button"
                     onClick={() => update({ paresMin: 7, paresMax: 8 })}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
                       filters.paresMin === 7 && filters.paresMax === 8
                         ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
                     }`}
                   >
-                    7P e 8P (Canônico)
+                    7P e 8P (Canônico Estrito)
                   </button>
                   <button
                     type="button"
                     onClick={() => update({ paresMin: 8, paresMax: 8 })}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
                       filters.paresMin === 8 && filters.paresMax === 8
                         ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
@@ -422,7 +433,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <button
                     type="button"
                     onClick={() => update({ paresMin: 7, paresMax: 7 })}
-                    className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
                       filters.paresMin === 7 && filters.paresMax === 7
                         ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
