@@ -15,6 +15,7 @@ import {
 import {
   getIntervalosRobustez50,
   calculateIndicePerformance,
+  calcularSazonalidadeEstatistica,
   PerformanceIndexResult,
 } from '../services/fechamentoPonderadoService';
 import { soundService } from '../services/soundAlert';
@@ -40,7 +41,8 @@ export const ModuloRobustezEstatistica: React.FC<ModuloRobustezEstatisticaProps>
   onGeneratePonderado,
   isGenerating = false,
 }) => {
-  const robustezIntervals = useMemo(() => getIntervalosRobustez50(), []);
+  const sazonalidade = useMemo(() => calcularSazonalidadeEstatistica(latestDraw), [latestDraw]);
+  const robustezIntervals = useMemo(() => sazonalidade.intervalosAjustados, [sazonalidade]);
 
   // Top 5 dezenas com maior Índice de Performance (relação frequência x atraso)
   const topPerformanceDezenas = useMemo<PerformanceIndexResult[]>(() => {
@@ -152,7 +154,52 @@ export const ModuloRobustezEstatistica: React.FC<ModuloRobustezEstatisticaProps>
 
       {/* CORPO DO MÓDULO */}
       <div className="p-4 sm:p-5 space-y-4">
-        {/* GRID DOS 3 INTERVALOS PROVÁVEIS (BASE 50 CONCURSOS) */}
+        {/* BANNER DINÂMICO: SAZONALIDADE ESTATÍSTICA (MM 100 vs MM 50) */}
+        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-teal-500/30 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-teal-400" />
+              <span className="text-xs font-bold text-teal-300">
+                Sazonalidade Estatística (Média Móvel de 100 Concursos vs Janela Recente de 50)
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                {sazonalidade.classificacaoSazonal}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Agressividade: {sazonalidade.agressividadeFiltros}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            {sazonalidade.explicacaoSazonal}
+          </p>
+
+          <div className="grid grid-cols-3 gap-2 pt-1 text-[11px] text-slate-400">
+            <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+              <span className="text-[10px] block text-slate-500">Soma MM100 / MM50:</span>
+              <strong className="text-emerald-300 font-mono">
+                {sazonalidade.mm100Soma} → {sazonalidade.mm50Soma} ({sazonalidade.deltaSoma >= 0 ? '+' : ''}{sazonalidade.deltaSoma})
+              </strong>
+            </div>
+            <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+              <span className="text-[10px] block text-slate-500">Pares MM100 / MM50:</span>
+              <strong className="text-cyan-300 font-mono">
+                {sazonalidade.mm100Pares} → {sazonalidade.mm50Pares} ({sazonalidade.deltaPares >= 0 ? '+' : ''}{sazonalidade.deltaPares})
+              </strong>
+            </div>
+            <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+              <span className="text-[10px] block text-slate-500">Moldura MM100 / MM50:</span>
+              <strong className="text-amber-300 font-mono">
+                {sazonalidade.mm100Moldura} → {sazonalidade.mm50Moldura} ({sazonalidade.deltaMoldura >= 0 ? '+' : ''}{sazonalidade.deltaMoldura})
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        {/* GRID DOS 3 INTERVALOS PROVÁVEIS (BASE 50 CONCURSOS CALIBRADA COM MM100) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* 1. Intervalo de Soma */}
           <div

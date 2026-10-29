@@ -1080,13 +1080,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         } catch {}
 
         onSaveTickets(result.tickets, exportMeta);
-        autoSaveFechamentoPrognostico(result.tickets, 'Fechamento Inteligente Ponderado (IP + Robustez 50)', exportMeta, selectedNumbers);
+        autoSaveFechamentoPrognostico(
+          result.tickets,
+          `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'})`,
+          exportMeta,
+          selectedNumbers
+        );
         setGenerationType('matriz');
         saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
         soundService.playGoldenZoneSuccessChime();
 
         setDocumentMessage(
-          `✓ Fechamento Inteligente Ponderado concluído! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. ${result.discardedByRobustezCount} combinações descartadas pela Robustez 50.`
+          `✓ Fechamento Ponderado concluído com Sazonalidade Estatística (${result.sazonalidade?.classificacaoSazonal || 'MM100'})! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
         );
         setTimeout(() => setDocumentMessage(null), 6000);
 

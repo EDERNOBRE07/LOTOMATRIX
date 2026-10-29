@@ -7,6 +7,7 @@ import {
   countMatches,
   getMaxConsecutiveSequence,
 } from './combinatorics';
+import { getHistorical100Draws } from './historical100Draws';
 
 export interface PerformanceIndexResult {
   numero: number;
@@ -37,6 +38,213 @@ export interface Robustez50Intervals {
   mediaMoldura: number;
   totalConcursosAuditados: number;
   desvioPadraoSoma: number;
+  agressividade?: string;
+  fatorSazonal?: number;
+}
+
+export interface SazonalidadeEstatisticaResult {
+  mm100Soma: number;
+  mm50Soma: number;
+  deltaSoma: number;
+  desvioPadraoSoma100: number;
+
+  mm100Pares: number;
+  mm50Pares: number;
+  deltaPares: number;
+  desvioPadraoPares100: number;
+
+  mm100Moldura: number;
+  mm50Moldura: number;
+  deltaMoldura: number;
+  desvioPadraoMoldura100: number;
+
+  indiceVariacaoSazonal: number; // e.g. 1.8%
+  classificacaoSazonal: 'Estabilidade Canônica' | 'Expansão de Soma' | 'Contração de Soma' | 'Oscilação Cíclica Regular';
+  agressividadeFiltros: 'Cirúrgica (Estabilidade Elevada)' | 'Sazonalmente Calibrada' | 'Ampla Protegida (Alta Dispersão)';
+  intervalosAjustados: Robustez50Intervals;
+  explicacaoSazonal: string;
+}
+
+/**
+ * Calcula a Sazonalidade Estatística da Lotofácil cruzando a Média Móvel de 100 Concursos
+ * com a janela recente de 50 concursos para calibrar dinamicamente a agressividade
+ * dos filtros de robustez.
+ */
+export function calcularSazonalidadeEstatistica(
+  latestDraw: LotofacilDraw = CONCURSO_ATUAL,
+  customDraws?: LotofacilDraw[]
+): SazonalidadeEstatisticaResult {
+  const sample100 = customDraws && customDraws.length >= 70 ? customDraws.slice(0, 100) : getHistorical100Draws(latestDraw);
+  const sample50 = sample100.slice(0, 50);
+
+  // Totais e Médias Móveis de 100 concursos
+  let somaTotal100 = 0;
+  let paresTotal100 = 0;
+  let molduraTotal100 = 0;
+  const somas100: number[] = [];
+  const pares100: number[] = [];
+  const molduras100: number[] = [];
+
+  sample100.forEach((d) => {
+    let s = 0;
+    let p = 0;
+    let m = 0;
+    d.dezenas.forEach((num) => {
+      s += num;
+      if (num % 2 === 0) p++;
+      if (MOLDURA.includes(num)) m++;
+    });
+    somaTotal100 += s;
+    paresTotal100 += p;
+    molduraTotal100 += m;
+    somas100.push(s);
+    pares100.push(p);
+    molduras100.push(m);
+  });
+
+  const count100 = sample100.length || 1;
+  const mm100Soma = Number((somaTotal100 / count100).toFixed(1));
+  const mm100Pares = Number((paresTotal100 / count100).toFixed(1));
+  const mm100Moldura = Number((molduraTotal100 / count100).toFixed(1));
+
+  // Desvios padrão (100 concursos)
+  const varSoma100 = somas100.reduce((acc, v) => acc + Math.pow(v - mm100Soma, 2), 0) / count100;
+  const desvioPadraoSoma100 = Number(Math.sqrt(varSoma100).toFixed(1));
+
+  const varPares100 = pares100.reduce((acc, v) => acc + Math.pow(v - mm100Pares, 2), 0) / count100;
+  const desvioPadraoPares100 = Number(Math.sqrt(varPares100).toFixed(1));
+
+  const varMoldura100 = molduras100.reduce((acc, v) => acc + Math.pow(v - mm100Moldura, 2), 0) / count100;
+  const desvioPadraoMoldura100 = Number(Math.sqrt(varMoldura100).toFixed(1));
+
+  // Totais e Médias Móveis de 50 concursos
+  let somaTotal50 = 0;
+  let paresTotal50 = 0;
+  let molduraTotal50 = 0;
+
+  sample50.forEach((d) => {
+    let s = 0;
+    let p = 0;
+    let m = 0;
+    d.dezenas.forEach((num) => {
+      s += num;
+      if (num % 2 === 0) p++;
+      if (MOLDURA.includes(num)) m++;
+    });
+    somaTotal50 += s;
+    paresTotal50 += p;
+    molduraTotal50 += m;
+  });
+
+  const count50 = sample50.length || 1;
+  const mm50Soma = Number((somaTotal50 / count50).toFixed(1));
+  const mm50Pares = Number((paresTotal50 / count50).toFixed(1));
+  const mm50Moldura = Number((molduraTotal50 / count50).toFixed(1));
+
+  // Deltas de deriva sazonal
+  const deltaSoma = Number((mm50Soma - mm100Soma).toFixed(1));
+  const deltaPares = Number((mm50Pares - mm100Pares).toFixed(1));
+  const deltaMoldura = Number((mm50Moldura - mm100Moldura).toFixed(1));
+
+  // Índice Composto de Variação Sazonal (%)
+  const relSoma = Math.abs(deltaSoma) / Math.max(1, mm100Soma);
+  const relPares = Math.abs(deltaPares) / Math.max(1, mm100Pares);
+  const relMoldura = Math.abs(deltaMoldura) / Math.max(1, mm100Moldura);
+  const indiceVariacaoSazonal = Number((((relSoma + relPares + relMoldura) / 3) * 100).toFixed(2));
+
+  // Classificação da Tendência Sazonal
+  let classificacaoSazonal: SazonalidadeEstatisticaResult['classificacaoSazonal'] = 'Estabilidade Canônica';
+  if (deltaSoma >= 3.0) {
+    classificacaoSazonal = 'Expansão de Soma';
+  } else if (deltaSoma <= -3.0) {
+    classificacaoSazonal = 'Contração de Soma';
+  } else if (Math.abs(deltaPares) > 0.4 || Math.abs(deltaMoldura) > 0.4) {
+    classificacaoSazonal = 'Oscilação Cíclica Regular';
+  }
+
+  // Ajuste da Agressividade dos Filtros de Robustez com base na Sazonalidade
+  let agressividadeFiltros: SazonalidadeEstatisticaResult['agressividadeFiltros'] = 'Sazonalmente Calibrada';
+  let somaMin = 180;
+  let somaMax = 220;
+  let paresMin = 6;
+  let paresMax = 8;
+  let molduraMin = 9;
+  let molduraMax = 11;
+  let explicacaoSazonal = '';
+
+  if (indiceVariacaoSazonal < 1.8) {
+    // Alta convergência entre MM50 e MM100: podemos aplicar filtros mais cirúrgicos sem risco de poda indevida
+    agressividadeFiltros = 'Cirúrgica (Estabilidade Elevada)';
+    somaMin = Math.max(182, Math.round(mm50Soma - 15));
+    somaMax = Math.min(218, Math.round(mm50Soma + 15));
+    paresMin = 6;
+    paresMax = 8;
+    molduraMin = 9;
+    molduraMax = 11;
+    explicacaoSazonal = `A Média Móvel de 100 concursos (Soma ${mm100Soma}, Pares ${mm100Pares}, Moldura ${mm100Moldura}) converge com a janela de 50 concursos (delta soma ${deltaSoma >= 0 ? '+' : ''}${deltaSoma}). Agressividade CIRÚRGICA ativada: tolerância refinada [Soma ${somaMin}–${somaMax}] maximizando a densidade dos 14/15 pontos.`;
+  } else if (indiceVariacaoSazonal <= 3.8) {
+    // Variação moderada: calibração dinâmica centrada na deriva sazonal recente
+    agressividadeFiltros = 'Sazonalmente Calibrada';
+    somaMin = Math.max(178, Math.round(mm50Soma - 18));
+    somaMax = Math.min(222, Math.round(mm50Soma + 18));
+    paresMin = deltaPares > 0.3 ? 7 : 6;
+    paresMax = deltaPares < -0.3 ? 7 : 8;
+    if (paresMin > paresMax) {
+      paresMin = 6;
+      paresMax = 8;
+    }
+    molduraMin = deltaMoldura < -0.3 ? 8 : 9;
+    molduraMax = deltaMoldura > 0.3 ? 12 : 11;
+    explicacaoSazonal = `Variação Sazonal controlada (${indiceVariacaoSazonal}%). A Média Móvel de 50 concursos (${mm50Soma} soma) apresenta ligeira deriva em relação aos 100 concursos (${mm100Soma} soma). Filtros calibrados dinamicamente para [Soma ${somaMin}–${somaMax}, Pares ${paresMin}–${paresMax}, Moldura ${molduraMin}–${molduraMax}] para evitar cortes de jogos premiáveis.`;
+  } else {
+    // Alta oscilação: abertura prudencial dos intervalos
+    agressividadeFiltros = 'Ampla Protegida (Alta Dispersão)';
+    somaMin = Math.max(174, Math.round(mm50Soma - 22));
+    somaMax = Math.min(226, Math.round(mm50Soma + 22));
+    paresMin = 5;
+    paresMax = 9;
+    molduraMin = 8;
+    molduraMax = 12;
+    explicacaoSazonal = `Alta dispersão sazonal identificada (${indiceVariacaoSazonal}%). Janela recente oscilou com desvio padrão de ${desvioPadraoSoma100}. Agressividade AMPLA PROTEGIDA ativada com limites estendidos [Soma ${somaMin}–${somaMax}] garantindo proteção total contra volatilidade estatística.`;
+  }
+
+  const intervalosAjustados: Robustez50Intervals = {
+    somaMin,
+    somaMax,
+    paresMin,
+    paresMax,
+    imparesMin: 15 - paresMax,
+    imparesMax: 15 - paresMin,
+    molduraMin,
+    molduraMax,
+    mediaSoma: mm50Soma,
+    mediaPares: mm50Pares,
+    mediaMoldura: mm50Moldura,
+    totalConcursosAuditados: count100,
+    desvioPadraoSoma: desvioPadraoSoma100,
+    agressividade: agressividadeFiltros,
+    fatorSazonal: indiceVariacaoSazonal,
+  };
+
+  return {
+    mm100Soma,
+    mm50Soma,
+    deltaSoma,
+    desvioPadraoSoma100,
+    mm100Pares,
+    mm50Pares,
+    deltaPares,
+    desvioPadraoPares100,
+    mm100Moldura,
+    mm50Moldura,
+    deltaMoldura,
+    desvioPadraoMoldura100,
+    indiceVariacaoSazonal,
+    classificacaoSazonal,
+    agressividadeFiltros,
+    intervalosAjustados,
+    explicacaoSazonal,
+  };
 }
 
 /**
@@ -216,13 +424,16 @@ export interface FechamentoPonderadoResult {
   averagePerformanceIndex: number;
   taxaAprovacao: number;
   robustnessBounds: Robustez50Intervals;
+  sazonalidade: SazonalidadeEstatisticaResult;
 }
 
 /**
  * Função de Fechamento Inteligente Ponderado:
  * - Dá preferência estrita a dezenas com alto Índice de Performance (relação Frequência x Atraso).
+ * - Incorpora a variável de 'Sazonalidade Estatística' cruzando a Média Móvel de 100 concursos
+ *   com a janela de 50 concursos para calibrar dinamicamente a agressividade dos filtros de robustez.
  * - Quando o Filtro de Robustez Estatística está ativo, descarta sumariamente combinações
- *   cujo somatório, paridade ou moldura fujam do intervalo das últimas 50 apurações.
+ *   cujo somatório, paridade ou moldura fujam do intervalo sazonalmente calibrado.
  * - Garante ausência total de redundâncias (zero jogos duplicados).
  */
 export function generateFechamentoInteligentePonderado({
@@ -249,7 +460,9 @@ export function generateFechamentoInteligentePonderado({
     throw new Error('É necessário selecionar pelo menos 15 dezenas para o fechamento ponderado.');
   }
 
-  const robustezIntervals = getIntervalosRobustez50();
+  // 1. Análise da Sazonalidade Estatística (MM 100 Concursos vs MM 50)
+  const sazonalidade = calcularSazonalidadeEstatistica(latestDraw);
+  const robustezIntervals = sazonalidade.intervalosAjustados;
   const applyRobustez = Boolean(filters?.robustezEstatisticaAtiva);
 
   // Mapear Índice de Performance para cada dezena do pool
@@ -420,7 +633,9 @@ export function generateFechamentoInteligentePonderado({
   const finalTickets: GameTicket[] = Array.from(uniqueMap.values()).map((item, idx) => {
     const analysis = analyzeTicket(item.dezenas, latestDraw.dezenas, aiScores);
     const tags: string[] = [`IP: ${item.ip}%`];
-    if (applyRobustez) tags.push('Robustez 50 ✓');
+    if (applyRobustez) {
+      tags.push(`Robustez Sazonal (${sazonalidade.agressividadeFiltros.split(' ')[0]}) ✓`);
+    }
     if (item.ip >= 80) tags.push('Top Performance 🔥');
 
     return {
@@ -453,5 +668,6 @@ export function generateFechamentoInteligentePonderado({
     averagePerformanceIndex: avgIP,
     taxaAprovacao,
     robustnessBounds: robustezIntervals,
+    sazonalidade,
   };
 }

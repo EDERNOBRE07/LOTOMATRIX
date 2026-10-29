@@ -34,6 +34,7 @@ import { IndiceMolduraUltimos10Card } from './IndiceMolduraUltimos10Card';
 import { HistoricoParidadeVinteConcursosCard } from './HistoricoParidadeVinteConcursosCard';
 import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
 import { BacktestingEstrategias100Card } from './BacktestingEstrategias100Card';
+import { RelatorioPerformanceDetalhadoModal } from './RelatorioPerformanceDetalhadoModal';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -110,6 +111,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
   >('atraso_desc');
+  const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState<boolean>(false);
 
   // Sorted views of the 25 numbers
   const sortedDezenas = [...statsList].sort((a, b) => {
@@ -472,9 +474,19 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </button>
         </div>
 
-        <span className="text-[11px] font-mono text-slate-400 pr-2">
-          Base: 3.800 Concursos Oficiais
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsPerformanceModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition cursor-pointer"
+            title="Abrir Auditoria Cruzada: Backtest 100 Concursos vs Comportamento Real do Usuário nos Últimos 30 Dias"
+          >
+            <Award className="w-4 h-4" />
+            <span>Relatório de Performance</span>
+          </button>
+          <span className="text-[11px] font-mono text-slate-400 pr-2 hidden sm:inline">
+            Base: 3.800 Concursos Oficiais
+          </span>
+        </div>
       </div>
 
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
@@ -524,6 +536,35 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               }
             }}
           />
+
+          {/* BANNER DE ACESSO AO RELATÓRIO DE PERFORMANCE DETALHADO */}
+          <div className="bg-gradient-to-r from-amber-950/40 via-slate-900 to-amber-950/30 rounded-2xl border border-amber-500/40 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25 shrink-0">
+                <Award className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">
+                    Relatório de Performance Detalhado · Auditoria Cruzada
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    100 CONCURSOS × 30 DIAS
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  Cruza as probabilidades matemáticas do backtesting de 100 concursos com o histórico prático das suas apostas salvas nos últimos 30 dias, calculando convergência estatística, ROI e laudo preditivo.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsPerformanceModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/30 transition cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-4 h-4 fill-current" />
+              <span>Abrir Relatório Detalhado</span>
+            </button>
+          </div>
 
           {/* 5. Backtesting de Estratégias nos Últimos 100 Concursos Reais (13, 14 e 15 Pontos) */}
           <BacktestingEstrategias100Card
@@ -1396,6 +1437,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           onApplyBiasRecommendation={onApplyNumbers}
         />
       )}
+
+      {/* MODAL DE RELATÓRIO DE PERFORMANCE DETALHADO (100 CONCURSOS × 30 DIAS) */}
+      <RelatorioPerformanceDetalhadoModal
+        isOpen={isPerformanceModalOpen}
+        onClose={() => setIsPerformanceModalOpen(false)}
+        latestDraw={latestDraw}
+        savedTickets={savedTickets}
+        dynamicStats={statsList}
+      />
     </div>
   );
 };
