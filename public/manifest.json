@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "LotoSniper - Precisão Cirúrgica para Lotofácil",
+  "short_name": "LotoSniper",
+  "description": "Plataforma de alta precisão matemática, fechamentos cirúrgicos com garantia de 14 pontos, IA preditiva e análise de atrasos para Lotofácil.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#090d16",
+  "background_color": "#090d16",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

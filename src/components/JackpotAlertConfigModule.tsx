@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { soundService } from '../services/soundAlert';
 import { countMatches } from '../services/combinatorics';
+import { sendNativeJackpotNotification } from '../services/nativeNotificationService';
 import {
   Bell,
   Volume2,
@@ -61,13 +62,13 @@ export const JackpotAlertConfigModule: React.FC<JackpotAlertConfigModuleProps> =
     }
   });
 
-  // 4. Limiar de acertos para disparo
+  // 4. Limiar de acertos para disparo (Padrão: 13+ pontos)
   const [threshold, setThreshold] = useState<AlertThresholdType>(() => {
     try {
       const v = localStorage.getItem('lotosniper_alert_threshold');
-      return (v as AlertThresholdType) || '14_and_15';
+      return (v as AlertThresholdType) || '13_plus';
     } catch {
-      return '14_and_15';
+      return '13_plus';
     }
   });
 
@@ -147,13 +148,16 @@ export const JackpotAlertConfigModule: React.FC<JackpotAlertConfigModuleProps> =
     showNotice('Reproduzindo Fanfarra Épica de 15 Pontos (Grand Jackpot)!');
   };
 
-  const testPushNotification = () => {
+  const testPushNotification = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('🏆 LOTOSNIPER • 14 PONTOS DETECTADOS!', {
-        body: `Jogo #04 em 'Meus Jogos' cravou 14 ACERTOS no Concurso Caixa #${latestDraw.concurso}! Toque para auditar.`,
-        icon: '/favicon.ico',
+      await sendNativeJackpotNotification({
+        concurso: latestDraw.concurso,
+        maxHits: 14,
+        winningTicketsCount: 1,
+        bestTicketIndex: 4,
+        dataSorteio: latestDraw.data,
       });
-      showNotice('Notificação de teste enviada para sua área de trabalho/celular!');
+      showNotice('Notificação nativa enviada! Testada com sucesso via Service Worker em 2º plano.');
     } else {
       showNotice('Ative a permissão de notificação no navegador para receber.');
       handleTogglePush(true);

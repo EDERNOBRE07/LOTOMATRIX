@@ -29,6 +29,7 @@ import { DashboardDesempenhoFinanceiroComponent } from './DashboardDesempenhoFin
 import { SimulacaoBacktestingComponent } from './SimulacaoBacktestingComponent';
 import { FrequenciaVinteConcursosComponent } from './FrequenciaVinteConcursosComponent';
 import { CorrelacaoFrequenciaAtrasoD3Component } from './CorrelacaoFrequenciaAtrasoD3Component';
+import { Top15FrequenciaUltimos10Card } from './Top15FrequenciaUltimos10Card';
 import { IndiceMolduraUltimos10Card } from './IndiceMolduraUltimos10Card';
 import { HistoricoParidadeVinteConcursosCard } from './HistoricoParidadeVinteConcursosCard';
 import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
@@ -476,9 +477,66 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </span>
       </div>
 
-      {/* SUBTAB 1: ATRASOS DAS DEZENAS */}
+      {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* 1. Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos */}
+          <Top15FrequenciaUltimos10Card
+            latestDraw={latestDraw}
+            onApplyTop15ToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+            onFixTopDezenas={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          {/* 2. Índice de Moldura vs Centro (Últimos 10 Concursos) */}
+          <IndiceMolduraUltimos10Card
+            latestDraw={latestDraw}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          {/* 3. Histórico de Paridade (Pares vs Ímpares - Últimos 20 Concursos) */}
+          <HistoricoParidadeVinteConcursosCard
+            latestDraw={latestDraw}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          {/* 4. Distribuição de Números Primos no Volante (4 a 7 Primos) */}
+          <DistribuicaoPrimosCard
+            latestDraw={latestDraw}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
+          {/* 5. Backtesting de Estratégias nos Últimos 100 Concursos Reais (13, 14 e 15 Pontos) */}
+          <BacktestingEstrategias100Card
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            dynamicStats={statsList}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
+              }
+            }}
+          />
+
           {/* Quick callout to Monte Carlo projection */}
           <div className="bg-gradient-to-r from-emerald-950/50 via-slate-900 to-indigo-950/40 rounded-2xl border border-emerald-500/30 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xl">
             <div className="flex items-center gap-3">

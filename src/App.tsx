@@ -11,11 +11,13 @@ import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
-import { Top15FrequenciaUltimos10Card } from './components/Top15FrequenciaUltimos10Card';
-import { IndiceMolduraUltimos10Card } from './components/IndiceMolduraUltimos10Card';
-import { HistoricoParidadeVinteConcursosCard } from './components/HistoricoParidadeVinteConcursosCard';
-import { DistribuicaoPrimosCard } from './components/DistribuicaoPrimosCard';
-import { BacktestingEstrategias100Card } from './components/BacktestingEstrategias100Card';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import {
+  sendNativeJackpotNotification,
+  requestNativeNotificationPermission,
+  isNotificationSupported,
+  getNotificationPermission,
+} from './services/nativeNotificationService';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
@@ -61,6 +63,17 @@ export default function App() {
       return false;
     }
   });
+
+  // Estado de permissão de Notificações Nativas do Navegador (13+ Pontos)
+  const [nativePerm, setNativePerm] = useState<NotificationPermission>(() => {
+    return isNotificationSupported() ? getNotificationPermission() : 'denied';
+  });
+  const [dismissPermPrompt, setDismissPermPrompt] = useState<boolean>(false);
+
+  const handleRequestNativePerm = async () => {
+    const res = await requestNativeNotificationPermission();
+    setNativePerm(res);
+  };
 
   // Theme initialization ('gold', 'high_contrast' or 'slate')
   useEffect(() => {
@@ -188,16 +201,15 @@ export default function App() {
     return () => window.removeEventListener('switch-tab', handleSwitchTab);
   }, []);
 
-  // Disparo automático de alertas sonoros e push para 14 e 15 acertos ao atualizar o concurso da Caixa
+  // Disparo automático de alertas sonoros e notificações nativas do navegador para 13+ pontos (13, 14 e 15 acertos)
   const triggerAutomaticJackpotAlerts = (draw: LotofacilDraw, ticketsToCheck: GameTicket[]) => {
     if (!ticketsToCheck || ticketsToCheck.length === 0 || !draw?.dezenas) return;
 
     const alertEnabled = localStorage.getItem('lotosniper_alert_14_15_enabled') !== 'false';
     if (!alertEnabled) return;
 
-    const soundEnabled = localStorage.getItem('lotosniper_alert_sound_enabled') !== 'false';
-    const pushEnabled = localStorage.getItem('lotosniper_alert_push_enabled') !== 'false';
-    const threshold = (localStorage.getItem('lotosniper_alert_threshold') as '15_only' | '14_and_15' | '13_plus') || '14_and_15';
+    // Padrão '13_plus' para alertar 13, 14 e 15 acertos conforme solicitado
+    const threshold = (localStorage.getItem('lotosniper_alert_threshold') as '15_only' | '14_and_15' | '13_plus') || '13_plus';
 
     let maxHits = 0;
     let winningCount = 0;
@@ -218,27 +230,16 @@ export default function App() {
       (threshold === '13_plus' && maxHits >= 13);
 
     if (isTriggered) {
-      // 1. Tocar áudio festivo correspondente
-      if (soundEnabled) {
-        if (maxHits >= 15) {
-          soundService.play15PontosJackpotSound();
-        } else if (maxHits >= 14) {
-          soundService.play14PontosCelebrationSound();
-        } else {
-          soundService.playGoldenZoneSuccessChime();
-        }
-      }
+      // 1. Disparar Notificação Nativa do Navegador (funciona em 2º plano via Service Worker)
+      sendNativeJackpotNotification({
+        concurso: draw.concurso,
+        maxHits,
+        winningTicketsCount: winningCount,
+        bestTicketIndex: bestIdx,
+        dataSorteio: draw.data,
+      });
 
-      // 2. Disparar notificação push no navegador se autorizada
-      if (pushEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        const title = maxHits >= 15 ? '🎉 GRAND JACKPOT: 15 PONTOS NA LOTOFÁCIL!' : `🏆 ${maxHits} PONTOS DETECTADOS!`;
-        const body = `Seu Jogo #${bestIdx} em 'Meus Jogos' cravou ${maxHits} PONTOS no Concurso Caixa #${draw.concurso}! Toque para auditar.`;
-        try {
-          new Notification(title, { body, icon: '/favicon.ico' });
-        } catch {}
-      }
-
-      // 3. Exibir banner de premiação no topo da tela
+      // 2. Exibir banner de premiação no topo da tela
       setJackpotHitNotice({
         concurso: draw.concurso,
         maxHits,
@@ -532,50 +533,43 @@ export default function App() {
           </div>
         )}
 
-        {/* Card Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos (Recharts) */}
-        <Top15FrequenciaUltimos10Card
-          latestDraw={latestDraw}
-          onApplyTop15ToFechamento={() => {
-            setActiveTab('fechamento');
-          }}
-          onFixTopDezenas={() => {
-            setActiveTab('fechamento');
-          }}
-        />
-
-        {/* Card Estatístico de Índice de Moldura vs Centro (Últimos 10 Concursos) */}
-        <IndiceMolduraUltimos10Card
-          latestDraw={latestDraw}
-          onNavigateToFechamento={() => {
-            setActiveTab('fechamento');
-          }}
-        />
-
-        {/* Card Estatístico de Histórico de Paridade (Últimos 20 Concursos - 7/8 e 8/7) */}
-        <HistoricoParidadeVinteConcursosCard
-          latestDraw={latestDraw}
-          onNavigateToFechamento={() => {
-            setActiveTab('fechamento');
-          }}
-        />
-
-        {/* Componente de Visualização de Distribuição de Números Primos (4 a 7 Primos por Volante) */}
-        <DistribuicaoPrimosCard
-          latestDraw={latestDraw}
-          onNavigateToFechamento={() => {
-            setActiveTab('fechamento');
-          }}
-        />
-
-        {/* Card de Backtesting de Estratégias contra os Últimos 100 Concursos Reais (13, 14 e 15 Pontos) */}
-        <BacktestingEstrategias100Card
-          latestDraw={latestDraw}
-          savedTickets={savedTickets}
-          dynamicStats={dynamicStats}
-          onNavigateToFechamento={() => {
-            setActiveTab('fechamento');
-          }}
-        />
+        {/* Banner de Ativação de Notificações Nativas do Navegador (13+ Pontos) */}
+        {nativePerm === 'default' && !dismissPermPrompt && (
+          <div className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-indigo-950/60 border border-amber-500/40 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </div>
+              <div className="text-xs">
+                <div className="font-bold text-amber-300 flex items-center gap-2">
+                  <span>Ativar Alertas Nativos no Navegador (13+ Pontos)</span>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 font-mono">
+                    2º PLANO
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Receba avisos instantâneos com som e resumo do prêmio na área de trabalho mesmo se a aba estiver em segundo plano ou minimizada.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                onClick={handleRequestNativePerm}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-md flex items-center gap-1.5"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Permitir Alertas</span>
+              </button>
+              <button
+                onClick={() => setDismissPermPrompt(true)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Ignorar"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Navigation Tabs Menu: Design Vibrante, Botões Animados e Localização Facilitada */}
         <NavigationMenu
@@ -730,6 +724,9 @@ export default function App() {
         onClose={() => setIsTourOpen(false)}
         onNavigateTab={(tab) => setActiveTab(tab as any)}
       />
+
+      {/* Indicador de Funcionamento Offline PWA */}
+      <OfflineIndicator />
     </div>
   );
 }
