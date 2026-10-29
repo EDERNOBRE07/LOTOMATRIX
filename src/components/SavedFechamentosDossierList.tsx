@@ -10,6 +10,7 @@ import {
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { soundService } from '../services/soundAlert';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
+import { ExportPDFModal } from './ExportPDFModal';
 import {
   FileText,
   Trash2,
@@ -27,6 +28,7 @@ import {
   Target,
   ArrowRight,
   Info,
+  Printer,
 } from 'lucide-react';
 
 interface SavedFechamentosDossierListProps {
@@ -49,6 +51,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   });
   const [expandedTicketsCardId, setExpandedTicketsCardId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [selectedForPDF, setSelectedForPDF] = useState<SavedFechamentoPrognostico | null>(null);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -276,6 +279,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
                   {/* Botões de Ação Principais para Este Fechamento */}
                   <div className="flex items-center gap-2 flex-wrap self-end lg:self-center">
+                    {/* Botão Gerar PDF Oficial Gold */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        soundService.playGoldenZoneSuccessChime();
+                        setSelectedForPDF(f);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 flex items-center gap-1.5 active:scale-95"
+                      title="Gerar PDF Oficial Gold formatado para impressão ou visualização externa"
+                    >
+                      <Printer className="w-4 h-4 text-slate-950" />
+                      <span>Gerar PDF Gold</span>
+                    </button>
+
                     {/* Botão Carregar Fechamento em Entrada de Jogos para Conferência */}
                     <button
                       type="button"
@@ -284,7 +301,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       title="Carregar todos os bilhetes deste fechamento na Entrada de Jogos para Conferência"
                     >
                       <ClipboardCheck className="w-4 h-4" />
-                      <span>Carregar em Entrada de Jogos para Conferência</span>
+                      <span>Carregar na Conferência</span>
                     </button>
 
                     {/* Botão Exportar TXT */}
@@ -510,6 +527,31 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             );
           })}
         </div>
+      )}
+
+      {/* Modal de Exportação e Impressão PDF Oficial Gold */}
+      {selectedForPDF && (
+        <ExportPDFModal
+          isOpen={Boolean(selectedForPDF)}
+          onClose={() => setSelectedForPDF(null)}
+          tickets={selectedForPDF.tickets}
+          savedFechamento={selectedForPDF}
+          latestDraw={{
+            ...latestDraw,
+            concurso: selectedForPDF.concurso,
+            data: selectedForPDF.dataConcurso || latestDraw.data,
+          }}
+          fechamentoMeta={{
+            strategyName: selectedForPDF.tipoFechamento,
+            modeName: selectedForPDF.modalidadeMatriz,
+            concurso: selectedForPDF.concurso,
+            dataConcurso: selectedForPDF.dataConcurso,
+            selectedNumbers: selectedForPDF.universoDezenas,
+            fixedNumbers: selectedForPDF.dezenasFixas,
+            excludedNumbers: selectedForPDF.dezenasExcluidas,
+            garantia: selectedForPDF.modalidadeMatriz,
+          }}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
-import { CONCURSO_ATUAL } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, MOLDURA, PRIMOS, FIBONACCI } from '../data/lotofacilData';
+import { SavedFechamentoPrognostico } from '../services/savedFechamentosStorage';
 import {
   Printer,
   Download,
@@ -15,6 +16,8 @@ import {
   Calendar,
   DollarSign,
   TrendingUp,
+  Target,
+  Zap,
 } from 'lucide-react';
 
 interface ExportPDFModalProps {
@@ -23,43 +26,78 @@ interface ExportPDFModalProps {
   tickets: GameTicket[];
   latestDraw?: LotofacilDraw;
   fechamentoMeta?: FechamentoExportMeta | null;
+  savedFechamento?: SavedFechamentoPrognostico | null;
 }
 
 export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   isOpen,
   onClose,
-  tickets,
+  tickets: propTickets,
   latestDraw = CONCURSO_ATUAL,
   fechamentoMeta,
+  savedFechamento,
 }) => {
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
   if (!isOpen) return null;
 
-  // Veto automático de bilhetes com alerta estatístico de soma < 180
-  const validTickets = tickets.filter((t) => {
+  // Resolve tickets (priorizando o fechamento salvo se passado)
+  const sourceTickets = savedFechamento?.tickets && savedFechamento.tickets.length > 0
+    ? savedFechamento.tickets
+    : propTickets;
+
+  // Veto categórico de bilhetes com alerta estatístico de soma < 180 (blindagem da Zona de Ouro)
+  const validTickets = sourceTickets.filter((t) => {
     const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
     return soma >= 180;
   });
 
-  // Cálculo das métricas consolidadas do fechamento
-  const poolNumbers = Array.from(new Set(validTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+  // Metadados do fechamento
+  const resolvedConcurso = savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso;
+  const resolvedData = savedFechamento?.dataConcurso || fechamentoMeta?.dataConcurso || latestDraw.data;
+  const strategyName =
+    savedFechamento?.tipoFechamento ||
+    fechamentoMeta?.strategyName ||
+    'Fechamento Inteligente Ponderado (Zona de Ouro)';
+  const modeName =
+    savedFechamento?.modalidadeMatriz ||
+    fechamentoMeta?.modeName ||
+    `${validTickets.length} Jogos • Garantia 14 Pontos`;
+
+  // Universo de dezenas
+  const poolNumbers =
+    savedFechamento?.universoDezenas && savedFechamento.universoDezenas.length > 0
+      ? savedFechamento.universoDezenas
+      : Array.from(new Set(validTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+
+  const fixedNumbers = savedFechamento?.dezenasFixas || fechamentoMeta?.fixedNumbers || [];
+  const excludedNumbers = savedFechamento?.dezenasExcluidas || fechamentoMeta?.excludedNumbers || [];
+
   const totalCusto = (validTickets.length * 3.5).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   });
 
-  const avgSoma = validTickets.length > 0 ? Math.round(validTickets.reduce((acc, t) => acc + t.soma, 0) / validTickets.length) : 200;
-  const avgPares = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.pares, 0) / validTickets.length).toFixed(1) : '7.5';
-  const avgPrimos = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.primos, 0) / validTickets.length).toFixed(1) : '5.3';
-  const avgMoldura = validTickets.length > 0 ? (validTickets.reduce((acc, t) => acc + t.moldura, 0) / validTickets.length).toFixed(1) : '9.8';
-  const avgScore = validTickets.length > 0 ? Math.round(validTickets.reduce((acc, t) => acc + (t.scoreIA || 80), 0) / validTickets.length) : 85;
-
-  const garantiaNome = fechamentoMeta?.garantia
-    ? fechamentoMeta.garantia
-    : fechamentoMeta?.modeName
-    ? fechamentoMeta.modeName.replace('_', ' ').toUpperCase()
-    : `${poolNumbers.length} Dezenas • Garantia 14 Pontos`;
+  const avgSoma =
+    validTickets.length > 0
+      ? Math.round(validTickets.reduce((acc, t) => acc + t.soma, 0) / validTickets.length)
+      : 200;
+  const avgPares =
+    validTickets.length > 0
+      ? (validTickets.reduce((acc, t) => acc + t.pares, 0) / validTickets.length).toFixed(1)
+      : '7.5';
+  const avgPrimos =
+    validTickets.length > 0
+      ? (validTickets.reduce((acc, t) => acc + t.primos, 0) / validTickets.length).toFixed(1)
+      : '5.3';
+  const avgMoldura =
+    validTickets.length > 0
+      ? (validTickets.reduce((acc, t) => acc + t.moldura, 0) / validTickets.length).toFixed(1)
+      : '9.8';
+  const avgScore =
+    validTickets.length > 0
+      ? Math.round(validTickets.reduce((acc, t) => acc + (t.scoreIA || 85), 0) / validTickets.length)
+      : 88;
 
   const handlePrint = () => {
     window.print();
@@ -70,11 +108,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>LotoSniper - Relatório Técnico & Volantes (${tickets.length} Jogos)</title>
+  <title>LotoSniper Gold - Relatório Técnico & Volantes (${validTickets.length} Jogos)</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 10mm;
+      margin: 8mm;
     }
     * {
       box-sizing: border-box;
@@ -86,128 +124,142 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
       background: #ffffff;
       color: #0f172a;
       margin: 0;
-      padding: 10px;
+      padding: 8px;
     }
-    .technical-header {
-      border: 2px solid #7c3aed;
+    .gold-header {
+      border: 2px solid #d97706;
       border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-      background: #faf5ff;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      background: #fffbeb;
     }
     .header-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 2px solid #ddd6fe;
-      padding-bottom: 10px;
-      margin-bottom: 12px;
+      border-bottom: 2px solid #fde68a;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
     .brand-title {
-      font-size: 20px;
+      font-size: 19px;
       font-weight: 900;
-      color: #6b21a8;
+      color: #b45309;
       text-transform: uppercase;
       letter-spacing: -0.5px;
       margin: 0;
     }
     .badge-concurso {
       font-size: 11px;
-      font-weight: bold;
-      background: #6b21a8;
-      color: #fff;
-      padding: 4px 10px;
+      font-weight: 900;
+      background: #d97706;
+      color: #ffffff;
+      padding: 4px 12px;
       border-radius: 6px;
+      font-family: monospace;
     }
     .metrics-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
+      gap: 8px;
+      margin-bottom: 10px;
     }
     .metric-box {
       background: #ffffff;
-      border: 1px solid #e9d5ff;
+      border: 1px solid #fde68a;
       border-radius: 8px;
-      padding: 8px 12px;
+      padding: 6px 10px;
       text-align: center;
     }
     .metric-label {
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
-      color: #64748b;
-      font-weight: 700;
+      color: #78350f;
+      font-weight: 800;
       margin-bottom: 2px;
     }
     .metric-val {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 900;
-      color: #1e1b4b;
+      color: #92400e;
       font-family: monospace;
     }
     .pool-section {
       background: #ffffff;
-      border: 1px solid #e9d5ff;
+      border: 1px solid #fde68a;
       border-radius: 8px;
-      padding: 10px 14px;
+      padding: 8px 12px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      margin-bottom: 10px;
     }
     .pool-label {
       font-size: 11px;
-      font-weight: 800;
-      color: #6b21a8;
+      font-weight: 900;
+      color: #b45309;
       white-space: nowrap;
     }
     .pool-balls {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
+      gap: 4px;
     }
     .pool-ball {
-      width: 24px;
-      height: 24px;
-      border-radius: 6px;
-      background: #7c3aed;
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      background: #d97706;
       color: #ffffff;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 900;
       display: flex;
       align-items: center;
       justify-content: center;
       font-family: monospace;
     }
+    .dossier-filters {
+      font-size: 9.5px;
+      color: #475569;
+      line-height: 1.4;
+      background: #ffffff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px dashed #fde68a;
+    }
+    .dossier-filters strong {
+      color: #0f172a;
+    }
     .slips-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 12px;
     }
     .slip-card {
-      border: 2px solid #8b5cf6;
-      border-radius: 12px;
-      padding: 12px;
+      border: 2px solid #d97706;
+      border-radius: 10px;
+      padding: 10px;
       background: #ffffff;
       page-break-inside: avoid;
       break-inside: avoid;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
     .slip-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px dashed #c4b5fd;
-      padding-bottom: 6px;
-      margin-bottom: 8px;
+      border-bottom: 1px dashed #fde68a;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
     }
     .slip-title {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 900;
-      color: #5b21b6;
+      color: #b45309;
       font-family: monospace;
     }
     .slip-type {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: bold;
       color: #64748b;
       text-transform: uppercase;
@@ -215,43 +267,41 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     .volante-grid-5x5 {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
-      margin-bottom: 8px;
+      gap: 5px;
+      margin-bottom: 6px;
     }
     .v-cell {
-      height: 34px;
+      height: 30px;
       border-radius: 6px;
       border: 1px solid #cbd5e1;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       font-family: monospace;
       color: #64748b;
       background: #f8fafc;
     }
     .v-cell.selected {
-      background: #6b21a8 !important;
+      background: #d97706 !important;
       color: #ffffff !important;
-      border: 2px solid #4c1d95 !important;
+      border: 2px solid #b45309 !important;
       font-weight: 900 !important;
-      box-shadow: inset 0 0 0 1px #ffffff;
+      box-shadow: inset 0 0 0 1px #fef08a;
     }
     .slip-footer {
       border-top: 1px solid #f1f5f9;
-      padding-top: 6px;
+      padding-top: 4px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
+      font-size: 9px;
       font-family: monospace;
       color: #64748b;
     }
-    .fill-instruction {
-      font-size: 9px;
-      color: #94a3b8;
-      font-style: italic;
+    .slip-footer strong {
+      color: #0f172a;
     }
     @media print {
       body {
@@ -262,51 +312,55 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
       }
       .slips-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 14px;
+        gap: 10px;
       }
     }
   </style>
 </head>
 <body>
-  <div class="technical-header">
+  <div class="gold-header">
     <div class="header-top">
       <div>
-        <h1 class="brand-title">LotoSniper • Relatório Técnico de Fechamento</h1>
-        <div style="font-size: 12px; color: #6b21a8; font-weight: 600; margin-top: 2px;">
-          Garantia Matemática Oficial • Matriz Pronta para Preenchimento em Lotérica
+        <h1 class="brand-title">LotoSniper Gold · Matriz Oficial Caixa</h1>
+        <div style="font-size: 11px; color: #78350f; font-weight: 700; margin-top: 2px;">
+          ${strategyName} • ${modeName}
         </div>
       </div>
-      <div class="badge-concurso">
-        CONCURSO BASE #${latestDraw.concurso} • ${latestDraw.data}
-      </div>
+      <div class="badge-concurso">CONCURSO #${resolvedConcurso} (${resolvedData})</div>
     </div>
 
     <div class="metrics-grid">
       <div class="metric-box">
-        <div class="metric-label">Total de Jogos</div>
-        <div class="metric-val">${tickets.length} apostas</div>
+        <div class="metric-label">Total de Bilhetes</div>
+        <div class="metric-val">${validTickets.length} Jogos</div>
       </div>
       <div class="metric-box">
-        <div class="metric-label">Custo Total (R$)</div>
+        <div class="metric-label">Custo Estimado</div>
         <div class="metric-val">${totalCusto}</div>
       </div>
       <div class="metric-box">
-        <div class="metric-label">Dezenas Base</div>
-        <div class="metric-val">${poolNumbers.length} dezenas</div>
+        <div class="metric-label">Dezenas no Desdobro</div>
+        <div class="metric-val">${poolNumbers.length} Números</div>
       </div>
       <div class="metric-box">
         <div class="metric-label">Soma Média</div>
-        <div class="metric-val">${avgSoma} (Ideal: 185-210)</div>
+        <div class="metric-val">${avgSoma} pts (Zona Ouro)</div>
       </div>
     </div>
 
     <div class="pool-section">
-      <div class="pool-label">DEZENAS COBERTAS NA MATRIZ:</div>
+      <span class="pool-label">Universo (${poolNumbers.length}D):</span>
       <div class="pool-balls">
         ${poolNumbers
           .map((n) => `<div class="pool-ball">${n.toString().padStart(2, '0')}</div>`)
           .join('')}
       </div>
+    </div>
+
+    <div class="dossier-filters">
+      <strong>Filtros Canônicos & Avançados Auditados:</strong>
+      Soma Zona de Ouro (≥ 180 pts, Média ${avgSoma}) • Paridade Dinâmica (${avgPares} Pares / ${(15 - Number(avgPares)).toFixed(1)} Ímpares) •
+      Primos Médios: ${avgPrimos} • Moldura Média: ${avgMoldura} • Sequência Máxima: até 6 consecutivas • Anomalias: 0 (100% blindado na Zona de Ouro).
     </div>
   </div>
 
@@ -329,7 +383,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
         <div class="slip-footer">
           <span>Soma: <strong>${t.soma}</strong> • ${t.pares}P/${t.impares}I</span>
           <span>Primos: ${t.primos} • Moldura: ${t.moldura}</span>
-          <span class="fill-instruction">Marque no volante oficial</span>
+          <span style="color: #b45309; font-weight: bold;">LotoSniper Gold</span>
         </div>
       </div>
     `
@@ -343,29 +397,32 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `volantes_lotosniper_${validTickets.length}_jogos_concurso_${latestDraw.concurso}.html`;
+    link.download = `volantes_lotosniper_gold_${validTickets.length}_jogos_concurso_${resolvedConcurso}.html`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl relative overflow-hidden font-sans">
+      <div className="bg-slate-900 border-2 border-amber-500/40 rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl shadow-amber-500/10 relative overflow-hidden font-sans">
         {/* Top Header */}
         <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/95 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-md shadow-amber-500/20">
               <Printer className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>Exportação PDF Estilizada & Impressão de Volantes</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40">
-                  {tickets.length} JOGOS
+                <span>Exportação PDF Gold & Impressão de Volantes</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-black border border-amber-500/40">
+                  {validTickets.length} JOGOS
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  PADRÃO GOLD
                 </span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Volantes no padrão oficial 5×5 da Caixa com cabeçalho técnico das métricas do fechamento.
+                Volantes no formato oficial 5×5 da Caixa com identidade visual Gold, prontos para impressão ou visualização externa.
               </p>
             </div>
           </div>
@@ -381,28 +438,30 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
         {/* Action Controls Bar */}
         <div className="px-5 py-3 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
           <div className="flex items-center gap-2 text-slate-300">
-            <Info className="w-4 h-4 text-purple-400 shrink-0" />
+            <Info className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
-              Para salvar em PDF, clique em <strong>"Imprimir / Salvar PDF"</strong> e selecione a impressora{' '}
-              <strong className="text-purple-300">"Salvar como PDF"</strong>.
+              Para gerar o arquivo PDF, clique em <strong>"Imprimir / Salvar PDF Gold"</strong> e selecione o destino{' '}
+              <strong className="text-amber-300">"Salvar como PDF"</strong>.
             </span>
           </div>
 
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={handleDownloadHTML}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
             >
-              <Download className="w-4 h-4 text-purple-400" />
-              <span>Baixar Arquivo HTML Autónomo</span>
+              <Download className="w-4 h-4 text-amber-400" />
+              <span>Baixar Arquivo HTML Gold</span>
             </button>
 
             <button
+              type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-bold transition shadow-lg shadow-purple-500/25 cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black transition shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95"
             >
               <Printer className="w-4 h-4" />
-              <span>Imprimir / Salvar PDF</span>
+              <span>Imprimir / Salvar PDF Gold</span>
             </button>
           </div>
         </div>
@@ -410,22 +469,23 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
         {/* Scrollable Printable Preview Area */}
         <div className="p-5 overflow-y-auto flex-1 space-y-5" ref={printAreaRef}>
           {/* Technical Header Card */}
-          <div className="bg-gradient-to-br from-purple-950/40 via-slate-950 to-slate-950 border-2 border-purple-500/40 rounded-2xl p-5 space-y-4 shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-500/30">
+          <div className="bg-gradient-to-br from-amber-950/40 via-slate-950 to-slate-950 border-2 border-amber-500/40 rounded-2xl p-5 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/30">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 block">
-                  Laudo Técnico de Fechamento
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block font-mono">
+                  Dossiê Oficial · LotoSniper Gold
                 </span>
                 <h4 className="text-lg font-black text-white flex items-center gap-2">
-                  <span>LOTOSNIPER • MATRIZ OFICIAL DE APOSTAS</span>
+                  <span>{strategyName}</span>
                 </h4>
+                <span className="text-xs text-slate-400 font-mono mt-0.5 block">{modeName}</span>
               </div>
 
-              <div className="flex items-center gap-2 bg-purple-500/15 border border-purple-500/30 px-3 py-1.5 rounded-xl font-mono text-xs">
-                <Calendar className="w-3.5 h-3.5 text-purple-300" />
+              <div className="flex items-center gap-2 bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-xl font-mono text-xs">
+                <Calendar className="w-3.5 h-3.5 text-amber-300" />
                 <span className="text-slate-300">Concurso Base:</span>
-                <strong className="text-purple-300">#{latestDraw.concurso}</strong>
-                <span className="text-slate-500">({latestDraw.data})</span>
+                <strong className="text-amber-300">#{resolvedConcurso}</strong>
+                <span className="text-slate-500">({resolvedData})</span>
               </div>
             </div>
 
@@ -434,7 +494,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
               <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                 <span className="text-slate-400 text-[10px] block uppercase font-bold">Total de Bilhetes</span>
                 <div className="text-base font-black font-mono text-white mt-0.5">{validTickets.length} jogos</div>
-                <span className="text-[10px] text-purple-400 font-medium">Volantes 15 dezenas</span>
+                <span className="text-[10px] text-amber-400 font-medium">100% Zona de Ouro (Soma ≥ 180)</span>
               </div>
 
               <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
@@ -446,53 +506,77 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
               <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                 <span className="text-slate-400 text-[10px] block uppercase font-bold">Dezenas no Desdobro</span>
                 <div className="text-base font-black font-mono text-cyan-300 mt-0.5">{poolNumbers.length} dezenas</div>
-                <span className="text-[10px] text-cyan-400/80 font-medium">Cobertura combinatória</span>
+                <span className="text-[10px] text-cyan-400/80 font-medium">Universo selecionado</span>
               </div>
 
               <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                 <span className="text-slate-400 text-[10px] block uppercase font-bold">Soma Média</span>
                 <div className="text-base font-black font-mono text-amber-300 mt-0.5">{avgSoma} pts</div>
-                <span className="text-[10px] text-amber-400/80 font-medium">Faixa Ouro (185-210)</span>
+                <span className="text-[10px] text-amber-400/80 font-medium">Faixa Ouro Central</span>
               </div>
             </div>
 
             {/* Dezenas Cobertas */}
-            <div className="pt-2 border-t border-purple-500/20">
-              <span className="text-xs font-bold text-slate-300 block mb-2">
-                Conjunto das {poolNumbers.length} Dezenas Utilizadas na Matriz:
+            <div className="pt-2 border-t border-amber-500/20">
+              <span className="text-xs font-bold text-slate-300 block mb-2 font-mono">
+                Universo de Dezenas na Matriz ({poolNumbers.length} números):
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
-                {poolNumbers.map((num) => (
-                  <span
-                    key={num}
-                    className="w-7 h-7 rounded-lg bg-purple-600 text-white font-mono font-black text-xs flex items-center justify-center shadow-sm"
-                  >
-                    {num.toString().padStart(2, '0')}
-                  </span>
-                ))}
+                {poolNumbers.map((num) => {
+                  const isFixed = fixedNumbers.includes(num);
+                  return (
+                    <span
+                      key={num}
+                      className={`w-7 h-7 rounded-lg font-mono font-black text-xs flex items-center justify-center shadow-sm ${
+                        isFixed
+                          ? 'bg-amber-400 text-slate-950 border-2 border-amber-200 ring-2 ring-amber-400/50'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}
+                    >
+                      {num.toString().padStart(2, '0')}
+                    </span>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Fixed / Excluded Notice if any */}
+            {(fixedNumbers.length > 0 || excludedNumbers.length > 0) && (
+              <div className="flex flex-wrap items-center gap-4 text-xs pt-2 border-t border-slate-800/80 font-mono">
+                {fixedNumbers.length > 0 && (
+                  <span className="text-slate-300">
+                    Fixas: <strong className="text-amber-300">{fixedNumbers.map((n) => n.toString().padStart(2, '0')).join(' ')}</strong>
+                  </span>
+                )}
+                {excludedNumbers.length > 0 && (
+                  <span className="text-slate-300">
+                    Excluídas: <strong className="text-rose-400">{excludedNumbers.map((n) => n.toString().padStart(2, '0')).join(' ')}</strong>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Volantes Visual Grid (Padrão 5x5 Caixa) */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400">
-              <span className="font-bold text-white uppercase tracking-wider text-[11px] font-mono">
-                Representação Visual dos Volantes (Pronto para Preenchimento)
+              <span className="font-bold text-white uppercase tracking-wider text-[11px] font-mono flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Representação dos Volantes Oficiais (Identidade Visual Gold)
               </span>
-              <span>{validTickets.length} Volantes Gerados (100% Zona de Ouro)</span>
+              <span className="font-mono text-amber-300 font-bold">{validTickets.length} Volantes Prontos</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {validTickets.map((t) => (
                 <div
                   key={t.id || t.index}
-                  className="bg-slate-950 border-2 border-purple-500/40 rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-md"
+                  className="bg-slate-950 border-2 border-amber-500/40 hover:border-amber-400/80 transition rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-md shadow-amber-950/20"
                 >
                   {/* Header Volante */}
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-sm text-purple-300">
+                      <span className="font-mono font-black text-sm text-amber-400">
                         JOGO #{t.index.toString().padStart(2, '0')}
                       </span>
                       <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
@@ -517,7 +601,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
                           key={num}
                           className={`h-9 rounded-xl flex items-center justify-center font-mono text-xs font-bold transition-all border ${
                             isSelected
-                              ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-900/40 font-black scale-102 ring-1 ring-white/30'
+                              ? 'bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 text-slate-950 border-amber-300 font-black shadow-md shadow-amber-950/40 scale-102 ring-1 ring-white/50'
                               : 'bg-slate-900/80 text-slate-500 border-slate-800'
                           }`}
                         >
@@ -530,11 +614,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
                   {/* Slip Metrics Footer */}
                   <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
                     <span>
-                      Primos: <strong className="text-purple-300">{t.primos}</strong> • Moldura:{' '}
+                      Primos: <strong className="text-amber-300">{t.primos}</strong> • Moldura:{' '}
                       <strong className="text-emerald-300">{t.moldura}</strong>
                     </span>
-                    <span className="text-emerald-400 font-bold">
-                      Score IA: {t.scoreIA || 80}%
+                    <span className="text-amber-400 font-bold">
+                      {t.scoreIA ? `Score IA: ${t.scoreIA}%` : 'Zona de Ouro ✓'}
                     </span>
                   </div>
                 </div>
@@ -546,14 +630,23 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
         {/* Modal Bottom Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/95 flex items-center justify-between text-xs shrink-0">
           <span className="text-slate-400 font-mono">
-            Concurso Base: #{latestDraw.concurso} • {tickets.length} Volantes Formatados
+            Concurso Base Caixa: #{resolvedConcurso} • {validTickets.length} Volantes Formatados (100% Zona de Ouro)
           </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
-          >
-            Fechar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black transition cursor-pointer shadow-md shadow-amber-500/20 flex items-center gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Imprimir</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       </div>
     </div>

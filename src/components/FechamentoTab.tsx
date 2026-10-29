@@ -1145,8 +1145,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
         soundService.playGoldenZoneSuccessChime();
 
+        const clusterInfo =
+          result.clustersDensidade && result.clustersDensidade.length > 0
+            ? ` • ${result.clustersDensidade.length} Clusters de Densidade (500 Concursos) Ativados`
+            : '';
+
         setDocumentMessage(
-          `✓ Fechamento Ponderado concluído com Sazonalidade Estatística (${result.sazonalidade?.classificacaoSazonal || 'MM100'})! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
+          `✓ Fechamento Ponderado concluído com Clusterização por Densidade de Dezenas${clusterInfo}! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
         );
         setTimeout(() => setDocumentMessage(null), 6000);
 

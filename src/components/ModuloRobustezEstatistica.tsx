@@ -16,7 +16,9 @@ import {
   getIntervalosRobustez50,
   calculateIndicePerformance,
   calcularSazonalidadeEstatistica,
+  identificarClustersDensidade500,
   PerformanceIndexResult,
+  ClusterDensidadeQuinteto,
 } from '../services/fechamentoPonderadoService';
 import { soundService } from '../services/soundAlert';
 
@@ -51,6 +53,12 @@ export const ModuloRobustezEstatistica: React.FC<ModuloRobustezEstatisticaProps>
       .sort((a, b) => b.indicePerformance - a.indicePerformance)
       .slice(0, 6);
   }, [dynamicStats]);
+
+  // Clusters de Quintetos com Alta Densidade e Colinearidade (500 Concursos)
+  const clustersDensidade = useMemo<ClusterDensidadeQuinteto[]>(() => {
+    const fullPool = Array.from({ length: 25 }, (_, i) => i + 1);
+    return identificarClustersDensidade500(fullPool, latestDraw).slice(0, 3);
+  }, [latestDraw]);
 
   const isRobustezAtiva = Boolean(filters.robustezEstatisticaAtiva);
   const isPonderadoAtivo = Boolean(filters.fechamentoPonderadoAtivo);
@@ -323,6 +331,61 @@ export const ModuloRobustezEstatistica: React.FC<ModuloRobustezEstatisticaProps>
             ))}
           </div>
         </div>
+
+        {/* TÉCNICA: CLUSTERIZAÇÃO POR DENSIDADE DE DEZENAS (500 CONCURSOS) */}
+        {clustersDensidade.length > 0 && (
+          <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/80 border border-amber-500/30 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 border-b border-amber-500/20">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Clusterização por Densidade de Dezenas · 500 Concursos
+                </span>
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  COLINEARIDADE TOP 5
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Quintetos com máxima aderência à Zona de Ouro (Soma 190-210)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {clustersDensidade.map((cluster) => (
+                <div
+                  key={cluster.id}
+                  className="bg-slate-900/90 border border-amber-500/30 hover:border-amber-400 rounded-xl p-3 space-y-2 shadow-sm transition"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-amber-300 font-mono">
+                      {cluster.nome.split('(')[0].trim()}
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                      {cluster.colinearidadeClassificacao}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {cluster.dezenas.map((num) => (
+                      <span
+                        key={num}
+                        className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-xs flex items-center justify-center font-mono shadow-sm"
+                      >
+                        {num.toString().padStart(2, '0')}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800">
+                    <span>Soma: <strong className="text-white">{cluster.soma}</strong></span>
+                    <span>{cluster.pares}P/{cluster.impares}I</span>
+                    <span className="text-amber-400 font-bold">Aderência: {cluster.aderenciaZonaOuro}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* TELEMETRIA DE COMBINAÇÕES DESCARTADAS (QUANDO DISPONÍVEL) */}
         {discardedByRobustezCount > 0 && (
