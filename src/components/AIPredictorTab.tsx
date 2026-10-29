@@ -506,6 +506,17 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
               </strong>
             </div>
           </div>
+          
+          {/* Heurística Fibonacci & Companheiras do 01 */}
+          <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span className="text-xs font-bold text-amber-300">Distribuição Fibonacci & Companheiras do 01:</span>
+            </div>
+            <span className="text-xs font-mono text-amber-200">
+              {prediction?.padroesSugeridos?.fibonacci || '3 a 5 dezenas da Sequência Fibonacci (01, 02, 03, 05, 08, 13, 21) com calibragem para fechamento de ciclo'}
+            </span>
+          </div>
         </div>
       </div>
 

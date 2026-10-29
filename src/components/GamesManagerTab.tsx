@@ -7,6 +7,7 @@ import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
+import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import {
   SavedGamesFilterMenu,
   PrimosFilterOption,
@@ -54,6 +55,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
+  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais'>('fechamentos_salvos');
 
   // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
   const [ticketTags, setTicketTags] = useState<Record<string, string[]>>(() => {
@@ -443,13 +445,66 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Export Bar */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2">
-            <Download className="w-5 h-5 text-emerald-400" />
-            <span>Gerenciador de Jogos, Exportador & Conferidor</span>
-          </h2>
+      {/* Seletor de Visão Principal: Dossiê de Fechamentos Salvos vs Gerenciador de Bilhetes */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 p-2 rounded-2xl border-2 border-slate-800 shadow-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSection('fechamentos_salvos')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              activeSection === 'fechamentos_salvos'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Dossiê de Fechamentos Salvos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('bilhetes_individuais')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              activeSection === 'bilhetes_individuais'
+                ? 'bg-gradient-to-r from-teal-400 to-emerald-500 text-slate-950 shadow-md shadow-teal-500/25'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Gerenciador de Bilhetes ({tickets.length} Jogos)</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
+          className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Criar Novo Fechamento</span>
+        </button>
+      </div>
+
+      {/* VISÃO 1: DOSSIÊ DE FECHAMENTOS SALVOS */}
+      {activeSection === 'fechamentos_salvos' && (
+        <SavedFechamentosDossierList
+          latestDraw={latestDraw}
+          onGoToConferencia={() => {
+            window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'conferencia' }));
+          }}
+        />
+      )}
+
+      {/* VISÃO 2: GERENCIADOR DE BILHETES INDIVIDUAIS */}
+      {activeSection === 'bilhetes_individuais' && (
+        <div className="space-y-6">
+          {/* Top Export Bar */}
+          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Download className="w-5 h-5 text-emerald-400" />
+                <span>Gerenciador de Bilhetes Individuais, Exportador & Conferidor</span>
+              </h2>
           <p className="text-xs text-slate-400 mt-1">
             Exporte seus bilhetes para apostas em lotéricas ou confira a premiação instantânea
             contra qualquer sorteio.
@@ -938,6 +993,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             )}
           </div>
         </>
+      )}
+        </div>
       )}
 
       {/* Modal de Exportação CSV Profissional para Casas Lotéricas e Plataformas de Apostas */}

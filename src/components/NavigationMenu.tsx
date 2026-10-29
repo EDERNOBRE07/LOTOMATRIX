@@ -145,11 +145,11 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
     },
     {
       id: 'jogos',
-      label: 'Meus Jogos & Conferidor',
-      shortLabel: 'Meus Jogos',
-      badge: 'Exportador TXT',
-      badgeValue: savedTickets.length > 0 ? savedTickets.length : undefined,
-      subtitle: 'Gerenciador com exportação TXT detalhada com cabeçalho técnico e conferidor instantâneo',
+      label: 'Jogos Salvos',
+      shortLabel: 'Jogos Salvos',
+      badge: 'Fechamentos',
+      badgeValue: savedTickets.length > 0 ? `${savedTickets.length} jogos` : undefined,
+      subtitle: 'Histórico de fechamentos salvos com dossiê técnico de filtros e exportação para conferência',
       icon: Download,
       activeColorClass:
         'bg-gradient-to-r from-teal-400 via-emerald-500 to-cyan-500 text-slate-950 shadow-[0_0_30px_rgba(20,184,166,0.55)] border-teal-300 ring-2 ring-teal-400/40',

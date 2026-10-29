@@ -284,6 +284,7 @@ ESTRATÉGIA MATEMÁTICA OBRIGATÓRIA (DOCUMENTO OFICIAL DA LOTOFÁCIL):
 6. Primos: No bilhete de 15, esperar entre 4 e 7 números primos (concurso 3804 teve 4 primos).
 7. Paridade: No bilhete de 15, esperar entre 7 e 8 pares (ou 8P/7I como no 3804, que é o padrão líder da história).
 8. Soma Total: Faixa canônica equilibrada de 175 a 220 (o 3804 teve soma exata 205).
+9. Distribuição de Fibonacci & Companheiras do 01: No bilhete de 15, esperar entre 3 e 5 dezenas da Sequência Fibonacci ([1, 2, 3, 5, 8, 13, 21]). Priorizar e elevar o peso probabilístico para dezenas que historicamente acompanham o número 01 em sorteios de fechamento de ciclo ([2, 3, 5, 11, 13, 17, 20, 21, 22, 25]).
 
 Forneça uma análise preditiva em formato JSON estruturado com:
 - scores: array de 25 números de 1 a 100 indicando a propensão de cada dezena (índice 0 = dezena 1, índice 24 = dezena 25).
@@ -292,7 +293,7 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 - taxaConfianca: número de 80 a 98 representando o índice de alinhamento com os padrões canônicos.
 - justificativaTecnica: explicação detalhada do raciocínio matemático (máximo 4 parágrafos claros).
 - dezenasChave: array com as 5 dezenas de maior peso estratégico.
-- padroesSugeridos: { paresImpares: string, primos: string, moldura: string, somaFaixa: string, repetidas: string }.`;
+- padroesSugeridos: { paresImpares: string, primos: string, moldura: string, somaFaixa: string, repetidas: string, fibonacci: string }.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -334,6 +335,7 @@ Forneça uma análise preditiva em formato JSON estruturado com:
                   moldura: { type: Type.STRING },
                   somaFaixa: { type: Type.STRING },
                   repetidas: { type: Type.STRING },
+                  fibonacci: { type: Type.STRING },
                 },
               },
             },
@@ -360,6 +362,9 @@ Forneça uma análise preditiva em formato JSON estruturado com:
     // Dynamic Heuristic Fallback engine using the 9 Repetidas + 9 Ausentes law from document
     const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
     const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+    const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
+    const COMPANHEIRAS_01_CICLO = [2, 3, 5, 11, 13, 17, 20, 21, 22, 25];
+    const isCicloFechando = faltantesCiclo.length <= 3;
 
     const scores = Array.from({ length: 25 }, (_, i) => {
       const d = i + 1;
@@ -369,6 +374,12 @@ Forneça uma análise preditiva em formato JSON estruturado com:
       if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15; // Top historical frequency
       if (PRIMOS.includes(d)) score += 6;
       if (MOLDURA.includes(d)) score += 6;
+      // Heurística de Fibonacci (meta canônica 3 a 5 dezenas)
+      if (FIBONACCI.includes(d)) score += 14;
+      // Companheiras do 01 em fechamento de ciclo
+      if (COMPANHEIRAS_01_CICLO.includes(d)) score += isCicloFechando ? 20 : 10;
+      if (d === 1) score += isCicloFechando || faltantesCiclo.includes(1) ? 22 : 12;
+
       return Math.min(99, Math.max(10, score));
     });
 
@@ -400,12 +411,13 @@ Forneça uma análise preditiva em formato JSON estruturado com:
         dezenasRecomendadas15_Ouro: [golden1, golden2, golden3],
         taxaConfianca: 96.4,
         justificativaTecnica:
-          `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi construído seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(', ')}) + 9 Ausentes (${ausentes9.join(', ')}). Isso garante a máxima probabilidade combinatória de capturar 13 a 15 dezenas sorteadas na matriz de fechamento.`,
+          `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi construído seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(', ')}) + 9 Ausentes (${ausentes9.join(', ')}). Inclui calibragem estatística para distribuição de 3 a 5 números de Fibonacci (01, 02, 03, 05, 08, 13, 21) e bonificação ponderada para as companheiras históricas do número 01 em fechamentos de ciclo (${COMPANHEIRAS_01_CICLO.join(', ')}).`,
         dezenasChave: faltantesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
         padroesSugeridos: {
           paresImpares: '7 Pares / 8 Ímpares (ou 8P/7I)',
           primos: '5 a 6 Primos',
           moldura: '9 a 10 Dezenas',
+          fibonacci: '3 a 5 dezenas da Sequência Fibonacci calibradas com as companheiras da dezena 01',
           somaFaixa: '180 a 215',
           repetidas: `9 Dezenas do Concurso #${concurso}`,
         },

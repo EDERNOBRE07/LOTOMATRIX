@@ -140,6 +140,7 @@ export interface AIPredictionResponse {
     moldura: string;
     somaFaixa: string;
     repetidas: string;
+    fibonacci?: string;
   };
 }
 

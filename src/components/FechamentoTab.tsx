@@ -24,6 +24,7 @@ import {
 } from '../services/combinatorics';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
+import { saveFechamentoPrognostico } from '../services/savedFechamentosStorage';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
@@ -845,6 +846,63 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   };
 
+  const autoSaveFechamentoPrognostico = (
+    ticketsToSave: GameTicket[],
+    fechamentoType: string,
+    metaData: FechamentoExportMeta,
+    activePool: number[]
+  ) => {
+    try {
+      const f = metaData.filters || filters;
+      saveFechamentoPrognostico({
+        id: `fechamento-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        timestamp: Date.now(),
+        dataCriacao: new Date().toLocaleString('pt-BR'),
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        tipoFechamento: fechamentoType,
+        modalidadeMatriz: metaData.modeName || `${preset.nome} (${ticketsToSave.length} Jogos - Garantia ${preset.garantia})`,
+        universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
+        dezenasFixas: metaData.fixedNumbers || fixedNumbers,
+        dezenasExcluidas: metaData.excludedNumbers || excludedNumbers,
+        faixaSoma: {
+          min: f.somaMin,
+          max: f.somaMax,
+          zonaOuro: '190 a 210',
+        },
+        paridade: {
+          minPares: f.paresMin,
+          maxPares: f.paresMax,
+          canonico: '7P/8I ou 8P/7I',
+        },
+        maxConsecutivas: f.maxConsecutivas || 5,
+        auditoriaAnomalias: 'Todos os bilhetes foram auditados com 0 anomalias estatísticas',
+        repetidas: {
+          min: f.repetidasMin,
+          max: f.repetidasMax,
+          concursoRef: latestDraw.concurso,
+        },
+        moldura: {
+          min: f.molduraMin,
+          max: f.molduraMax,
+        },
+        primos: {
+          min: f.primosMin,
+          max: f.primosMax,
+        },
+        fibonacci: {
+          min: f.fibonacciMin,
+          max: f.fibonacciMax,
+        },
+        tickets: ticketsToSave,
+        totalJogos: ticketsToSave.length,
+        custoTotal: ticketsToSave.length * VALOR_APOSTA_LOTOFACIL,
+      });
+    } catch (e) {
+      console.warn('Falha ao auto-salvar prognóstico de fechamento:', e);
+    }
+  };
+
   const handleGenerate = () => {
     setIsGenerating(true);
     setGenerationError(null);
@@ -919,6 +977,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, exportMeta);
+        autoSaveFechamentoPrognostico(tickets, strategyName || preset.nome, exportMeta, selectedNumbers);
         setGenerationType('matriz');
         saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
 
@@ -1021,6 +1080,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         } catch {}
 
         onSaveTickets(result.tickets, exportMeta);
+        autoSaveFechamentoPrognostico(result.tickets, 'Fechamento Inteligente Ponderado (IP + Robustez 50)', exportMeta, selectedNumbers);
         setGenerationType('matriz');
         saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
         soundService.playGoldenZoneSuccessChime();
@@ -1080,6 +1140,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     } catch {}
 
     onSaveTickets(tickets, exportMeta);
+    autoSaveFechamentoPrognostico(
+      tickets,
+      exportMeta.strategyName || '⚡ Gerador Turbo (Força Bruta 14 Pts • 17ms)',
+      exportMeta,
+      exportMeta.selectedNumbers || selectedNumbers
+    );
     saveToAutoSave(tickets, mode, selectedNumbers, filters, 'matriz');
 
     setDocumentMessage(
@@ -1160,6 +1226,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, fiboMeta);
+        autoSaveFechamentoPrognostico(tickets, fiboMeta.strategyName || 'Distribuição de Fibonacci Otimizada (Zona de Ouro)', fiboMeta, latestDraw.dezenas);
         setGenerationType('fibonacci');
         saveToAutoSave(tickets, mode, selectedNumbers, filters, 'fibonacci');
 

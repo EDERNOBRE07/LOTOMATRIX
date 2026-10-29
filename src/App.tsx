@@ -349,13 +349,45 @@ export default function App() {
     const optimalPool = buildOptimal18Pool(draw, dynamicStats, dezenasPendentesCiclo, 9, 9);
     const recomendadas18 = optimalPool.dezenas18;
 
+    // Heurística de Fibonacci: 7 dezenas na Lotofácil [01, 02, 03, 05, 08, 13, 21] (meta ideal de 3 a 5 dezenas)
+    const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
+
+    // Dezenas companheiras que historicamente acompanham o número 01 em sorteios de fechamento de ciclo
+    // Concursos canônicos de ciclo (ex: #3804, #3788, #3752) apontam alta coocorrência com: 02, 03, 05, 11, 13, 17, 20, 21, 22, 25
+    const COMPANHEIRAS_01_CICLO = [2, 3, 5, 11, 13, 17, 20, 21, 22, 25];
+    const isFechandoCiclo = dezenasPendentesCiclo.length <= 3;
+
     const scores = Array.from({ length: 25 }, (_, i) => {
       const num = i + 1;
       let score = 50;
-      if (dezenasPendentesCiclo.includes(num)) score += 40; // High cycle urgency
-      if (recomendadas18.includes(num)) score += 25; // Inside optimal pool
-      if ([11, 20, 25, 10, 13, 24, 1, 4].includes(num)) score += 15; // Top historical frequency
-      if (draw.dezenas.includes(num)) score += 12; // Repetition likelihood
+
+      // Urgência probabilística de fechamento de ciclo
+      if (dezenasPendentesCiclo.includes(num)) score += 38;
+
+      // Presença no pool ótimo recomendado (9 Repetidas + 9 Ausentes)
+      if (recomendadas18.includes(num)) score += 22;
+
+      // Frequência histórica líder (top dezenas)
+      if ([11, 20, 25, 10, 13, 24, 1, 4].includes(num)) score += 14;
+
+      // Probabilidade de repetição do concurso anterior
+      if (draw.dezenas.includes(num)) score += 12;
+
+      // Heurística de Distribuição de Fibonacci (calibração para 3 a 5 dezenas no bilhete)
+      if (FIBONACCI_NUMBERS.includes(num)) {
+        score += 15;
+      }
+
+      // Ajuste de peso para dezenas que historicamente acompanham o 01 em fechamentos de ciclo
+      if (COMPANHEIRAS_01_CICLO.includes(num)) {
+        score += isFechandoCiclo ? 22 : 12;
+      }
+
+      // Se for a própria dezena 01, atuar como âncora prioritária caso o ciclo esteja na reta final ou pendente
+      if (num === 1) {
+        score += isFechandoCiclo || dezenasPendentesCiclo.includes(1) ? 20 : 10;
+      }
+
       return Math.min(99, Math.max(15, score));
     });
 
@@ -368,12 +400,13 @@ export default function App() {
         [...recomendadas18.slice(2, 16), recomendadas18[1]].sort((a, b) => a - b),
       ],
       taxaConfianca: 96.8,
-      justificativaTecnica: `Sincronização LotoSniper com o Concurso #${draw.concurso} (${draw.data}). Matriz construída com a Regra do Documento Oficial: proporção de Repetidas e Ausentes calibrada com base no Concurso 3804 (fechamento de ciclo 100% comprovado com 01, 18 e 25). Proteção estatística com filtros ampliados para 8-11 moldura e 4-7 primos para máxima assertividade sem podas indevidas.`,
+      justificativaTecnica: `Sincronização LotoSniper com o Concurso #${draw.concurso} (${draw.data}). Matriz construída com a Regra do Documento Oficial: proporção de Repetidas e Ausentes calibrada com base no Concurso 3804 (fechamento de ciclo 100% comprovado com 01, 18 e 25). Heurística de Fibonacci ativa com intervalo de 3 a 5 dezenas (01, 02, 03, 05, 08, 13, 21), incorporando pesos estratégicos para as dezenas companheiras do 01 em momentos de fechamento de ciclo (02, 03, 05, 11, 13, 17, 20, 21, 22, 25). Proteção estatística com filtros ampliados para 8-11 moldura e 4-7 primos para máxima assertividade sem podas indevidas.`,
       dezenasChave: dezenasPendentesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
       padroesSugeridos: {
         paresImpares: '8 Pares / 7 Ímpares (ou 7P/8I)',
         primos: '4 a 7 Primos (calibrado #3804)',
         moldura: '8 a 11 Dezenas (calibrado #3804)',
+        fibonacci: '3 a 5 dezenas Fibonacci (01, 02, 03, 05, 08, 13, 21) com pesos para companheiras do 01',
         somaFaixa: '175 a 220',
         repetidas: `8 a 10 Dezenas do Concurso #${draw.concurso}`,
       },

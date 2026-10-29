@@ -129,11 +129,27 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
 
   // CONTEST SELECTOR: LATEST CONTEST IS ALWAYS THE DEFAULT & HIGHEST PRIORITY
   const [selectedConcursoId, setSelectedConcursoId] = useState<number>(latestDraw.concurso);
+  const [loadedFechamentoNotice, setLoadedFechamentoNotice] = useState<string | null>(null);
 
   // Sync priority when latestDraw updates
   React.useEffect(() => {
     setSelectedConcursoId(latestDraw.concurso);
   }, [latestDraw.concurso]);
+
+  // Listener para carregar jogos de fechamento salvo diretamente na Entrada de Jogos
+  React.useEffect(() => {
+    const handleLoadConferenceGames = (e: any) => {
+      if (e?.detail?.text) {
+        setInputText(e.detail.text);
+        setIsEditorExpanded(true);
+        const name = e.detail.name || 'Fechamento Salvo';
+        setLoadedFechamentoNotice(`✓ Fechamento "${name}" carregado com sucesso na Entrada de Jogos para Conferência!`);
+        setTimeout(() => setLoadedFechamentoNotice(null), 6000);
+      }
+    };
+    window.addEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
+    return () => window.removeEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
+  }, []);
 
   // Combine draws with latestDraw strictly placed first
   const allDraws = useMemo(() => {
@@ -590,6 +606,22 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Alerta de Fechamento Salvo Carregado na Entrada de Jogos para Conferência */}
+      {loadedFechamentoNotice && (
+        <div className="bg-sky-500/15 border-2 border-sky-400/60 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-sky-200 animate-fadeIn shadow-lg shadow-sky-500/10">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-sky-400 shrink-0" />
+            <span className="font-bold">{loadedFechamentoNotice}</span>
+          </div>
+          <button
+            onClick={() => setLoadedFechamentoNotice(null)}
+            className="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 text-[11px]"
+          >
+            Dispensar
+          </button>
+        </div>
+      )}
 
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
       <div className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden">
