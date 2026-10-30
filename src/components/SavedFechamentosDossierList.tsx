@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   SavedFechamentoPrognostico,
   getSavedFechamentos,
@@ -6,11 +6,14 @@ import {
   clearAllSavedFechamentos,
   formatTicketsForConferenciaInput,
   FIBONACCI_NUMBERS,
+  exportBackupJSON,
+  restoreBackupJSON,
 } from '../services/savedFechamentosStorage';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { soundService } from '../services/soundAlert';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
 import { ExportPDFModal } from './ExportPDFModal';
+import { downloadGoldFechamentoPDF } from '../services/goldPdfGenerator';
 import {
   FileText,
   Trash2,
@@ -22,6 +25,7 @@ import {
   ChevronUp,
   Sparkles,
   Download,
+  Upload,
   Flame,
   Zap,
   ShieldCheck,
@@ -29,6 +33,7 @@ import {
   ArrowRight,
   Info,
   Printer,
+  FileCheck,
 } from 'lucide-react';
 
 interface SavedFechamentosDossierListProps {
@@ -157,6 +162,50 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     showFeedback('Arquivo TXT com Dossiê Técnico baixado com sucesso!');
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadPdfDirect = (f: SavedFechamentoPrognostico) => {
+    try {
+      downloadGoldFechamentoPDF(f);
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`PDF Gold "${f.tipoFechamento}" gerado com sucesso via jsPDF!`);
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar PDF via jsPDF.');
+    }
+  };
+
+  const handleExportBackup = () => {
+    try {
+      exportBackupJSON();
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback('Backup completo (.json) exportado com sucesso para restauração multi-dispositivos!');
+    } catch {
+      showFeedback('Falha ao exportar backup.');
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const res = restoreBackupJSON(content);
+        if (res.success) {
+          soundService.playGoldenZoneSuccessChime();
+          showFeedback(`Backup restaurado com sucesso! ${res.count} fechamento(s) sincronizados.`);
+          setFechamentos(getSavedFechamentos());
+        } else {
+          showFeedback(`Erro ao restaurar backup: ${res.error}`);
+        }
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   return (
     <div className="space-y-6">
       {/* Feedback Toast */}
@@ -195,11 +244,40 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Backup JSON */}
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+              title="Fazer download de um arquivo .json com todos os fechamentos para backup ou transferência para outro dispositivo"
+            >
+              <Download className="w-3.5 h-3.5 text-amber-400" />
+              <span>Fazer Backup (.json)</span>
+            </button>
+
+            {/* Restaurar Backup */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportBackup}
+              accept=".json"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+              title="Restaurar fechamentos a partir de um arquivo .json de backup"
+            >
+              <Upload className="w-3.5 h-3.5 text-sky-400" />
+              <span>Restaurar Backup</span>
+            </button>
+
             {fechamentos.length > 1 && (
               <button
                 onClick={handleClearAll}
-                className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
                 title="Limpar todos os fechamentos salvos"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -279,7 +357,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
                   {/* Botões de Ação Principais para Este Fechamento */}
                   <div className="flex items-center gap-2 flex-wrap self-end lg:self-center">
-                    {/* Botão Gerar PDF Oficial Gold */}
+                    {/* Botão Gerar PDF Oficial Gold (Modal & Prévia de Impressão) */}
                     <button
                       type="button"
                       onClick={() => {
@@ -287,10 +365,21 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         setSelectedForPDF(f);
                       }}
                       className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 flex items-center gap-1.5 active:scale-95"
-                      title="Gerar PDF Oficial Gold formatado para impressão ou visualização externa"
+                      title="Visualizar e Imprimir Dossiê e Volantes formatados"
                     >
                       <Printer className="w-4 h-4 text-slate-950" />
-                      <span>Gerar PDF Gold</span>
+                      <span>Visualizar & Imprimir</span>
+                    </button>
+
+                    {/* Botão Baixar PDF Direto (jsPDF Gold) */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdfDirect(f)}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                      title="Baixar arquivo PDF Gold formatado diretamente via jsPDF"
+                    >
+                      <Download className="w-4 h-4 text-amber-400" />
+                      <span>Baixar PDF Gold</span>
                     </button>
 
                     {/* Botão Carregar Fechamento em Entrada de Jogos para Conferência */}

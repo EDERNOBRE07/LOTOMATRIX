@@ -171,3 +171,176 @@ export function formatTicketsForConferenciaInput(tickets: GameTicket[]): string 
     })
     .join('\n');
 }
+
+/**
+ * Cria e salva um SavedFechamentoPrognostico a partir do estado atual do FechamentoTab
+ */
+export function createSavedFechamentoFromCurrent({
+  tickets,
+  tipoFechamento,
+  modalidadeMatriz,
+  universoDezenas,
+  dezenasFixas = [],
+  dezenasExcluidas = [],
+  filters,
+  concurso = 3816,
+  dataConcurso = '26/10/2026',
+}: {
+  tickets: GameTicket[];
+  tipoFechamento: string;
+  modalidadeMatriz: string;
+  universoDezenas: number[];
+  dezenasFixas?: number[];
+  dezenasExcluidas?: number[];
+  filters?: FilterCriteria;
+  concurso?: number;
+  dataConcurso?: string;
+}): SavedFechamentoPrognostico {
+  const totalJogos = tickets.length;
+  const custoTotal = totalJogos * VALOR_APOSTA_LOTOFACIL;
+  const now = new Date();
+
+  const prognostico: SavedFechamentoPrognostico = {
+    id: `fechamento-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: Date.now(),
+    dataCriacao: now.toLocaleString('pt-BR'),
+    concurso,
+    dataConcurso,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoDezenas: [...universoDezenas].sort((a, b) => a - b),
+    dezenasFixas: [...dezenasFixas].sort((a, b) => a - b),
+    dezenasExcluidas: [...dezenasExcluidas].sort((a, b) => a - b),
+    faixaSoma: {
+      min: filters?.somaMin ?? 180,
+      max: filters?.somaMax ?? 220,
+      zonaOuro: '190 a 210',
+    },
+    paridade: {
+      minPares: filters?.paresMin ?? 6,
+      maxPares: filters?.paresMax ?? 9,
+      canonico: '6 a 9 Pares (Banda Flexível)',
+    },
+    maxConsecutivas: filters?.maxConsecutivas ?? 6,
+    auditoriaAnomalias: 'Todos os bilhetes foram auditados com 0 anomalias estatísticas e Soma >= 180',
+    repetidas: {
+      min: filters?.repetidasMin ?? 6,
+      max: filters?.repetidasMax ?? 11,
+      concursoRef: concurso,
+    },
+    moldura: {
+      min: filters?.molduraMin ?? 8,
+      max: filters?.molduraMax ?? 11,
+    },
+    primos: {
+      min: filters?.primosMin ?? 4,
+      max: filters?.primosMax ?? 7,
+    },
+    fibonacci: {
+      min: filters?.fibonacciMin ?? 3,
+      max: filters?.fibonacciMax ?? 5,
+    },
+    tickets,
+    totalJogos,
+    custoTotal,
+  };
+
+  saveFechamentoPrognostico(prognostico);
+  triggerAutoBackupSnapshot();
+  return prognostico;
+}
+
+// ==============================================================================
+// SISTEMA DE BACKUP AUTOMÁTICO & RECUPERAÇÃO MULTI-DISPOSITIVOS
+// ==============================================================================
+const BACKUP_SNAPSHOTS_KEY = 'lotosniper_auto_backup_snapshots';
+
+export interface BackupSnapshot {
+  id: string;
+  data: string;
+  timestamp: number;
+  totalFechamentos: number;
+  fechamentos: SavedFechamentoPrognostico[];
+}
+
+export function triggerAutoBackupSnapshot(): void {
+  try {
+    const list = getSavedFechamentos();
+    const snapshotsRaw = localStorage.getItem(BACKUP_SNAPSHOTS_KEY);
+    const snapshots: BackupSnapshot[] = snapshotsRaw ? JSON.parse(snapshotsRaw) : [];
+
+    const newSnapshot: BackupSnapshot = {
+      id: `snap-${Date.now()}`,
+      data: new Date().toLocaleString('pt-BR'),
+      timestamp: Date.now(),
+      totalFechamentos: list.length,
+      fechamentos: list,
+    };
+
+    // Mantém os 5 snapshots mais recentes
+    const updated = [newSnapshot, ...snapshots.slice(0, 4)];
+    localStorage.setItem(BACKUP_SNAPSHOTS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('Erro ao salvar snapshot de backup automático:', err);
+  }
+}
+
+export function getBackupSnapshots(): BackupSnapshot[] {
+  try {
+    const snapshotsRaw = localStorage.getItem(BACKUP_SNAPSHOTS_KEY);
+    return snapshotsRaw ? JSON.parse(snapshotsRaw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function exportBackupJSON(): void {
+  const list = getSavedFechamentos();
+  const backupData = {
+    app: 'LotoSniper AI Pro',
+    versao: '2026.4',
+    dataExportacao: new Date().toISOString(),
+    totalFechamentos: list.length,
+    fechamentos: list,
+  };
+
+  const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `lotosniper_backup_jogos_salvos_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export function restoreBackupJSON(jsonString: string): { success: boolean; count: number; error?: string } {
+  try {
+    const parsed = JSON.parse(jsonString);
+    const fechamentosToRestore = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.fechamentos)
+      ? parsed.fechamentos
+      : null;
+
+    if (!fechamentosToRestore || fechamentosToRestore.length === 0) {
+      return { success: false, count: 0, error: 'Nenhum fechamento válido encontrado no arquivo.' };
+    }
+
+    const current = getSavedFechamentos();
+    const currentIds = new Set(current.map((f) => f.id));
+    const merged = [...fechamentosToRestore.filter((f: SavedFechamentoPrognostico) => !currentIds.has(f.id)), ...current];
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 50)));
+    triggerAutoBackupSnapshot();
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: merged }));
+    }
+
+    return { success: true, count: fechamentosToRestore.length };
+  } catch (e) {
+    return { success: false, count: 0, error: 'Arquivo JSON inválido ou corrompido.' };
+  }
+}

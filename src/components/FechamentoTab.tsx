@@ -72,6 +72,7 @@ import {
   Award,
   Activity,
   Lightbulb,
+  BookmarkCheck,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -956,6 +957,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     } catch (e) {
       console.warn('Falha ao auto-salvar prognóstico de fechamento:', e);
     }
+  };
+
+  const [hasSavedInJogosSalvos, setHasSavedInJogosSalvos] = useState(false);
+
+  const handleManualSaveFechamento = () => {
+    if (generatedTickets.length === 0) return;
+    const meta = getCurrentExportMeta();
+    autoSaveFechamentoPrognostico(
+      generatedTickets,
+      strategyName || `Fechamento ${preset.nome}`,
+      meta,
+      selectedNumbers
+    );
+    onSaveTickets(generatedTickets, meta);
+    soundService.playGoldenZoneSuccessChime();
+    setHasSavedInJogosSalvos(true);
+    setDocumentMessage(
+      `✓ Fechamento (${generatedTickets.length} bilhetes) salvo com sucesso em "Jogos Salvos"! Dossiê técnico completo arquivado.`
+    );
+    setTimeout(() => {
+      setHasSavedInJogosSalvos(false);
+      setDocumentMessage(null);
+    }, 6000);
   };
 
   const handleGenerate = () => {
@@ -2328,6 +2352,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Botão Salvar Fechamento em Jogos Salvos */}
+              <button
+                type="button"
+                onClick={handleManualSaveFechamento}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black text-xs transition cursor-pointer shadow-md active:scale-95 ${
+                  hasSavedInJogosSalvos
+                    ? 'bg-emerald-400 text-slate-950 shadow-emerald-500/30'
+                    : 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-500/30 ring-1 ring-amber-300'
+                }`}
+                title="Salvar fechamento e incluir o prognóstico técnico completo em 'Jogos Salvos'"
+              >
+                {hasSavedInJogosSalvos ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 fill-current" />
+                    <span>Fechamento Salvo em "Jogos Salvos"!</span>
+                  </>
+                ) : (
+                  <>
+                    <BookmarkCheck className="w-3.5 h-3.5 text-slate-950" />
+                    <span>Salvar Fechamento em "Jogos Salvos"</span>
+                  </>
+                )}
+              </button>
+
               <button
                 onClick={handleCopyAll}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition cursor-pointer"

@@ -19,6 +19,7 @@ import { D3AIAccuracyComparisonChart } from './D3AIAccuracyComparisonChart';
 import { MonteCarloHeatmap5Concursos } from './MonteCarloHeatmap5Concursos';
 import { TrendRadarPublicFeed } from './TrendRadarPublicFeed';
 import { Heatmap100Concursos } from './Heatmap100Concursos';
+import { AIRecommendationsBacktest10Module } from './AIRecommendationsBacktest10Module';
 import {
   Sparkles,
   Cpu,
@@ -465,6 +466,13 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       <HistoricalProbability500Module
         dynamicStats={dynamicStats}
         latestDraw={latestDraw}
+        onApplyNumbers={onApplyRecommendation}
+      />
+
+      {/* NOVO MÓDULO: BACKTEST DAS RECOMENDAÇÕES DA IA CONTRA OS ÚLTIMOS 10 CONCURSOS */}
+      <AIRecommendationsBacktest10Module
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
         onApplyNumbers={onApplyRecommendation}
       />
 

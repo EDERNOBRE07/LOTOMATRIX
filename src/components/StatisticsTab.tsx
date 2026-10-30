@@ -36,6 +36,7 @@ import { DistribuicaoPrimosCard } from './DistribuicaoPrimosCard';
 import { BacktestingEstrategias100Card } from './BacktestingEstrategias100Card';
 import { RelatorioPerformanceDetalhadoModal } from './RelatorioPerformanceDetalhadoModal';
 import { RastreadorPrecisaoIA30DiasCard } from './RastreadorPrecisaoIA30DiasCard';
+import { ProbabilidadePreditivaRegressao200Card } from './ProbabilidadePreditivaRegressao200Card';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -546,6 +547,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                 window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }));
               }
             }}
+          />
+
+          {/* 6. Probabilidade Preditiva de Saída (Regressão Linear OLS sobre 200 Concursos - Top 10 Dezenas) */}
+          <ProbabilidadePreditivaRegressao200Card
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
           />
 
           {/* BANNER DE ACESSO AO RELATÓRIO DE PERFORMANCE DETALHADO */}
