@@ -128,23 +128,30 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     return () => window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
   }, [expandedCardId]);
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const showFeedback = (msg: string) => {
     setFeedbackMessage(msg);
     setTimeout(() => setFeedbackMessage(null), 5000);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Deseja realmente excluir o fechamento salvo "${name}"?`)) {
-      deleteSavedFechamento(id);
-      showFeedback(`Fechamento "${name}" excluído com sucesso.`);
-    }
+    const updated = deleteSavedFechamento(id);
+    setFechamentos(updated);
+    setConfirmDeleteId(null);
+    try {
+      soundService.playFilterClick();
+    } catch {}
+    showFeedback(`✓ Fechamento "${name}" excluído com sucesso.`);
   };
 
   const handleClearAll = () => {
-    if (window.confirm('Atenção: Deseja apagar todos os fechamentos salvos nesta seção?')) {
-      clearAllSavedFechamentos();
-      showFeedback('Todos os fechamentos salvos foram removidos.');
-    }
+    clearAllSavedFechamentos();
+    setFechamentos([]);
+    try {
+      soundService.playFilterClick();
+    } catch {}
+    showFeedback('Todos os fechamentos salvos foram removidos.');
   };
 
   const handleLoadInConferencia = (fechamento: SavedFechamentoPrognostico) => {
@@ -153,6 +160,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       showFeedback('Este fechamento não possui bilhetes válidos para carregar.');
       return;
     }
+
+    // Persistir em localStorage para garantir que a aba de conferência carregue mesmo após ser montada
+    try {
+      localStorage.setItem(
+        'lotosniper_pending_conference_games',
+        JSON.stringify({
+          text: formattedText,
+          tickets: fechamento.tickets,
+          name: fechamento.tipoFechamento,
+          concurso: fechamento.concurso,
+          timestamp: Date.now(),
+        })
+      );
+    } catch {}
 
     // Disparar evento para ModuloConferenciaJogos preencher a Entrada de Jogos
     window.dispatchEvent(
@@ -535,14 +556,36 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     </button>
 
                     {/* Botão Excluir Fechamento Salvo */}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(f.id, f.tipoFechamento)}
-                      className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 transition cursor-pointer"
-                      title="Excluir este fechamento salvo"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmDeleteId === f.id ? (
+                      <div className="flex items-center gap-1 bg-rose-950/90 p-1 rounded-xl border border-rose-500/60 shadow-md">
+                        <span className="text-[10px] text-rose-200 font-bold px-1.5">Excluir?</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(f.id, f.tipoFechamento)}
+                          className="px-2 py-1 rounded-lg bg-rose-500 text-slate-950 font-black text-[10px] hover:bg-rose-400 transition cursor-pointer"
+                          title="Confirmar exclusão definitiva"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[10px] hover:bg-slate-700 transition cursor-pointer"
+                          title="Cancelar"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(f.id)}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 transition cursor-pointer"
+                        title="Excluir este fechamento salvo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
 
                     {/* Botão Expandir / Recolher Dossiê */}
                     <button

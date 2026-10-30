@@ -29,29 +29,35 @@ export interface SavedFechamentoPrognostico {
 }
 
 const STORAGE_KEY = 'lotosniper_saved_prognosticos';
+const INITIALIZED_KEY = 'lotosniper_prognosticos_initialized';
 
 export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
   try {
+    const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true';
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // Seed with initial sample matching user's exact specification
+
+    if (!isInitialized) {
+      localStorage.setItem(INITIALIZED_KEY, 'true');
       const sample = createInitialSampleFechamento();
       localStorage.setItem(STORAGE_KEY, JSON.stringify([sample]));
       return [sample];
     }
+
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [createInitialSampleFechamento()];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [createInitialSampleFechamento()];
+    return [];
   }
 }
 
 export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico): void {
   try {
+    localStorage.setItem(INITIALIZED_KEY, 'true');
     const list = getSavedFechamentos();
     // Prepend new prognostic
     const updated = [fechamento, ...list.filter((f) => f.id !== fechamento.id)];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 30))); // Keep last 30
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 50))); // Keep last 50
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
@@ -60,22 +66,26 @@ export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico
   }
 }
 
-export function deleteSavedFechamento(id: string): void {
+export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] {
   try {
+    localStorage.setItem(INITIALIZED_KEY, 'true');
     const list = getSavedFechamentos();
     const updated = list.filter((f) => f.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
+    return updated;
   } catch (e) {
     console.error('Falha ao excluir fechamento salvo:', e);
+    return [];
   }
 }
 
 export function clearAllSavedFechamentos(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(INITIALIZED_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: [] }));
     }

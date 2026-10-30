@@ -138,13 +138,38 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
 
   // Listener para carregar jogos de fechamento salvo diretamente na Entrada de Jogos
   React.useEffect(() => {
+    // 1. Checa se há jogos pendentes salvos em localStorage ao montar
+    try {
+      const raw = localStorage.getItem('lotosniper_pending_conference_games');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.text) {
+          setInputText(parsed.text);
+          setIsEditorExpanded(true);
+          const name = parsed.name || 'Fechamento Salvo';
+          setLoadedFechamentoNotice(`✓ Fechamento "${name}" carregado com sucesso na Entrada de Jogos para Conferência!`);
+          localStorage.removeItem('lotosniper_pending_conference_games');
+          setTimeout(() => {
+            const el = document.getElementById('entrada-jogos-conferencia');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 300);
+          setTimeout(() => setLoadedFechamentoNotice(null), 7000);
+        }
+      }
+    } catch {}
+
+    // 2. Listener para eventos disparados com o módulo já montado
     const handleLoadConferenceGames = (e: any) => {
       if (e?.detail?.text) {
         setInputText(e.detail.text);
         setIsEditorExpanded(true);
         const name = e.detail.name || 'Fechamento Salvo';
         setLoadedFechamentoNotice(`✓ Fechamento "${name}" carregado com sucesso na Entrada de Jogos para Conferência!`);
-        setTimeout(() => setLoadedFechamentoNotice(null), 6000);
+        setTimeout(() => {
+          const el = document.getElementById('entrada-jogos-conferencia');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+        setTimeout(() => setLoadedFechamentoNotice(null), 7000);
       }
     };
     window.addEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
@@ -624,7 +649,7 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       )}
 
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
-      <div className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden">
+      <div id="entrada-jogos-conferencia" className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden scroll-mt-24">
         <div className="p-3 bg-slate-900/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-emerald-400" />
