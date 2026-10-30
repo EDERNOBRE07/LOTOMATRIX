@@ -173,11 +173,15 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onSyncNow}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition cursor-pointer disabled:opacity-50"
-            title="Verificar e atualizar com o último concurso da Caixa Econômica Federal"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer active:scale-95 shadow-sm ${
+              isSyncing
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 cursor-wait'
+                : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
+            }`}
+            title="Consultar e atualizar imediatamente com o último concurso da Caixa Econômica Federal"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
-            <span>{isSyncing ? 'Buscando...' : 'Atualizar'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : 'text-emerald-400'}`} />
+            <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
           </button>
 
           {/* Ciclo Telemetry com Destaque Intermitente quando em Reta Final */}

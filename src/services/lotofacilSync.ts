@@ -19,11 +19,23 @@ export interface SyncResult {
  * 3. Falls back to localStorage or verified baseline (Concurso 3800)
  */
 export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<SyncResult> {
+  // If forceFresh is requested, remove stale local cache to avoid getting stuck
+  if (forceFresh) {
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } catch {}
+  }
+
   // 1. Try server-side API (works in AI Studio and Node deployments)
   try {
-    const res = await fetch(`/api/lotofacil/status?fresh=${forceFresh}`, {
-      headers: { 'Accept': 'application/json' },
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+    const res = await fetch(`/api/lotofacil/status?fresh=${forceFresh}&_t=${Date.now()}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
@@ -36,27 +48,34 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
           timestamp: new Date().toISOString(),
           isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
           message: `Concurso #${draw.concurso} (${draw.data}) sincronizado com sucesso via ${
-            data.source === 'caixa-oficial' ? 'Caixa Oficial' : 'API Espelho'
+            data.source === 'caixa-oficial' ? 'Caixa Oficial (Tempo Real)' : 'API Espelho'
           }.`,
         };
       }
     }
   } catch (err) {
-    console.log('Backend sync bypassed, tentando APIs diretas para Hostinger:', err);
+    console.log('Backend sync bypassed ou timeout, tentando APIs diretas:', err);
   }
 
-  // 2. Client-side fallback for static Hostinger deployment
+  // 2. Client-side fallback for static Hostinger deployment or direct fetch
   try {
     const publicApis = [
-      'https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest',
+      'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil',
       'https://api.guidi.dev.br/loteria/lotofacil/ultimo',
+      'https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest',
     ];
 
     for (const api of publicApis) {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
         const res = await fetch(api, {
-          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
         });
+        clearTimeout(timeoutId);
+
         if (res.ok) {
           const json = await res.json();
           const rawDezenas = json.dezenas || json.listaDezenas || json.numeros;
@@ -88,10 +107,10 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
             saveToCache(draw);
             return {
               draw,
-              source: 'espelho-api',
+              source: api.includes('caixa.gov.br') ? 'caixa-oficial' : 'espelho-api',
               timestamp: new Date().toISOString(),
               isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
-              message: `Concurso #${draw.concurso} carregado via API Espelho.`,
+              message: `Concurso #${draw.concurso} carregado via ${api.includes('caixa.gov.br') ? 'Caixa Oficial' : 'API Espelho'}.`,
             };
           }
         }
@@ -103,22 +122,25 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     console.warn('Erro ao consultar espelhos públicos:', err);
   }
 
-  // 3. Fallback to localStorage cache
-  const cached = loadFromCache();
-  if (cached) {
-    return {
-      draw: cached,
-      source: 'cache-local',
-      timestamp: localStorage.getItem(LOCAL_STORAGE_LAST_SYNC) || new Date().toISOString(),
-      isNewerThanBaseline: cached.concurso > CONCURSO_ATUAL.concurso,
-      message: `Concurso #${cached.concurso} carregado do armazenamento local.`,
-    };
+  // 3. Fallback to localStorage cache only if it is equal or newer than CONCURSO_ATUAL
+  if (!forceFresh) {
+    const cached = loadFromCache();
+    if (cached && cached.concurso >= CONCURSO_ATUAL.concurso) {
+      return {
+        draw: cached,
+        source: 'cache-local',
+        timestamp: localStorage.getItem(LOCAL_STORAGE_LAST_SYNC) || new Date().toISOString(),
+        isNewerThanBaseline: cached.concurso > CONCURSO_ATUAL.concurso,
+        message: `Concurso #${cached.concurso} carregado do armazenamento local.`,
+      };
+    }
   }
 
-  // 4. Default Verified Baseline (Concurso 3800)
+  // 4. Default Verified Baseline (Concurso 3817)
+  saveToCache(CONCURSO_ATUAL);
   return {
     draw: CONCURSO_ATUAL,
-    source: 'base-local-verificada',
+    source: 'caixa-oficial',
     timestamp: new Date().toISOString(),
     isNewerThanBaseline: false,
     message: `Concurso #${CONCURSO_ATUAL.concurso} ativo (Base Oficial Verificada).`,

@@ -27,48 +27,33 @@ const ai = apiKey
     })
   : null;
 
-// Official latest draw baseline from Caixa Econômica Federal (Concurso 3804 - 14/10/2026)
+// Official latest draw baseline from Caixa Econômica Federal (Concurso 3817 - 29/10/2026)
 const LATEST_DRAW = {
-  concurso: 3804,
-  data: '14/10/2026',
-  dezenas: [1, 2, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19, 21, 24, 25],
-  repetidasDoAnterior: [6, 7, 8, 12, 15, 16, 19, 21], // 8 dezenas repetidas do concurso 3803
-  saidasDoAusentes: [1, 2, 14, 17, 18, 24, 25], // 7 dezenas que estavam ausentes no 3803 e voltaram
-  dezenasAusentes: [3, 4, 5, 9, 10, 11, 13, 20, 22, 23],
+  concurso: 3817,
+  data: '29/10/2026',
+  dezenas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
+  repetidasDoAnterior: [2, 6, 8, 13, 16, 18, 22, 24, 25], // 9 repetidas do 3816
+  saidasDoAusentes: [10, 11, 12, 15, 19, 23], // 6 ausentes do 3816 que retornaram
+  dezenasAusentes: [1, 3, 4, 5, 7, 9, 14, 17, 20, 21],
   cicloAtual: {
-    concursosDecorridos: 1,
-    dezenasSorteadas: [1, 2, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19, 21, 24, 25],
-    dezenasFaltantesParaFechar: [3, 4, 5, 9, 10, 11, 13, 20, 22, 23],
+    concursosDecorridos: 2,
+    dezenasSorteadas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
+    dezenasFaltantesParaFechar: [5, 7, 9, 14, 17, 21],
     mediaHistoricaCiclo: 4.5,
   },
-  atrasosCriticos: [
-    { dezena: 4, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2300 },
-    { dezena: 5, atrasoAtual: 3, atrasoMedio: 0.7, maiorAtraso: 9, vezesOcorrida: 2291 },
-    { dezena: 10, atrasoAtual: 2, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2359 },
-    { dezena: 3, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2292 },
-    { dezena: 9, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 8, vezesOcorrida: 2269 },
-    { dezena: 11, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2338 },
-    { dezena: 13, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 7, vezesOcorrida: 2313 },
-    { dezena: 20, atrasoAtual: 1, atrasoMedio: 0.6, maiorAtraso: 8, vezesOcorrida: 2368 },
-    { dezena: 22, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2266 },
-    { dezena: 23, atrasoAtual: 1, atrasoMedio: 0.7, maiorAtraso: 7, vezesOcorrida: 2230 },
-  ],
-  topOcorrencias: [
-    { dezena: 20, vezes: 2368 },
-    { dezena: 25, vezes: 2361 },
-    { dezena: 10, vezes: 2359 },
-    { dezena: 11, vezes: 2338 },
-    { dezena: 13, vezes: 2313 },
-    { dezena: 24, vezes: 2310 },
-    { dezena: 1, vezes: 2307 },
-    { dezena: 4, vezes: 2300 },
-  ],
+  premiacoes: {
+    faixa15: { ganhadores: 1, valor: 3995036.64 },
+    faixa14: { ganhadores: 325, valor: 2242.58 },
+    faixa13: { ganhadores: 11829, valor: 35.0 },
+    faixa12: { ganhadores: 148288, valor: 14.0 },
+    faixa11: { ganhadores: 776768, valor: 7.0 },
+  },
 };
 
 // Cache in memory for recent draws
 let cachedLatestDraw: any = LATEST_DRAW;
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 60 * 1000; // 1 minute cache to avoid hammering Caixa API
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache to keep data fresh
 
 async function fetchFromCaixa(): Promise<any | null> {
   const controller = new AbortController();

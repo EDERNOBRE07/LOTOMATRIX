@@ -37,6 +37,7 @@ import { BacktestingEstrategias100Card } from './BacktestingEstrategias100Card';
 import { RelatorioPerformanceDetalhadoModal } from './RelatorioPerformanceDetalhadoModal';
 import { RastreadorPrecisaoIA30DiasCard } from './RastreadorPrecisaoIA30DiasCard';
 import { ProbabilidadePreditivaRegressao200Card } from './ProbabilidadePreditivaRegressao200Card';
+import { MapaCalorProbabilidadesD3 } from './MapaCalorProbabilidadesD3';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -85,6 +86,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'mapa_calor_d3'
     | 'correlacao_d3'
     | 'frequencia_20'
     | 'simulacao_backtest'
@@ -137,6 +139,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('mapa_calor_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'mapa_calor_d3'
+                ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 fill-current text-amber-400" />
+            <span>Mapa de Calor D3</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              5X5 OURO
+            </span>
           </button>
 
           <button
@@ -549,7 +566,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }}
           />
 
-          {/* 6. Probabilidade Preditiva de Saída (Regressão Linear OLS sobre 200 Concursos - Top 10 Dezenas) */}
+          {/* 6. Mapa de Calor de Probabilidades D3.js (Grade 5x5 Volante com Regressão Linear) */}
+          <MapaCalorProbabilidadesD3
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+          />
+
+          {/* 7. Probabilidade Preditiva de Saída (Regressão Linear OLS sobre 200 Concursos - Top 10 Dezenas) */}
           <ProbabilidadePreditivaRegressao200Card
             latestDraw={latestDraw}
             statsList={statsList}
@@ -1110,6 +1135,24 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+      )}
+
+      {/* SUBTAB: MAPA DE CALOR DE PROBABILIDADES D3.JS (GRADE 5X5 VOLANTE COM REGRESSÃO OLS) */}
+      {activeSubTab === 'mapa_calor_d3' && (
+        <div className="space-y-6">
+          <MapaCalorProbabilidadesD3
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+          />
+          <ProbabilidadePreditivaRegressao200Card
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
       )}
 
       {/* SUBTAB: GRÁFICO DE DISPERSÃO D3.JS (CORRELAÇÃO FREQUÊNCIA 100 VS ATRASO ATUAL) */}

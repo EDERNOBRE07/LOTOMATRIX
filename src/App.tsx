@@ -313,10 +313,38 @@ export default function App() {
 
       // After updating latest draw, trigger AI prediction optimization with the newly loaded draw
       fetchAIPrediction(result.draw);
+      return result;
     } catch (err) {
       console.error('Falha na sincronização:', err);
+      throw err;
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Disparo manual instantâneo do botão de atualização com feedback tátil e sonoro
+  const handleManualSync = async () => {
+    try {
+      soundService.playFilterClick();
+    } catch {}
+    setSyncNotice({
+      message: 'Consultando Caixa Econômica Federal em tempo real...',
+      source: 'caixa-oficial',
+      concurso: latestDraw.concurso,
+      data: latestDraw.data,
+    });
+    try {
+      const res = await runAutoUpdate(true);
+      try {
+        soundService.playGoldenZoneSuccessChime();
+      } catch {}
+    } catch (e) {
+      setSyncNotice({
+        message: 'Aviso: Não foi possível obter novo concurso da rede. Mantendo base oficial segura.',
+        source: 'cache-local',
+        concurso: latestDraw.concurso,
+        data: latestDraw.data,
+      });
     }
   };
 
@@ -452,7 +480,7 @@ export default function App() {
       <Header
         latestDraw={latestDraw}
         isSyncing={isSyncing}
-        onSyncNow={() => runAutoUpdate(true)}
+        onSyncNow={handleManualSync}
         syncSource={syncSource}
         cyclePendingNumbers={dezenasPendentesCiclo}
         concursosNoCiclo={concursosNoCiclo}
