@@ -17,7 +17,12 @@ if ('serviceWorker' in navigator) {
 
   // Handle messages dispatched by ServiceWorker (e.g. notification click)
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.action === 'go_to_jogos') {
+    if (
+      event.data?.action === 'go_to_jogos' ||
+      event.data?.type === 'NOTIFICATION_SAVED_GAMES_CLICKED' ||
+      event.data?.type === 'NOTIFICATION_JACKPOT_CLICKED' ||
+      event.data?.tab === 'jogos'
+    ) {
       window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
     }
   });

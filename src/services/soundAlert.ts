@@ -223,6 +223,35 @@ class SoundService {
     } catch (e) {}
   }
 
+  // Play tactile click sound for buttons and number toggling
+  playFilterClick() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(580, now);
+      osc.frequency.exponentialRampToValueAtTime(840, now + 0.04);
+
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } catch (e) {}
+  }
+
+  // Play anomaly alert sound
+  playAnomalyDetected() {
+    this.playOutsideGoldenZoneAlert();
+  }
+
   // Test current alert sound configuration
   testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' = '14_pontos') {
     if (type === '15_pontos') this.play15PontosJackpotSound();

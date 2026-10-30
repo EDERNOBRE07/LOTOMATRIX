@@ -34,7 +34,17 @@ import {
   Info,
   Printer,
   FileCheck,
+  Bell,
+  BellRing,
 } from 'lucide-react';
+import {
+  auditAndNotifySavedGames,
+  isPushNotificationSupported,
+  getPushPermission,
+  requestPushPermission,
+  isPushEnabledByUser,
+  setPushEnabledByUser,
+} from '../services/savedGamesAuditorService';
 
 interface SavedFechamentosDossierListProps {
   latestDraw: LotofacilDraw;
@@ -57,6 +67,54 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [expandedTicketsCardId, setExpandedTicketsCardId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [selectedForPDF, setSelectedForPDF] = useState<SavedFechamentoPrognostico | null>(null);
+  const [pushPerm, setPushPerm] = useState<NotificationPermission>(() => getPushPermission());
+  const [pushEnabled, setPushEnabled] = useState<boolean>(() => isPushEnabledByUser());
+  const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handlePerm = () => setPushPerm(getPushPermission());
+    const handleConfig = (e: any) => setPushEnabled(Boolean(e.detail));
+    window.addEventListener('lotosniper-push-perm-changed', handlePerm);
+    window.addEventListener('lotosniper-push-config-changed', handleConfig);
+    return () => {
+      window.removeEventListener('lotosniper-push-perm-changed', handlePerm);
+      window.removeEventListener('lotosniper-push-config-changed', handleConfig);
+    };
+  }, []);
+
+  const handleTogglePush = () => {
+    const next = !pushEnabled;
+    setPushEnabled(next);
+    setPushEnabledByUser(next);
+    showFeedback(next ? 'Notificações push em 2º plano ativadas.' : 'Notificações push desativadas.');
+  };
+
+  const handleTestPush = async () => {
+    setIsTestingPush(true);
+    try {
+      if (pushPerm !== 'granted') {
+        const p = await requestPushPermission();
+        setPushPerm(p);
+        if (p !== 'granted') {
+          showFeedback('Permissão de notificações não concedida no navegador.');
+          setIsTestingPush(false);
+          return;
+        }
+      }
+      const res = await auditAndNotifySavedGames(latestDraw, true);
+      if (res) {
+        showFeedback(
+          `Notificação de teste enviada via Service Worker para o Concurso #${res.concurso} (${res.totalBilhetesAvaliados} bilhetes avaliados)!`
+        );
+      } else {
+        showFeedback('Notificação de teste disparada com sucesso!');
+      }
+    } catch (e) {
+      showFeedback('Erro ao disparar notificação push de teste.');
+    } finally {
+      setIsTestingPush(false);
+    }
+  };
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -291,6 +349,79 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
               <Zap className="w-4 h-4 fill-current" />
               <span>Novo Fechamento</span>
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Card de Notificações Push em Segundo Plano via Service Worker */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border-2 border-emerald-500/40 rounded-3xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/20 shrink-0">
+              <BellRing className="w-6 h-6 text-slate-950" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  Notificações Push em Segundo Plano (Service Worker)
+                </h3>
+                {pushPerm === 'granted' ? (
+                  <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Operacional em 2º Plano
+                  </span>
+                ) : pushPerm === 'denied' ? (
+                  <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    Bloqueado no Navegador
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    Permissão Pendente
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                O Service Worker audita automaticamente todos os seus jogos salvos assim que a Caixa apurar um novo concurso, enviando uma notificação push com o total de acertos e bilhetes premiados, <strong>mesmo com o navegador em segundo plano ou a tela desligada</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            {/* Toggle de ativação */}
+            <label className="flex items-center gap-2 cursor-pointer bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800 text-xs text-slate-300 hover:text-white select-none">
+              <input
+                type="checkbox"
+                checked={pushEnabled}
+                onChange={handleTogglePush}
+                className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+              />
+              <span className="font-semibold text-[11px]">Auto-Push Ativo</span>
+            </label>
+
+            {/* Botão de Testar Notificação Push */}
+            <button
+              type="button"
+              onClick={handleTestPush}
+              disabled={isTestingPush}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition cursor-pointer flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+              title="Disparar uma notificação push de teste agora para conferir o funcionamento no sistema"
+            >
+              <Bell className="w-3.5 h-3.5 fill-current" />
+              <span>{isTestingPush ? 'Enviando...' : 'Testar Push Agora'}</span>
+            </button>
+
+            {pushPerm !== 'granted' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const p = await requestPushPermission();
+                  setPushPerm(p);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <span>Habilitar no Navegador</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

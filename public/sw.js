@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lotosniper-cache-v1';
+const CACHE_NAME = 'lotosniper-cache-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -88,9 +88,21 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Notification Click: Focus window or open /#jogos to inspect tickets
+// Message Listener: Allows frontend to trigger persistent background notifications
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_SAVED_GAMES_NOTIFICATION') {
+    const { title, options } = event.data;
+    event.waitUntil(self.registration.showNotification(title, options));
+  }
+});
+
+// Notification Click: Focus window or open /#jogos to inspect tickets and results
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+
+  if (event.action === 'fechar') {
+    return;
+  }
 
   const targetUrl = event.notification.data?.url || '/#jogos';
 
@@ -99,10 +111,12 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
           client.postMessage({
-            type: 'NOTIFICATION_JACKPOT_CLICKED',
+            type: 'NOTIFICATION_SAVED_GAMES_CLICKED',
             concurso: event.notification.data?.concurso,
             maxHits: event.notification.data?.maxHits,
-            action: 'go_to_jogos',
+            winningTickets: event.notification.data?.winningTickets,
+            tab: 'jogos',
+            section: 'fechamentos_salvos',
           });
           return client.focus();
         }
@@ -119,13 +133,17 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const payload = event.data.json();
-    const title = payload.title || 'LotoSniper Alerta';
+    const title = payload.title || 'LotoSniper • Alerta de Jogos Salvos';
     const options = {
       body: payload.body || 'Novo sorteio apurado.',
       icon: '/favicon.svg',
       badge: '/favicon.svg',
-      data: payload.data || {},
-      vibrate: [200, 100, 200],
+      data: payload.data || { url: '/#jogos' },
+      vibrate: [300, 100, 300, 100, 300],
+      actions: [
+        { action: 'conferir', title: '🎯 Conferir Jogos' },
+        { action: 'fechar', title: 'Fechar' }
+      ]
     };
     event.waitUntil(self.registration.showNotification(title, options));
   } catch {
@@ -134,6 +152,7 @@ self.addEventListener('push', (event) => {
       self.registration.showNotification('LotoSniper', {
         body: text,
         icon: '/favicon.svg',
+        data: { url: '/#jogos' },
       })
     );
   }

@@ -24,6 +24,7 @@ import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSy
 import { buildOptimal18Pool, countMatches } from './services/combinatorics';
 import { soundService } from './services/soundAlert';
 import { auditAndTriggerIntelligentAlerts, auditAndTriggerHybridAlerts } from './services/notificationService';
+import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
 import {
   Layers,
   Sparkles,
@@ -40,6 +41,7 @@ import {
   Settings,
   HelpCircle,
   Flame,
+  ArrowRight,
 } from 'lucide-react';
 
 export type TabType =
@@ -132,6 +134,8 @@ export default function App() {
     bestTicketIndex: number;
   } | null>(null);
 
+  const [savedGamesAuditNotice, setSavedGamesAuditNotice] = useState<SavedGamesAuditResult | null>(null);
+
   const [activeFechamentoMeta, setActiveFechamentoMeta] = useState<FechamentoExportMeta | null>(() => {
     try {
       const saved = localStorage.getItem('lotosniper_active_fechamento_meta');
@@ -200,6 +204,41 @@ export default function App() {
     window.addEventListener('switch-tab', handleSwitchTab);
     return () => window.removeEventListener('switch-tab', handleSwitchTab);
   }, []);
+
+  // Escuta cliques nas notificações emitidas pelo Service Worker em segundo plano
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      const handleSwMessage = (event: MessageEvent) => {
+        if (
+          event.data?.type === 'NOTIFICATION_SAVED_GAMES_CLICKED' ||
+          event.data?.type === 'NOTIFICATION_JACKPOT_CLICKED'
+        ) {
+          setActiveTab('jogos');
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    }
+  }, []);
+
+  // Escuta evento customizado de auditoria de jogos salvos para exibir notificação em tela
+  useEffect(() => {
+    const handleAudited = (e: any) => {
+      if (e.detail) {
+        setSavedGamesAuditNotice(e.detail);
+      }
+    };
+    window.addEventListener('lotosniper-saved-games-audited', handleAudited);
+    return () => window.removeEventListener('lotosniper-saved-games-audited', handleAudited);
+  }, []);
+
+  // Polling em segundo plano: verifica periodicamente se há novo concurso apurado pela Caixa
+  useEffect(() => {
+    const timer = setInterval(() => {
+      runAutoUpdate(false).catch(() => {});
+    }, 60 * 1000); // Checa a cada 60s
+    return () => clearInterval(timer);
+  }, [latestDraw.concurso]);
 
   // Disparo automático de alertas sonoros e notificações nativas do navegador para 13+ pontos (13, 14 e 15 acertos)
   const triggerAutomaticJackpotAlerts = (draw: LotofacilDraw, ticketsToCheck: GameTicket[]) => {
@@ -305,6 +344,16 @@ export default function App() {
         } catch { return []; }
       })();
       triggerAutomaticJackpotAlerts(result.draw, ticketsToCheck);
+
+      // Auditoria dos Jogos Salvos com notificação push via Service Worker (Mesmo em Segundo Plano)
+      try {
+        const auditRes = await auditAndNotifySavedGames(result.draw);
+        if (auditRes) {
+          setSavedGamesAuditNotice(auditRes);
+        }
+      } catch (e) {
+        console.warn('Erro ao auditar jogos salvos para push:', e);
+      }
 
       // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Ciclo < 3)
       const { stats: newStats, dezenasPendentesCiclo: newPending, concursosNoCiclo: newCicloNum } = computeDynamicStats(result.draw, RECENT_DRAWS);
@@ -587,6 +636,58 @@ export default function App() {
                 onClick={() => setJackpotHitNotice(null)}
                 className="p-2 rounded-xl bg-slate-950/20 hover:bg-slate-950/40 text-slate-950 transition cursor-pointer"
                 title="Fechar notificação"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Banner de Auditoria Automática de Jogos Salvos via Service Worker */}
+        {savedGamesAuditNotice && (
+          <div className="bg-gradient-to-r from-emerald-950/90 via-slate-900 to-teal-950/90 border-2 border-emerald-500/70 rounded-2xl p-4 text-white shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 font-black shrink-0 shadow-lg shadow-emerald-500/25">
+                <Bell className="w-6 h-6 text-slate-950" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+                    PUSH SERVICE WORKER • CONCURSO #{savedGamesAuditNotice.concurso}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">({savedGamesAuditNotice.dataConcurso})</span>
+                </div>
+                <h3 className="text-sm sm:text-base font-bold text-white mt-0.5">
+                  {savedGamesAuditNotice.totalWinningTickets > 0
+                    ? `🎉 ${savedGamesAuditNotice.totalWinningTickets} bilhete(s) premiados! Melhor jogo obteve ${savedGamesAuditNotice.maxHits} acertos.`
+                    : `Conferência automática concluída: ${savedGamesAuditNotice.totalBilhetesAvaliados} bilhetes conferidos (Melhor: ${savedGamesAuditNotice.maxHits} pts).`}
+                </h3>
+                <p className="text-xs text-slate-300">
+                  {savedGamesAuditNotice.bestFechamentoTitle}
+                  {savedGamesAuditNotice.premioEstimadoTotal > 0 && (
+                    <span className="text-emerald-400 font-mono font-bold ml-2">
+                      • Prêmio Estimado: R$ {savedGamesAuditNotice.premioEstimadoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setActiveTab('jogos');
+                  setSavedGamesAuditNotice(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 font-black text-xs shadow-md transition cursor-pointer hover:scale-105 active:scale-95 flex items-center gap-1.5"
+              >
+                <span>Ver Jogos Salvos</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setSavedGamesAuditNotice(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                title="Fechar aviso"
               >
                 <X className="w-4 h-4" />
               </button>
