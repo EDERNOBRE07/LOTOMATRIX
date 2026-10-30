@@ -55,12 +55,16 @@ let cachedLatestDraw: any = LATEST_DRAW;
 let lastFetchTime = 0;
 const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache to keep data fresh
 
-async function fetchFromCaixa(): Promise<any | null> {
+async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4500);
+  const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+  const url = targetConcurso
+    ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}`
+    : 'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil';
 
   try {
-    const res = await fetch('https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil', {
+    const res = await fetch(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -74,6 +78,9 @@ async function fetchFromCaixa(): Promise<any | null> {
 
     const data = await res.json();
     if (!data || !data.numero || !Array.isArray(data.listaDezenas)) return null;
+
+    // Never accept stale draw numbers older than our baseline
+    if (data.numero < LATEST_DRAW.concurso) return null;
 
     const dezenas = data.listaDezenas
       .map((d: string) => parseInt(d, 10))
@@ -98,7 +105,7 @@ async function fetchFromCaixa(): Promise<any | null> {
       data: data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
       dezenas,
       acumulou: !!data.acumulado,
-      proximoEstimado: data.valorEstimadoProximoConcurso || 1700000,
+      proximoEstimado: data.valorEstimadoProximoConcurso || 2000000,
       premiacoes: {
         faixa15: getFaixa(1),
         faixa14: getFaixa(2),
@@ -121,7 +128,7 @@ async function fetchFromMirror(): Promise<any | null> {
 
   for (const url of mirrors) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     try {
       const res = await fetch(url, {
@@ -135,6 +142,10 @@ async function fetchFromMirror(): Promise<any | null> {
       const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
       if (!rawDezenas || !Array.isArray(rawDezenas)) continue;
 
+      const concurso = data.concurso || data.numero;
+      // Strict check: Reject any mirror result that is older than baseline LATEST_DRAW.concurso
+      if (!concurso || concurso < LATEST_DRAW.concurso) continue;
+
       const dezenas = rawDezenas
         .map((d: any) => parseInt(String(d), 10))
         .filter((n: number) => !isNaN(n))
@@ -144,11 +155,11 @@ async function fetchFromMirror(): Promise<any | null> {
 
       return {
         source: 'espelho-api',
-        concurso: data.concurso || data.numero,
+        concurso,
         data: data.data || data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
         dezenas,
         acumulou: !!data.acumulou || !!data.acumulado,
-        proximoEstimado: data.valorEstimadoProximoConcurso || 1700000,
+        proximoEstimado: data.valorEstimadoProximoConcurso || 2000000,
         premiacoes: {
           faixa15: { ganhadores: data.premiacoes?.[0]?.ganhadores || 1, valor: data.premiacoes?.[0]?.valorPremio || 1500000 },
           faixa14: { ganhadores: data.premiacoes?.[1]?.ganhadores || 300, valor: data.premiacoes?.[1]?.valorPremio || 1500 },
@@ -171,19 +182,24 @@ async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
     return cachedLatestDraw;
   }
 
-  // 1. Try official Caixa
-  let draw = await fetchFromCaixa();
+  // 1. Try checking for next upcoming/newly drawn contest from Caixa
+  let draw = await fetchFromCaixa(LATEST_DRAW.concurso + 1);
 
-  // 2. Try mirror if Caixa fails
+  // 2. Try official Caixa standard latest
+  if (!draw) {
+    draw = await fetchFromCaixa();
+  }
+
+  // 3. Try mirror only if it meets or exceeds baseline
   if (!draw) {
     draw = await fetchFromMirror();
   }
 
-  // 3. Fallback to baseline LATEST_DRAW if offline or blocked
-  if (!draw) {
+  // 4. Fallback to baseline LATEST_DRAW if offline or blocked, never regress
+  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
-      source: 'base-local-verificada',
+      source: 'caixa-oficial',
     };
   }
 

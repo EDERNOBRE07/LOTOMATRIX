@@ -38,6 +38,7 @@ import { RelatorioPerformanceDetalhadoModal } from './RelatorioPerformanceDetalh
 import { RastreadorPrecisaoIA30DiasCard } from './RastreadorPrecisaoIA30DiasCard';
 import { ProbabilidadePreditivaRegressao200Card } from './ProbabilidadePreditivaRegressao200Card';
 import { MapaCalorProbabilidadesD3 } from './MapaCalorProbabilidadesD3';
+import { VarianciaSomaScatterRecharts } from './VarianciaSomaScatterRecharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -580,6 +581,20 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
             onApplyNumbers={onApplyNumbers}
+          />
+
+          {/* 8. Gráfico de Dispersão da Soma das Dezenas (Recharts • 100 Concursos & Tendência Preditiva) */}
+          <VarianciaSomaScatterRecharts
+            latestDraw={latestDraw}
+            onApplySomaFilter={(min, max) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
           />
 
           {/* BANNER DE ACESSO AO RELATÓRIO DE PERFORMANCE DETALHADO */}
@@ -1493,12 +1508,26 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         <EvolucaoPontuacaoChart latestDraw={latestDraw} />
       )}
 
-      {/* SUBTAB: ANÁLISE DE VARIÂNCIA (DESVIO DA MÉDIA 13,0) */}
+      {/* SUBTAB: ANÁLISE DE VARIÂNCIA (DESVIO DA MÉDIA 13,0 & GRÁFICO RECHARTS 100 CONCURSOS) */}
       {activeSubTab === 'variancia' && (
-        <AnaliseVarianciaComponent
-          latestDraw={latestDraw}
-          onApplyBiasRecommendation={onApplyNumbers}
-        />
+        <div className="space-y-6">
+          <VarianciaSomaScatterRecharts
+            latestDraw={latestDraw}
+            onApplySomaFilter={(min, max) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
+          />
+          <AnaliseVarianciaComponent
+            latestDraw={latestDraw}
+            onApplyBiasRecommendation={onApplyNumbers}
+          />
+        </div>
       )}
 
       {/* MODAL DE RELATÓRIO DE PERFORMANCE DETALHADO (100 CONCURSOS × 30 DIAS) */}

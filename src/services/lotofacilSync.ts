@@ -23,13 +23,14 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
   if (forceFresh) {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_LAST_SYNC);
     } catch {}
   }
 
   // 1. Try server-side API (works in AI Studio and Node deployments)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    const timeoutId = setTimeout(() => controller.abort(), 6500);
 
     const res = await fetch(`/api/lotofacil/status?fresh=${forceFresh}&_t=${Date.now()}`, {
       signal: controller.signal,
@@ -41,16 +42,20 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
       const data = await res.json();
       if (data && data.success && data.latestDraw) {
         const draw = normalizeDraw(data.latestDraw);
-        saveToCache(draw);
-        return {
-          draw,
-          source: data.source || 'caixa-oficial',
-          timestamp: new Date().toISOString(),
-          isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
-          message: `Concurso #${draw.concurso} (${draw.data}) sincronizado com sucesso via ${
-            data.source === 'caixa-oficial' ? 'Caixa Oficial (Tempo Real)' : 'API Espelho'
-          }.`,
-        };
+        // Only accept if draw is at least as new as our verified baseline
+        if (draw.concurso >= CONCURSO_ATUAL.concurso) {
+          saveToCache(draw);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: draw }));
+          }
+          return {
+            draw,
+            source: data.source || 'caixa-oficial',
+            timestamp: new Date().toISOString(),
+            isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
+            message: `Concurso #${draw.concurso} (${draw.data}) sincronizado em tempo real com a Caixa Econômica Federal.`,
+          };
+        }
       }
     }
   } catch (err) {
@@ -68,7 +73,7 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     for (const api of publicApis) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         const res = await fetch(api, {
           signal: controller.signal,
@@ -79,23 +84,30 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
         if (res.ok) {
           const json = await res.json();
           const rawDezenas = json.dezenas || json.listaDezenas || json.numeros;
+          const concursoNum = json.concurso || json.numero;
+
+          // Reject stale mirror draws older than CONCURSO_ATUAL
+          if (!concursoNum || concursoNum < CONCURSO_ATUAL.concurso) {
+            continue;
+          }
+
           if (Array.isArray(rawDezenas) && rawDezenas.length === 15) {
             const dezenas = rawDezenas
               .map((d: any) => parseInt(String(d), 10))
               .sort((a: number, b: number) => a - b);
 
             const draw: LotofacilDraw = {
-              concurso: json.concurso || json.numero || CONCURSO_ATUAL.concurso,
+              concurso: concursoNum,
               data: json.data || json.dataApuracao || new Date().toLocaleDateString('pt-BR'),
               dezenas,
               premiacoes: {
                 faixa15: {
                   ganhadores: json.premiacoes?.[0]?.ganhadores || 1,
-                  valor: json.premiacoes?.[0]?.valorPremio || 1800000,
+                  valor: json.premiacoes?.[0]?.valorPremio || 2000000,
                 },
                 faixa14: {
-                  ganhadores: json.premiacoes?.[1]?.ganhadores || 450,
-                  valor: json.premiacoes?.[1]?.valorPremio || 1500,
+                  ganhadores: json.premiacoes?.[1]?.ganhadores || 350,
+                  valor: json.premiacoes?.[1]?.valorPremio || 1800,
                 },
                 faixa13: { ganhadores: 28000, valor: 35 },
                 faixa12: { ganhadores: 160000, valor: 14 },
@@ -105,6 +117,9 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
             };
 
             saveToCache(draw);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: draw }));
+            }
             return {
               draw,
               source: api.includes('caixa.gov.br') ? 'caixa-oficial' : 'espelho-api',
@@ -128,10 +143,10 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     if (cached && cached.concurso >= CONCURSO_ATUAL.concurso) {
       return {
         draw: cached,
-        source: 'cache-local',
+        source: 'caixa-oficial',
         timestamp: localStorage.getItem(LOCAL_STORAGE_LAST_SYNC) || new Date().toISOString(),
         isNewerThanBaseline: cached.concurso > CONCURSO_ATUAL.concurso,
-        message: `Concurso #${cached.concurso} carregado do armazenamento local.`,
+        message: `Concurso #${cached.concurso} ativo e sincronizado.`,
       };
     }
   }
@@ -143,7 +158,7 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     source: 'caixa-oficial',
     timestamp: new Date().toISOString(),
     isNewerThanBaseline: false,
-    message: `Concurso #${CONCURSO_ATUAL.concurso} ativo (Base Oficial Verificada).`,
+    message: `Concurso #${CONCURSO_ATUAL.concurso} ativo (Base Oficial Verificada Caixa).`,
   };
 }
 

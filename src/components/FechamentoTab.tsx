@@ -29,6 +29,7 @@ import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
 import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
+import { PainelTendenciaCiclo, CycleTendencyConfig } from './PainelTendenciaCiclo';
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
@@ -79,6 +80,7 @@ interface FechamentoTabProps {
   latestDraw: LotofacilDraw;
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];
+  concursosNoCiclo?: number;
   aiPrediction: AIPredictionResponse | null;
   initialFixedNumbers?: number[];
   onSaveTickets: (tickets: GameTicket[], meta?: FechamentoExportMeta) => void;
@@ -91,6 +93,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
+  concursosNoCiclo = 2,
   aiPrediction,
   initialFixedNumbers,
   onSaveTickets,
@@ -105,6 +108,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [strategyName, setStrategyName] = useState<string>(
     '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
   );
+
+  // Painel de Controle de Tendência de Ciclo (Filtros de Dezenas Pendentes vs Alta Frequência)
+  const [cycleTendencyConfig, setCycleTendencyConfig] = useState<CycleTendencyConfig>(() => ({
+    enabled: true,
+    mode: 'pendentes',
+    intensity: 'moderado',
+    fixedPending: false,
+  }));
 
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>(() => {
     try {
@@ -334,6 +345,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     try {
       localStorage.setItem('lotosniper_sound_alert', String(enabled));
     } catch {}
+  };
+
+  // Aplicação de Tendência de Ciclo a partir do Painel de Controle (Dezenas Pendentes vs Alta Frequência)
+  const handleApplyCycleTendencyToVolante = (selectedNums: number[], fixedNums?: number[]) => {
+    setSelectedNumbers(selectedNums.slice(0, targetCount));
+    if (fixedNums && fixedNums.length > 0) {
+      setFixedNumbers(fixedNums);
+    }
+    const modeName =
+      cycleTendencyConfig.mode === 'pendentes'
+        ? 'Dezenas Pendentes'
+        : cycleTendencyConfig.mode === 'frequentes'
+        ? 'Alta Frequência'
+        : 'Equilíbrio Híbrido';
+    setDocumentMessage(
+      `✓ Tendência de Ciclo (${modeName}) aplicada no volante! ${selectedNums.length} dezenas carregadas.`
+    );
+    setTimeout(() => setDocumentMessage(null), 6000);
   };
 
   // Telemetria de Combinações Descartadas pelo Filtro de Robustez Estatística
@@ -1934,6 +1963,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           setFixedNumbers([]);
           setExcludedNumbers([]);
         }}
+      />
+
+      {/* PAINEL DE CONTROLE: TENDÊNCIA DE CICLO (FILTROS DE DEZENAS PENDENTES VS ALTA FREQUÊNCIA) */}
+      <PainelTendenciaCiclo
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        concursosNoCiclo={concursosNoCiclo}
+        config={cycleTendencyConfig}
+        onChangeConfig={setCycleTendencyConfig}
+        onApplyToVolante={handleApplyCycleTendencyToVolante}
+        targetCount={targetCount}
       />
 
       {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}

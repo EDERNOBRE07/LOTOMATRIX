@@ -232,6 +232,23 @@ export default function App() {
     return () => window.removeEventListener('lotosniper-saved-games-audited', handleAudited);
   }, []);
 
+  // Escuta atualizações de concurso em tempo real para sincronização global
+  useEffect(() => {
+    const handleDrawUpdated = (e: any) => {
+      const incomingDraw = e.detail;
+      if (incomingDraw && incomingDraw.concurso) {
+        setLatestDraw((prev) => {
+          if (incomingDraw.concurso >= prev.concurso) {
+            return incomingDraw;
+          }
+          return prev;
+        });
+      }
+    };
+    window.addEventListener('lotosniper-concurso-updated', handleDrawUpdated);
+    return () => window.removeEventListener('lotosniper-concurso-updated', handleDrawUpdated);
+  }, []);
+
   // Polling em segundo plano: verifica periodicamente se há novo concurso apurado pela Caixa
   useEffect(() => {
     const timer = setInterval(() => {
@@ -748,6 +765,7 @@ export default function App() {
             latestDraw={latestDraw}
             dynamicStats={dynamicStats}
             cyclePendingNumbers={dezenasPendentesCiclo}
+            concursosNoCiclo={concursosNoCiclo}
             aiPrediction={aiPrediction}
             initialFixedNumbers={pendingFixedNumbers}
             onSaveTickets={(tickets, meta) => {
