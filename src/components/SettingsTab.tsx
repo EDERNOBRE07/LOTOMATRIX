@@ -33,6 +33,7 @@ import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
 export type CheckInterval = 'startup_only' | '1h' | '4h' | '12h';
+export type PollingInterval = '5min' | '15min' | '30min';
 export type BackupDestination = 'local' | 'gdrive';
 
 interface SettingsTabProps {
@@ -92,6 +93,47 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     try {
       localStorage.setItem('lotosniper_check_interval', interval);
     } catch {}
+  };
+
+  // 2.1. Seletor de Intervalo de Polling em Segundo Plano (5min, 15min, 30min)
+  const [pollingInterval, setPollingInterval] = useState<PollingInterval>(() => {
+    try {
+      return (localStorage.getItem('lotosniper_polling_interval') as PollingInterval) || '5min';
+    } catch {
+      return '5min';
+    }
+  });
+
+  const handlePollingIntervalChange = (val: PollingInterval) => {
+    setPollingInterval(val);
+    const msMap: Record<PollingInterval, number> = {
+      '5min': 5 * 60 * 1000,
+      '15min': 15 * 60 * 1000,
+      '30min': 30 * 60 * 1000,
+    };
+    const ms = msMap[val];
+    try {
+      localStorage.setItem('lotosniper_polling_interval', val);
+      localStorage.setItem('lotosniper_polling_interval_ms', String(ms));
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-polling-interval-changed', {
+          detail: ms,
+        })
+      );
+    }
+
+    const labelMap: Record<PollingInterval, string> = {
+      '5min': '5 minutos (300s)',
+      '15min': '15 minutos (900s)',
+      '30min': '30 minutos (1800s)',
+    };
+    setNotificationSuccessNotice(
+      `Intervalo de Polling da Caixa configurado para ${labelMap[val]} com sucesso!`
+    );
+    setTimeout(() => setNotificationSuccessNotice(null), 4000);
   };
 
   // 3. Notificações Push do Navegador
@@ -470,44 +512,115 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Intervalo de Checagem Automática */}
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
-            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-800">
-              <Clock className="w-5 h-5 text-cyan-400" />
-              <div>
-                <h3 className="text-sm font-bold text-white">Intervalo de Checagem Automática</h3>
-                <p className="text-[11px] text-slate-400">Frequência com que o LotoSniper verifica se a Caixa sorteou novo concurso</p>
+          {/* Seletor de Intervalo de Polling (5min, 15min, 30min) da Caixa */}
+          <div className="bg-slate-900/90 rounded-2xl border border-amber-500/30 p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Intervalo de Polling da Caixa</span>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      SEGUNDO PLANO
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Frequência com que o app checa silenciosamente se a Caixa apurou novo concurso
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-mono font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Timer Ativo: {pollingInterval}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 text-xs">
+            {/* Selector Options: 5min, 15min, 30min */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
-                { id: 'startup_only', label: 'Apenas ao Iniciar o App', desc: 'Mais leve' },
-                { id: '1h', label: 'A cada 1 hora', desc: 'Tempo real' },
-                { id: '4h', label: 'A cada 4 horas', desc: 'Recomendado' },
-                { id: '12h', label: 'A cada 12 horas', desc: 'Econômico' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleCheckIntervalChange(item.id as CheckInterval)}
-                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                    checkInterval === item.id
-                      ? 'bg-cyan-500/15 border-cyan-400 text-white ring-1 ring-cyan-500/30'
-                      : 'bg-slate-950/60 border-slate-850 text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  <strong className="block font-bold">{item.label}</strong>
-                  <span className="text-[10px] text-slate-400">{item.desc}</span>
-                </button>
-              ))}
+                {
+                  id: '5min',
+                  label: '5 Minutos',
+                  tempo: '300s',
+                  badge: 'Recomendado',
+                  desc: 'Mais ágil para sorteios ao vivo das 20h.',
+                  accent: 'from-amber-400 to-yellow-500',
+                },
+                {
+                  id: '15min',
+                  label: '15 Minutos',
+                  tempo: '900s',
+                  badge: 'Equilibrado',
+                  desc: 'Consumo moderado de dados e bateria.',
+                  accent: 'from-emerald-400 to-teal-500',
+                },
+                {
+                  id: '30min',
+                  label: '30 Minutos',
+                  tempo: '1.800s',
+                  badge: 'Econômico',
+                  desc: 'Ideal para conexões 4G/5G limitadas.',
+                  accent: 'from-cyan-400 to-blue-500',
+                },
+              ].map((opt) => {
+                const isSelected = pollingInterval === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => handlePollingIntervalChange(opt.id as PollingInterval)}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer relative overflow-hidden group ${
+                      isSelected
+                        ? 'bg-gradient-to-br from-amber-500/15 to-yellow-500/5 border-amber-400 text-white shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/40'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <strong className="text-xs font-black flex items-center gap-1.5 text-white">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            isSelected ? 'bg-amber-400' : 'bg-slate-600'
+                          }`}
+                        />
+                        {opt.label}
+                      </strong>
+                      <span
+                        className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                          isSelected
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {opt.badge}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-tight mb-2">
+                      {opt.desc}
+                    </p>
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 border-t border-slate-800/80 pt-1.5">
+                      <span>Ciclo de Verificação</span>
+                      <strong className={isSelected ? 'text-amber-300' : 'text-slate-400'}>
+                        {opt.tempo}
+                      </strong>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="pt-2 text-[11px] text-slate-400 flex items-center justify-between">
-              <span>Sincronização manual imediata:</span>
+            {/* Quick manual sync footer */}
+            <div className="pt-2 text-[11px] text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-slate-800/60">
+              <span className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>O timer roda em segundo plano e notifica assim que a Caixa publicar o espelho.</span>
+              </span>
               <button
                 onClick={onSyncNow}
                 disabled={isSyncing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium transition cursor-pointer"
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs transition cursor-pointer shrink-0"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
                 <span>{isSyncing ? 'Sincronizando...' : 'Verificar Agora'}</span>

@@ -249,13 +249,37 @@ export default function App() {
     return () => window.removeEventListener('lotosniper-concurso-updated', handleDrawUpdated);
   }, []);
 
+  // 2.1. Intervalo de Polling em segundo plano configurável pelo usuário (5min, 15min, 30min)
+  const [pollingIntervalMs, setPollingIntervalMs] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_polling_interval_ms');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch {}
+    return 5 * 60 * 1000; // Padrão: 5 minutos (300.000ms)
+  });
+
+  useEffect(() => {
+    const handlePollingChange = (e: any) => {
+      if (e.detail && typeof e.detail === 'number' && e.detail > 0) {
+        console.log(`[LotoSniper Polling] Intervalo atualizado em tempo real para ${e.detail / 60000} minutos (${e.detail}ms).`);
+        setPollingIntervalMs(e.detail);
+      }
+    };
+    window.addEventListener('lotosniper-polling-interval-changed', handlePollingChange);
+    return () => window.removeEventListener('lotosniper-polling-interval-changed', handlePollingChange);
+  }, []);
+
   // Polling em segundo plano: verifica periodicamente se há novo concurso apurado pela Caixa
   useEffect(() => {
+    console.log(`[LotoSniper Polling Caixa] Loop de verificação ativo: checando a cada ${pollingIntervalMs / 60000} minutos (${pollingIntervalMs}ms).`);
     const timer = setInterval(() => {
       runAutoUpdate(false).catch(() => {});
-    }, 60 * 1000); // Checa a cada 60s
+    }, pollingIntervalMs);
     return () => clearInterval(timer);
-  }, [latestDraw.concurso]);
+  }, [latestDraw.concurso, pollingIntervalMs]);
 
   // Disparo automático de alertas sonoros e notificações nativas do navegador para 13+ pontos (13, 14 e 15 acertos)
   const triggerAutomaticJackpotAlerts = (draw: LotofacilDraw, ticketsToCheck: GameTicket[]) => {

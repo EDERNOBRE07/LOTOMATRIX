@@ -40,6 +40,7 @@ import { ProbabilidadePreditivaRegressao200Card } from './ProbabilidadePreditiva
 import { MapaCalorProbabilidadesD3 } from './MapaCalorProbabilidadesD3';
 import { VarianciaSomaScatterRecharts } from './VarianciaSomaScatterRecharts';
 import { HistoricoAtrasosRechartsCard } from './HistoricoAtrasosRechartsCard';
+import { WidgetTendenciasTop5Recharts } from './WidgetTendenciasTop5Recharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -88,6 +89,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'widget_tendencias'
     | 'mapa_calor_d3'
     | 'correlacao_d3'
     | 'frequencia_20'
@@ -141,6 +143,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('widget_tendencias')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'widget_tendencias'
+                ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Widget de Tendências (Top 5)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              RECHARTS
+            </span>
           </button>
 
           <button
@@ -513,6 +530,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* Widget de Tendências: 5 Dezenas Mais Sorteadas nos Últimos 20 Concursos (Recharts) */}
+          <WidgetTendenciasTop5Recharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onFixNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+
           {/* 1. Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos */}
           <Top15FrequenciaUltimos10Card
             latestDraw={latestDraw}
@@ -1168,6 +1197,38 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           }}
         />
       </div>
+    )}
+
+      {/* SUBTAB DEDICADA: WIDGET DE TENDÊNCIAS (5 DEZENAS MAIS SORTEADAS NOS ÚLTIMOS 20 CONCURSOS COM RECHARTS) */}
+      {activeSubTab === 'widget_tendencias' && (
+        <div className="space-y-6">
+          <WidgetTendenciasTop5Recharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onFixNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+
+          <HistoricoAtrasosRechartsCard
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onFixNumbersInFechamento={(nums) => {
+              if (onApplyNumbers) onApplyNumbers(nums);
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
+          />
+        </div>
       )}
 
       {/* SUBTAB: MAPA DE CALOR DE PROBABILIDADES D3.JS (GRADE 5X5 VOLANTE COM REGRESSÃO OLS) */}
