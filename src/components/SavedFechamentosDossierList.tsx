@@ -35,6 +35,7 @@ import {
   Info,
   Printer,
   FileCheck,
+  FileSpreadsheet,
   Bell,
   BellRing,
   Database,
@@ -284,6 +285,63 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar PDF via jsPDF.');
+    }
+  };
+
+  const handleDownloadCSVDirect = (f: SavedFechamentoPrognostico) => {
+    try {
+      const headers = [
+        'Jogo',
+        'Dezenas Formatadas',
+        'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D14', 'D15',
+        'Pares',
+        'Ímpares',
+        'Primos',
+        'Moldura',
+        'Fibonacci',
+        'Soma Total',
+        'Score IA',
+        'Modelo de Prognostico',
+        'Concurso Base',
+        'Data Criacao',
+      ];
+
+      const rows = f.tickets.map((t, idx) => {
+        const sorted = [...t.dezenas].sort((a, b) => a - b);
+        const dCols = sorted.map((n) => n.toString().padStart(2, '0'));
+        const formatted = sorted.map((n) => n.toString().padStart(2, '0')).join(' - ');
+        return [
+          `"Jogo ${(t.index ?? idx + 1).toString().padStart(2, '0')}"`,
+          `"${formatted}"`,
+          ...dCols,
+          t.pares ?? sorted.filter((n) => n % 2 === 0).length,
+          t.impares ?? sorted.filter((n) => n % 2 !== 0).length,
+          t.primos ?? sorted.filter((n) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length,
+          t.moldura ?? sorted.filter((n) => MOLDURA.includes(n)).length,
+          t.fibonacci ?? sorted.filter((n) => FIBONACCI_NUMBERS.includes(n)).length,
+          t.soma ?? sorted.reduce((a, b) => a + b, 0),
+          `"${(t.scoreIA || 92).toFixed(1)}"`,
+          `"${f.tipoFechamento}"`,
+          f.concurso,
+          `"${f.dataCriacao || ''}"`,
+        ].join(';');
+      });
+
+      const csvContent = '\uFEFF' + headers.join(';') + '\n' + rows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lotosniper_fechamento_concurso_${f.concurso}_${f.totalJogos}_jogos.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`✓ Arquivo CSV com ${f.totalJogos} apostas do Fechamento baixado com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar arquivo CSV.');
     }
   };
 
@@ -573,7 +631,19 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     </span>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm sm:text-base font-black text-white">{f.tipoFechamento}</h3>
+                        {f.tipoFechamento.includes(' • Sugestão: ') ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm sm:text-base font-black text-white">
+                              {f.tipoFechamento.split(' • Sugestão: ')[0]}
+                            </h3>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-400/50 font-bold flex items-center gap-1 shadow-sm">
+                              <Sparkles className="w-3 h-3 text-amber-400" />
+                              <span>Sugestão: {f.tipoFechamento.split(' • Sugestão: ')[1]}</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <h3 className="text-sm sm:text-base font-black text-white">{f.tipoFechamento}</h3>
+                        )}
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
                           {f.modalidadeMatriz}
                         </span>
@@ -619,6 +689,17 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     >
                       <Download className="w-4 h-4 text-amber-400" />
                       <span>Baixar PDF Gold</span>
+                    </button>
+
+                    {/* Botão Baixar CSV Formatado para Lotéricas/Planilhas */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadCSVDirect(f)}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                      title="Baixar arquivo CSV com todas as dezenas formatadas para lotéricas ou planilhas"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                      <span>Baixar CSV</span>
                     </button>
 
                     {/* Botão Carregar Fechamento em Entrada de Jogos para Conferência */}

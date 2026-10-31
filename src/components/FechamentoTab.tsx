@@ -558,6 +558,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [activeModel, setActiveModel] = useState<string>(
     '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
   );
+  // Sugestão Estratégica Incorporada na Matriz (para composição do nome em Jogos Salvos)
+  const [appliedSuggestionName, setAppliedSuggestionName] = useState<string | null>(null);
+
+  const getFullPrognosticoFechamentoName = (): string => {
+    const baseModel = activeModel || strategyName || `Modelo ${preset.nome}`;
+    if (appliedSuggestionName) {
+      return `${baseModel} • Sugestão: ${appliedSuggestionName}`;
+    }
+    return baseModel;
+  };
 
   const applyStrategyModel = (modelType: string, overrideTargetCount?: number) => {
     const tCount = overrideTargetCount ?? targetCount;
@@ -626,6 +636,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 1. Aplicar Top 18 no Fechamento
   const handleApplyTop18 = () => {
     setActiveStrategicBox('top_18');
+    setAppliedSuggestionName('Top 18 IA (Calor & Probabilidade)');
     setMode('18_14_15');
     const sorted18 = [...dynamicStats]
       .sort((a, b) => {
@@ -638,8 +649,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       .sort((a, b) => a - b);
 
     setSelectedNumbers(sorted18);
-    setStrategyName('Top 18 IA');
-    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada e iluminada no Fechamento!');
+    const fullName = `${activeModel || 'Top 18 IA'} • Sugestão: Top 18 IA (Calor & Probabilidade)`;
+    setStrategyName(fullName);
+    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada e incorporada ao nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -647,14 +659,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 2. Aplicar Pares de Ouro
   const handleApplyParesDeOuro = () => {
     setActiveStrategicBox('pares_ouro');
+    setAppliedSuggestionName('Par de Ouro [11, 20]');
     const goldenPair = [11, 20];
     setFixedNumbers((prev) => Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b));
     setSelectedNumbers((prev) => {
       const merged = Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b);
       return merged.slice(0, targetCount);
     });
-    setStrategyName('Par de Ouro [11, 20]');
-    setDocumentMessage('✓ Par de Ouro [11, 20] fixado e iluminado no Fechamento!');
+    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Par de Ouro [11, 20]`;
+    setStrategyName(fullName);
+    setDocumentMessage('✓ Par de Ouro [11, 20] fixado e incorporado ao nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -662,6 +676,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 3. Aplicar Preditor em Tempo Real da Lotofácil
   const handleApplyRealTimePredictor = () => {
     setActiveStrategicBox('preditor_real');
+    setAppliedSuggestionName('Preditor em Tempo Real');
     const ranked = [...dynamicStats]
       .sort((a, b) => {
         const probA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes;
@@ -673,8 +688,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       .sort((a, b) => a - b);
 
     setSelectedNumbers(ranked);
-    setStrategyName('Preditor em Tempo Real da Lotofácil');
-    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas e iluminadas na matriz de ${targetCount} dezenas!`);
+    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Preditor em Tempo Real`;
+    setStrategyName(fullName);
+    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas na matriz de ${targetCount} dezenas e no nome do fechamento!`);
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -682,6 +698,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 4. Aplicar Insights Diários da IA (Carrega TODOS os Filtros Presetados e calibra a matriz 5x5)
   const handleApplyDailyAIInsights = () => {
     setActiveStrategicBox('insights_ia');
+    setAppliedSuggestionName('Insights Diários da IA (Filtros Presetados)');
     let voidPairs = filters.combinacoesVazioExcluidas || [];
     try {
       if (voidPairs.length === 0) {
@@ -739,9 +756,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     });
 
     setSelectedNumbers(calibrated.dezenas);
-    setStrategyName('Insights Diários da IA (Todos os Filtros Presetados)');
+    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Insights Diários da IA (Filtros Presetados)`;
+    setStrategyName(fullName);
     setDocumentMessage(
-      `✓ Insights Diários da IA: todos os filtros presetados carregados e matriz 5×5 (${targetCount} dezenas) calibrada na Zona de Ouro (190–210), 7–8 Pares e Classe A!`
+      `✓ Insights Diários da IA: todos os filtros presetados carregados e incorporados no nome do Fechamento!`
     );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 6000);
@@ -750,6 +768,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 5. Garantir Incorporação dos Filtros Canônicos
   const handleEnsureFilters = () => {
     setActiveStrategicBox('garantir_filtros');
+    setAppliedSuggestionName('Filtros Canônicos (Zona de Ouro)');
     const updatedFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 185,
@@ -769,7 +788,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasExcluidas: excludedNumbers,
     };
     handleFiltersChange(updatedFilters, true);
-    setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no Fechamento!');
+    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Filtros Canônicos (Zona de Ouro)`;
+    setStrategyName(fullName);
+    setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -777,6 +798,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 6. Aplicar Curva ABC (Classe A - 80% Frequência Histórica)
   const handleApplyCurvaAbcClasseA = () => {
     setActiveStrategicBox('curva_abc');
+    setAppliedSuggestionName('Curva ABC (Classe A - 80% Pareto)');
     const updatedFilters: FilterCriteria = {
       ...filters,
       curvaAbcAtiva: true,
@@ -786,9 +808,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
     handleFiltersChange(updatedFilters, true);
-    setStrategyName('Curva ABC (Classe A - 80% Pareto)');
+    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Curva ABC (Classe A - 80% Pareto)`;
+    setStrategyName(fullName);
     setDocumentMessage(
-      `✓ Dezenas da Classe A aplicadas no volante 5×5 e Filtro de Curva ABC ativado permanentemente!`
+      `✓ Dezenas da Classe A aplicadas no volante 5×5 e incorporadas no nome do Fechamento!`
     );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
@@ -993,10 +1016,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const handleManualSaveFechamento = () => {
     if (generatedTickets.length === 0) return;
-    const meta = getCurrentExportMeta();
+    const finalPrognosticoName = getFullPrognosticoFechamentoName();
+    const meta = {
+      ...getCurrentExportMeta(),
+      strategyName: finalPrognosticoName,
+    };
     autoSaveFechamentoPrognostico(
       generatedTickets,
-      strategyName || `Fechamento ${preset.nome}`,
+      finalPrognosticoName,
       meta,
       selectedNumbers
     );
@@ -1004,7 +1031,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     soundService.playGoldenZoneSuccessChime();
     setHasSavedInJogosSalvos(true);
     setDocumentMessage(
-      `✓ Fechamento (${generatedTickets.length} bilhetes) salvo com sucesso em "Jogos Salvos"! Dossiê técnico completo arquivado.`
+      `✓ Fechamento "${finalPrognosticoName}" (${generatedTickets.length} bilhetes) salvo com sucesso em "Jogos Salvos"! Dossiê técnico completo arquivado.`
     );
     setTimeout(() => {
       setHasSavedInJogosSalvos(false);
@@ -1067,8 +1094,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         // Sucesso comprovado
         setGenerationError(null);
+        const finalPrognosticoName = getFullPrognosticoFechamentoName();
         const exportMeta: FechamentoExportMeta = {
-          strategyName,
+          strategyName: finalPrognosticoName,
           modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
           garantia: preset.garantia,
           targetCount: targetCount,
@@ -1086,7 +1114,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, exportMeta);
-        autoSaveFechamentoPrognostico(tickets, strategyName || preset.nome, exportMeta, selectedNumbers);
+        autoSaveFechamentoPrognostico(tickets, finalPrognosticoName, exportMeta, selectedNumbers);
         setGenerationType('matriz');
         saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
 
@@ -1188,11 +1216,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
         } catch {}
 
-        onSaveTickets(result.tickets, exportMeta);
+        const finalPonderadoName = appliedSuggestionName
+          ? `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'}) • Sugestão: ${appliedSuggestionName}`
+          : `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'})`;
+
+        onSaveTickets(result.tickets, { ...exportMeta, strategyName: finalPonderadoName });
         autoSaveFechamentoPrognostico(
           result.tickets,
-          `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'})`,
-          exportMeta,
+          finalPonderadoName,
+          { ...exportMeta, strategyName: finalPonderadoName },
           selectedNumbers
         );
         setGenerationType('matriz');
@@ -1397,8 +1429,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const savings = Math.max(0, rawCaixaCost - totalCost);
 
   const getCurrentExportMeta = (): FechamentoExportMeta => {
+    const finalPrognosticoName = getFullPrognosticoFechamentoName();
     return {
-      strategyName,
+      strategyName: finalPrognosticoName,
       modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
       garantia: preset.garantia,
       targetCount: targetCount,

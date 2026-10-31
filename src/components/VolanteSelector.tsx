@@ -9,7 +9,8 @@ import {
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics';
 import { calculateCurvaAbc } from '../services/curvaAbcService';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award } from 'lucide-react';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X } from 'lucide-react';
+import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 
 interface VolanteSelectorProps {
   selectedNumbers: number[];
@@ -50,6 +51,30 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc'
   >('normal');
   const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude'>('select');
+  const [showRollingModal, setShowRollingModal] = useState<boolean>(false);
+
+  // Compute scores map
+  const scoresMap = React.useMemo(() => {
+    const map: { [num: number]: number } = {};
+    for (let i = 1; i <= 25; i++) {
+      if (aiScores && aiScores[i - 1] !== undefined) {
+        map[i] = Math.round(aiScores[i - 1]);
+      } else {
+        const s = statsList.find((st) => st.numero === i);
+        map[i] = s ? Math.min(99, Math.round(60 + s.vezes / 20 + s.atrasoAtual * 3)) : 80;
+      }
+    }
+    return map;
+  }, [aiScores, statsList]);
+
+  // Numbers to spin: either selectedNumbers if targetCount is reached, or optimal pool
+  const numbersToSpin = React.useMemo(() => {
+    if (selectedNumbers.length >= 15) {
+      return [...selectedNumbers].slice(0, targetCount).sort((a, b) => a - b);
+    }
+    const pool = buildOptimalPool(targetCount, latestDraw, statsList, cyclePendingNumbers);
+    return pool.dezenas.slice(0, targetCount).sort((a, b) => a - b);
+  }, [selectedNumbers, targetCount, latestDraw, statsList, cyclePendingNumbers]);
 
   // Curva ABC data
   const curvaAbcSummary = React.useMemo(() => calculateCurvaAbc(statsList), [statsList]);
@@ -262,6 +287,40 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         </div>
       </div>
 
+      {/* Sorteio Rolling Numbers Animado (Framer Motion) */}
+      {showRollingModal && (
+        <div className="my-4 p-4 rounded-2xl bg-slate-950/90 border border-amber-500/40 relative shadow-2xl">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+            <span className="text-xs font-black text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              Sorteio Rolling Numbers no Volante (Framer Motion)
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowRollingModal(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="Fechar Sorteio Animado"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <RollingNumbersSorteio
+            finalNumbers={numbersToSpin}
+            title="Sorteio das Dezenas do Volante"
+            subtitle={`Girando ${numbersToSpin.length} dezenas selecionadas/recomendadas com animação mecânica Framer Motion`}
+            cycleKeyNumbers={cyclePendingNumbers}
+            scoresMap={scoresMap}
+            autoStart={true}
+            onApplyNumbers={(nums) => {
+              onSelectSet(nums);
+              setShowRollingModal(false);
+              onStrategySelect?.(`Sorteio Rolling Numbers (${nums.length} Dezenas)`);
+            }}
+          />
+        </div>
+      )}
+
       {/* Volante Grid 5x5 */}
       <div className="py-4 flex justify-center">
         <div className="grid grid-cols-5 gap-2 sm:gap-3 max-w-md w-full">
@@ -457,6 +516,18 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             }`}
           >
             <span>Equilíbrio Canônico</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRollingModal((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${
+              showRollingModal
+                ? 'bg-amber-400 text-slate-950 font-black border border-amber-300 ring-2 ring-amber-300/50 shadow-amber-400/40'
+                : 'bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/10 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300'
+            }`}
+          >
+            <Play className="w-3.5 h-3.5 fill-current text-amber-400" />
+            <span>🎲 Sorteio Rolling Numbers</span>
           </button>
         </div>
 

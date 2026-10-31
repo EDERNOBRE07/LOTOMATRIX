@@ -30,6 +30,7 @@ import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
 import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
 import { RegrasAlertaHibridoComponent } from './RegrasAlertaHibridoComponent';
+import { HostingerMySQLConfigModule } from './HostingerMySQLConfigModule';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -64,7 +65,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   cyclePendingNumbers = [17, 22],
   concursosNoCiclo = 3,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'geral' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'>('geral');
+  const [activeSubTab, setActiveSubTab] = useState<
+    'geral' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+  >('geral');
 
   // 1. Modo de Conexão
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => {
@@ -447,6 +450,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             Conexão & Notificações
+          </button>
+          <button
+            onClick={() => setActiveSubTab('mysql_hostinger')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'mysql_hostinger'
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-sm font-black'
+                : 'text-amber-400 hover:text-white'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>MySQL Hostinger & Cronjob</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              BACKUP
+            </span>
           </button>
           <button
             onClick={() => setActiveSubTab('regras_hibridas')}
@@ -940,6 +957,18 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUBTAB: MYSQL HOSTINGER & CRONJOB BACKUP AUTOMÁTICO                       */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'mysql_hostinger' && (
+        <div className="space-y-5">
+          <HostingerMySQLConfigModule
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* SUBTAB: REGRAS DE ALERTA HÍBRIDO (E / OU)                                 */}
       {/* ========================================================================= */}
       {activeSubTab === 'regras_hibridas' && (
@@ -1100,6 +1129,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Backup MySQL Hostinger no Servidor */}
+          <div className="pt-2">
+            <HostingerMySQLConfigModule
+              latestDraw={latestDraw}
+              savedTickets={savedTickets}
+            />
           </div>
         </div>
       )}

@@ -20,6 +20,7 @@ import { MonteCarloHeatmap5Concursos } from './MonteCarloHeatmap5Concursos';
 import { TrendRadarPublicFeed } from './TrendRadarPublicFeed';
 import { Heatmap100Concursos } from './Heatmap100Concursos';
 import { AIRecommendationsBacktest10Module } from './AIRecommendationsBacktest10Module';
+import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 import {
   Sparkles,
   Cpu,
@@ -134,6 +135,14 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
     [...recomendadas18.slice(2, 16), recomendadas18[1]].sort((a, b) => a - b),
   ];
 
+  const scoresMap = React.useMemo(() => {
+    const map: { [num: number]: number } = {};
+    for (let i = 1; i <= 25; i++) {
+      map[i] = Math.round(scores[i - 1] || 50);
+    }
+    return map;
+  }, [scores]);
+
   // EVOLUÇÃO HISTÓRICA DA TAXA DE CONFIANÇA (ÚLTIMOS 10 CONCURSOS)
   const historicalConfidenceData = React.useMemo(() => {
     // 10 most recent draws in chronological order (oldest to newest)
@@ -229,6 +238,16 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Sorteio Dinâmico com Rolling Numbers (Framer Motion) */}
+      <RollingNumbersSorteio
+        finalNumbers={recomendadas18}
+        title="Sorteio Preditivo com Rolling Numbers (Framer Motion)"
+        subtitle={`Visualização dinâmica das 18 dezenas mais prováveis calculadas para o Concurso #${latestDraw.concurso + 1}`}
+        cycleKeyNumbers={cyclePendingNumbers}
+        scoresMap={scoresMap}
+        onApplyNumbers={onApplyRecommendation}
+      />
 
       {/* Recommended 18 Numbers (O Top da IA para garantir 14 pontos) */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl">

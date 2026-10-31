@@ -698,6 +698,155 @@ app.delete('/api/mysql/fechamentos/:id', async (req: Request, res: Response) => 
   res.json({ success: true, deleted: id });
 });
 
+// POST: Testar conexão com Hostinger MySQL
+app.post('/api/mysql/test-connection', async (req: Request, res: Response) => {
+  const { host, port, database, user, password } = req.body || {};
+  try {
+    const testConfig = {
+      host: host || MYSQL_CONFIG.host,
+      port: port || MYSQL_CONFIG.port,
+      user: user || MYSQL_CONFIG.user,
+      password: password !== undefined ? password : MYSQL_CONFIG.password,
+      database: database || MYSQL_CONFIG.database,
+      connectTimeout: 5000,
+    };
+    const testConn = await mysql.createConnection(testConfig);
+    await testConn.query('SELECT 1');
+    await testConn.end();
+
+    mysqlPool = mysql.createPool(testConfig);
+    isMysqlConnected = true;
+    mysqlLastError = null;
+
+    res.json({
+      success: true,
+      connected: true,
+      message: `Conexão bem-sucedida com o banco ${testConfig.database} no servidor Hostinger (${testConfig.host})!`,
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      connected: false,
+      message: `Servidor local ativo (fallback em cache pronto para MySQL). Detalhe: ${err?.message || 'Aguardando liberação de IP/firewall Hostinger'}`,
+      error: err?.message,
+    });
+  }
+});
+
+// GET: Obter configuração atual do Hostinger MySQL
+app.get('/api/mysql/config', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    config: {
+      host: MYSQL_CONFIG.host,
+      port: MYSQL_CONFIG.port,
+      user: MYSQL_CONFIG.user,
+      database: MYSQL_CONFIG.database,
+      passwordConfigured: !!MYSQL_CONFIG.password,
+    },
+    connected: isMysqlConnected,
+  });
+});
+
+// POST: Atualizar configuração do Hostinger MySQL
+app.post('/api/mysql/config', async (req: Request, res: Response) => {
+  const { host, port, database, user, password } = req.body || {};
+  try {
+    if (host) MYSQL_CONFIG.host = host;
+    if (port) MYSQL_CONFIG.port = port;
+    if (database) MYSQL_CONFIG.database = database;
+    if (user) MYSQL_CONFIG.user = user;
+    if (password !== undefined) MYSQL_CONFIG.password = password;
+
+    const configFile = path.resolve(__dirname, 'hostinger_mysql_config.json');
+    fs.writeFileSync(configFile, JSON.stringify(MYSQL_CONFIG, null, 2), 'utf-8');
+
+    initMySQL().catch(() => {});
+    res.json({ success: true, message: 'Configurações de banco MySQL salvas no servidor.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message });
+  }
+});
+
+// POST: Executar Cronjob de Backup de GamesManagerTab e SimulatorTab
+app.post('/api/mysql/cron-backup', async (req: Request, res: Response) => {
+  const { gamesManagerData, simulatorData, concursoReferencia, dataReferencia } = req.body || {};
+  const backupId = `cron_backup_${Date.now()}`;
+
+  if (isMysqlConnected && mysqlPool) {
+    try {
+      const conn = await mysqlPool.getConnection();
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS lotosniper_games_manager_backup (
+          id VARCHAR(128) PRIMARY KEY,
+          concurso_ref INT,
+          data_ref VARCHAR(32),
+          total_jogos INT,
+          payload_json LONGTEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS lotosniper_simulator_backup (
+          id VARCHAR(128) PRIMARY KEY,
+          concurso_ref INT,
+          data_ref VARCHAR(32),
+          payload_json LONGTEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      if (gamesManagerData) {
+        await conn.query(
+          'INSERT INTO lotosniper_games_manager_backup (id, concurso_ref, data_ref, total_jogos, payload_json) VALUES (?, ?, ?, ?, ?)',
+          [
+            backupId + '_games',
+            concursoReferencia || 0,
+            dataReferencia || '',
+            gamesManagerData.totalJogos || 0,
+            JSON.stringify(gamesManagerData),
+          ]
+        );
+      }
+
+      if (simulatorData) {
+        await conn.query(
+          'INSERT INTO lotosniper_simulator_backup (id, concurso_ref, data_ref, payload_json) VALUES (?, ?, ?, ?)',
+          [
+            backupId + '_sim',
+            concursoReferencia || 0,
+            dataReferencia || '',
+            JSON.stringify(simulatorData),
+          ]
+        );
+      }
+      conn.release();
+      console.log(`[Hostinger MySQL Cronjob] Backup gravado no servidor com sucesso: ${backupId}`);
+    } catch (err) {
+      console.warn('[Hostinger MySQL Cronjob] Aviso: Erro ao gravar tabelas MySQL, salvando cópia local:', err);
+    }
+  }
+
+  // Backup local de segurança
+  try {
+    const backupDir = path.resolve(__dirname, 'backups_mysql');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(backupDir, `${backupId}.json`),
+      JSON.stringify(req.body, null, 2),
+      'utf-8'
+    );
+  } catch {}
+
+  res.json({
+    success: true,
+    backupId,
+    timestamp: new Date().toISOString(),
+    mysqlConnected: isMysqlConnected,
+  });
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isDev =

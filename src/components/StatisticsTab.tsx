@@ -41,6 +41,7 @@ import { MapaCalorProbabilidadesD3 } from './MapaCalorProbabilidadesD3';
 import { VarianciaSomaScatterRecharts } from './VarianciaSomaScatterRecharts';
 import { HistoricoAtrasosRechartsCard } from './HistoricoAtrasosRechartsCard';
 import { WidgetTendenciasTop5Recharts } from './WidgetTendenciasTop5Recharts';
+import { DashboardFrequenciaAtrasosRecharts } from './DashboardFrequenciaAtrasosRecharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
