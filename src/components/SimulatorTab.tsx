@@ -10,6 +10,7 @@ import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
 import { AlgorithmDuelSimulator } from './AlgorithmDuelSimulator';
 import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
+import { QuickBacktestD3Area } from './QuickBacktestD3Area';
 import {
   Play,
   RotateCcw,
@@ -27,6 +28,7 @@ import {
   Download,
   ArrowRight,
   Swords,
+  Zap,
 } from 'lucide-react';
 
 interface SimulatorTabProps {
@@ -50,8 +52,15 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     }
   };
   const [activeSubTab, setActiveSubTab] = useState<
-    'backtest' | 'backtest_d3' | 'duelo_algoritmos' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
-  >('backtest');
+    | 'quick_backtest'
+    | 'backtest'
+    | 'backtest_d3'
+    | 'duelo_algoritmos'
+    | 'evolucao_saldo'
+    | 'calculadora'
+    | 'animacao'
+    | 'espelho'
+  >('quick_backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
     'concurso_3803' | 'concurso_3802' | 'concurso_3801' | 'ultimos_15' | 'monte_carlo_1000'
@@ -167,6 +176,27 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       {/* Subtab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+          <button
+            onClick={() => setActiveSubTab('quick_backtest')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'quick_backtest'
+                ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Zap className="w-4 h-4 fill-current" />
+            <span>Quick Backtest (5 Sorteios)</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'quick_backtest'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-400/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              ÁREA D3
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('backtest')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
@@ -302,7 +332,14 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       />
 
       {/* Render Subtab Views */}
-      {activeSubTab === 'backtest_d3' ? (
+      {activeSubTab === 'quick_backtest' ? (
+        <QuickBacktestD3Area
+          tickets={tickets}
+          latestDraw={latestDraw}
+          onGoToGenerator={onGoToGenerator}
+          onGoToGamesManager={handleGoToGamesManager}
+        />
+      ) : activeSubTab === 'backtest_d3' ? (
         <SimulacaoBacktestD3Component
           currentTickets={tickets}
           latestDraw={latestDraw}
@@ -385,6 +422,14 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               tickets.length * VALOR_APOSTA_LOTOFACIL
             ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             shortcutButtonLabel="Gerenciar & Conferir"
+            onGoToGamesManager={handleGoToGamesManager}
+          />
+
+          {/* Quick Backtest Automático (Últimos 5 Concursos • D3.js Area Chart) */}
+          <QuickBacktestD3Area
+            tickets={tickets}
+            latestDraw={latestDraw}
+            onGoToGenerator={onGoToGenerator}
             onGoToGamesManager={handleGoToGamesManager}
           />
 

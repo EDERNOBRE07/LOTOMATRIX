@@ -24,6 +24,13 @@ if ('serviceWorker' in navigator) {
       event.data?.tab === 'jogos'
     ) {
       window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+    } else if (
+      event.data?.type === 'NOTIFICATION_TOP5_TREND_CLICKED' ||
+      event.data?.tab === 'estatisticas'
+    ) {
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'estatisticas' }));
+    } else if (event.data?.tab) {
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: event.data.tab }));
     }
   });
 }

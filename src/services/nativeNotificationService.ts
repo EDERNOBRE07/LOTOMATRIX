@@ -1,5 +1,7 @@
 import { soundService } from './soundAlert';
 import { saveAlertsHistory, getAlertsHistory, IntelligentAlert } from './notificationService';
+import { LotofacilDraw } from '../types/lotofacil';
+import { getHistorical100Draws } from './historical100Draws';
 
 export interface NativeJackpotPayload {
   concurso: number;
@@ -143,3 +145,165 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
     return false;
   }
 }
+
+export interface Top5TrendNotificationPayload {
+  dezena: number;
+  marco: 'atraso_zero' | 'repeticao_consecutiva';
+  concurso: number;
+  repeticoes?: number;
+  frequencia20?: number;
+}
+
+/**
+ * Sends a Service Worker / native browser notification when a Top 5 trend number
+ * hits a milestone ('atraso zero' or 'repeticao consecutiva').
+ */
+export async function sendNativeTop5TrendNotification(payload: Top5TrendNotificationPayload): Promise<boolean> {
+  const { dezena, marco, concurso, repeticoes = 2, frequencia20 = 15 } = payload;
+  const numStr = dezena.toString().padStart(2, '0');
+
+  // 1. Play auditory chime
+  try {
+    soundService.playGoldenZoneSuccessChime();
+  } catch {}
+
+  // 2. Prepare Title and Body
+  const isConsecutive = marco === 'repeticao_consecutiva';
+  const title = isConsecutive
+    ? `🔥 Top 5 de Tendência: Dezena ${numStr} em Repetição Consecutiva!`
+    : `⚡ Top 5 de Tendência: Dezena ${numStr} Atinge Atraso Zero!`;
+
+  const body = isConsecutive
+    ? `A Dezena ${numStr} (Top 5 dos últimos 20 concursos com ${frequencia20} aparições) foi sorteada no Concurso #${concurso} pelo ${repeticoes}º sorteio seguido!`
+    : `A Dezena ${numStr} (uma das 5 mais sorteadas nos últimos 20 concursos) foi sorteada no Concurso #${concurso}, alcançando Atraso Zero no volante.`;
+
+  // 3. Register in in-app alerts history
+  try {
+    const existing = getAlertsHistory();
+    const alertId = `top5_trend_${concurso}_${dezena}_${marco}_${Date.now()}`;
+    const newAlert: IntelligentAlert = {
+      id: alertId,
+      timestamp: Date.now(),
+      dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      type: 'system',
+      title,
+      body,
+      concurso,
+      read: false,
+    };
+    saveAlertsHistory([newAlert, ...existing]);
+  } catch {}
+
+  // 4. Native Browser Notification (Foreground & Background Tab Support via Service Worker)
+  if (!isNotificationSupported() || Notification.permission !== 'granted') {
+    return false;
+  }
+
+  const notificationOptions: NotificationOptions & {
+    renotify?: boolean;
+    vibrate?: number[];
+  } = {
+    body,
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    tag: `lotosniper-top5-${dezena}-${concurso}-${marco}`,
+    renotify: true,
+    data: {
+      url: '/#estatisticas',
+      tab: 'estatisticas',
+      dezena,
+      marco,
+      concurso,
+      type: 'NOTIFICATION_TOP5_TREND_CLICKED',
+    },
+  };
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && 'showNotification' in registration) {
+        await registration.showNotification(title, notificationOptions);
+        return true;
+      }
+    }
+
+    const notif = new Notification(title, notificationOptions);
+    notif.onclick = () => {
+      window.focus();
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'estatisticas' }));
+      notif.close();
+    };
+    return true;
+  } catch (e) {
+    console.warn('Erro ao disparar notificação Top 5 de tendência:', e);
+    return false;
+  }
+}
+
+/**
+ * Passive auditor called upon new draw sync to check if any of the Top 5 numbers
+ * hit "atraso zero" or "repeticao consecutiva", dispatching push notifications.
+ */
+export async function auditAndNotifyTop5Trends(latestDraw: LotofacilDraw): Promise<boolean> {
+  try {
+    const isEnabled = localStorage.getItem('lotosniper_push_top5_trends_enabled') === 'true';
+    if (!isEnabled) return false;
+
+    // Deduplication check
+    const dedupeKey = `lotosniper_top5_audit_${latestDraw.concurso}`;
+    if (sessionStorage.getItem(dedupeKey)) return false;
+
+    const historical = getHistorical100Draws(latestDraw);
+    const last20 = historical.slice(0, 20);
+    const previousDraw = historical[1];
+
+    const counts: { [num: number]: number } = {};
+    for (let i = 1; i <= 25; i++) counts[i] = 0;
+    last20.forEach((d) => d.dezenas.forEach((n) => counts[n]++));
+
+    const sortedTop5 = Object.keys(counts)
+      .map((k) => ({ num: parseInt(k, 10), freq: counts[parseInt(k, 10)] }))
+      .sort((a, b) => b.freq - a.freq || a.num - b.num)
+      .slice(0, 5);
+
+    const allowAtrasoZero = localStorage.getItem('lotosniper_push_top5_atraso_zero') !== 'false';
+    const allowRepeticao = localStorage.getItem('lotosniper_push_top5_repeticao') !== 'false';
+
+    let anySent = false;
+    for (const item of sortedTop5) {
+      const drawnInLatest = latestDraw.dezenas.includes(item.num);
+      if (!drawnInLatest) continue;
+
+      const drawnInPrev = previousDraw ? previousDraw.dezenas.includes(item.num) : false;
+
+      if (drawnInPrev && allowRepeticao) {
+        await sendNativeTop5TrendNotification({
+          dezena: item.num,
+          marco: 'repeticao_consecutiva',
+          concurso: latestDraw.concurso,
+          repeticoes: 2,
+          frequencia20: item.freq,
+        });
+        anySent = true;
+      } else if (allowAtrasoZero) {
+        await sendNativeTop5TrendNotification({
+          dezena: item.num,
+          marco: 'atraso_zero',
+          concurso: latestDraw.concurso,
+          frequencia20: item.freq,
+        });
+        anySent = true;
+      }
+    }
+
+    if (anySent) {
+      sessionStorage.setItem(dedupeKey, 'true');
+    }
+    return anySent;
+  } catch (err) {
+    console.warn('Erro ao auditar Top 5 de tendências:', err);
+    return false;
+  }
+}
+
+

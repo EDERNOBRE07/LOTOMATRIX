@@ -14,6 +14,8 @@ import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import {
   sendNativeJackpotNotification,
+  sendNativeTop5TrendNotification,
+  auditAndNotifyTop5Trends,
   requestNativeNotificationPermission,
   isNotificationSupported,
   getNotificationPermission,
@@ -394,6 +396,13 @@ export default function App() {
         }
       } catch (e) {
         console.warn('Erro ao auditar jogos salvos para push:', e);
+      }
+
+      // Auditoria das Top 5 Dezenas de Tendência (Atraso Zero & Repetição Consecutiva via Service Worker)
+      try {
+        await auditAndNotifyTop5Trends(result.draw);
+      } catch (e) {
+        console.warn('Erro ao auditar Top 5 de tendências para push:', e);
       }
 
       // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Ciclo < 3)

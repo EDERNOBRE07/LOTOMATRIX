@@ -23,12 +23,15 @@ import {
   Zap,
   Sparkles,
   Info,
+  Flame,
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
 import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
 import { RegrasAlertaHibridoComponent } from './RegrasAlertaHibridoComponent';
+import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
+import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
@@ -186,7 +189,112 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       setNotificationSuccessNotice('Notificação de teste enviada!');
       setTimeout(() => setNotificationSuccessNotice(null), 3000);
     } else {
-      alert('Por favor, autorize as notificações push no seu navegador.');
+      setNotificationSuccessNotice('Por favor, autorize as notificações push no seu navegador para receber alertas.');
+      setTimeout(() => setNotificationSuccessNotice(null), 4000);
+    }
+  };
+
+  // 3.1. Notificações Push para Dezenas do 'Top 5 de Tendências' (Atraso Zero & Repetição Consecutiva via Service Worker)
+  const [pushTop5TrendsEnabled, setPushTop5TrendsEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_push_top5_trends_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [pushTop5AtrasoZero, setPushTop5AtrasoZero] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_push_top5_atraso_zero') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const [pushTop5Repeticao, setPushTop5Repeticao] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_push_top5_repeticao') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleTogglePushTop5Trends = async (enabled: boolean) => {
+    if (enabled && typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotificationPermission(perm);
+        if (perm === 'granted') {
+          setPushTop5TrendsEnabled(true);
+          localStorage.setItem('lotosniper_push_top5_trends_enabled', 'true');
+          setNotificationSuccessNotice(
+            'Notificações Push ativadas para as Top 5 Dezenas de Tendência (via Service Worker)!'
+          );
+          setTimeout(() => setNotificationSuccessNotice(null), 4000);
+        } else {
+          setPushTop5TrendsEnabled(false);
+          localStorage.setItem('lotosniper_push_top5_trends_enabled', 'false');
+        }
+      } catch {
+        setPushTop5TrendsEnabled(false);
+      }
+    } else {
+      setPushTop5TrendsEnabled(false);
+      try {
+        localStorage.setItem('lotosniper_push_top5_trends_enabled', 'false');
+      } catch {}
+    }
+  };
+
+  const handleToggleTop5SubOption = (option: 'atraso_zero' | 'repeticao', checked: boolean) => {
+    if (option === 'atraso_zero') {
+      setPushTop5AtrasoZero(checked);
+      try {
+        localStorage.setItem('lotosniper_push_top5_atraso_zero', String(checked));
+      } catch {}
+    } else {
+      setPushTop5Repeticao(checked);
+      try {
+        localStorage.setItem('lotosniper_push_top5_repeticao', String(checked));
+      } catch {}
+    }
+  };
+
+  const handleTestTop5Notification = async (marco: 'atraso_zero' | 'repeticao_consecutiva') => {
+    try {
+      const historical = getHistorical100Draws(latestDraw);
+      const last20 = historical.slice(0, 20);
+      const counts: { [num: number]: number } = {};
+      for (let i = 1; i <= 25; i++) counts[i] = 0;
+      last20.forEach((d) => d.dezenas.forEach((n) => counts[n]++));
+
+      const sorted = Object.keys(counts)
+        .map((k) => ({ num: parseInt(k, 10), freq: counts[parseInt(k, 10)] }))
+        .sort((a, b) => b.freq - a.freq);
+
+      const topNum = sorted[0]?.num || 10;
+      const topFreq = sorted[0]?.freq || 16;
+
+      const ok = await sendNativeTop5TrendNotification({
+        dezena: topNum,
+        marco,
+        concurso: latestDraw.concurso,
+        repeticoes: 2,
+        frequencia20: topFreq,
+      });
+
+      if (ok) {
+        setNotificationSuccessNotice(
+          `Notificação de teste da Dezena ${topNum.toString().padStart(2, '0')} (${
+            marco === 'repeticao_consecutiva' ? 'Repetição Consecutiva' : 'Atraso Zero'
+          }) enviada com sucesso!`
+        );
+      } else {
+        setNotificationSuccessNotice('Habilite as permissões de notificação no navegador para receber o alerta.');
+      }
+      setTimeout(() => setNotificationSuccessNotice(null), 4500);
+    } catch (e) {
+      console.warn('Erro ao testar notificação de tendência:', e);
     }
   };
 
@@ -628,7 +736,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Notificações Push do Navegador */}
+          {/* Notificações Push do Navegador (Geral) */}
           <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl md:col-span-2">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
@@ -674,6 +782,133 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-850">
                 <span className="text-slate-400 text-[10px] block">Dispositivos Compatíveis:</span>
                 <strong className="text-slate-200">Chrome, Safari, Firefox, Edge, Android</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Notificações Push Específicas: Top 5 Dezenas de Tendência (via Service Worker) */}
+          <div className="bg-gradient-to-br from-slate-900/95 via-amber-950/20 to-slate-900/90 rounded-2xl border border-amber-500/40 p-5 space-y-4 shadow-xl md:col-span-2 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20 shrink-0">
+                  <Flame className="w-5 h-5 fill-current" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-white">
+                      Notificações Push · Top 5 Dezenas de Tendência
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      SERVICE WORKER
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Alerta você mesmo com o navegador em segundo plano quando qualquer uma das 5 dezenas mais sorteadas dos últimos 20 concursos atingir marcos críticos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => handleTogglePushTop5Trends(!pushTop5TrendsEnabled)}
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition cursor-pointer ${
+                    pushTop5TrendsEnabled ? 'bg-amber-400 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                  title={pushTop5TrendsEnabled ? 'Desativar notificações do Top 5' : 'Ativar notificações do Top 5'}
+                >
+                  <span className="w-4 h-4 rounded-full bg-slate-950 shadow-md"></span>
+                </button>
+              </div>
+            </div>
+
+            {/* Marcos Monitorados */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <label
+                onClick={() => handleToggleTop5SubOption('atraso_zero', !pushTop5AtrasoZero)}
+                className={`p-3.5 rounded-xl border flex items-start gap-3 transition cursor-pointer ${
+                  pushTop5AtrasoZero && pushTop5TrendsEnabled
+                    ? 'bg-amber-500/10 border-amber-500/50 text-white ring-1 ring-amber-500/30'
+                    : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={pushTop5AtrasoZero && pushTop5TrendsEnabled}
+                  disabled={!pushTop5TrendsEnabled}
+                  onChange={(e) => handleToggleTop5SubOption('atraso_zero', e.target.checked)}
+                  className="mt-0.5 accent-amber-400 rounded"
+                />
+                <div>
+                  <strong className="block text-white font-bold text-xs flex items-center gap-1.5">
+                    <span>Marco: Atraso Zero (Sorteada no Concurso)</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
+                      ZERA HIATO
+                    </span>
+                  </strong>
+                  <span className="text-[11px] text-slate-400 leading-tight block mt-1">
+                    Dispara notificação push instantânea assim que uma das 5 dezenas do Top 5 for apurada pela Caixa, confirmando presença imediata.
+                  </span>
+                </div>
+              </label>
+
+              <label
+                onClick={() => handleToggleTop5SubOption('repeticao', !pushTop5Repeticao)}
+                className={`p-3.5 rounded-xl border flex items-start gap-3 transition cursor-pointer ${
+                  pushTop5Repeticao && pushTop5TrendsEnabled
+                    ? 'bg-amber-500/10 border-amber-500/50 text-white ring-1 ring-amber-500/30'
+                    : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={pushTop5Repeticao && pushTop5TrendsEnabled}
+                  disabled={!pushTop5TrendsEnabled}
+                  onChange={(e) => handleToggleTop5SubOption('repeticao', e.target.checked)}
+                  className="mt-0.5 accent-amber-400 rounded"
+                />
+                <div>
+                  <strong className="block text-white font-bold text-xs flex items-center gap-1.5">
+                    <span>Marco: Repetição Consecutiva (Momento Quente)</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300">
+                      EM SEQUÊNCIA
+                    </span>
+                  </strong>
+                  <span className="text-[11px] text-slate-400 leading-tight block mt-1">
+                    Alerta quando a dezena é sorteada em 2 ou mais sorteios seguidos, sinalizando forte tração para fechamentos de ciclo.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Test Actions Bar */}
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-800/80 text-xs">
+              <span className="text-slate-400 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>
+                  {pushTop5TrendsEnabled
+                    ? 'Monitoramento ativo em segundo plano via Service Worker.'
+                    : 'Habilite o botão acima para receber push das dezenas do Top 5.'}
+                </span>
+              </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleTestTop5Notification('repeticao_consecutiva')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1"
+                >
+                  <Flame className="w-3 h-3 fill-current" />
+                  <span>Testar Push Repetição</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTestTop5Notification('atraso_zero')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1"
+                >
+                  <Zap className="w-3 h-3 fill-current" />
+                  <span>Testar Push Atraso Zero</span>
+                </button>
               </div>
             </div>
           </div>

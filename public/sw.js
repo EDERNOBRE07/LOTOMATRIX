@@ -90,13 +90,18 @@ self.addEventListener('fetch', (event) => {
 
 // Message Listener: Allows frontend to trigger persistent background notifications
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_SAVED_GAMES_NOTIFICATION') {
+  if (
+    event.data &&
+    (event.data.type === 'SHOW_SAVED_GAMES_NOTIFICATION' ||
+      event.data.type === 'SHOW_TOP5_TREND_NOTIFICATION' ||
+      event.data.type === 'SHOW_JACKPOT_NOTIFICATION')
+  ) {
     const { title, options } = event.data;
     event.waitUntil(self.registration.showNotification(title, options));
   }
 });
 
-// Notification Click: Focus window or open /#jogos to inspect tickets and results
+// Notification Click: Focus window or open /#jogos / /#estatisticas to inspect results
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -104,19 +109,25 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  const targetUrl = event.notification.data?.url || '/#jogos';
+  const targetTab = event.notification.data?.tab || 'jogos';
+  const targetUrl = event.notification.data?.url || (targetTab === 'estatisticas' ? '/#estatisticas' : '/#jogos');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url && 'focus' in client) {
           client.postMessage({
-            type: 'NOTIFICATION_SAVED_GAMES_CLICKED',
+            type:
+              event.notification.data?.type ||
+              (targetTab === 'estatisticas'
+                ? 'NOTIFICATION_TOP5_TREND_CLICKED'
+                : 'NOTIFICATION_SAVED_GAMES_CLICKED'),
             concurso: event.notification.data?.concurso,
             maxHits: event.notification.data?.maxHits,
-            winningTickets: event.notification.data?.winningTickets,
-            tab: 'jogos',
-            section: 'fechamentos_salvos',
+            dezena: event.notification.data?.dezena,
+            marco: event.notification.data?.marco,
+            tab: targetTab,
+            section: event.notification.data?.section || 'fechamentos_salvos',
           });
           return client.focus();
         }
