@@ -267,6 +267,113 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+
+      {/* PAINEL OFICIAL DE TELEMETRIA: ÚLTIMO CONCURSO, CICLO DAS 25 DEZENAS & GANHADORES */}
+      <div className="bg-slate-950/70 border-t border-slate-800/80 px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+          {/* Concurso, Data do Sorteio & Progresso do Ciclo Atual (Alinhados Visualmente) */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+            {/* Concurso & Data */}
+            <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-inner">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-slate-400 font-medium">Concurso:</span>
+              <strong className="text-white font-mono font-black text-sm">#{latestDraw.concurso}</strong>
+              <span className="text-slate-500 font-mono">|</span>
+              <span className="text-amber-300 font-mono font-semibold">
+                🗓️ {latestDraw.data}
+              </span>
+            </div>
+
+            {/* Progresso do Ciclo Atual das 25 Dezenas Alinhado com a Data */}
+            <div
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition shadow-sm ${
+                isRetaFinalCiclo
+                  ? 'bg-amber-950/40 border-amber-500/60 text-amber-200'
+                  : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Flame className={`w-3.5 h-3.5 ${isRetaFinalCiclo ? 'text-amber-400 animate-bounce' : 'text-amber-400/80'}`} />
+                <span className="font-bold text-white">
+                  Ciclo: <span className="text-amber-400 font-mono font-black">{Math.max(0, 25 - cyclePendingNumbers.length)}/25</span> dezenas sorteadas
+                </span>
+                <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
+                  ({Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100)}%)
+                </span>
+              </div>
+
+              {/* Barra de progresso visual do ciclo */}
+              <div className="w-16 sm:w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/60 hidden sm:block">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100))}%` }}
+                />
+              </div>
+
+              {/* Indicador de Pressão Estatística Atual */}
+              <span
+                className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold tracking-wider ${
+                  isRetaFinalCiclo
+                    ? 'bg-amber-400 text-slate-950 shadow-sm animate-pulse'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                }`}
+                title={
+                  isRetaFinalCiclo
+                    ? `Pressão Máxima de Fechamento: Restam apenas [${cyclePendingNumbers.map(n => n.toString().padStart(2, '0')).join(', ')}] para fechar todas as 25 dezenas!`
+                    : `Ciclo em andamento no ${concursosNoCiclo}º concurso.`
+                }
+              >
+                {isRetaFinalCiclo
+                  ? `⚡ Pressão Iminente (${cyclePendingNumbers.length} rest.)`
+                  : `${concursosNoCiclo}º Conc. do Ciclo`}
+              </span>
+            </div>
+          </div>
+
+          {/* 15 Dezenas Sorteadas no Último Concurso */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+              Dezenas:
+            </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {(latestDraw.dezenas || []).map((num) => (
+                <span
+                  key={num}
+                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
+                  title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${latestDraw.concurso}`}
+                >
+                  {num.toString().padStart(2, '0')}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Número Oficial de Ganhadores com 15 Pontos e 14 Pontos */}
+          <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-200">
+              <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>
+                <strong>15 pts:</strong>{' '}
+                <span className="font-mono font-bold text-white">
+                  {latestDraw.premiacoes?.faixa15?.ganhadores ?? 1}
+                </span>{' '}
+                {(latestDraw.premiacoes?.faixa15?.ganhadores ?? 1) === 1 ? 'ganhador' : 'ganhadores'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+              <span>
+                <strong>14 pts:</strong>{' '}
+                <span className="font-mono font-bold text-cyan-300">
+                  {latestDraw.premiacoes?.faixa14?.ganhadores ?? 325}
+                </span>{' '}
+                apostas
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
   );
 };

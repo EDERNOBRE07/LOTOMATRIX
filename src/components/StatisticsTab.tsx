@@ -39,6 +39,7 @@ import { RastreadorPrecisaoIA30DiasCard } from './RastreadorPrecisaoIA30DiasCard
 import { ProbabilidadePreditivaRegressao200Card } from './ProbabilidadePreditivaRegressao200Card';
 import { MapaCalorProbabilidadesD3 } from './MapaCalorProbabilidadesD3';
 import { VarianciaSomaScatterRecharts } from './VarianciaSomaScatterRecharts';
+import { HistoricoAtrasosRechartsCard } from './HistoricoAtrasosRechartsCard';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -583,7 +584,24 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             onApplyNumbers={onApplyNumbers}
           />
 
-          {/* 8. Gráfico de Dispersão da Soma das Dezenas (Recharts • 100 Concursos & Tendência Preditiva) */}
+          {/* 8. Gráfico de Histórico de Atrasos das Dezenas (Recharts • Tendências de Longo Prazo, Atraso Médio e Último) */}
+          <HistoricoAtrasosRechartsCard
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onFixNumbersInFechamento={(nums) => {
+              if (onApplyNumbers) onApplyNumbers(nums);
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
+          />
+
+          {/* 9. Gráfico de Dispersão da Soma das Dezenas (Recharts • 100 Concursos & Tendência Preditiva) */}
           <VarianciaSomaScatterRecharts
             latestDraw={latestDraw}
             onApplySomaFilter={(min, max) => {

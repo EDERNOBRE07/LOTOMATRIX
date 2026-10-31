@@ -74,6 +74,7 @@ import {
   Activity,
   Lightbulb,
   BookmarkCheck,
+  ArrowRight,
 } from 'lucide-react';
 
 interface FechamentoTabProps {

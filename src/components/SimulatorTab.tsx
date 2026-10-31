@@ -9,6 +9,7 @@ import { EfficiencyReportModal } from './EfficiencyReportModal';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
 import { AlgorithmDuelSimulator } from './AlgorithmDuelSimulator';
+import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
 import {
   Play,
   RotateCcw,
@@ -49,7 +50,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     }
   };
   const [activeSubTab, setActiveSubTab] = useState<
-    'backtest' | 'duelo_algoritmos' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
+    'backtest' | 'backtest_d3' | 'duelo_algoritmos' | 'evolucao_saldo' | 'calculadora' | 'animacao' | 'espelho'
   >('backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
@@ -179,6 +180,27 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('backtest_d3')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'backtest_d3'
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Simulação de Backtest (D3.js)</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'backtest_d3'
+                  ? 'bg-amber-950 text-amber-200 border border-amber-400/40'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}
+            >
+              10 A 100 CONC
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('duelo_algoritmos')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
               activeSubTab === 'duelo_algoritmos'
@@ -280,7 +302,12 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       />
 
       {/* Render Subtab Views */}
-      {activeSubTab === 'duelo_algoritmos' ? (
+      {activeSubTab === 'backtest_d3' ? (
+        <SimulacaoBacktestD3Component
+          currentTickets={tickets}
+          latestDraw={latestDraw}
+        />
+      ) : activeSubTab === 'duelo_algoritmos' ? (
         <AlgorithmDuelSimulator
           latestDraw={latestDraw}
           userSavedTickets={tickets}

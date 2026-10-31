@@ -8,11 +8,8 @@ import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
-import {
-  SavedGamesFilterMenu,
-  PrimosFilterOption,
-  SomaFilterOption,
-} from './SavedGamesFilterMenu';
+import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
+import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
 import {
   Download,
   Copy,
@@ -443,6 +440,35 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     return latestDraw.dezenas;
   }, [fechamentoMeta, tickets, latestDraw.dezenas]);
 
+  const handleDirectVolantePDF = () => {
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+    if (listToExport.length === 0) return;
+
+    let metaToUse = fechamentoMeta;
+    if (!metaToUse) {
+      try {
+        const savedMeta = localStorage.getItem('lotosniper_active_fechamento_meta');
+        if (savedMeta) metaToUse = JSON.parse(savedMeta);
+      } catch {}
+    }
+
+    const concursoRef = metaToUse?.concurso || latestDraw.concurso;
+    const dataRef = metaToUse?.dataConcurso || latestDraw.data;
+
+    try {
+      downloadTicketsVolantePDF(listToExport, {
+        concurso: concursoRef,
+        dataConcurso: dataRef,
+        titulo: 'LOTOSNIPER GOLD • VOLANTES DE APOSTA OFICIAIS 5X5',
+      });
+      setCopiedFormat('pdf');
+      setTimeout(() => setCopiedFormat(null), 4000);
+    } catch (e) {
+      console.error('Erro ao gerar PDF de volantes via jsPDF:', e);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Seletor de Visão Principal: Dossiê de Fechamentos Salvos vs Gerenciador de Bilhetes */}
@@ -506,8 +532,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 <span>Gerenciador de Bilhetes Individuais, Exportador & Conferidor</span>
               </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Exporte seus bilhetes para apostas em lotéricas ou confira a premiação instantânea
-            contra qualquer sorteio.
+            Exporte seus bilhetes para formatos oficiais (PDF com Volantes 5×5 e CSV para planilhas/lotéricas) ou confira a premiação instantânea.
           </p>
         </div>
 
@@ -538,34 +563,33 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Baixar TXT</span>
             </button>
 
-            {/* Botão Exportar para CSV (Planilhas Externas: Excel & Google Sheets) */}
+            {/* Botão Exportar para CSV direto */}
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm hover:border-emerald-400"
-              title="Baixar lista atual de jogos em formato CSV formatado para planilhas externas (Excel / Google Sheets)"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/20 hover:from-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition cursor-pointer shadow-sm hover:border-emerald-400 active:scale-95"
+              title="Baixar lista atual de jogos em arquivo CSV pronto para Excel, Google Sheets ou lotéricas"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Exportar para CSV</span>
+              <span>Exportar CSV</span>
             </button>
 
-            {/* Exportar CSV Profissional (Lotéricas & Plataformas de Apostas) */}
+            {/* Botão Exportar PDF com layout de volantes oficiais 5x5 */}
             <button
-              onClick={() => setIsCSVModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-black transition cursor-pointer shadow-md shadow-emerald-500/15"
-              title="Exportação CSV profissional com metadados para casas lotéricas ou plataformas de apostas"
+              onClick={handleDirectVolantePDF}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/25 via-yellow-500/25 to-amber-500/25 hover:from-amber-500/35 text-amber-300 border border-amber-500/50 text-xs font-black transition cursor-pointer shadow-md shadow-amber-500/15 active:scale-95"
+              title="Gerar e baixar diretamente o arquivo PDF com os volantes oficiais 5x5 diagramados prontos para impressão"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Configurar CSV ({selectedTicketIds.size})</span>
+              <Printer className="w-3.5 h-3.5 text-amber-400" />
+              <span>Baixar PDF (Volantes 5×5)</span>
             </button>
 
-            {/* Exportar PDF Formatado para Volantes da Lotofácil */}
+            {/* Modal de Configuração Avançada de PDF */}
             <button
               onClick={() => setIsPDFModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition cursor-pointer shadow-sm shadow-purple-500/15"
-              title="Exportar PDF formatado pronto para impressão em volantes da Lotofácil"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+              title="Visualizar prévia e configurar opções de impressão dos volantes"
             >
-              <Printer className="w-3.5 h-3.5 text-purple-400" />
-              <span>Exportar PDF (Volantes)</span>
+              <span>Prévia / Imprimir</span>
             </button>
           </div>
         )}

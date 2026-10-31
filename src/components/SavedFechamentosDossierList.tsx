@@ -8,6 +8,7 @@ import {
   FIBONACCI_NUMBERS,
   exportBackupJSON,
   restoreBackupJSON,
+  syncWithMySQLHostinger,
 } from '../services/savedFechamentosStorage';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { soundService } from '../services/soundAlert';
@@ -36,6 +37,8 @@ import {
   FileCheck,
   Bell,
   BellRing,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import {
   auditAndNotifySavedGames,
@@ -70,6 +73,36 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [pushPerm, setPushPerm] = useState<NotificationPermission>(() => getPushPermission());
   const [pushEnabled, setPushEnabled] = useState<boolean>(() => isPushEnabledByUser());
   const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
+  const [mysqlStatus, setMysqlStatus] = useState<{
+    connected: boolean;
+    database: string;
+    user: string;
+    site: string;
+    totalSaved: number;
+    message: string;
+  } | null>(null);
+  const [isSyncingMysql, setIsSyncingMysql] = useState<boolean>(false);
+
+  useEffect(() => {
+    syncWithMySQLHostinger()
+      .then((st) => setMysqlStatus(st))
+      .catch(() => {});
+  }, []);
+
+  const handleManualMySQLSync = async () => {
+    setIsSyncingMysql(true);
+    try {
+      const res = await syncWithMySQLHostinger();
+      setMysqlStatus(res);
+      setFechamentos(getSavedFechamentos());
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`✓ Banco Hostinger MySQL (${res.database}) sincronizado! ${res.totalSaved} fechamento(s) ativos.`);
+    } catch {
+      showFeedback('Falha na sincronização com o banco Hostinger MySQL.');
+    } finally {
+      setIsSyncingMysql(false);
+    }
+  };
 
   useEffect(() => {
     const handlePerm = () => setPushPerm(getPushPermission());
@@ -443,6 +476,60 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                 <span>Habilitar no Navegador</span>
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Card do Banco de Dados MySQL Hostinger (u376010332_LotoSniper @ lotosniper.com.br) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 border-2 border-amber-500/40 rounded-3xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/20 shrink-0">
+              <Database className="w-6 h-6 text-slate-950" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  Banco de Dados MySQL Hostinger · u376010332_LotoSniper
+                </h3>
+                <span className="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                  lotosniper.com.br
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Criado em: 2026-10-10
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Persistência relacional na Hostinger: Todos os fechamentos e bilhetes salvos são sincronizados com o banco de dados <strong>u376010332_LotoSniper</strong> (usuário: <code>u376010332_LotoSniper</code>) para recuperação segura e consistente em qualquer dispositivo.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            <button
+              onClick={handleManualMySQLSync}
+              disabled={isSyncingMysql}
+              className={`px-3.5 py-2 rounded-xl border text-xs font-black transition cursor-pointer shadow-md flex items-center gap-1.5 active:scale-95 ${
+                isSyncingMysql
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 cursor-wait'
+                  : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 border-amber-400 shadow-amber-500/20'
+              }`}
+              title="Sincronizar imediatamente todos os jogos salvos com o banco de dados MySQL da Hostinger"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingMysql ? 'animate-spin' : ''}`} />
+              <span>{isSyncingMysql ? 'Sincronizando...' : 'Sincronizar com MySQL'}</span>
+            </button>
+
+            <a
+              href="/api/hostinger_mysql_sync.php"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
+              title="Acessar endpoint PHP de conexão direta do MySQL no servidor Hostinger"
+            >
+              <span>Endpoint Hostinger PHP</span>
+            </a>
           </div>
         </div>
       </div>

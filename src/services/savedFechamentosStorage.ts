@@ -51,6 +51,74 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
   }
 }
 
+export async function syncWithMySQLHostinger(): Promise<{
+  connected: boolean;
+  database: string;
+  user: string;
+  site: string;
+  totalSaved: number;
+  message: string;
+}> {
+  try {
+    const res = await fetch('/api/mysql/status');
+    if (res.ok) {
+      const statusData = await res.json();
+
+      // Envia os fechamentos locais para o MySQL
+      const localList = getSavedFechamentos();
+      for (const f of localList) {
+        try {
+          await fetch('/api/mysql/fechamentos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(f),
+          });
+        } catch {}
+      }
+
+      // Busca fechamentos remotos do MySQL e mescla
+      try {
+        const fetchRes = await fetch('/api/mysql/fechamentos');
+        if (fetchRes.ok) {
+          const fetchJson = await fetchRes.json();
+          if (fetchJson.success && Array.isArray(fetchJson.fechamentos) && fetchJson.fechamentos.length > 0) {
+            const remote = fetchJson.fechamentos;
+            const existingIds = new Set(localList.map((x) => x.id));
+            const toAdd = remote.filter((r: any) => !existingIds.has(r.id));
+            if (toAdd.length > 0) {
+              const merged = [...localList, ...toAdd];
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: merged }));
+              }
+            }
+          }
+        }
+      } catch {}
+
+      return {
+        connected: !!statusData.connected,
+        database: statusData.database || 'u376010332_LotoSniper',
+        user: statusData.user || 'u376010332_LotoSniper',
+        site: statusData.site || 'lotosniper.com.br',
+        totalSaved: statusData.totalSaved || localList.length,
+        message: statusData.statusText || 'Sincronizado com Hostinger MySQL',
+      };
+    }
+  } catch (err: any) {
+    console.warn('[MySQL Sync] Erro ao sincronizar com backend MySQL:', err);
+  }
+
+  return {
+    connected: false,
+    database: 'u376010332_LotoSniper',
+    user: 'u376010332_LotoSniper',
+    site: 'lotosniper.com.br',
+    totalSaved: getSavedFechamentos().length,
+    message: 'Armazenamento em cache local ativo (Pronto para sincronização MySQL Hostinger)',
+  };
+}
+
 export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico): void {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
@@ -61,6 +129,20 @@ export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
+
+    // Grava de forma assíncrona no Banco de Dados MySQL da Hostinger (u376010332_LotoSniper)
+    fetch('/api/mysql/fechamentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fechamento),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        console.log('[Hostinger MySQL] Fechamento salvo no banco MySQL:', res);
+      })
+      .catch((err) => {
+        console.warn('[Hostinger MySQL] Sincronização offline, mantido em cache local seguro:', err);
+      });
   } catch (e) {
     console.error('Falha ao salvar fechamento:', e);
   }
@@ -75,6 +157,12 @@ export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
+
+    // Exclui de forma assíncrona no Banco de Dados MySQL da Hostinger
+    fetch(`/api/mysql/fechamentos/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+
     return updated;
   } catch (e) {
     console.error('Falha ao excluir fechamento salvo:', e);
