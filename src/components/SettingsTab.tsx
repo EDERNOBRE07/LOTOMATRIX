@@ -539,6 +539,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           {/* Seletor de Tema: Modo Escuro Padrão vs Modo Gold Imperial */}
           <ThemeSelectorModule />
 
+          {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
+          <HostingerMySQLConfigModule
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+
           {/* Central de Alertas Customizados por Push e Som para 14 e 15 Pontos */}
           <JackpotAlertConfigModule
             latestDraw={latestDraw}
@@ -552,12 +558,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
             concursosNoCiclo={concursosNoCiclo}
-          />
-
-          {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
-          <HostingerMySQLConfigModule
-            latestDraw={latestDraw}
-            savedTickets={savedTickets}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

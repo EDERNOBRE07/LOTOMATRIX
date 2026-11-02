@@ -289,14 +289,14 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-black text-white tracking-wide">
-                Segurança e Backup: Servidor MySQL Hostinger & Backups Automáticos
+                Segurança e Backup
               </h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase font-mono tracking-wider">
-                lotosniper.com.br
+                MySQL Hostinger · lotosniper.com.br
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Gerencie a segurança dos seus jogos e simulações com persistência automatizada no banco MySQL da Hostinger.
+              Insira os dados do servidor MySQL da Hostinger e defina a frequência (diária, semanal) dos backups automáticos dos jogos salvos.
             </p>
           </div>
         </div>
@@ -478,8 +478,9 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
 
         {/* Frequência do Cronjob */}
         <div className="space-y-2">
-          <label className="text-xs text-slate-300 font-bold block">
-            Frequência de Execução do Cronjob:
+          <label className="text-xs text-slate-300 font-bold block flex items-center justify-between">
+            <span>Seletor de Frequência dos Backups Automáticos:</span>
+            <span className="text-[10px] font-mono text-amber-400 font-bold">Frequência: Diária ou Semanal</span>
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
             {[

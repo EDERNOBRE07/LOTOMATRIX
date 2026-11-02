@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   PRIMOS,
   MOLDURA,
@@ -139,9 +140,82 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     }
   };
 
-  const handleAutoCompletarRolling = () => {
+  const [isRollingVolante, setIsRollingVolante] = useState<boolean>(false);
+  const [flashingDezenas, setFlashingDezenas] = useState<number[]>([]);
+
+  const runRollingAnimation = (targetNumbers: number[], strategyLabel: string) => {
+    setIsRollingVolante(true);
     setShowRollingModal(true);
-    soundService.playTickCountdown();
+    soundService.playTick();
+
+    let step = 0;
+    const interval = setInterval(() => {
+      const randomSubset: number[] = [];
+      while (randomSubset.length < targetCount) {
+        const rand = Math.floor(Math.random() * 25) + 1;
+        if (!randomSubset.includes(rand)) randomSubset.push(rand);
+      }
+      setFlashingDezenas(randomSubset);
+      soundService.playTick();
+      step++;
+
+      if (step >= 8) {
+        clearInterval(interval);
+        setFlashingDezenas([]);
+        setIsRollingVolante(false);
+        onSelectSet(targetNumbers);
+        onStrategySelect?.(strategyLabel);
+        soundService.playSuccess();
+      }
+    }, 130);
+  };
+
+  // 1. Auto-completar: preserva dezenas atuais e preenche até targetCount com rolling numbers
+  const handleAutoCompletar = () => {
+    let current = [...selectedNumbers];
+    if (fixedNumbers.length > 0) {
+      current = Array.from(new Set([...fixedNumbers, ...current]));
+    }
+    current = current.filter((n) => !excludedNumbers.includes(n));
+
+    if (current.length >= targetCount) {
+      runRollingAnimation(current.slice(0, targetCount).sort((a, b) => a - b), 'Auto-completar Volante');
+      return;
+    }
+
+    const needed = targetCount - current.length;
+    const candidates = [...statsList]
+      .filter((s) => !current.includes(s.numero) && !excludedNumbers.includes(s.numero))
+      .sort((a, b) => {
+        const scoreA = aiScores ? aiScores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
+        const scoreB = aiScores ? aiScores[b.numero - 1] : b.vezes / 24 + b.atrasoAtual * 5;
+        return scoreB - scoreA;
+      })
+      .slice(0, needed)
+      .map((s) => s.numero);
+
+    const fullSet = [...current, ...candidates].sort((a, b) => a - b);
+    runRollingAnimation(fullSet, `Auto-completar (${fullSet.length} Dezenas)`);
+  };
+
+  // 2. Gerar: calcula um pool ideal com animação rolling numbers
+  const handleGerar = () => {
+    const optimal = buildOptimalPool(targetCount, latestDraw, statsList, cyclePendingNumbers);
+    let pool = [...optimal.dezenas];
+
+    if (fixedNumbers.length > 0) {
+      pool = Array.from(new Set([...fixedNumbers, ...pool])).slice(0, targetCount);
+    }
+    if (excludedNumbers.length > 0) {
+      pool = pool.filter((n) => !excludedNumbers.includes(n));
+      const candidates = Array.from({ length: 25 }, (_, i) => i + 1)
+        .filter((n) => !excludedNumbers.includes(n) && !pool.includes(n));
+      while (pool.length < targetCount && candidates.length > 0) {
+        pool.push(candidates.shift()!);
+      }
+    }
+    pool.sort((a, b) => a - b);
+    runRollingAnimation(pool, `Gerador Inteligente (${pool.length} Dezenas)`);
   };
 
   return (
@@ -172,15 +246,28 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Botão Auto-completar & Gerar com Rolling Numbers */}
+          {/* Botão Gerar com Rolling Numbers */}
           <button
             type="button"
-            onClick={handleAutoCompletarRolling}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 active:scale-95"
-            title="Sortear e rolar visualmente as dezenas via Framer Motion como em um sorteio real antes de estabilizar"
+            onClick={handleGerar}
+            disabled={isRollingVolante}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-emerald-500/25 active:scale-95 disabled:opacity-50"
+            title="Gerar novo conjunto ideal com animação mecânica de rolling numbers antes de estabilizar"
+          >
+            <Play className={`w-3.5 h-3.5 fill-current text-slate-950 ${isRollingVolante ? 'animate-spin' : ''}`} />
+            <span>Gerar</span>
+          </button>
+
+          {/* Botão Auto-completar com Rolling Numbers */}
+          <button
+            type="button"
+            onClick={handleAutoCompletar}
+            disabled={isRollingVolante}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 active:scale-95 disabled:opacity-50"
+            title="Auto-completar as dezenas restantes com animação mecânica de rolling numbers antes de estabilizar"
           >
             <Sparkles className="w-3.5 h-3.5 fill-current text-slate-950" />
-            <span>Auto-completar & Gerar</span>
+            <span>Auto-completar</span>
           </button>
 
           {/* Click Mode Toggle */}
@@ -399,12 +486,33 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               borderStyle = 'border-emerald-300';
             }
 
+            const isFlashing = isRollingVolante && flashingDezenas.includes(num);
+
             return (
-              <button
+              <motion.button
                 key={num}
                 type="button"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                animate={
+                  isFlashing
+                    ? {
+                        scale: [1, 1.15, 0.92, 1],
+                        rotate: [0, 4, -4, 0],
+                        backgroundColor: '#f59e0b',
+                        color: '#020617',
+                      }
+                    : isRollingVolante
+                    ? { scale: [1, 1.06, 0.96, 1] }
+                    : { scale: 1, rotate: 0 }
+                }
+                transition={
+                  isRollingVolante
+                    ? { duration: 0.22, repeat: Infinity, ease: 'easeInOut' }
+                    : { duration: 0.15 }
+                }
                 onClick={() => handleNumberClick(num)}
-                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all transform active:scale-95 cursor-pointer ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px]`}
+                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px]`}
               >
                 {/* Number */}
                 <span className="font-mono text-base sm:text-lg tracking-tight leading-none font-bold">
@@ -469,7 +577,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                       : 'C'}
                   </span>
                 )}
-              </button>
+              </motion.button>
             );
           })}
         </div>
