@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import * as d3 from 'd3';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { getHistorical100Draws } from '../services/historical100Draws';
@@ -505,34 +506,43 @@ export const ScatterSomaPontuacaoD3: React.FC<ScatterSomaPontuacaoD3Props> = ({
         </div>
       )}
 
-      {/* D3 SVG Container */}
-      <div className="relative bg-slate-950 rounded-xl border border-slate-800/80 p-2 sm:p-4 overflow-x-auto">
-        <svg
-          ref={svgRef}
-          viewBox="0 0 800 380"
-          className="w-full h-auto min-w-[620px] select-none"
-        />
+      {/* D3 SVG Container com Efeito Scale e Transição Fluida via Framer Motion */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={`scatter-d3-${numConcursos}-${highlightZone}`}
+          initial={{ opacity: 0, scale: 0.94, y: 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 1.04, y: -6 }}
+          transition={{ duration: 0.32, ease: 'easeOut' }}
+          className="relative bg-slate-950 rounded-xl border border-slate-800/80 p-2 sm:p-4 overflow-x-auto"
+        >
+          <svg
+            ref={svgRef}
+            viewBox="0 0 800 380"
+            className="w-full h-auto min-w-[620px] select-none"
+          />
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
-            <span className="text-slate-300 font-medium">Zona de Ouro (185 – 215)</span>
+          {/* Legend */}
+          <div className="flex flex-wrap items-center justify-center gap-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+              <span className="text-slate-300 font-medium">Zona de Ouro (185 – 215)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+              <span className="text-slate-300 font-medium">Zona de Prata (170-184 / 216-225)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-sky-400 inline-block"></span>
+              <span className="text-slate-300 font-medium">Zona de Atenção</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+              <span className="text-slate-300 font-medium">Extremos Raros (&lt;160 ou &gt;235)</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-            <span className="text-slate-300 font-medium">Zona de Prata (170-184 / 216-225)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-sky-400 inline-block"></span>
-            <span className="text-slate-300 font-medium">Zona de Atenção</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
-            <span className="text-slate-300 font-medium">Extremos Raros (&lt;160 ou &gt;235)</span>
-          </div>
-        </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
 
       {/* Selected Point Detail Card */}
       {selectedPoint && (

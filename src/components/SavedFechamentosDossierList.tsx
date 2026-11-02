@@ -625,41 +625,42 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
               >
                 {/* Cabeçalho do Card */}
                 <div className="p-4 sm:p-5 border-b border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <span className="flex items-center justify-center w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-sm shrink-0">
+                  <div className="flex items-start gap-3.5">
+                    <span className="flex items-center justify-center px-2 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono font-black text-sm shrink-0">
                       #{(idx + 1).toString().padStart(2, '0')}
                     </span>
-                    <div>
+                    <div className="space-y-1">
+                      {/* Linha 1: ⚡(Tipo de Fechamento) - (Para concurso: Concurso Base Caixa # N° + 1) */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {f.tipoFechamento.includes(' • Sugestão: ') ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-sm sm:text-base font-black text-white">
-                              {f.tipoFechamento.split(' • Sugestão: ')[0]}
-                            </h3>
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-400/50 font-bold flex items-center gap-1 shadow-sm">
-                              <Sparkles className="w-3 h-3 text-amber-400" />
-                              <span>Sugestão: {f.tipoFechamento.split(' • Sugestão: ')[1]}</span>
-                            </span>
-                          </div>
-                        ) : (
-                          <h3 className="text-sm sm:text-base font-black text-white">{f.tipoFechamento}</h3>
-                        )}
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
-                          {f.modalidadeMatriz}
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          {f.totalJogos} Jogos (R$ {f.custoTotal.toFixed(2)})
-                        </span>
+                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+                          <span>
+                            ⚡{f.tipoFechamento.replace(/^⚡\s*/, '')} - (Para concurso: Concurso Base Caixa #{f.concurso + 1})
+                          </span>
+                        </h3>
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap font-mono">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                          {f.dataCriacao}
-                        </span>
-                        <span>•</span>
-                        <span>Concurso Base Caixa #{f.concurso}</span>
-                        <span>•</span>
-                        <span className="text-amber-400 font-bold">Universo: {f.universoDezenas.length} Dezenas</span>
+
+                      {/* Linha 2: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15)) */}
+                      <div className="text-xs font-bold text-emerald-400 font-mono">
+                        {f.modalidadeMatriz.includes('Matriz Pro')
+                          ? f.modalidadeMatriz
+                          : `${f.universoDezenas.length} Dezenas (Garantia 14 se 15) - Matriz Pro (${f.totalJogos} Jogos - Garantia 14 Pontos (com 35% de chance de 15))`}
+                      </div>
+
+                      {/* Linha 3: 24 Jogos (R$ 84.00) */}
+                      <div className="text-xs font-black text-amber-300 font-mono">
+                        {f.totalJogos} Jogos (R$ {f.custoTotal.toFixed(2)})
+                      </div>
+
+                      {/* Linha 4: 02/11/2026, 13:31:41 */}
+                      <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{f.dataCriacao}</span>
+                      </div>
+
+                      {/* Linhas 5 e 6: •Concurso Base Caixa #3819 •Universo: 18 Dezenas */}
+                      <div className="flex items-center gap-3 text-xs text-slate-300 font-mono">
+                        <span>•Concurso Base Caixa #{f.concurso}</span>
+                        <span className="text-amber-400 font-bold">•Universo: {f.universoDezenas.length} Dezenas</span>
                       </div>
                     </div>
                   </div>

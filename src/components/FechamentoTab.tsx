@@ -970,7 +970,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         concurso: latestDraw.concurso,
         dataConcurso: latestDraw.data,
         tipoFechamento: fechamentoType,
-        modalidadeMatriz: metaData.modeName || `${preset.nome} (${ticketsToSave.length} Jogos - Garantia ${preset.garantia})`,
+        modalidadeMatriz: `${preset.nome} - Matriz Pro (${ticketsToSave.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
         universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
         dezenasFixas: metaData.fixedNumbers || fixedNumbers,
         dezenasExcluidas: metaData.excludedNumbers || excludedNumbers,
@@ -1097,7 +1097,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         const finalPrognosticoName = getFullPrognosticoFechamentoName();
         const exportMeta: FechamentoExportMeta = {
           strategyName: finalPrognosticoName,
-          modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
+          modeName: `${preset.nome} - Matriz Pro (${tickets.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
           garantia: preset.garantia,
           targetCount: targetCount,
           selectedNumbers: selectedNumbers,

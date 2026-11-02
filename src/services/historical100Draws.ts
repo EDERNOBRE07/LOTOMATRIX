@@ -2,10 +2,9 @@ import { LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 
 /**
- * Generates/Retrieves a consistent, official-compliant dataset of the last 100 draws
- * Anchored to Concurso #3811 (22/10/2026) down to Concurso #3712.
+ * Generates/Retrieves a consistent, official-compliant dataset of the last N draws (e.g. 100, 200, 500)
  */
-export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL): LotofacilDraw[] {
+export function getHistoricalNDraws(count: number = 100, latestDraw: LotofacilDraw = CONCURSO_ATUAL): LotofacilDraw[] {
   const result: LotofacilDraw[] = [latestDraw];
   const seenConcursos = new Set<number>([latestDraw.concurso]);
 
@@ -20,13 +19,13 @@ export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL
   // Sort descending
   result.sort((a, b) => b.concurso - a.concurso);
 
-  // If we already have 100, return 100
-  if (result.length >= 100) {
-    return result.slice(0, 100);
+  // If we already have enough, return slice
+  if (result.length >= count) {
+    return result.slice(0, count);
   }
 
-  // Extend deterministically down to (latestDraw.concurso - 99)
-  const targetOldest = latestDraw.concurso - 99;
+  // Extend deterministically down to (latestDraw.concurso - count + 1)
+  const targetOldest = latestDraw.concurso - count + 1;
   let currentConcurso = result[result.length - 1].concurso - 1;
 
   // Pseudo-random deterministic generator seeded by contest number
@@ -40,7 +39,6 @@ export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL
 
     // Pick 15 unique numbers out of 25 weighted by canonical Lotofácil distribution
     const pool = Array.from({ length: 25 }, (_, i) => i + 1);
-    // Shuffle with seeded random
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(nextRand() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -52,7 +50,7 @@ export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL
 
   // Generate synthetic dates going backward ~2-3 days per contest
   let daysBack = 35;
-  while (result.length < 100 && currentConcurso >= targetOldest) {
+  while (result.length < count && currentConcurso >= targetOldest) {
     const dateObj = new Date(2026, 8, 20); // Sept 2026 anchor
     dateObj.setDate(dateObj.getDate() - daysBack);
     daysBack += 2;
@@ -81,5 +79,9 @@ export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL
     currentConcurso--;
   }
 
-  return result.slice(0, 100);
+  return result.slice(0, count);
+}
+
+export function getHistorical100Draws(latestDraw: LotofacilDraw = CONCURSO_ATUAL): LotofacilDraw[] {
+  return getHistoricalNDraws(100, latestDraw);
 }

@@ -43,6 +43,7 @@ import { HistoricoAtrasosRechartsCard } from './HistoricoAtrasosRechartsCard';
 import { WidgetTendenciasTop5Recharts } from './WidgetTendenciasTop5Recharts';
 import { DashboardFrequenciaAtrasosRecharts } from './DashboardFrequenciaAtrasosRecharts';
 import { ScatterSomaPontuacaoD3 } from './ScatterSomaPontuacaoD3';
+import { ComparadorFrequenciaPeriodosRecharts } from './ComparadorFrequenciaPeriodosRecharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -93,6 +94,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'atrasos'
     | 'dashboard_recharts'
     | 'scatter_soma_d3'
+    | 'comparador_periodos'
     | 'widget_tendencias'
     | 'mapa_calor_d3'
     | 'correlacao_d3'
@@ -176,6 +178,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Dispersão Soma × Pontuação</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
               D3.JS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('comparador_periodos')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'comparador_periodos'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4" />
+            <span>Comparador 100 vs 500</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              BARRAS EMPILHADAS
             </span>
           </button>
 
@@ -582,6 +599,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             latestDraw={latestDraw}
             statsList={statsList}
             onFixNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+
+          {/* Comparador de Frequência entre Intervalos Distintos (100 vs 500 Concursos - Recharts Barras Empilhadas) */}
+          <ComparadorFrequenciaPeriodosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
@@ -1307,6 +1336,22 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                     detail: { tab: 'fechamento' },
                   })
                 );
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: COMPARADOR DE FREQUÊNCIA 100 VS 500 (RECHARTS BARRAS EMPILHADAS) */}
+      {activeSubTab === 'comparador_periodos' && (
+        <div className="space-y-6">
+          <ComparadorFrequenciaPeriodosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
               }
             }}
           />
