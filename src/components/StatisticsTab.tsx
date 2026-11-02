@@ -45,6 +45,7 @@ import { DashboardFrequenciaAtrasosRecharts } from './DashboardFrequenciaAtrasos
 import { ScatterSomaPontuacaoD3 } from './ScatterSomaPontuacaoD3';
 import { ComparadorFrequenciaPeriodosRecharts } from './ComparadorFrequenciaPeriodosRecharts';
 import { EspelhoConcursoAtualModule } from './EspelhoConcursoAtualModule';
+import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -93,6 +94,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'historico_roi'
     | 'espelho_concurso'
     | 'dashboard_recharts'
     | 'scatter_soma_d3'
@@ -151,6 +153,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('historico_roi')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'historico_roi'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Histórico de ROI (20 Concursos)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              RECHARTS • 20 CONCURSOS
+            </span>
           </button>
 
           <button
@@ -647,6 +664,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               }
             }}
           />
+
+          {/* Gráfico de Histórico de Retorno sobre Investimento (ROI • 20 Concursos) com Recharts */}
+          <HistoricoROISavedGamesChart latestDraw={latestDraw} />
 
           {/* 1. Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos */}
           <Top15FrequenciaUltimos10Card
@@ -1327,6 +1347,13 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       </div>
     )}
+
+      {/* SUBTAB DEDICADA: HISTÓRICO DE RETORNO SOBRE INVESTIMENTO (ROI - 20 CONCURSOS COM RECHARTS) */}
+      {activeSubTab === 'historico_roi' && (
+        <div className="space-y-6">
+          <HistoricoROISavedGamesChart latestDraw={latestDraw} />
+        </div>
+      )}
 
       {/* SUBTAB DEDICADA: DASHBOARD 100 CONCURSOS (RECHARTS & FRAMER MOTION) */}
       {activeSubTab === 'dashboard_recharts' && (

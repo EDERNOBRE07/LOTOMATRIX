@@ -14,7 +14,9 @@ import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { soundService } from '../services/soundAlert';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
 import { ExportPDFModal } from './ExportPDFModal';
+import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { downloadGoldFechamentoPDF } from '../services/goldPdfGenerator';
+import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import {
   FileText,
   Trash2,
@@ -71,6 +73,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [expandedTicketsCardId, setExpandedTicketsCardId] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [selectedForPDF, setSelectedForPDF] = useState<SavedFechamentoPrognostico | null>(null);
+  const [selectedForLotericaPDF, setSelectedForLotericaPDF] = useState<SavedFechamentoPrognostico | null>(null);
   const [pushPerm, setPushPerm] = useState<NotificationPermission>(() => getPushPermission());
   const [pushEnabled, setPushEnabled] = useState<boolean>(() => isPushEnabledByUser());
   const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
@@ -288,6 +291,47 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     }
   };
 
+  const handleDownloadLotericaDirect = (f: SavedFechamentoPrognostico) => {
+    try {
+      downloadProfessionalLotericaPDF({
+        fechamento: f,
+        tickets: f.tickets,
+        concurso: f.concurso,
+        dataConcurso: f.dataConcurso,
+        strategyName: f.tipoFechamento,
+        modalidadeMatriz: f.modalidadeMatriz,
+        universoDezenas: f.universoDezenas,
+        custoTotalEstimado: f.custoTotal,
+      });
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`✓ PDF Oficial Lotérica com marca d'água para "${f.tipoFechamento}" gerado com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar PDF para lotérica.');
+    }
+  };
+
+  const handleDownloadAllLotericaPDFDirect = () => {
+    if (fechamentos.length === 0) return;
+    try {
+      const allTickets = fechamentos.flatMap((f) => f.tickets);
+      const totalCost = fechamentos.reduce((acc, f) => acc + f.custoTotal, 0);
+      downloadProfessionalLotericaPDF({
+        tickets: allTickets,
+        concurso: fechamentos[0]?.concurso || 3818,
+        strategyName: `Carteira Completa (${fechamentos.length} Fechamentos Salvos)`,
+        modalidadeMatriz: `${allTickets.length} Apostas Consolidadas`,
+        custoTotalEstimado: totalCost,
+        watermarkText: 'LOTO SNIPER • COMPROVANTE OFICIAL DE JOGOS • USO LOTÉRICO',
+      });
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`✓ PDF Lotérica com todos os ${allTickets.length} jogos salvos gerado com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar PDF de todos os jogos.');
+    }
+  };
+
   const handleDownloadCSVDirect = (f: SavedFechamentoPrognostico) => {
     try {
       const headers = [
@@ -443,6 +487,19 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
               <Upload className="w-3.5 h-3.5 text-sky-400" />
               <span>Restaurar Backup</span>
             </button>
+
+            {/* Gerar PDF Lotérica de Todos os Jogos Salvos */}
+            {fechamentos.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDownloadAllLotericaPDFDirect}
+                className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/20 hover:from-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                title="Gerar PDF profissional com todos os jogos salvos diagramados com marca d'água e custos estimados para impressão em lotéricas"
+              >
+                <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                <span>PDF Lotérica (Todos os Jogos)</span>
+              </button>
+            )}
 
             {fechamentos.length > 1 && (
               <button
@@ -690,6 +747,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     >
                       <Download className="w-4 h-4 text-amber-400" />
                       <span>Baixar PDF Gold</span>
+                    </button>
+
+                    {/* Botão Gerar PDF Oficial para Lotérica com Marca d'Água e Custos Estimados */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        soundService.playGoldenZoneSuccessChime();
+                        setSelectedForLotericaPDF(f);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-emerald-500/25 flex items-center gap-1.5 active:scale-95"
+                      title="Gerar PDF profissional com dezenas, custo estimado e marca d'água para impressão em lotéricas"
+                    >
+                      <Printer className="w-4 h-4 text-slate-950" />
+                      <span>PDF Lotérica (Marca d'Água)</span>
                     </button>
 
                     {/* Botão Baixar CSV Formatado para Lotéricas/Planilhas */}
@@ -983,6 +1054,17 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             excludedNumbers: selectedForPDF.dezenasExcluidas,
             garantia: selectedForPDF.modalidadeMatriz,
           }}
+        />
+      )}
+
+      {/* Modal de Exportação Profissional para Lotéricas com Marca d'Água e Custos */}
+      {selectedForLotericaPDF && (
+        <ExportLotericaPDFModal
+          isOpen={Boolean(selectedForLotericaPDF)}
+          onClose={() => setSelectedForLotericaPDF(null)}
+          fechamento={selectedForLotericaPDF}
+          tickets={selectedForLotericaPDF.tickets}
+          latestDraw={latestDraw}
         />
       )}
     </div>

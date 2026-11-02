@@ -7,9 +7,11 @@ import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
+import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
+import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import {
   Download,
   Copy,
@@ -52,6 +54,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
+  const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais'>('fechamentos_salvos');
 
   // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
@@ -583,6 +586,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Baixar PDF (Volantes 5×5)</span>
             </button>
 
+            {/* Botão Exportar PDF Profissional para Lotérica com Marca d'Água e Custo Estimado */}
+            <button
+              onClick={() => setIsLotericaPDFModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+              title="Gerar PDF profissional com dezenas, custo estimado e marca d'água para levar e imprimir em casas lotéricas"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-950" />
+              <span>PDF Lotérica (Marca d'Água)</span>
+            </button>
+
             {/* Modal de Configuração Avançada de PDF */}
             <button
               onClick={() => setIsPDFModalOpen(true)}
@@ -1038,6 +1051,14 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       <ExportPDFModal
         isOpen={isPDFModalOpen}
         onClose={() => setIsPDFModalOpen(false)}
+        tickets={ticketsWithTags}
+        latestDraw={latestDraw}
+      />
+
+      {/* Modal de Exportação em PDF Profissional para Lotéricas com Marca d'Água e Custos */}
+      <ExportLotericaPDFModal
+        isOpen={isLotericaPDFModalOpen}
+        onClose={() => setIsLotericaPDFModalOpen(false)}
         tickets={ticketsWithTags}
         latestDraw={latestDraw}
       />
