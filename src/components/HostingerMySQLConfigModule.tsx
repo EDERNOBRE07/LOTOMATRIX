@@ -36,6 +36,7 @@ export interface MySQLHostingerCredentials {
   password?: string;
   tableGames: string;
   tableSimulator: string;
+  ssl?: boolean;
 }
 
 export type CronJobFrequency = 'diaria' | 'semanal' | 'pos_sorteio_21h' | '6h' | '12h' | 'on_change';
@@ -58,6 +59,7 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
       password: '',
       tableGames: 'lotosniper_games_manager_backup',
       tableSimulator: 'lotosniper_simulator_backup',
+      ssl: true,
     };
   });
 
@@ -394,7 +396,7 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
           </div>
 
           {/* Senha */}
-          <div className="space-y-1 sm:col-span-2">
+          <div className="space-y-1">
             <label className="text-slate-400 font-medium block">Senha do Banco de Dados:</label>
             <div className="relative">
               <input
@@ -414,12 +416,30 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
               </button>
             </div>
           </div>
+
+          {/* SSL / Conexão Criptografada */}
+          <div className="space-y-1 flex flex-col justify-end">
+            <label className="text-slate-400 font-medium block">Segurança de Rede:</label>
+            <div className="h-[38px] flex items-center px-3 bg-slate-900 border border-slate-700 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={credentials.ssl ?? true}
+                  onChange={(e) => setCredentials({ ...credentials, ssl: e.target.checked })}
+                  className="accent-amber-400 rounded"
+                />
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>SSL / Conexão Criptografada TLS</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Action Buttons for Credentials */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
-          <div className="text-[11px] text-slate-400">
-            {connectionStatus?.message}
+          <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>{connectionStatus?.message}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -454,13 +474,13 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
             </div>
             <div>
               <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                <span>Cronjob de Backup Automático no Servidor</span>
+                <span>Cronjob de Backup Automático dos Jogos Salvos</span>
                 <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
-                  SERVIDOR ATIVO
+                  {cronEnabled ? 'ATIVO' : 'DESATIVADO'}
                 </span>
               </h4>
               <p className="text-[11px] text-slate-400">
-                Executa rotinas periódicas para persistir todos os jogos gerados e simulações diretamente no banco MySQL da Hostinger.
+                Garante que todos os bilhetes, matrizes e fechamentos salvos sejam persistidos de forma segura e pontual.
               </p>
             </div>
           </div>
@@ -476,65 +496,105 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
           </button>
         </div>
 
-        {/* Frequência do Cronjob */}
-        <div className="space-y-2">
-          <label className="text-xs text-slate-300 font-bold block flex items-center justify-between">
-            <span>Seletor de Frequência dos Backups Automáticos:</span>
-            <span className="text-[10px] font-mono text-amber-400 font-bold">Frequência: Diária ou Semanal</span>
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-            {[
-              {
-                id: 'diaria',
-                label: 'Diária (Pós-Sorteio)',
-                desc: 'Backup diário automático às 21h00 pós-sorteio da Caixa',
-                badge: 'Recomendado',
-              },
-              {
-                id: 'semanal',
-                label: 'Semanal (Domingo)',
-                desc: 'Backup semanal consolidado todo domingo às 23h59',
-                badge: 'Semanal',
-              },
-              {
-                id: 'on_change',
-                label: 'A Cada Novo Jogo',
-                desc: 'Gravação imediata em tempo real ao salvar fechamento',
-                badge: 'Instantâneo',
-              },
-              {
-                id: '12h',
-                label: 'A Cada 12 Horas',
-                desc: 'Sincronização regular de manhã e à noite',
-                badge: 'Regular',
-              },
-            ].map((opt) => {
-              const isSelected = cronFrequency === opt.id || (opt.id === 'diaria' && cronFrequency === 'pos_sorteio_21h');
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => handleFrequencyChange(opt.id as CronJobFrequency)}
-                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                    isSelected
-                      ? 'bg-amber-500/15 border-amber-400 text-white shadow-md shadow-amber-500/10 ring-1 ring-amber-400/40'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <strong className="text-xs text-white">{opt.label}</strong>
-                    <span
-                      className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${
-                        isSelected ? 'bg-amber-500/30 text-amber-300' : 'bg-slate-800 text-slate-500'
-                      }`}
-                    >
-                      {opt.badge}
-                    </span>
+        {/* Frequência do Cronjob: Diária vs Semanal */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <label className="text-xs text-white font-bold block flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-amber-400" />
+              <span>Seletor de Frequência dos Backups Automáticos:</span>
+            </label>
+            <span className="text-[11px] font-mono font-bold text-amber-300 bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+              Modo Atual: {cronFrequency === 'semanal' ? '📅 Semanal' : '⚡ Diária'}
+            </span>
+          </div>
+
+          {/* Cards Interativos Diária vs Semanal */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+            {/* Opção 1: Diária */}
+            <div
+              onClick={() => handleFrequencyChange('diaria')}
+              className={`p-4 rounded-xl border transition cursor-pointer relative overflow-hidden group ${
+                cronFrequency === 'diaria' || cronFrequency === 'pos_sorteio_21h'
+                  ? 'bg-gradient-to-br from-amber-500/20 via-slate-900 to-amber-500/5 border-amber-400 text-white shadow-xl shadow-amber-500/15 ring-2 ring-amber-400/50'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
+                      cronFrequency === 'diaria' || cronFrequency === 'pos_sorteio_21h'
+                        ? 'border-amber-400 bg-amber-400'
+                        : 'border-slate-600'
+                    }`}
+                  >
+                    {(cronFrequency === 'diaria' || cronFrequency === 'pos_sorteio_21h') && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                    )}
                   </div>
-                  <span className="text-[10px] text-slate-400 block leading-tight">{opt.desc}</span>
-                </button>
-              );
-            })}
+                  <strong className="text-sm font-black text-white flex items-center gap-1.5">
+                    <span>Frequência Diária</span>
+                    <span className="text-[10px] font-mono font-bold text-amber-300">21h00</span>
+                  </strong>
+                </div>
+
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40 uppercase">
+                  Recomendado
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Executa o backup automático <strong>todos os dias</strong> às <strong>21h00</strong>, logo após a apuração oficial dos concursos da Caixa, salvando todos os novos jogos gerados e os dados de conferência.
+              </p>
+
+              <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span>Próxima execução prevista:</span>
+                <strong className="text-amber-300">Hoje às 21:00 (Pós-Sorteio)</strong>
+              </div>
+            </div>
+
+            {/* Opção 2: Semanal */}
+            <div
+              onClick={() => handleFrequencyChange('semanal')}
+              className={`p-4 rounded-xl border transition cursor-pointer relative overflow-hidden group ${
+                cronFrequency === 'semanal'
+                  ? 'bg-gradient-to-br from-emerald-500/20 via-slate-900 to-emerald-500/5 border-emerald-400 text-white shadow-xl shadow-emerald-500/15 ring-2 ring-emerald-400/50'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
+                      cronFrequency === 'semanal'
+                        ? 'border-emerald-400 bg-emerald-400'
+                        : 'border-slate-600'
+                    }`}
+                  >
+                    {cronFrequency === 'semanal' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                    )}
+                  </div>
+                  <strong className="text-sm font-black text-white flex items-center gap-1.5">
+                    <span>Frequência Semanal</span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-300">Domingo 23h59</span>
+                  </strong>
+                </div>
+
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 uppercase">
+                  Consolidado
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Executa o backup automático <strong>uma vez por semana</strong>, todo <strong>domingo às 23h59</strong>, consolidando todos os jogos e bilhetes da semana inteira de uma só vez para economizar tráfego.
+              </p>
+
+              <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span>Próxima execução prevista:</span>
+                <strong className="text-emerald-300">Domingo às 23:59</strong>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -141,43 +141,79 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   };
 
   const [isRollingVolante, setIsRollingVolante] = useState<boolean>(false);
-  const [flashingDezenas, setFlashingDezenas] = useState<number[]>([]);
   const [isStabilizing, setIsStabilizing] = useState<boolean>(false);
   const [stabilizedNumbers, setStabilizedNumbers] = useState<number[]>([]);
+  const [rollingDrumBalls, setRollingDrumBalls] = useState<
+    { slot: number; currentDisplay: number; target: number; isLocked: boolean }[]
+  >([]);
+  const [rollingGridDisplays, setRollingGridDisplays] = useState<{ [num: number]: number }>({});
+  const [rollProgress, setRollProgress] = useState<number>(0);
 
   const runRollingAnimation = (targetNumbers: number[], strategyLabel: string) => {
     setIsRollingVolante(true);
-    setShowRollingModal(true);
+    setIsStabilizing(false);
+    setStabilizedNumbers([]);
+    setRollProgress(0);
+
+    const total = targetNumbers.length;
+    // Initial ball drum slots for rolling display
+    const initialBalls = targetNumbers.map((target, idx) => ({
+      slot: idx,
+      currentDisplay: Math.floor(Math.random() * 25) + 1,
+      target,
+      isLocked: false,
+    }));
+    setRollingDrumBalls(initialBalls);
     soundService.playTick();
 
-    let step = 0;
-    const interval = setInterval(() => {
-      const randomSubset: number[] = [];
-      while (randomSubset.length < targetCount) {
-        const rand = Math.floor(Math.random() * 25) + 1;
-        if (!randomSubset.includes(rand)) randomSubset.push(rand);
+    // Fast interval for rotating random numbers during draw simulation
+    const tumbleInterval = setInterval(() => {
+      setRollingDrumBalls((prev) =>
+        prev.map((b) =>
+          b.isLocked
+            ? b
+            : { ...b, currentDisplay: Math.floor(Math.random() * 25) + 1 }
+        )
+      );
+
+      const gridMap: { [n: number]: number } = {};
+      for (let n = 1; n <= 25; n++) {
+        gridMap[n] = Math.floor(Math.random() * 25) + 1;
       }
-      setFlashingDezenas(randomSubset);
+      setRollingGridDisplays(gridMap);
       soundService.playTick();
-      step++;
+    }, 60);
 
-      if (step >= 8) {
-        clearInterval(interval);
-        setFlashingDezenas([]);
-        setIsRollingVolante(false);
-        onSelectSet(targetNumbers);
-        onStrategySelect?.(strategyLabel);
-        soundService.playSuccess();
+    // Staggered settling sequence: each ball locks into place with acoustic feedback
+    targetNumbers.forEach((targetNum, index) => {
+      const lockDelay = 220 + Math.round((index / total) * 780);
 
-        // Transição de 'estabilização' visual: as dezenas sorteadas brilham intensamente por 500ms com Framer Motion
-        setStabilizedNumbers(targetNumbers);
-        setIsStabilizing(true);
-        setTimeout(() => {
-          setIsStabilizing(false);
-          setStabilizedNumbers([]);
-        }, 500);
-      }
-    }, 130);
+      setTimeout(() => {
+        setRollingDrumBalls((prev) =>
+          prev.map((b, idx) => (idx === index ? { ...b, currentDisplay: targetNum, isLocked: true } : b))
+        );
+        soundService.playTickCountdown();
+        setRollProgress(Math.round(((index + 1) / total) * 100));
+
+        // When the final ball locks:
+        if (index === total - 1) {
+          clearInterval(tumbleInterval);
+          setRollingGridDisplays({});
+          setIsRollingVolante(false);
+          onSelectSet(targetNumbers);
+          onStrategySelect?.(strategyLabel);
+          soundService.playSuccess();
+
+          // Transição de 'estabilização' visual: as dezenas sorteadas brilham intensamente por 500ms usando Framer Motion
+          setStabilizedNumbers(targetNumbers);
+          setIsStabilizing(true);
+          setTimeout(() => {
+            setIsStabilizing(false);
+            setStabilizedNumbers([]);
+          }, 500);
+        }
+      }, lockDelay);
+    });
   };
 
   // 1. Auto-completar: preserva dezenas atuais e preenche até targetCount com rolling numbers
@@ -403,7 +439,70 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         </div>
       </div>
 
-      {/* Sorteio Rolling Numbers Animado (Framer Motion) */}
+      {/* Globo Sorteador com Rolling Numbers Animado em Tempo Real (Framer Motion) */}
+      <AnimatePresence>
+        {isRollingVolante && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, scale: 0.95 }}
+            animate={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
+            className="my-3.5 p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/70 via-slate-950 to-emerald-950/70 border-2 border-amber-400/80 shadow-[0_0_30px_rgba(245,158,11,0.3)] overflow-hidden relative"
+          >
+            <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-amber-500/30 text-xs">
+              <span className="font-black text-amber-300 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                <span>Sorteio Mecânico · Rolling Numbers ({rollProgress}%)</span>
+              </span>
+              <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-md animate-pulse">
+                SORTEANDO AO VIVO
+              </span>
+            </div>
+
+            {/* Rolling drum balls */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none justify-center flex-wrap">
+              {rollingDrumBalls.map((ball) => (
+                <motion.div
+                  key={`drum-ball-${ball.slot}`}
+                  animate={
+                    ball.isLocked
+                      ? {
+                          scale: [1.25, 1],
+                          backgroundColor: '#f59e0b',
+                          color: '#020617',
+                        }
+                      : {
+                          scale: [0.95, 1.1, 0.95],
+                          backgroundColor: '#020617',
+                          color: '#fbbf24',
+                        }
+                  }
+                  transition={{ duration: 0.15 }}
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center font-mono font-black text-xs sm:text-sm border transition-all ${
+                    ball.isLocked
+                      ? 'border-amber-300 shadow-md shadow-amber-500/50 ring-1 ring-amber-300'
+                      : 'border-amber-500/50 text-amber-300 shadow-sm'
+                  }`}
+                >
+                  <AnimatePresence mode="popLayout">
+                    <motion.span
+                      key={`roll-ball-${ball.slot}-${ball.currentDisplay}`}
+                      initial={{ y: ball.isLocked ? -10 : -16, opacity: 0.3 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: 16, opacity: 0.3 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                    >
+                      {ball.currentDisplay.toString().padStart(2, '0')}
+                    </motion.span>
+                  </AnimatePresence>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sorteio Rolling Numbers Manual (Framer Motion Modal) */}
       {showRollingModal && (
         <div className="my-4 p-4 rounded-2xl bg-slate-950/90 border border-amber-500/40 relative shadow-2xl">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
@@ -519,7 +618,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               borderStyle = 'border-emerald-300';
             }
 
-            const isFlashing = isRollingVolante && flashingDezenas.includes(num);
+            const isRollingCell = isRollingVolante && rollingGridDisplays[num] !== undefined;
             const isStabilizingThis = isStabilizing && stabilizedNumbers.includes(num);
 
             return (
@@ -529,12 +628,10 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 animate={
-                  isFlashing
+                  isRollingCell
                     ? {
-                        scale: [1, 1.15, 0.92, 1],
-                        rotate: [0, 4, -4, 0],
-                        backgroundColor: '#f59e0b',
-                        color: '#020617',
+                        scale: [1, 1.08, 0.94, 1],
+                        borderColor: ['#334155', '#f59e0b', '#10b981', '#334155'],
                       }
                     : isStabilizingThis
                     ? {
@@ -547,14 +644,12 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                         filter: ['brightness(1)', 'brightness(2.2)', 'brightness(1.15)'],
                         borderColor: ['#10b981', '#fde047', '#34d399'],
                       }
-                    : isRollingVolante
-                    ? { scale: [1, 1.06, 0.96, 1] }
                     : { scale: 1, rotate: 0 }
                 }
                 transition={
                   isStabilizingThis
                     ? { duration: 0.5, ease: 'easeOut', times: [0, 0.5, 1] }
-                    : isRollingVolante
+                    : isRollingCell
                     ? { duration: 0.22, repeat: Infinity, ease: 'easeInOut' }
                     : { duration: 0.15 }
                 }
@@ -572,10 +667,33 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                     className="absolute inset-0 rounded-xl bg-gradient-to-r from-amber-300/80 via-yellow-200/90 to-emerald-300/80 blur-xs pointer-events-none z-20"
                   />
                 )}
-                {/* Number */}
-                <span className="font-mono text-base sm:text-lg tracking-tight leading-none font-bold">
-                  {num.toString().padStart(2, '0')}
-                </span>
+                {/* Rolling Number with Framer Motion */}
+                <div className="h-6 sm:h-7 w-full flex items-center justify-center overflow-hidden relative">
+                  <AnimatePresence mode="popLayout">
+                    {isRollingCell ? (
+                      <motion.span
+                        key={`rolling-${num}-${rollingGridDisplays[num]}`}
+                        initial={{ y: -16, opacity: 0.3 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 16, opacity: 0.3 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                        className="font-mono text-base sm:text-lg tracking-tight leading-none font-black text-amber-300"
+                      >
+                        {rollingGridDisplays[num].toString().padStart(2, '0')}
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key={`static-${num}`}
+                        initial={isStabilizingThis ? { scale: 0.85 } : false}
+                        animate={isStabilizingThis ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                        className="font-mono text-base sm:text-lg tracking-tight leading-none font-bold"
+                      >
+                        {num.toString().padStart(2, '0')}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 {/* Sub-label indicators */}
                 <div className="flex items-center gap-1 mt-1 text-[9px] font-mono leading-none">
