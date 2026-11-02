@@ -44,6 +44,7 @@ import { WidgetTendenciasTop5Recharts } from './WidgetTendenciasTop5Recharts';
 import { DashboardFrequenciaAtrasosRecharts } from './DashboardFrequenciaAtrasosRecharts';
 import { ScatterSomaPontuacaoD3 } from './ScatterSomaPontuacaoD3';
 import { ComparadorFrequenciaPeriodosRecharts } from './ComparadorFrequenciaPeriodosRecharts';
+import { EspelhoConcursoAtualModule } from './EspelhoConcursoAtualModule';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -92,6 +93,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'espelho_concurso'
     | 'dashboard_recharts'
     | 'scatter_soma_d3'
     | 'comparador_periodos'
@@ -149,6 +151,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('espelho_concurso')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'espelho_concurso'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4 text-amber-400" />
+            <span>Espelho do Concurso Atual</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              ÚLTIMOS 5 CICLOS
+            </span>
           </button>
 
           <button
@@ -610,6 +627,19 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           <ComparadorFrequenciaPeriodosRecharts
             latestDraw={latestDraw}
             statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+
+          {/* Módulo Oficial: Espelho do Concurso Atual (10 Dezenas Ausentes & Tendência nos Últimos 5 Ciclos) */}
+          <EspelhoConcursoAtualModule
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
             onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
@@ -1336,6 +1366,23 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                     detail: { tab: 'fechamento' },
                   })
                 );
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: ESPELHO DO CONCURSO ATUAL (10 DEZENAS AUSENTES & TENDÊNCIA 5 CICLOS) */}
+      {activeSubTab === 'espelho_concurso' && (
+        <div className="space-y-6">
+          <EspelhoConcursoAtualModule
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
               }
             }}
           />

@@ -573,7 +573,67 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const tCount = overrideTargetCount ?? targetCount;
     setActiveModel(modelType);
 
-    if (modelType.includes('Clássico') || modelType.includes('Documento')) {
+    if (modelType.includes('Insights de Filtros da IA') || modelType === 'Insights de Filtros da IA') {
+      let voidPairs = filters.combinacoesVazioExcluidas || [];
+      try {
+        if (voidPairs.length === 0) {
+          const voidAnalysis = computeVoidHeatmap();
+          voidPairs = voidAnalysis.vaziosAbsolutos.slice(0, 6).map((v) => v.pair);
+        }
+      } catch (e) {
+        console.warn('Falha ao calcular mapa de vazios:', e);
+      }
+
+      // 1. Configura rigorosamente todos os filtros recomendados pela IA para o próximo concurso
+      const idealAIFilters: FilterCriteria = {
+        ...filters,
+        paresMin: 7,
+        paresMax: 8,
+        primosMin: 5,
+        primosMax: 6,
+        molduraMin: 9,
+        molduraMax: 10,
+        somaMin: 190,
+        somaMax: 210,
+        fibonacciMin: 3,
+        fibonacciMax: 5,
+        repetidasMin: 8,
+        repetidasMax: 10,
+        maxConsecutivas: 4,
+        curvaAbcAtiva: true,
+        minDezenasClasseA: 11,
+        vaziosAtivos: true,
+        combinacoesVazioExcluidas: voidPairs,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+
+      setFilters(idealAIFilters);
+      saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+
+      // 2. Calibra o pool ideal de dezenas para o fechamento utilizando todos os filtros recomendados pela IA
+      const calibrated = buildFilterCompliantPool({
+        targetCount: tCount,
+        filters: idealAIFilters,
+        previousDraw: latestDraw,
+        dynamicStats,
+        cyclePending: cyclePendingNumbers,
+        aiScores: aiPrediction?.scores,
+        currentSelected: selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+      });
+
+      setSelectedNumbers(calibrated.dezenas);
+      const name = '⚡ Insights de Filtros da IA (Filtros & Fechamento Ideal)';
+      setStrategyName(name);
+      setActiveModel('Insights de Filtros da IA');
+      setDocumentMessage(
+        `✓ Modelo "Insights de Filtros da IA" ativado: Fechamento ideal gerado com 100% dos filtros recomendados para o Concurso #${latestDraw.concurso + 1} (${calibrated.motivoAjuste})`
+      );
+      soundService.playGoldenZoneSuccessChime();
+      setTimeout(() => setDocumentMessage(null), 6000);
+    } else if (modelType.includes('Clássico') || modelType.includes('Documento')) {
       const optimal = buildFilterCompliantPool({
         targetCount: tCount,
         filters,
@@ -590,7 +650,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setStrategyName(name);
       setDocumentMessage(`Fechamento Clássico aplicado com filtros ativos: ${optimal.motivoAjuste}`);
       setTimeout(() => setDocumentMessage(null), 6000);
-    } else if (modelType.includes('Top') || modelType.includes('IA')) {
+    } else if (modelType === 'Top 18 IA' || (modelType.includes('Top') && !modelType.includes('Insights'))) {
       const sorted = [...dynamicStats]
         .sort((a, b) => {
           const scoreA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
@@ -1585,7 +1645,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
           {/* Modelo 1: ⚡ Fechamento Clássico */}
           <button
             type="button"
@@ -1642,7 +1702,35 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 3: 🔄 Fechar Ciclo */}
+          {/* Modelo 3: 🧠⚡ Insights de Filtros da IA */}
+          <button
+            type="button"
+            onClick={() => applyStrategyModel('Insights de Filtros da IA')}
+            className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+              strategyName.includes('Insights de Filtros da IA') || activeModel === 'Insights de Filtros da IA'
+                ? 'bg-gradient-to-br from-cyan-500/25 via-emerald-500/20 to-slate-900 border-2 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/50 scale-[1.01]'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+                <Sparkles className="w-4 h-4 fill-cyan-400/30" />
+              </span>
+              <div>
+                <span className="font-bold text-xs sm:text-sm text-white block">
+                  Insights de Filtros da IA
+                </span>
+                <span className="text-[10px] font-mono font-bold text-cyan-400">
+                  Fechamento Ideal Preditivo
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Fechamento ideal calibrado que utiliza todos os filtros recomendados pela IA para o próximo concurso.
+            </p>
+          </button>
+
+          {/* Modelo 4: 🔄 Fechar Ciclo */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Fechar Ciclo (2, 7, 10)')}
@@ -1670,7 +1758,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 4: ⚖️ Equilíbrio Canônico */}
+          {/* Modelo 5: ⚖️ Equilíbrio Canônico */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Equilíbrio Canônico')}

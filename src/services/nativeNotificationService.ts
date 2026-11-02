@@ -344,7 +344,7 @@ export async function sendNativeCycleAlertNotification(
       id: alertId,
       timestamp: Date.now(),
       dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      type: 'cycle',
+      type: 'cycle_closed',
       title: `⚡ Reta Final do Ciclo: ${ausentesCount} Ausentes [≤ ${threshold}]`,
       body,
       concurso,
@@ -362,7 +362,7 @@ export async function sendNativeCycleAlertNotification(
     if ('serviceWorker' in navigator) {
       const registration = await navigator.serviceWorker.ready;
       if (registration && registration.showNotification) {
-        await registration.showNotification(title, {
+        const notifOptions: any = {
           body,
           icon: '/favicon.svg',
           badge: '/favicon.svg',
@@ -374,7 +374,8 @@ export async function sendNativeCycleAlertNotification(
             concurso,
             ausentesCount,
           },
-        });
+        };
+        await registration.showNotification(title, notifOptions);
         return true;
       }
     }
