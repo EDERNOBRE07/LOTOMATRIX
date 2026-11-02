@@ -460,9 +460,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             <Database className="w-3.5 h-3.5" />
-            <span>MySQL Hostinger & Cronjob</span>
+            <span>Segurança e Backup (MySQL Hostinger)</span>
             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
-              BACKUP
+              CRONJOB
             </span>
           </button>
           <button
@@ -552,6 +552,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             statsList={statsList}
             cyclePendingNumbers={cyclePendingNumbers}
             concursosNoCiclo={concursosNoCiclo}
+          />
+
+          {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
+          <HostingerMySQLConfigModule
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

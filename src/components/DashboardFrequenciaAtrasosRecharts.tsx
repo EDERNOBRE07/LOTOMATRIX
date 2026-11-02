@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -460,12 +461,20 @@ export const DashboardFrequenciaAtrasosRecharts: React.FC<
           </span>
         </div>
 
-        <div className="w-full h-[320px] sm:h-[360px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`chart-${intervalo}-${filtroExibicao}`}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14 }}
+            transition={{ duration: 0.32, ease: 'easeOut' }}
+            className="w-full h-[320px] sm:h-[360px]"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
               data={filteredData}
               margin={{ top: 20, right: 25, left: -10, bottom: 10 }}
-              onClick={(e) => {
+              onClick={(e: any) => {
                 if (e && e.activePayload && e.activePayload.length > 0) {
                   const num = e.activePayload[0].payload.numero;
                   setSelectedDezena(num);
@@ -661,7 +670,8 @@ export const DashboardFrequenciaAtrasosRecharts: React.FC<
               />
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
+      </AnimatePresence>
 
         {/* Rodapé Explicativo da Interpretação Estatística */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4 border-t border-slate-800 text-xs text-slate-400">

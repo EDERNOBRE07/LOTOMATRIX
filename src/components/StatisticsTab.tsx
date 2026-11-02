@@ -42,6 +42,7 @@ import { VarianciaSomaScatterRecharts } from './VarianciaSomaScatterRecharts';
 import { HistoricoAtrasosRechartsCard } from './HistoricoAtrasosRechartsCard';
 import { WidgetTendenciasTop5Recharts } from './WidgetTendenciasTop5Recharts';
 import { DashboardFrequenciaAtrasosRecharts } from './DashboardFrequenciaAtrasosRecharts';
+import { ScatterSomaPontuacaoD3 } from './ScatterSomaPontuacaoD3';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -90,6 +91,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'dashboard_recharts'
+    | 'scatter_soma_d3'
     | 'widget_tendencias'
     | 'mapa_calor_d3'
     | 'correlacao_d3'
@@ -144,6 +147,36 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('dashboard_recharts')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'dashboard_recharts'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4" />
+            <span>Dashboard 100 Concursos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              RECHARTS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('scatter_soma_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'scatter_soma_d3'
+                ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            <span>Dispersão Soma × Pontuação</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              D3.JS
+            </span>
           </button>
 
           <button
@@ -531,6 +564,19 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* Dashboard Oficial: Frequência nos Últimos 100 Concursos & Curva de Atraso (Recharts + Framer Motion) */}
+          <DashboardFrequenciaAtrasosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+
           {/* Widget de Tendências: 5 Dezenas Mais Sorteadas nos Últimos 20 Concursos (Recharts) */}
           <WidgetTendenciasTop5Recharts
             latestDraw={latestDraw}
@@ -635,6 +681,29 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           <VarianciaSomaScatterRecharts
             latestDraw={latestDraw}
             onApplySomaFilter={(min, max) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
+          />
+
+          {/* 10. Novo Gráfico D3.js: Dispersão da Soma das Dezenas × Pontuação Histórica e Zonas de Probabilidade */}
+          <ScatterSomaPontuacaoD3
+            latestDraw={latestDraw}
+            onApplySomaFilter={(min, max) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento', minSoma: min, maxSoma: max },
+                  })
+                );
+              }
+            }}
+            onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(
                   new CustomEvent('switch-tab', {
@@ -1199,6 +1268,50 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       </div>
     )}
+
+      {/* SUBTAB DEDICADA: DASHBOARD 100 CONCURSOS (RECHARTS & FRAMER MOTION) */}
+      {activeSubTab === 'dashboard_recharts' && (
+        <div className="space-y-6">
+          <DashboardFrequenciaAtrasosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: DISPERSÃO SOMA × PONTUAÇÃO (D3.JS) */}
+      {activeSubTab === 'scatter_soma_d3' && (
+        <div className="space-y-6">
+          <ScatterSomaPontuacaoD3
+            latestDraw={latestDraw}
+            onApplySomaFilter={(min, max) => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento', minSoma: min, maxSoma: max },
+                  })
+                );
+              }
+            }}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('switch-tab', {
+                    detail: { tab: 'fechamento' },
+                  })
+                );
+              }
+            }}
+          />
+        </div>
+      )}
 
       {/* SUBTAB DEDICADA: WIDGET DE TENDÊNCIAS (5 DEZENAS MAIS SORTEADAS NOS ÚLTIMOS 20 CONCURSOS COM RECHARTS) */}
       {activeSubTab === 'widget_tendencias' && (

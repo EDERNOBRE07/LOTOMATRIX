@@ -11,6 +11,7 @@ import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics'
 import { calculateCurvaAbc } from '../services/curvaAbcService';
 import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X } from 'lucide-react';
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
+import { soundService } from '../services/soundAlert';
 
 interface VolanteSelectorProps {
   selectedNumbers: number[];
@@ -104,7 +105,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   const handleSelectDocumentStrategy = () => {
     const optimal = buildOptimalPool(targetCount, latestDraw, statsList, cyclePendingNumbers);
     onSelectSet(optimal.dezenas.slice(0, targetCount));
-    onStrategySelect?.('⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)');
+    onStrategySelect?.('⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)');
   };
 
   const handleSelectCycleClosure = () => {
@@ -138,6 +139,11 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     }
   };
 
+  const handleAutoCompletarRolling = () => {
+    setShowRollingModal(true);
+    soundService.playTickCountdown();
+  };
+
   return (
     <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl">
       {/* Top Bar: Selector Title and Counters */}
@@ -165,19 +171,31 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           </p>
         </div>
 
-        {/* Click Mode Toggle */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Auto-completar & Gerar com Rolling Numbers */}
           <button
-            onClick={() => setClickMode('select')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
-              clickMode === 'select'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            type="button"
+            onClick={handleAutoCompletarRolling}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 active:scale-95"
+            title="Sortear e rolar visualmente as dezenas via Framer Motion como em um sorteio real antes de estabilizar"
           >
-            <Check className="w-3.5 h-3.5" />
-            <span>Selecionar</span>
+            <Sparkles className="w-3.5 h-3.5 fill-current text-slate-950" />
+            <span>Auto-completar & Gerar</span>
           </button>
+
+          {/* Click Mode Toggle */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto text-xs">
+            <button
+              onClick={() => setClickMode('select')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
+                clickMode === 'select'
+                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Selecionar</span>
+            </button>
           <button
             onClick={() => setClickMode('fix')}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
@@ -204,6 +222,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           </button>
         </div>
       </div>
+    </div>
 
       {/* Visual Filter Overlays */}
       <div className="flex flex-wrap items-center justify-between gap-2 py-3 border-b border-slate-800/60 text-xs">
@@ -475,13 +494,13 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             type="button"
             onClick={handleSelectDocumentStrategy}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer ${
-              activeStrategy?.includes('Documento')
+              activeStrategy?.includes('Clássico') || activeStrategy?.includes('Documento')
                 ? 'bg-emerald-500 text-slate-950 border border-emerald-400 ring-2 ring-emerald-400/50 shadow-emerald-500/30'
                 : 'bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/60 text-emerald-300'
             }`}
           >
             <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)</span>
+            <span>⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)</span>
           </button>
           <button
             type="button"

@@ -259,6 +259,19 @@ class SoundService {
     else if (type === 'oportunidade') this.playOpportunityAlert();
     else this.playGoldenZoneSuccessChime();
   }
+
+  // General aliases
+  playTick() {
+    this.playTickCountdown();
+  }
+
+  playSuccess() {
+    this.playGoldenZoneSuccessChime();
+  }
+
+  playChime() {
+    this.playGoldenZoneSuccessChime();
+  }
 }
 
 export const soundService = new SoundService();

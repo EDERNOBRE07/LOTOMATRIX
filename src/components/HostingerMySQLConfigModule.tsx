@@ -38,7 +38,7 @@ export interface MySQLHostingerCredentials {
   tableSimulator: string;
 }
 
-export type CronJobFrequency = 'pos_sorteio_21h' | '6h' | '12h' | 'on_change';
+export type CronJobFrequency = 'diaria' | 'semanal' | 'pos_sorteio_21h' | '6h' | '12h' | 'on_change';
 
 export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProps> = ({
   latestDraw = CONCURSO_ATUAL,
@@ -289,14 +289,14 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-black text-white tracking-wide">
-                Banco de Dados MySQL Hostinger & Cronjob de Backup
+                Segurança e Backup: Servidor MySQL Hostinger & Backups Automáticos
               </h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase font-mono tracking-wider">
                 lotosniper.com.br
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Configuração direta das credenciais do servidor MySQL e rotinas automáticas de persistência dos jogos e simulações.
+              Gerencie a segurança dos seus jogos e simulações com persistência automatizada no banco MySQL da Hostinger.
             </p>
           </div>
         </div>
@@ -484,31 +484,31 @@ export const HostingerMySQLConfigModule: React.FC<HostingerMySQLConfigModuleProp
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
             {[
               {
-                id: 'pos_sorteio_21h',
-                label: 'Pós-Sorteio (21h00)',
-                desc: 'Diário após a apuração da Caixa',
+                id: 'diaria',
+                label: 'Diária (Pós-Sorteio)',
+                desc: 'Backup diário automático às 21h00 pós-sorteio da Caixa',
                 badge: 'Recomendado',
               },
               {
-                id: '6h',
-                label: 'A Cada 6 Horas',
-                desc: 'Ideal para alta produção de jogos',
-                badge: 'Frequente',
+                id: 'semanal',
+                label: 'Semanal (Domingo)',
+                desc: 'Backup semanal consolidado todo domingo às 23h59',
+                badge: 'Semanal',
+              },
+              {
+                id: 'on_change',
+                label: 'A Cada Novo Jogo',
+                desc: 'Gravação imediata em tempo real ao salvar fechamento',
+                badge: 'Instantâneo',
               },
               {
                 id: '12h',
                 label: 'A Cada 12 Horas',
-                desc: 'Manhã e noite',
+                desc: 'Sincronização regular de manhã e à noite',
                 badge: 'Regular',
               },
-              {
-                id: 'on_change',
-                label: 'Em Tempo Real',
-                desc: 'A cada novo fechamento gerado',
-                badge: 'Instantâneo',
-              },
             ].map((opt) => {
-              const isSelected = cronFrequency === opt.id;
+              const isSelected = cronFrequency === opt.id || (opt.id === 'diaria' && cronFrequency === 'pos_sorteio_21h');
               return (
                 <button
                   key={opt.id}

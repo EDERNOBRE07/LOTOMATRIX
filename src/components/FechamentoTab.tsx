@@ -107,7 +107,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const targetCount = preset.dezenasNecessarias;
 
   const [strategyName, setStrategyName] = useState<string>(
-    '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
+    '⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)'
   );
 
   // Painel de Controle de Tendência de Ciclo (Filtros de Dezenas Pendentes vs Alta Frequência)
@@ -556,7 +556,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // Modelo de Prognóstico Ativo
   const [activeModel, setActiveModel] = useState<string>(
-    '⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)'
+    '⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)'
   );
   // Sugestão Estratégica Incorporada na Matriz (para composição do nome em Jogos Salvos)
   const [appliedSuggestionName, setAppliedSuggestionName] = useState<string | null>(null);
@@ -573,7 +573,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const tCount = overrideTargetCount ?? targetCount;
     setActiveModel(modelType);
 
-    if (modelType.includes('Documento')) {
+    if (modelType.includes('Clássico') || modelType.includes('Documento')) {
       const optimal = buildFilterCompliantPool({
         targetCount: tCount,
         filters,
@@ -586,9 +586,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers,
       });
       setSelectedNumbers(optimal.dezenas);
-      const name = '⚡ Estratégia Documento (Filtros & Proporções Canônicas)';
+      const name = '⚡ Fechamento Clássico (Filtros & Proporções Canônicas)';
       setStrategyName(name);
-      setDocumentMessage(`Estratégia Documento aplicada com filtros ativos: ${optimal.motivoAjuste}`);
+      setDocumentMessage(`Fechamento Clássico aplicado com filtros ativos: ${optimal.motivoAjuste}`);
       setTimeout(() => setDocumentMessage(null), 6000);
     } else if (modelType.includes('Top') || modelType.includes('IA')) {
       const sorted = [...dynamicStats]
@@ -1586,12 +1586,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {/* Modelo 1: ⚡ Estratégia Documento */}
+          {/* Modelo 1: ⚡ Fechamento Clássico */}
           <button
             type="button"
-            onClick={() => applyStrategyModel('⚡ Estratégia Documento (9 Repetidas + 9 Ausentes)')}
+            onClick={() => applyStrategyModel('⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)')}
             className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
-              strategyName.includes('Documento')
+              strategyName.includes('Clássico') || strategyName.includes('Documento')
                 ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
                 : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
             }`}
@@ -1602,7 +1602,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </span>
               <div>
                 <span className="font-bold text-xs sm:text-sm text-white block">
-                  Estratégia Documento
+                  Fechamento Clássico
                 </span>
                 <span className="text-[10px] font-mono font-bold text-emerald-400">
                   9 Repetidas + 9 Ausentes
