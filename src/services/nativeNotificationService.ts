@@ -306,4 +306,91 @@ export async function auditAndNotifyTop5Trends(latestDraw: LotofacilDraw): Promi
   }
 }
 
+export interface NativeCycleAlertPayload {
+  ausentesCount: number;
+  dezenasAusentes: number[];
+  concurso: number;
+  concursosNoCiclo: number;
+  threshold: number;
+  playAudio?: boolean;
+}
+
+/**
+ * Sends a native browser push notification when the cycle approaches closure
+ * (i.e. number of missing cycle numbers <= threshold, default 3).
+ */
+export async function sendNativeCycleAlertNotification(
+  payload: NativeCycleAlertPayload
+): Promise<boolean> {
+  const { ausentesCount, dezenasAusentes, concurso, concursosNoCiclo, threshold, playAudio = true } = payload;
+
+  // 1. Play auditory alarm
+  if (playAudio) {
+    try {
+      soundService.playCycleAlertSound();
+    } catch {}
+  }
+
+  // 2. Prepare title and body
+  const dezenasStr = dezenasAusentes.map((n) => n.toString().padStart(2, '0')).join(', ');
+  const title = `⚡ Reta Final do Ciclo (#${concurso}) • ${ausentesCount} Dezenas Ausentes`;
+  const body = `Restam apenas ${ausentesCount} dezenas ausentes [${dezenasStr}] para completar as 25 no ${concursosNoCiclo}º concurso deste ciclo! Limite configurado: ≤ ${threshold}. Toque para abrir matrizes.`;
+
+  // 3. Register in in-app alerts history
+  try {
+    const existing = getAlertsHistory();
+    const alertId = `cycle_${concurso}_${ausentesCount}_${Date.now()}`;
+    const newAlert: IntelligentAlert = {
+      id: alertId,
+      timestamp: Date.now(),
+      dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      type: 'cycle',
+      title: `⚡ Reta Final do Ciclo: ${ausentesCount} Ausentes [≤ ${threshold}]`,
+      body,
+      concurso,
+      read: false,
+    };
+    saveAlertsHistory([newAlert, ...existing]);
+  } catch {}
+
+  // 4. Browser Notification
+  if (!isNotificationSupported() || Notification.permission !== 'granted') {
+    return false;
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && registration.showNotification) {
+        await registration.showNotification(title, {
+          body,
+          icon: '/favicon.svg',
+          badge: '/favicon.svg',
+          tag: `lotosniper-cycle-alert-${concurso}`,
+          renotify: true,
+          requireInteraction: false,
+          data: {
+            url: '/#fechamento',
+            concurso,
+            ausentesCount,
+          },
+        });
+        return true;
+      }
+    }
+
+    new Notification(title, {
+      body,
+      icon: '/favicon.svg',
+      badge: '/favicon.svg',
+      tag: `lotosniper-cycle-alert-${concurso}`,
+    });
+    return true;
+  } catch (err) {
+    console.warn('Erro ao disparar notificação push de ciclo:', err);
+    return false;
+  }
+}
+
+
 

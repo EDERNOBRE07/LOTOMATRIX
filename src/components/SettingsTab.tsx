@@ -31,6 +31,7 @@ import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
 import { RegrasAlertaHibridoComponent } from './RegrasAlertaHibridoComponent';
 import { HostingerMySQLConfigModule } from './HostingerMySQLConfigModule';
+import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -66,7 +67,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -452,6 +453,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             Conexão & Notificações
           </button>
           <button
+            onClick={() => setActiveSubTab('monitoramento_ciclo')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'monitoramento_ciclo'
+                ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-sm font-black'
+                : 'text-amber-400 hover:text-white'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-400" />
+            <span>Monitoramento de Ciclo</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              {cyclePendingNumbers.length} AUSENTES
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('mysql_hostinger')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'mysql_hostinger'
@@ -543,6 +558,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <HostingerMySQLConfigModule
             latestDraw={latestDraw}
             savedTickets={savedTickets}
+          />
+
+          {/* Card Interativo: Monitoramento de Ciclo (Limite de Ausência, Notificações Sonoras e Push) */}
+          <CycleMonitoringCard
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
           />
 
           {/* Central de Alertas Customizados por Push e Som para 14 e 15 Pontos */}
@@ -960,6 +982,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           />
         </div>
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: MONITORAMENTO DE CICLO (LIMITE DE AUSÊNCIA & ALERTAS)             */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'monitoramento_ciclo' && (
+        <div className="space-y-5">
+          <CycleMonitoringCard
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
       )}
 
       {/* ========================================================================= */}

@@ -247,16 +247,46 @@ class SoundService {
     } catch (e) {}
   }
 
+  // Play radar pulse alert for cycle completion urgency
+  playCycleAlertSound() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      // Dual-tone harmonic radar pulse (660Hz -> 880Hz -> 1100Hz)
+      const freqs = [659.25, 880.0, 1174.66];
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + idx * 0.1 + 0.22);
+
+        gain.gain.setValueAtTime(0.14, now + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.25);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.1);
+        osc.stop(now + idx * 0.1 + 0.28);
+      });
+    } catch (e) {}
+  }
+
   // Play anomaly alert sound
   playAnomalyDetected() {
     this.playOutsideGoldenZoneAlert();
   }
 
   // Test current alert sound configuration
-  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' = '14_pontos') {
+  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' | 'ciclo' = '14_pontos') {
     if (type === '15_pontos') this.play15PontosJackpotSound();
     else if (type === '14_pontos') this.play14PontosCelebrationSound();
     else if (type === 'oportunidade') this.playOpportunityAlert();
+    else if (type === 'ciclo') this.playCycleAlertSound();
     else this.playGoldenZoneSuccessChime();
   }
 

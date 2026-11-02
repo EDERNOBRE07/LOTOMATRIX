@@ -142,6 +142,8 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
 
   const [isRollingVolante, setIsRollingVolante] = useState<boolean>(false);
   const [flashingDezenas, setFlashingDezenas] = useState<number[]>([]);
+  const [isStabilizing, setIsStabilizing] = useState<boolean>(false);
+  const [stabilizedNumbers, setStabilizedNumbers] = useState<number[]>([]);
 
   const runRollingAnimation = (targetNumbers: number[], strategyLabel: string) => {
     setIsRollingVolante(true);
@@ -166,6 +168,14 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         onSelectSet(targetNumbers);
         onStrategySelect?.(strategyLabel);
         soundService.playSuccess();
+
+        // Transição de 'estabilização' visual: as dezenas sorteadas brilham intensamente por 500ms com Framer Motion
+        setStabilizedNumbers(targetNumbers);
+        setIsStabilizing(true);
+        setTimeout(() => {
+          setIsStabilizing(false);
+          setStabilizedNumbers([]);
+        }, 500);
       }
     }, 130);
   };
@@ -422,10 +432,33 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               onSelectSet(nums);
               setShowRollingModal(false);
               onStrategySelect?.(`Sorteio Rolling Numbers (${nums.length} Dezenas)`);
+              setStabilizedNumbers(nums);
+              setIsStabilizing(true);
+              soundService.playSuccess();
+              setTimeout(() => {
+                setIsStabilizing(false);
+                setStabilizedNumbers([]);
+              }, 500);
             }}
           />
         </div>
       )}
+
+      {/* Banner de Transição de Estabilização Visual (500ms Glow) */}
+      <AnimatePresence>
+        {isStabilizing && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className="my-3 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-emerald-500/20 to-amber-500/25 border border-amber-400 text-amber-200 text-xs font-bold flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.45)]"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
+            <span>Resultado do Sorteio Estabilizado • Dezenas Consolidadas!</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Volante Grid 5x5 */}
       <div className="py-4 flex justify-center">
@@ -487,6 +520,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             }
 
             const isFlashing = isRollingVolante && flashingDezenas.includes(num);
+            const isStabilizingThis = isStabilizing && stabilizedNumbers.includes(num);
 
             return (
               <motion.button
@@ -502,18 +536,42 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                         backgroundColor: '#f59e0b',
                         color: '#020617',
                       }
+                    : isStabilizingThis
+                    ? {
+                        scale: [1, 1.28, 1.05],
+                        boxShadow: [
+                          '0 0 0px rgba(251, 191, 36, 0)',
+                          '0 0 35px rgba(251, 191, 36, 1), 0 0 60px rgba(16, 185, 129, 0.9), inset 0 0 15px rgba(255, 255, 255, 0.95)',
+                          '0 0 15px rgba(16, 185, 129, 0.5)',
+                        ],
+                        filter: ['brightness(1)', 'brightness(2.2)', 'brightness(1.15)'],
+                        borderColor: ['#10b981', '#fde047', '#34d399'],
+                      }
                     : isRollingVolante
                     ? { scale: [1, 1.06, 0.96, 1] }
                     : { scale: 1, rotate: 0 }
                 }
                 transition={
-                  isRollingVolante
+                  isStabilizingThis
+                    ? { duration: 0.5, ease: 'easeOut', times: [0, 0.5, 1] }
+                    : isRollingVolante
                     ? { duration: 0.22, repeat: Infinity, ease: 'easeInOut' }
                     : { duration: 0.15 }
                 }
                 onClick={() => handleNumberClick(num)}
-                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px]`}
+                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px] ${
+                  isStabilizingThis ? 'z-30 ring-2 ring-amber-300' : ''
+                }`}
               >
+                {/* Intense stabilization flash aura */}
+                {isStabilizingThis && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: [0, 1, 0], scale: [0.9, 1.45, 1.7] }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-amber-300/80 via-yellow-200/90 to-emerald-300/80 blur-xs pointer-events-none z-20"
+                  />
+                )}
                 {/* Number */}
                 <span className="font-mono text-base sm:text-lg tracking-tight leading-none font-bold">
                   {num.toString().padStart(2, '0')}

@@ -19,6 +19,7 @@ import {
   requestNativeNotificationPermission,
   isNotificationSupported,
   getNotificationPermission,
+  sendNativeCycleAlertNotification,
 } from './services/nativeNotificationService';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
