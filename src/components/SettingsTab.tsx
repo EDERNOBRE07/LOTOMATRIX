@@ -37,6 +37,8 @@ import { StorageSyncManager } from './StorageSyncManager';
 import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
 import { S3CronjobManagerCard } from './S3CronjobManagerCard';
+import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
+import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -72,7 +74,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -475,6 +477,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             Conexão & Notificações
           </button>
           <button
+            onClick={() => setActiveSubTab('alertas_agendados')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'alertas_agendados'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-sm font-black'
+                : 'text-amber-400 hover:text-white'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>Alertas Agendados</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+              PUSH SERVICE WORKER
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('relatorio_eficiencia')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'relatorio_eficiencia'
@@ -623,6 +639,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             latestDraw={latestDraw}
             savedTickets={savedTickets}
             onApplyNumbers={handleApplyGeminiNumbers}
+          />
+
+          {/* Exportação de Dados em PDF: Performance, Análises Gemini & Gráficos de ROI */}
+          <ExportExecutivePdfCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
           />
 
           {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
@@ -1076,6 +1098,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUBTAB: ALERTAS AGENDADOS & METAS DE CICLOS (PUSH SERVICE WORKER)          */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'alertas_agendados' && (
+        <div className="space-y-5">
+          <ScheduledAlertsTab
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* SUBTAB: RELATÓRIO DE EFICIÊNCIA (IA GEMINI - 50 CONCURSOS)                 */}
       {/* ========================================================================= */}
       {activeSubTab === 'relatorio_eficiencia' && (
@@ -1197,6 +1232,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'dados' && (
         <div className="space-y-5">
+          {/* Card de Exportação de Dados em PDF com Performance, Análises Gemini e Gráficos de ROI */}
+          <ExportExecutivePdfCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Exportar Dados JSON */}
             <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl">
