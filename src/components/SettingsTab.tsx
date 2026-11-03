@@ -34,6 +34,7 @@ import { HostingerMySQLConfigModule } from './HostingerMySQLConfigModule';
 import { SegurancaAvancadaS3Card } from './SegurancaAvancadaS3Card';
 import { StorageSyncManager } from './StorageSyncManager';
 import { CycleMonitoringCard } from './CycleMonitoringCard';
+import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -69,7 +70,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'relatorio_eficiencia' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -304,6 +305,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  const handleApplyGeminiNumbers = (dezenas: number[]) => {
+    try {
+      localStorage.setItem('lotosniper_canonical_fixed_dezenas', JSON.stringify(dezenas));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('lotosniper-canonical-restrictions-updated', {
+            detail: { dezenas, source: 'gemini_efficiency' },
+          })
+        );
+      }
+      setNotificationSuccessNotice(
+        `${dezenas.length} dezenas sugeridas pela IA Gemini (${dezenas.map((d) => d.toString().padStart(2, '0')).join(', ')}) enviadas para fixação no gerador!`
+      );
+      setTimeout(() => setNotificationSuccessNotice(null), 5000);
+    } catch {}
+  };
+
   // 4. Backups Automáticos Semanais
   const [weeklyBackupEnabled, setWeeklyBackupEnabled] = useState<boolean>(() => {
     try {
@@ -455,6 +473,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             Conexão & Notificações
           </button>
           <button
+            onClick={() => setActiveSubTab('relatorio_eficiencia')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'relatorio_eficiencia'
+                ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-sm font-black'
+                : 'text-purple-400 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+            <span>Relatório de Eficiência (IA Gemini)</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold">
+              IA 50 CONCURSOS
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('seguranca_avancada')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'seguranca_avancada'
@@ -569,6 +601,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="space-y-5">
           {/* Seletor de Tema: Modo Escuro Padrão vs Modo Gold Imperial */}
           <ThemeSelectorModule />
+
+          {/* Relatório de Eficiência com IA Gemini (Análise dos Jogos Salvos vs Últimos 50 Concursos) */}
+          <RelatorioEficienciaGeminiCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onApplyNumbers={handleApplyGeminiNumbers}
+          />
 
           {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
           <HostingerMySQLConfigModule
@@ -1011,6 +1050,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           />
         </div>
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: RELATÓRIO DE EFICIÊNCIA (IA GEMINI - 50 CONCURSOS)                 */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'relatorio_eficiencia' && (
+        <div className="space-y-5">
+          <RelatorioEficienciaGeminiCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onApplyNumbers={handleApplyGeminiNumbers}
+          />
+        </div>
       )}
 
       {/* ========================================================================= */}

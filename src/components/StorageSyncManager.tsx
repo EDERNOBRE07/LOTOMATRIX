@@ -15,6 +15,9 @@ import {
   Zap,
   Server,
   Layers,
+  Calendar,
+  Timer,
+  Play,
 } from 'lucide-react';
 import {
   S3BackupConfig,
@@ -48,6 +51,64 @@ export const StorageSyncManager: React.FC<StorageSyncManagerProps> = ({
     filesUploaded?: string[];
     timestamp?: string;
   } | null>(null);
+
+  // Cronjob de Backup Automático no S3
+  const [cronjobActive, setCronjobActive] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_s3_cronjob_active');
+      return saved ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [cronSchedule, setCronSchedule] = useState<'after_draw' | 'daily_21h' | 'daily_23h' | 'draw_days'>(() => {
+    try {
+      return (localStorage.getItem('lotosniper_s3_cron_schedule') as any) || 'after_draw';
+    } catch {
+      return 'after_draw';
+    }
+  });
+
+  const [lastCronRun, setLastCronRun] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('lotosniper_s3_last_cron_run');
+    } catch {
+      return null;
+    }
+  });
+
+  const handleToggleCronjob = (active: boolean) => {
+    setCronjobActive(active);
+    try {
+      localStorage.setItem('lotosniper_s3_cronjob_active', String(active));
+    } catch {}
+  };
+
+  const handleScheduleChange = (sched: 'after_draw' | 'daily_21h' | 'daily_23h' | 'draw_days') => {
+    setCronSchedule(sched);
+    try {
+      localStorage.setItem('lotosniper_s3_cron_schedule', sched);
+    } catch {}
+  };
+
+  // Listener para executar backup automático após cada novo sorteio
+  useEffect(() => {
+    const handleDrawAudited = (e: any) => {
+      if (cronjobActive && (cronSchedule === 'after_draw' || cronSchedule === 'draw_days')) {
+        console.log('[Cronjob S3] Novo sorteio apurado. Disparando backup automático...');
+        handleManualUpload();
+        const runTime = new Date().toLocaleTimeString('pt-BR');
+        setLastCronRun(runTime);
+        try {
+          localStorage.setItem('lotosniper_s3_last_cron_run', runTime);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('lotosniper-saved-games-audited', handleDrawAudited);
+    return () => window.removeEventListener('lotosniper-saved-games-audited', handleDrawAudited);
+  }, [cronjobActive, cronSchedule, config]);
 
   useEffect(() => {
     const handleUpdate = (e: any) => {
@@ -227,6 +288,200 @@ export const StorageSyncManager: React.FC<StorageSyncManagerProps> = ({
           <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
             {config.includeCsv ? 'ATIVO' : 'DESATIVADO'}
           </span>
+        </div>
+      </div>
+
+      {/* Card Cronjob: Agendamento de Backups Automáticos para S3 */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-indigo-500/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30">
+              <Timer className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>Cronjob de Backup Automático no S3</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                    CRON ATIVO
+                  </span>
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Sincroniza automaticamente os jogos e fechamentos salvos no bucket S3 em horários programados.
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+            <span className="text-xs font-mono font-bold text-slate-300">
+              {cronjobActive ? 'ATIVADO' : 'PAUSADO'}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleToggleCronjob(!cronjobActive)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                cronjobActive ? 'bg-indigo-600' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  cronjobActive ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Seletor de Frequência do Cronjob */}
+        <div className="space-y-2">
+          <label className="text-[11px] font-mono font-bold text-slate-300 uppercase tracking-wider block">
+            Frequência de Execução Programada:
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <button
+              type="button"
+              disabled={!cronjobActive}
+              onClick={() => handleScheduleChange('after_draw')}
+              className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                cronSchedule === 'after_draw'
+                  ? 'bg-indigo-950/60 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/30'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              } ${!cronjobActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                cronSchedule === 'after_draw' ? 'border-indigo-400 bg-indigo-500' : 'border-slate-600'
+              }`}>
+                {cronSchedule === 'after_draw' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div className="space-y-0.5">
+                <strong className="block text-white font-bold text-xs">Após cada novo sorteio (20h45)</strong>
+                <span className="text-[11px] text-slate-400 block">
+                  Disparo imediato após a Caixa apurar o concurso e o Service Worker auditar os bilhetes.
+                </span>
+                <span className="inline-block text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-bold">
+                  (Recomendado)
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              disabled={!cronjobActive}
+              onClick={() => handleScheduleChange('daily_21h')}
+              className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                cronSchedule === 'daily_21h'
+                  ? 'bg-indigo-950/60 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/30'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              } ${!cronjobActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                cronSchedule === 'daily_21h' ? 'border-indigo-400 bg-indigo-500' : 'border-slate-600'
+              }`}>
+                {cronSchedule === 'daily_21h' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div className="space-y-0.5">
+                <strong className="block text-white font-bold text-xs">Diário às 21h00</strong>
+                <span className="text-[11px] text-slate-400 block">
+                  Execução noturna pontual após o término oficial das apurações lotéricas diárias.
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              disabled={!cronjobActive}
+              onClick={() => handleScheduleChange('daily_23h')}
+              className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                cronSchedule === 'daily_23h'
+                  ? 'bg-indigo-950/60 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/30'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              } ${!cronjobActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                cronSchedule === 'daily_23h' ? 'border-indigo-400 bg-indigo-500' : 'border-slate-600'
+              }`}>
+                {cronSchedule === 'daily_23h' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div className="space-y-0.5">
+                <strong className="block text-white font-bold text-xs">Diário às 23h30</strong>
+                <span className="text-[11px] text-slate-400 block">
+                  Consolidação final do dia para segurança completa de todos os bilhetes gerados.
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              disabled={!cronjobActive}
+              onClick={() => handleScheduleChange('draw_days')}
+              className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 cursor-pointer ${
+                cronSchedule === 'draw_days'
+                  ? 'bg-indigo-950/60 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/30'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              } ${!cronjobActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex items-center justify-center shrink-0 ${
+                cronSchedule === 'draw_days' ? 'border-indigo-400 bg-indigo-500' : 'border-slate-600'
+              }`}>
+                {cronSchedule === 'draw_days' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div className="space-y-0.5">
+                <strong className="block text-white font-bold text-xs">Dias de Sorteio (Seg a Sáb às 21h15)</strong>
+                <span className="text-[11px] text-slate-400 block">
+                  Apenas nos 6 dias semanais de sorteio regular da Lotofácil, ignorando domingos.
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Rodapé do Cronjob: Próxima Execução & Botão de Teste */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-300">
+          <div className="flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span>
+              {cronjobActive ? (
+                <>
+                  <strong className="text-white">Próxima Execução: </strong>
+                  {cronSchedule === 'after_draw'
+                    ? 'Hoje às 20h45 (Imediatamente após novo sorteio)'
+                    : cronSchedule === 'daily_21h'
+                    ? 'Hoje às 21h00'
+                    : cronSchedule === 'daily_23h'
+                    ? 'Hoje às 23h30'
+                    : 'Hoje às 21h15 (Segunda a Sábado)'}
+                </>
+              ) : (
+                <span className="text-slate-400 italic">Cronjob pausado manualmente pelo operador.</span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {lastCronRun && (
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Último disparo: {lastCronRun}
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={isUploading || !isConfigured}
+              onClick={() => {
+                handleManualUpload();
+                const nowStr = new Date().toLocaleTimeString('pt-BR');
+                setLastCronRun(nowStr);
+                try {
+                  localStorage.setItem('lotosniper_s3_last_cron_run', nowStr);
+                } catch {}
+              }}
+              className="px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-200 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Play className="w-3 h-3 text-purple-400" />
+              <span>Testar Disparo do Cronjob</span>
+            </button>
+          </div>
         </div>
       </div>
 

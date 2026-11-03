@@ -14,6 +14,7 @@ export interface AuditedWinningGame {
   dezenasAcertadas: number[];
   fechamentoOrigem: string;
   fechamentoId?: string;
+  fechamentoNumero?: string | number;
   premioEstimado: number;
   dataAuditoria: string;
 }
@@ -171,24 +172,29 @@ export async function auditAndNotifySavedGames(
     ticket: GameTicket;
     sourceTitle: string;
     fechamentoId?: string;
+    fechamentoNumero?: string | number;
   }[] = [];
 
-  savedFechamentos.forEach((f) => {
+  savedFechamentos.forEach((f, fIdx) => {
+    const fechamentoNum = (f as any).numeroFechamento || fIdx + 1;
+    const formattedNum = `#${fechamentoNum.toString().padStart(2, '0')}`;
     (f.tickets || []).forEach((t) => {
       allTicketsToCheck.push({
         ticket: t,
         sourceTitle: f.tipoFechamento || f.modalidadeMatriz || 'Fechamento Salvo',
         fechamentoId: f.id,
+        fechamentoNumero: formattedNum,
       });
     });
   });
 
-  individualTickets.forEach((t) => {
+  individualTickets.forEach((t, tIdx) => {
     // Avoid exact duplicate checks if already present in fechamentos
     allTicketsToCheck.push({
       ticket: t,
       sourceTitle: 'Meus Jogos & Conferidor',
       fechamentoId: 'individual',
+      fechamentoNumero: `#${(tIdx + 1).toString().padStart(2, '0')}`,
     });
   });
 
@@ -214,7 +220,7 @@ export async function auditAndNotifySavedGames(
   const P14 = draw.premiacoes?.faixa14?.valor || 1500.0;
   const P15 = draw.premiacoes?.faixa15?.valor || 1800000.0;
 
-  allTicketsToCheck.forEach(({ ticket, sourceTitle, fechamentoId }, idx) => {
+  allTicketsToCheck.forEach(({ ticket, sourceTitle, fechamentoId, fechamentoNumero }, idx) => {
     const hits = countMatches(ticket.dezenas, draw.dezenas);
     const matchedNumbers = ticket.dezenas.filter((n) => draw.dezenas.includes(n)).sort((a, b) => a - b);
     let unitPrize = 0;
@@ -259,6 +265,7 @@ export async function auditAndNotifySavedGames(
         dezenasAcertadas: matchedNumbers,
         fechamentoOrigem: sourceTitle,
         fechamentoId,
+        fechamentoNumero: fechamentoNumero || `#${(idx + 1).toString().padStart(2, '0')}`,
         premioEstimado: unitPrize,
         dataAuditoria: new Date().toLocaleString('pt-BR'),
       });

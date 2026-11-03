@@ -213,6 +213,10 @@ export const AuditedWinningGamesList: React.FC<AuditedWinningGamesListProps> = (
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800/80 gap-2">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Número do Fechamento Salvo */}
+                    <span className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500/25 to-yellow-500/20 text-amber-300 border border-amber-500/40 font-mono text-[11px] font-black flex items-center gap-1 shadow-sm">
+                      <span>{game.fechamentoNumero || `#${(idx + 1).toString().padStart(2, '0')}`}</span>
+                    </span>
                     <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
                       Origem do Fechamento:
                     </span>
