@@ -31,6 +31,8 @@ import { ThemeSelectorModule } from './ThemeSelectorModule';
 import { BacktestingHistoricoModule } from './BacktestingHistoricoModule';
 import { RegrasAlertaHibridoComponent } from './RegrasAlertaHibridoComponent';
 import { HostingerMySQLConfigModule } from './HostingerMySQLConfigModule';
+import { SegurancaAvancadaS3Card } from './SegurancaAvancadaS3Card';
+import { StorageSyncManager } from './StorageSyncManager';
 import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
@@ -67,7 +69,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -453,6 +455,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             Conexão & Notificações
           </button>
           <button
+            onClick={() => setActiveSubTab('seguranca_avancada')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'seguranca_avancada'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm font-black'
+                : 'text-indigo-400 hover:text-white'
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>Segurança Avançada (S3)</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">
+              NUVEM
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('monitoramento_ciclo')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'monitoramento_ciclo'
@@ -556,6 +572,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
           {/* Card Interativo: Segurança e Backup (Servidor MySQL Hostinger & Rotinas de Cronjob) */}
           <HostingerMySQLConfigModule
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+
+          {/* Componente StorageSyncManager: Gerenciador de Sincronização S3 & Upload Manual */}
+          <StorageSyncManager
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
+          />
+
+          {/* Card Interativo: Segurança Avançada (Bucket S3 Compatível & Redundância em Nuvem) */}
+          <SegurancaAvancadaS3Card
             latestDraw={latestDraw}
             savedTickets={savedTickets}
           />
@@ -993,6 +1022,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             latestDraw={latestDraw}
             cyclePendingNumbers={cyclePendingNumbers}
             concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: SEGURANÇA AVANÇADA (BUCKET S3 COMPATÍVEL & REDUNDÂNCIA EM NUVEM)  */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'seguranca_avancada' && (
+        <div className="space-y-5">
+          <StorageSyncManager
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+          <SegurancaAvancadaS3Card
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
           />
         </div>
       )}

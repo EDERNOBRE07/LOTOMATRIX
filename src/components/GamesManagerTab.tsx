@@ -10,6 +10,7 @@ import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
+import { AnaliseROISavedGames } from './AnaliseROISavedGames';
 import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
@@ -34,6 +35,7 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 
 interface GamesManagerTabProps {
@@ -57,7 +59,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
-  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais'>('fechamentos_salvos');
+  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>('fechamentos_salvos');
 
   // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
   const [ticketTags, setTicketTags] = useState<Record<string, string[]>>(() => {
@@ -504,6 +506,22 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             <Layers className="w-4 h-4" />
             <span>Gerenciador de Bilhetes ({tickets.length} Jogos)</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('analise_roi')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              activeSection === 'analise_roi'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Análise de ROI</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+              LUCRO REAL
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -567,6 +585,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       {/* VISÃO 2: GERENCIADOR DE BILHETES INDIVIDUAIS */}
       {activeSection === 'bilhetes_individuais' && (
         <div className="space-y-6">
+          {/* Análise de ROI (Return on Investment) com Configuração de Aposta Mínima */}
+          <AnaliseROISavedGames
+            tickets={tickets}
+            latestDraw={latestDraw}
+          />
+
           {/* Jogos Vencedores Auditados pelo Service Worker */}
           <AuditedWinningGamesList
             latestDraw={latestDraw}
@@ -1078,6 +1102,22 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </div>
         </>
       )}
+        </div>
+      )}
+
+      {/* VISÃO 3: ANÁLISE DE ROI & LUCRO LÍQUIDO (RETORNO FINANCEIRO) */}
+      {activeSection === 'analise_roi' && (
+        <div className="space-y-6">
+          <AnaliseROISavedGames
+            tickets={tickets}
+            latestDraw={latestDraw}
+          />
+          <AuditedWinningGamesList
+            latestDraw={latestDraw}
+            onGoToConferencia={() => {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'conferencia' }));
+            }}
+          />
         </div>
       )}
 
