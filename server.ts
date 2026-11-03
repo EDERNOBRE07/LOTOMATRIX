@@ -1,8 +1,10 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import mysql from 'mysql2/promise';
 
 dotenv.config();
 
@@ -10,7 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+// The dev server must always listen on port 3000 in the AI Studio environment
+const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -474,8 +477,6 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 // ============================================================================
 // HOSTINGER MYSQL DATABASE INTEGRATION (u376010332_LotoSniper @ lotosniper.com.br)
 // ============================================================================
-import mysql from 'mysql2/promise';
-import fs from 'fs';
 
 const MYSQL_CONFIG = {
   host: process.env.MYSQL_HOST || '127.0.0.1',
