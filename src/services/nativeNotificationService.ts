@@ -45,27 +45,99 @@ export async function requestNativeNotificationPermission(): Promise<Notificatio
   }
 }
 
+export interface PrizeNotificationTiersConfig {
+  hits11: boolean;
+  hits12: boolean;
+  hits13: boolean;
+  hits14: boolean;
+  hits15: boolean;
+}
+
+export const DEFAULT_PRIZE_NOTIFICATION_TIERS: PrizeNotificationTiersConfig = {
+  hits11: false, // 11 acertos (desativado por padrão para poupar notificações)
+  hits12: false, // 12 acertos
+  hits13: true,  // 13 acertos (ativo por padrão)
+  hits14: true,  // 14 acertos (ativo por padrão)
+  hits15: true,  // 15 acertos (ativo por padrão)
+};
+
+export const PRIZE_TIERS_STORAGE_KEY = 'lotosniper_prize_notification_tiers';
+
 /**
- * Sends a native browser notification for 13, 14, or 15 hits.
+ * Retrieves the user-configured prize notification tiers from localStorage
+ */
+export function getPrizeNotificationTiers(): PrizeNotificationTiersConfig {
+  try {
+    const raw = localStorage.getItem(PRIZE_TIERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        hits11: Boolean(parsed.hits11),
+        hits12: Boolean(parsed.hits12),
+        hits13: parsed.hits13 !== undefined ? Boolean(parsed.hits13) : true,
+        hits14: parsed.hits14 !== undefined ? Boolean(parsed.hits14) : true,
+        hits15: parsed.hits15 !== undefined ? Boolean(parsed.hits15) : true,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_PRIZE_NOTIFICATION_TIERS };
+}
+
+/**
+ * Persists the prize notification tiers config
+ */
+export function savePrizeNotificationTiers(config: PrizeNotificationTiersConfig): void {
+  try {
+    localStorage.setItem(PRIZE_TIERS_STORAGE_KEY, JSON.stringify(config));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-prize-tiers-changed', { detail: config })
+      );
+    }
+  } catch {}
+}
+
+/**
+ * Checks if notifications for a specific number of hits (11-15) are enabled
+ */
+export function isPrizeTierEnabled(hits: number): boolean {
+  const tiers = getPrizeNotificationTiers();
+  if (hits >= 15) return tiers.hits15;
+  if (hits === 14) return tiers.hits14;
+  if (hits === 13) return tiers.hits13;
+  if (hits === 12) return tiers.hits12;
+  if (hits === 11) return tiers.hits11;
+  return false;
+}
+
+/**
+ * Sends a native browser notification for 11, 12, 13, 14, or 15 hits,
+ * respecting the individually configured notification tiers.
  * Designed to work reliably even when the browser tab is in background or minimized,
  * utilizing the Service Worker registration when available.
  */
 export async function sendNativeJackpotNotification(payload: NativeJackpotPayload): Promise<boolean> {
   const { concurso, maxHits, winningTicketsCount, bestTicketIndex } = payload;
-  if (maxHits < 13) return false;
+  
+  // Verify if this specific tier is activated in user preferences
+  if (!isPrizeTierEnabled(maxHits)) {
+    return false;
+  }
 
-  // 1. Play auditory celebration
+  // 1. Play auditory celebration based on hit tier
   try {
     if (maxHits >= 15) {
       soundService.play15PontosJackpotSound();
     } else if (maxHits >= 14) {
       soundService.play14PontosCelebrationSound();
-    } else {
+    } else if (maxHits >= 13) {
       soundService.playGoldenZoneSuccessChime();
+    } else {
+      soundService.playSuccess();
     }
   } catch {}
 
-  // 2. Prepare Title and Body
+  // 2. Prepare Title and Badge by tier
   let title = '';
   let badgeText = '';
   if (maxHits >= 15) {
@@ -74,12 +146,20 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
   } else if (maxHits >= 14) {
     title = `💎 14 PONTOS CRAVADOS NO CONCURSO #${concurso}!`;
     badgeText = 'FAIXA DE ELITE';
-  } else {
+  } else if (maxHits === 13) {
     title = `⭐ PREMIAÇÃO: 13 PONTOS NO CONCURSO #${concurso}!`;
     badgeText = 'LUCRO GARANTIDO';
+  } else if (maxHits === 12) {
+    title = `✨ PREMIAÇÃO: 12 PONTOS NO CONCURSO #${concurso}!`;
+    badgeText = 'PREMIAÇÃO FIXA';
+  } else if (maxHits === 11) {
+    title = `🎯 PREMIAÇÃO MÍNIMA: 11 PONTOS NO CONCURSO #${concurso}!`;
+    badgeText = 'FAIXA 11 ACERTOS';
+  } else {
+    return false;
   }
 
-  const pluralJogos = winningTicketsCount > 1 ? ` (${winningTicketsCount} jogos premiados com 13+ pontos)` : '';
+  const pluralJogos = winningTicketsCount > 1 ? ` (${winningTicketsCount} jogos premiados com ${maxHits} acertos)` : '';
   const body = `Seu Jogo #${bestTicketIndex} em 'Meus Jogos' cravou ${maxHits} acertos no Concurso Caixa #${concurso}!${pluralJogos} Toque para auditar a premiação.`;
 
   // 3. Register in in-app alerts history
@@ -111,9 +191,9 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
     body,
     icon: '/favicon.svg',
     badge: '/favicon.svg',
-    tag: `lotosniper-jackpot-${concurso}`,
+    tag: `lotosniper-jackpot-${concurso}-${maxHits}`,
     renotify: true,
-    requireInteraction: true, // Keeps notification visible until user interacts with it
+    requireInteraction: maxHits >= 13, // Keeps notification visible for 13+
     data: {
       url: '/#jogos',
       concurso,
@@ -142,6 +222,83 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
     return true;
   } catch (e) {
     console.warn('Erro ao exibir notificação nativa:', e);
+    return false;
+  }
+}
+
+/**
+ * Triggers an instant interactive test for a specific prize tier (11, 12, 13, 14 or 15 hits).
+ * Bypasses the enable check temporarily so the user can preview the alert before toggling.
+ */
+export async function testNativePrizeNotification(hits: 11 | 12 | 13 | 14 | 15, concursoNum: number = 3340): Promise<boolean> {
+  // 1. Play sound
+  try {
+    if (hits >= 15) soundService.play15PontosJackpotSound();
+    else if (hits >= 14) soundService.play14PontosCelebrationSound();
+    else if (hits === 13) soundService.playGoldenZoneSuccessChime();
+    else soundService.playSuccess();
+  } catch {}
+
+  if (!isNotificationSupported()) return false;
+
+  let permission = Notification.permission;
+  if (permission !== 'granted') {
+    permission = await requestNativeNotificationPermission();
+    if (permission !== 'granted') return false;
+  }
+
+  const titles: Record<number, { title: string; badge: string; desc: string }> = {
+    15: {
+      title: '🎉 TESTE: GRAND JACKPOT 15 PONTOS!',
+      badge: 'PRÊMIO MÁXIMO',
+      desc: 'Simulação do disparo de 15 Pontos no Concurso Caixa #3340.',
+    },
+    14: {
+      title: '💎 TESTE: 14 PONTOS CRAVADOS!',
+      badge: 'FAIXA DE ELITE',
+      desc: 'Simulação do disparo de 14 Pontos no Concurso Caixa #3340.',
+    },
+    13: {
+      title: '⭐ TESTE: PREMIAÇÃO 13 PONTOS!',
+      badge: 'LUCRO GARANTIDO',
+      desc: 'Simulação do disparo de 13 Pontos no Concurso Caixa #3340.',
+    },
+    12: {
+      title: '✨ TESTE: PREMIAÇÃO 12 PONTOS!',
+      badge: 'PREMIAÇÃO FIXA',
+      desc: 'Simulação do disparo de 12 Pontos (R$ 12,00) no Concurso Caixa #3340.',
+    },
+    11: {
+      title: '🎯 TESTE: PREMIAÇÃO 11 PONTOS!',
+      badge: 'FAIXA 11 ACERTOS',
+      desc: 'Simulação do disparo de 11 Pontos (R$ 6,00) no Concurso Caixa #3340.',
+    },
+  };
+
+  const meta = titles[hits];
+  const body = `[TESTE DE NOTIFICAÇÃO] ${meta.desc} Faixa: ${meta.badge}. Notificações ativas!`;
+
+  const notificationOptions: any = {
+    body,
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    tag: `lotosniper-test-${hits}-${Date.now()}`,
+    renotify: true,
+    data: { url: '/#configuracoes', testHit: hits },
+  };
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && 'showNotification' in registration) {
+        await registration.showNotification(meta.title, notificationOptions);
+        return true;
+      }
+    }
+    new Notification(meta.title, notificationOptions);
+    return true;
+  } catch (err) {
+    console.warn('Erro ao testar notificação de faixa:', err);
     return false;
   }
 }

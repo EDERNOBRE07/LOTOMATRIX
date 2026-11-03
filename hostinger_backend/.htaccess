@@ -1,0 +1,27 @@
+# ============================================================================
+# LOTOSNIPER PRO • DIRETIVAS DE SEGURANÇA APACHE/HOSTINGER (.htaccess)
+# ============================================================================
+
+# Forçar HTTPS
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# Bloquear acesso direto a arquivos de schema, logs e ambiente
+<FilesMatch "(\.sql|\.log|\.env|\.git|\.md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Desabilitar listagem de diretório
+Options -Indexes
+
+# Prevenção contra Clickjacking e MIME Sniffing
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
