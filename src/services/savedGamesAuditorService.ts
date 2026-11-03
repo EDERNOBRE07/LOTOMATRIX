@@ -4,6 +4,20 @@ import { countMatches } from './combinatorics';
 import { soundService } from './soundAlert';
 import { saveAlertsHistory, getAlertsHistory, IntelligentAlert } from './notificationService';
 
+export interface AuditedWinningGame {
+  id: string;
+  concurso: number;
+  dataConcurso: string;
+  ticketIndex: number;
+  dezenas: number[];
+  acertos: number;
+  dezenasAcertadas: number[];
+  fechamentoOrigem: string;
+  fechamentoId?: string;
+  premioEstimado: number;
+  dataAuditoria: string;
+}
+
 export interface SavedGamesAuditResult {
   concurso: number;
   dataConcurso: string;
@@ -21,10 +35,45 @@ export interface SavedGamesAuditResult {
   premioEstimadoTotal: number;
   notificationDispatched: boolean;
   timestamp: number;
+  jogosVencedores: AuditedWinningGame[];
 }
 
-const STORAGE_LAST_AUDITED_CONCURSO = 'lotosniper_last_audited_concurso';
-const STORAGE_PUSH_ENABLED = 'lotosniper_push_saved_games_enabled';
+export const STORAGE_LAST_AUDITED_CONCURSO = 'lotosniper_last_audited_concurso';
+export const STORAGE_PUSH_ENABLED = 'lotosniper_push_saved_games_enabled';
+export const STORAGE_AUDITED_WINNING_GAMES = 'lotosniper_audited_winning_games';
+
+/**
+ * Recupera do armazenamento local a lista de jogos vencedores auditados pelo Service Worker
+ */
+export function getAuditedWinningGames(): AuditedWinningGame[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_AUDITED_WINNING_GAMES);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Salva a lista de jogos vencedores auditados
+ */
+export function saveAuditedWinningGames(games: AuditedWinningGame[]): void {
+  try {
+    localStorage.setItem(STORAGE_AUDITED_WINNING_GAMES, JSON.stringify(games));
+  } catch {}
+}
+
+/**
+ * Limpa o histórico de jogos vencedores auditados
+ */
+export function clearAuditedWinningGames(): void {
+  try {
+    localStorage.removeItem(STORAGE_AUDITED_WINNING_GAMES);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-winning-games-cleared'));
+    }
+  } catch {}
+}
 
 /**
  * Checks if Notification API is supported by the browser
@@ -118,13 +167,18 @@ export async function auditAndNotifySavedGames(
     }
   } catch {}
 
-  const allTicketsToCheck: { ticket: GameTicket; sourceTitle: string }[] = [];
+  const allTicketsToCheck: {
+    ticket: GameTicket;
+    sourceTitle: string;
+    fechamentoId?: string;
+  }[] = [];
 
   savedFechamentos.forEach((f) => {
     (f.tickets || []).forEach((t) => {
       allTicketsToCheck.push({
         ticket: t,
         sourceTitle: f.tipoFechamento || f.modalidadeMatriz || 'Fechamento Salvo',
+        fechamentoId: f.id,
       });
     });
   });
@@ -134,6 +188,7 @@ export async function auditAndNotifySavedGames(
     allTicketsToCheck.push({
       ticket: t,
       sourceTitle: 'Meus Jogos & Conferidor',
+      fechamentoId: 'individual',
     });
   });
 
@@ -151,6 +206,7 @@ export async function auditAndNotifySavedGames(
   let hits12 = 0;
   let hits11 = 0;
   let premioEstimadoTotal = 0;
+  const winningGames: AuditedWinningGame[] = [];
 
   const P11 = draw.premiacoes?.faixa11?.valor || 7.0;
   const P12 = draw.premiacoes?.faixa12?.valor || 14.0;
@@ -158,8 +214,11 @@ export async function auditAndNotifySavedGames(
   const P14 = draw.premiacoes?.faixa14?.valor || 1500.0;
   const P15 = draw.premiacoes?.faixa15?.valor || 1800000.0;
 
-  allTicketsToCheck.forEach(({ ticket, sourceTitle }) => {
+  allTicketsToCheck.forEach(({ ticket, sourceTitle, fechamentoId }, idx) => {
     const hits = countMatches(ticket.dezenas, draw.dezenas);
+    const matchedNumbers = ticket.dezenas.filter((n) => draw.dezenas.includes(n)).sort((a, b) => a - b);
+    let unitPrize = 0;
+
     if (hits > maxHits) {
       maxHits = hits;
       bestTicketNumbers = ticket.dezenas;
@@ -168,21 +227,49 @@ export async function auditAndNotifySavedGames(
 
     if (hits === 15) {
       hits15++;
+      unitPrize = P15;
       premioEstimadoTotal += P15;
     } else if (hits === 14) {
       hits14++;
+      unitPrize = P14;
       premioEstimadoTotal += P14;
     } else if (hits === 13) {
       hits13++;
+      unitPrize = P13;
       premioEstimadoTotal += P13;
     } else if (hits === 12) {
       hits12++;
+      unitPrize = P12;
       premioEstimadoTotal += P12;
     } else if (hits === 11) {
       hits11++;
+      unitPrize = P11;
       premioEstimadoTotal += P11;
     }
+
+    // Criar registro de jogo vencedor associado ao fechamento utilizado
+    if (hits >= 11) {
+      winningGames.push({
+        id: `winner_${draw.concurso}_${ticket.id || idx}_${Date.now()}`,
+        concurso: draw.concurso,
+        dataConcurso: draw.data,
+        ticketIndex: ticket.index ?? (idx + 1),
+        dezenas: [...ticket.dezenas].sort((a, b) => a - b),
+        acertos: hits,
+        dezenasAcertadas: matchedNumbers,
+        fechamentoOrigem: sourceTitle,
+        fechamentoId,
+        premioEstimado: unitPrize,
+        dataAuditoria: new Date().toLocaleString('pt-BR'),
+      });
+    }
   });
+
+  // Ordena os jogos vencedores pelo maior número de acertos (15 > 14 > 13 > 12 > 11)
+  winningGames.sort((a, b) => b.acertos - a.acertos);
+
+  // Salva no armazenamento local a lista completa de jogos vencedores auditados pelo Service Worker
+  saveAuditedWinningGames(winningGames);
 
   const totalWinningTickets = hits15 + hits14 + hits13 + hits12 + hits11;
 
@@ -316,12 +403,18 @@ export async function auditAndNotifySavedGames(
     premioEstimadoTotal,
     notificationDispatched,
     timestamp: Date.now(),
+    jogosVencedores: winningGames,
   };
 
   // Dispatch custom in-app event so UI components can display toast or banner
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('lotosniper-saved-games-audited', { detail: result })
+    );
+    window.dispatchEvent(
+      new CustomEvent('lotosniper-winning-games-updated', {
+        detail: { concurso: draw.concurso, jogosVencedores: winningGames },
+      })
     );
   }
 

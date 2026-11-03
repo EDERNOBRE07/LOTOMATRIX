@@ -9,6 +9,8 @@ import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
+import { AuditedWinningGamesList } from './AuditedWinningGamesList';
+import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
@@ -504,14 +506,52 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
-          className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Criar Novo Fechamento</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Botão de Exportação de PDF Formatado de Jogos Salvos para Impressão */}
+          <button
+            type="button"
+            onClick={() => {
+              const allSaved = getSavedFechamentos();
+              if (allSaved.length > 0) {
+                const allTickets = allSaved.flatMap((f) => f.tickets);
+                const totalCost = allSaved.reduce((acc, f) => acc + f.custoTotal, 0);
+                downloadProfessionalLotericaPDF({
+                  tickets: allTickets.length > 0 ? allTickets : tickets,
+                  concurso: latestDraw.concurso,
+                  dataConcurso: latestDraw.data,
+                  strategyName: `Dossiê Geral • ${allSaved.length} Fechamentos Salvos`,
+                  modalidadeMatriz: `${allTickets.length} Jogos Prontos para Impressão`,
+                  custoTotalEstimado: totalCost,
+                });
+              } else if (tickets.length > 0) {
+                downloadProfessionalLotericaPDF({
+                  tickets,
+                  concurso: latestDraw.concurso,
+                  dataConcurso: latestDraw.data,
+                  strategyName: 'Bilhetes LotoSniper',
+                  modalidadeMatriz: `${tickets.length} Jogos Formatados para Impressão`,
+                  custoTotalEstimado: tickets.length * 3.5,
+                });
+              } else {
+                setIsLotericaPDFModalOpen(true);
+              }
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer"
+            title="Exportar jogos salvos em PDF profissional formatado, pronto para impressão em lotéricas"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-950" />
+            <span>Exportar PDF para Impressão</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Criar Novo Fechamento</span>
+          </button>
+        </div>
       </div>
 
       {/* VISÃO 1: DOSSIÊ DE FECHAMENTOS SALVOS */}
@@ -527,6 +567,13 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       {/* VISÃO 2: GERENCIADOR DE BILHETES INDIVIDUAIS */}
       {activeSection === 'bilhetes_individuais' && (
         <div className="space-y-6">
+          {/* Jogos Vencedores Auditados pelo Service Worker */}
+          <AuditedWinningGamesList
+            latestDraw={latestDraw}
+            onGoToConferencia={() => {
+              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'conferencia' }));
+            }}
+          />
           {/* Top Export Bar */}
           <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>

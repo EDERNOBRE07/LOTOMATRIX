@@ -46,6 +46,7 @@ import { ScatterSomaPontuacaoD3 } from './ScatterSomaPontuacaoD3';
 import { ComparadorFrequenciaPeriodosRecharts } from './ComparadorFrequenciaPeriodosRecharts';
 import { EspelhoConcursoAtualModule } from './EspelhoConcursoAtualModule';
 import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
+import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -94,6 +95,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'mapa_calor_frequencia'
     | 'historico_roi'
     | 'espelho_concurso'
     | 'dashboard_recharts'
@@ -153,6 +155,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('mapa_calor_frequencia')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'mapa_calor_frequencia'
+                ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-rose-600 text-white shadow-md shadow-rose-500/25 font-black ring-1 ring-rose-400'
+                : 'text-rose-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-rose-400 fill-current" />
+            <span>Mapa de Calor 25 Dezenas (Azul ao Vermelho)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+              HEATMAP
+            </span>
           </button>
 
           <button
@@ -615,6 +632,13 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* Mapa de Calor (Heatmap) de Frequência Histórica das 25 Dezenas (Gradiente Azul ao Vermelho) */}
+          <MapaCalorFrequenciaHistorica
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+          />
+
           {/* Dashboard Oficial: Frequência nos Últimos 100 Concursos & Curva de Atraso (Recharts + Framer Motion) */}
           <DashboardFrequenciaAtrasosRecharts
             latestDraw={latestDraw}
@@ -1347,6 +1371,17 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       </div>
     )}
+
+      {/* SUBTAB DEDICADA: MAPA DE CALOR (HEATMAP) FREQUÊNCIA HISTÓRICA 25 DEZENAS (AZUL AO VERMELHO) */}
+      {activeSubTab === 'mapa_calor_frequencia' && (
+        <div className="space-y-6">
+          <MapaCalorFrequenciaHistorica
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
+      )}
 
       {/* SUBTAB DEDICADA: HISTÓRICO DE RETORNO SOBRE INVESTIMENTO (ROI - 20 CONCURSOS COM RECHARTS) */}
       {activeSubTab === 'historico_roi' && (

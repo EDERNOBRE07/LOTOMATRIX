@@ -17,6 +17,7 @@ import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { downloadGoldFechamentoPDF } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
+import { AuditedWinningGamesList } from './AuditedWinningGamesList';
 import {
   FileText,
   Trash2,
@@ -648,6 +649,12 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
           </div>
         </div>
       </div>
+
+      {/* Lista de Jogos Vencedores Auditados pelo Service Worker */}
+      <AuditedWinningGamesList
+        latestDraw={latestDraw}
+        onGoToConferencia={onGoToConferencia}
+      />
 
       {/* Lista de Fechamentos Salvos */}
       {fechamentos.length === 0 ? (
