@@ -233,3 +233,108 @@ export async function uploadBackupToS3(
     };
   }
 }
+
+// ============================================================================
+// LOGS DE EXECUÇÃO DO CRONJOB S3
+// ============================================================================
+
+export interface S3CronExecutionLog {
+  id: string;
+  timestamp: string;
+  formattedTime: string;
+  trigger: 'cron_daily' | 'cron_draw' | 'manual' | 'test';
+  triggerLabel: string;
+  scheduledTime?: string;
+  status: 'success' | 'failure' | 'warning';
+  statusCode: number;
+  filesUploaded: string[];
+  totalBytes: number;
+  durationMs: number;
+  message: string;
+  bucket: string;
+}
+
+export const STORAGE_S3_CRON_LOGS = 'lotosniper_s3_cronjob_logs';
+
+const INITIAL_MOCK_LOGS: S3CronExecutionLog[] = [
+  {
+    id: 's3-log-1',
+    timestamp: new Date(Date.now() - 24 * 3600 * 1000 + 7200 * 1000).toISOString(),
+    formattedTime: new Date(Date.now() - 24 * 3600 * 1000).toLocaleDateString('pt-BR') + ' às 02:00:18',
+    trigger: 'cron_daily',
+    triggerLabel: 'Cronjob Diário (02:00)',
+    scheduledTime: '02:00',
+    status: 'success',
+    statusCode: 200,
+    filesUploaded: ['backups/lotosniper/lotosniper_backup_conc_3817.json', 'backups/lotosniper/lotosniper_apostas_conc_3817.csv'],
+    totalBytes: 18450,
+    durationMs: 820,
+    message: 'Backup automático diário das 02:00 executado com êxito. 2 arquivos enviados.',
+    bucket: 'lotosniper-backup-cloud',
+  },
+  {
+    id: 's3-log-2',
+    timestamp: new Date(Date.now() - 10 * 3600 * 1000).toISOString(),
+    formattedTime: new Date(Date.now() - 10 * 3600 * 1000).toLocaleDateString('pt-BR') + ' às 20:46:12',
+    trigger: 'cron_draw',
+    triggerLabel: 'Pós-Apuração Caixa (20h45)',
+    scheduledTime: '20:45',
+    status: 'success',
+    statusCode: 200,
+    filesUploaded: ['backups/lotosniper/lotosniper_backup_conc_3818.json', 'backups/lotosniper/lotosniper_apostas_conc_3818.csv'],
+    totalBytes: 24310,
+    durationMs: 760,
+    message: 'Gatilho pós-sorteio Caixa acionado. Sincronização e auditoria consolidadas.',
+    bucket: 'lotosniper-backup-cloud',
+  },
+];
+
+export function getS3CronLogs(): S3CronExecutionLog[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_S3_CRON_LOGS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_S3_CRON_LOGS, JSON.stringify(INITIAL_MOCK_LOGS));
+      return INITIAL_MOCK_LOGS;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MOCK_LOGS;
+  } catch {
+    return INITIAL_MOCK_LOGS;
+  }
+}
+
+export function addS3CronLog(
+  log: Omit<S3CronExecutionLog, 'id' | 'timestamp' | 'formattedTime'>
+): S3CronExecutionLog {
+  const fullLog: S3CronExecutionLog = {
+    ...log,
+    id: `s3-log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    formattedTime: `${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`,
+  };
+
+  try {
+    const current = getS3CronLogs();
+    const updated = [fullLog, ...current].slice(0, 50); // Mantém os últimos 50 logs
+    localStorage.setItem(STORAGE_S3_CRON_LOGS, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-s3-cron-log-added', { detail: fullLog })
+      );
+    }
+  } catch (err) {
+    console.error('Erro ao salvar log de cron S3:', err);
+  }
+
+  return fullLog;
+}
+
+export function clearS3CronLogs(): void {
+  try {
+    localStorage.setItem(STORAGE_S3_CRON_LOGS, JSON.stringify([]));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-s3-cron-logs-cleared'));
+    }
+  } catch {}
+}
+

@@ -24,6 +24,7 @@ import {
   Sparkles,
   Info,
   Flame,
+  Timer,
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
@@ -35,6 +36,7 @@ import { SegurancaAvancadaS3Card } from './SegurancaAvancadaS3Card';
 import { StorageSyncManager } from './StorageSyncManager';
 import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
+import { S3CronjobManagerCard } from './S3CronjobManagerCard';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -70,7 +72,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'relatorio_eficiencia' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -487,6 +489,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </span>
           </button>
           <button
+            onClick={() => setActiveSubTab('cronjobs_s3')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'cronjobs_s3'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm font-black'
+                : 'text-indigo-400 hover:text-white'
+            }`}
+          >
+            <Timer className="w-3.5 h-3.5" />
+            <span>Gerenciador de Cronjobs S3</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">
+              02:00 / LOGS
+            </span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('seguranca_avancada')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === 'seguranca_avancada'
@@ -613,6 +629,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <HostingerMySQLConfigModule
             latestDraw={latestDraw}
             savedTickets={savedTickets}
+          />
+
+          {/* Gerenciador de Cronjobs para S3 (Agendamento Diário ex: 02:00 e Logs de Execução) */}
+          <S3CronjobManagerCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
           />
 
           {/* Componente StorageSyncManager: Gerenciador de Sincronização S3 & Upload Manual */}
@@ -1066,6 +1089,24 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUBTAB: GERENCIADOR DE CRONJOBS S3 & LOGS DE EXECUÇÃO                     */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'cronjobs_s3' && (
+        <div className="space-y-5">
+          <S3CronjobManagerCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
+          />
+          <StorageSyncManager
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* SUBTAB: MONITORAMENTO DE CICLO (LIMITE DE AUSÊNCIA & ALERTAS)             */}
       {/* ========================================================================= */}
       {activeSubTab === 'monitoramento_ciclo' && (
@@ -1083,9 +1124,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'seguranca_avancada' && (
         <div className="space-y-5">
+          <S3CronjobManagerCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
+          />
           <StorageSyncManager
             latestDraw={latestDraw}
             savedTickets={savedTickets}
+            onOpenS3Config={() => setActiveSubTab('seguranca_avancada')}
           />
           <SegurancaAvancadaS3Card
             latestDraw={latestDraw}
