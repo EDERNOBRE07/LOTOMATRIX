@@ -12,6 +12,7 @@ import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
 import {
   sendNativeJackpotNotification,
   sendNativeTop5TrendNotification,
@@ -576,6 +577,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Dev Server Health Check Alert Banner (Activates if server connection or assets fail) */}
+      <DevServerHealthStatus showPillInHeader={false} />
+
       {/* Header with live synchronization controls */}
       <Header
         latestDraw={latestDraw}

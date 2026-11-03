@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
+import { DevServerHealthStatus } from './DevServerHealthStatus';
 
 interface HeaderProps {
   latestDraw: LotofacilDraw;
@@ -224,6 +225,9 @@ export const Header: React.FC<HeaderProps> = ({
               {aiStatus === 'loading' ? 'Otimizando...' : 'Online'}
             </strong>
           </div>
+
+          {/* Vite Dev Server Health Status Pill */}
+          <DevServerHealthStatus showPillInHeader={true} />
 
           {/* Theme Quick Switcher: Alternância entre Modo Gold e Alto Contraste (Monocromático) */}
           <button

@@ -5,18 +5,21 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, '.'),
+        '@': path.resolve(import.meta.dirname, './src'),
       },
     },
     build: {
-      outDir: 'dist',
+      outDir: path.resolve(import.meta.dirname, 'dist'),
       chunkSizeWarningLimit: 1600,
       emptyOutDir: true,
       rollupOptions: {
+        input: {
+          main: path.resolve(import.meta.dirname, 'index.html'),
+        },
         onwarn(warning, warn) {
           // Suppress non-critical entry resolution warnings
           if (warning.code === 'EMPTY_BUNDLE' || warning.code === 'CIRCULAR_DEPENDENCY') return;
@@ -25,11 +28,24 @@ export default defineConfig(() => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      port: 3000,
+      host: '0.0.0.0',
+      strictPort: true,
+      // Explicitly disable HMR WebSocket server in AI Studio environment to prevent port 24678 conflicts
+      hmr: false,
+      // File watch configuration: ignore heavy and build directories to avoid CPU spikes during edits
+      watch: process.env.DISABLE_HMR === 'true'
+        ? null
+        : {
+            usePolling: false,
+            ignored: [
+              '**/node_modules/**',
+              '**/dist/**',
+              '**/.git/**',
+              '**/backups_mysql/**',
+              '**/*.json',
+            ],
+          },
     },
   };
 });

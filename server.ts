@@ -848,6 +848,62 @@ app.post('/api/mysql/cron-backup', async (req: Request, res: Response) => {
   });
 });
 
+// ============================================================================
+// HEALTH CHECK & VITE DEV SERVER RESPONSIVENESS ENDPOINTS
+// ============================================================================
+
+// GET: Health check for Vite dev server & backend responsiveness
+app.get('/api/health', (_req: Request, res: Response) => {
+  const isDev =
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NODE_ENV !== 'publish' &&
+    !import.meta.url.endsWith('server.js');
+
+  res.json({
+    status: 'ok',
+    service: 'lotosniper-vite-dev-server',
+    port: PORT,
+    environment: isDev ? 'development' : 'production',
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    viteMode: isDev ? 'middleware' : 'static',
+    memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+  });
+});
+
+// GET: Verify entry point (index.html) and output directory (dist) mapping
+app.get('/api/health/assets', (_req: Request, res: Response) => {
+  const indexPath = path.resolve(__dirname, 'index.html');
+  const distPath = path.resolve(__dirname, 'dist');
+  const indexExists = fs.existsSync(indexPath);
+  const distExists = fs.existsSync(distPath);
+
+  let indexSize = 0;
+  if (indexExists) {
+    try {
+      indexSize = fs.statSync(indexPath).size;
+    } catch {}
+  }
+
+  res.json({
+    status: indexExists ? 'ok' : 'degraded',
+    entryPoint: {
+      file: 'index.html',
+      path: indexPath,
+      exists: indexExists,
+      sizeBytes: indexSize,
+      targetScript: '/src/main.tsx',
+    },
+    outputDir: {
+      dir: 'dist',
+      path: distPath,
+      exists: distExists,
+    },
+    hmrStatus: 'disabled_safe_mode',
+    verifiedAt: new Date().toISOString(),
+  });
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isDev =
@@ -858,7 +914,10 @@ async function startServer() {
   if (isDev) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
