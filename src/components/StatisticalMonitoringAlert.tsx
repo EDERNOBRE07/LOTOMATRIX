@@ -89,43 +89,59 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
     let excluidasOk = 0;
     let allCompliantCount = 0;
 
-    activeSummary.allResults.forEach((game) => {
-      const pOk =
-        game.pares >= activeFiltersConfig.paresMin && game.pares <= activeFiltersConfig.paresMax;
-      const sOk =
-        game.soma >= activeFiltersConfig.somaMin && game.soma <= activeFiltersConfig.somaMax;
-      const prOk =
-        game.primos >= activeFiltersConfig.primosMin && game.primos <= activeFiltersConfig.primosMax;
-      const mOk =
-        game.moldura >= activeFiltersConfig.molduraMin && game.moldura <= activeFiltersConfig.molduraMax;
-      const fiboCount = game.dezenas.filter((n) => [1, 2, 3, 5, 8, 13, 21].includes(n)).length;
-      const fOk =
-        fiboCount >= activeFiltersConfig.fibonacciMin && fiboCount <= activeFiltersConfig.fibonacciMax;
-      const repCount = game.dezenas.filter((n) => CONCURSO_ATUAL.dezenas.includes(n)).length;
-      const rOk =
-        repCount >= activeFiltersConfig.repetidasMin && repCount <= activeFiltersConfig.repetidasMax;
-      const seqOk = game.maxSequencia <= activeFiltersConfig.maxConsecutivas;
-      const fixOk =
-        activeFiltersConfig.dezenasFixas.length === 0 ||
-        activeFiltersConfig.dezenasFixas.every((n) => game.dezenas.includes(n));
-      const excOk =
-        activeFiltersConfig.dezenasExcluidas.length === 0 ||
-        !activeFiltersConfig.dezenasExcluidas.some((n) => game.dezenas.includes(n));
+    const dezenasFixas = activeFiltersConfig.dezenasFixas || [];
+    const dezenasExcluidas = activeFiltersConfig.dezenasExcluidas || [];
+    const maxConsecutivas = activeFiltersConfig.maxConsecutivas ?? 6;
 
-      if (pOk) paresOk++;
-      if (sOk) somaOk++;
-      if (prOk) primosOk++;
-      if (mOk) molduraOk++;
-      if (fOk) fiboOk++;
-      if (rOk) repetidasOk++;
-      if (seqOk) sequenciaOk++;
-      if (fixOk) fixasOk++;
-      if (excOk) excluidasOk++;
+    try {
+      activeSummary.allResults.forEach((game) => {
+        if (!game || !Array.isArray(game.dezenas)) return;
 
-      if (pOk && sOk && prOk && mOk && fOk && rOk && seqOk && fixOk && excOk) {
-        allCompliantCount++;
-      }
-    });
+        const pOk =
+          game.pares >= (activeFiltersConfig.paresMin ?? 5) &&
+          game.pares <= (activeFiltersConfig.paresMax ?? 10);
+        const sOk =
+          game.soma >= (activeFiltersConfig.somaMin ?? 175) &&
+          game.soma <= (activeFiltersConfig.somaMax ?? 225);
+        const prOk =
+          game.primos >= (activeFiltersConfig.primosMin ?? 3) &&
+          game.primos <= (activeFiltersConfig.primosMax ?? 8);
+        const mOk =
+          game.moldura >= (activeFiltersConfig.molduraMin ?? 7) &&
+          game.moldura <= (activeFiltersConfig.molduraMax ?? 12);
+        const fiboCount = game.dezenas.filter((n) => [1, 2, 3, 5, 8, 13, 21].includes(n)).length;
+        const fOk =
+          fiboCount >= (activeFiltersConfig.fibonacciMin ?? 2) &&
+          fiboCount <= (activeFiltersConfig.fibonacciMax ?? 6);
+        const repCount = game.dezenas.filter((n) => CONCURSO_ATUAL.dezenas.includes(n)).length;
+        const rOk =
+          repCount >= (activeFiltersConfig.repetidasMin ?? 6) &&
+          repCount <= (activeFiltersConfig.repetidasMax ?? 12);
+        const seqOk = (game.maxSequencia ?? 1) <= maxConsecutivas;
+        const fixOk =
+          dezenasFixas.length === 0 ||
+          dezenasFixas.every((n) => game.dezenas.includes(n));
+        const excOk =
+          dezenasExcluidas.length === 0 ||
+          !dezenasExcluidas.some((n) => game.dezenas.includes(n));
+
+        if (pOk) paresOk++;
+        if (sOk) somaOk++;
+        if (prOk) primosOk++;
+        if (mOk) molduraOk++;
+        if (fOk) fiboOk++;
+        if (rOk) repetidasOk++;
+        if (seqOk) sequenciaOk++;
+        if (fixOk) fixasOk++;
+        if (excOk) excluidasOk++;
+
+        if (pOk && sOk && prOk && mOk && fOk && rOk && seqOk && fixOk && excOk) {
+          allCompliantCount++;
+        }
+      });
+    } catch (e) {
+      console.warn('Erro ao calcular filterAudit:', e);
+    }
 
     return {
       total,

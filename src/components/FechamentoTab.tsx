@@ -1030,10 +1030,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         concurso: latestDraw.concurso,
         dataConcurso: latestDraw.data,
         tipoFechamento: fechamentoType,
-        modalidadeMatriz: `${preset.nome} - Matriz Pro (${ticketsToSave.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
+        modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} - Matriz Pro (${ticketsToSave.length} Jogos - Garantia ${preset?.garantia || '14 Pontos'} (com 35% de chance de 15))`,
         universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
-        dezenasFixas: metaData.fixedNumbers || fixedNumbers,
-        dezenasExcluidas: metaData.excludedNumbers || excludedNumbers,
+        dezenasFixas: metaData.fixedNumbers || fixedNumbers || [],
+        dezenasExcluidas: metaData.excludedNumbers || excludedNumbers || [],
         faixaSoma: {
           min: f.somaMin,
           max: f.somaMax,
@@ -1111,6 +1111,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           dezenasFixas: fixedNumbers,
           dezenasExcluidas: excludedNumbers,
         };
+        setFilters(fullFilters);
 
         let tickets: GameTicket[] = [];
 
@@ -1226,6 +1227,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           dezenasFixas: fixedNumbers,
           dezenasExcluidas: excludedNumbers,
         };
+        setFilters(fullFilters);
 
         const result = generateFechamentoInteligentePonderado({
           selectedNumbers,
@@ -1328,6 +1330,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setGenerationTimeMs(turboRes.elapsedMs);
     setStrategyName(`⚡ Gerador Turbo (Força Bruta 14 Pts • ${turboRes.elapsedMs}ms)`);
 
+    const fullFilters: FilterCriteria = {
+      ...filters,
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    };
+    setFilters(fullFilters);
+
     const exportMeta: FechamentoExportMeta = {
       strategyName: `⚡ Gerador Turbo Força Bruta (${turboRes.elapsedMs}ms)`,
       modeName: `Turbo 14 Pontos (${tickets.length} Jogos - Garantia 100% de 14)`,
@@ -1336,11 +1345,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       selectedNumbers: selectedNumbers.length >= 16 ? selectedNumbers : tickets[0]?.dezenas || [],
       fixedNumbers,
       excludedNumbers,
-      filters: {
-        ...filters,
-        dezenasFixas: fixedNumbers,
-        dezenasExcluidas: excludedNumbers,
-      },
+      filters: fullFilters,
       concurso: latestDraw.concurso,
       dataConcurso: latestDraw.data,
       timestamp: Date.now(),

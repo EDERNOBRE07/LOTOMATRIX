@@ -48,6 +48,7 @@ import { EspelhoConcursoAtualModule } from './EspelhoConcursoAtualModule';
 import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
 import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
+import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -73,6 +74,7 @@ import {
   RotateCcw,
   DollarSign,
   ShieldAlert,
+  GitCompare,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -96,6 +98,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'comparativo_concursos'
     | 'timeline_100'
     | 'mapa_calor_frequencia'
     | 'historico_roi'
@@ -171,6 +174,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Linha do Tempo 100 Concursos</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
               100 SORTEIOS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('comparativo_concursos')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'comparativo_concursos'
+                ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 text-white shadow-md shadow-indigo-500/25 font-black ring-1 ring-indigo-400'
+                : 'text-indigo-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <GitCompare className="w-4 h-4 text-indigo-400" />
+            <span>Comparativo entre 2 Concursos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+              TRANSIÇÃO DE DEZENAS
             </span>
           </button>
 
@@ -655,6 +673,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             statsList={statsList}
             onSelectConcurso={(draw: LotofacilDraw) => {
               console.log('Concurso selecionado na linha do tempo:', draw.concurso);
+            }}
+          />
+
+          {/* Comparativo Visual do Comportamento das Dezenas entre Dois Concursos */}
+          <ComparadorDoisConcursosComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
             }}
           />
 
@@ -1397,6 +1427,41 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         />
       </div>
     )}
+
+      {/* SUBTAB DEDICADA: COMPARADOR DE DOIS CONCURSOS (TRANSIÇÃO DE DEZENAS & DELTAS) */}
+      {activeSubTab === 'comparativo_concursos' && (
+        <div className="space-y-6">
+          <ComparadorDoisConcursosComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: LINHA DO TEMPO 100 CONCURSOS */}
+      {activeSubTab === 'timeline_100' && (
+        <div className="space-y-6">
+          <LinhaDoTempo100ConcursosComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onSelectConcurso={(draw: LotofacilDraw) => {
+              console.log('Concurso selecionado na linha do tempo:', draw.concurso);
+            }}
+            onApplyNumbers={onApplyNumbers}
+            onNavigateToFechamento={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
+              }
+            }}
+          />
+        </div>
+      )}
 
       {/* SUBTAB DEDICADA: MAPA DE CALOR (HEATMAP) FREQUÊNCIA HISTÓRICA 25 DEZENAS (AZUL AO VERMELHO) */}
       {activeSubTab === 'mapa_calor_frequencia' && (

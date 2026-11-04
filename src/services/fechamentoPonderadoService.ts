@@ -814,16 +814,23 @@ export function generateFechamentoInteligentePonderado({
   // Filtrar números excluídos logo no início
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
   const fixedList = (filters?.dezenasFixas || []).filter((f) => !excludedSet.has(f));
-  const rawPool = selectedNumbers.filter((n) => !excludedSet.has(n));
+  const validSelected = Array.isArray(selectedNumbers) ? selectedNumbers : [];
+  const rawPool = validSelected.filter((n) => !excludedSet.has(n));
 
   // Garantir que números fixos estejam no pool
   const poolSet = new Set([...rawPool, ...fixedList]);
+
+  // Se o pool tiver menos de 15 dezenas, completar de forma inteligente
+  if (poolSet.size < 15) {
+    for (let i = 1; i <= 25 && poolSet.size < 15; i++) {
+      if (!excludedSet.has(i)) {
+        poolSet.add(i);
+      }
+    }
+  }
+
   const sortedPool = Array.from(poolSet).sort((a, b) => a - b);
   const n = sortedPool.length;
-
-  if (n < 15) {
-    throw new Error('É necessário selecionar pelo menos 15 dezenas para o fechamento ponderado.');
-  }
 
   // 1. Análise da Sazonalidade Estatística (MM 100 Concursos vs MM 50)
   const sazonalidade = calcularSazonalidadeEstatistica(latestDraw);

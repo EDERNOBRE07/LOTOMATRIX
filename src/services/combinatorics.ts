@@ -198,15 +198,17 @@ export function ticketPassesFilters(
   if (ticket.maxConsecutivas > filters.maxConsecutivas) return false;
 
   // Check required fixed numbers
-  if (filters.dezenasFixas.length > 0) {
-    for (const fix of filters.dezenasFixas) {
+  const fixed = filters?.dezenasFixas || [];
+  if (fixed.length > 0) {
+    for (const fix of fixed) {
       if (!ticket.dezenas.includes(fix)) return false;
     }
   }
 
   // Check excluded numbers
-  if (filters.dezenasExcluidas.length > 0) {
-    for (const exc of filters.dezenasExcluidas) {
+  const excluded = filters?.dezenasExcluidas || [];
+  if (excluded.length > 0) {
+    for (const exc of excluded) {
       if (ticket.dezenas.includes(exc)) return false;
     }
   }

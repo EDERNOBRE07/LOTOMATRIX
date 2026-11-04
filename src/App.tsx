@@ -13,6 +13,7 @@ import { VolanteSelector } from './components/VolanteSelector';
 import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   sendNativeJackpotNotification,
   sendNativeTop5TrendNotification,
@@ -798,123 +799,125 @@ export default function App() {
         />
 
         {/* Tab Viewport */}
-        {activeTab === 'fechamento' && (
-          <FechamentoTab
-            latestDraw={latestDraw}
-            dynamicStats={dynamicStats}
-            cyclePendingNumbers={dezenasPendentesCiclo}
-            concursosNoCiclo={concursosNoCiclo}
-            aiPrediction={aiPrediction}
-            initialFixedNumbers={pendingFixedNumbers}
-            onSaveTickets={(tickets, meta) => {
-              setSavedTickets(tickets);
-              if (meta) {
-                setActiveFechamentoMeta(meta);
-                try {
-                  localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
-                } catch {}
-              }
-            }}
-            onGoToSimulator={handleGoToSimulator}
-            onGoToGamesManager={(tickets, meta) => {
-              if (tickets && tickets.length > 0) setSavedTickets(tickets);
-              if (meta) {
-                setActiveFechamentoMeta(meta);
-                try {
-                  localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
-                } catch {}
-              }
-              setActiveTab('jogos');
-            }}
-            isAILoading={isAILoading}
-          />
-        )}
+        <ErrorBoundary fallbackTitle="LotoSniper • Módulo Ativo">
+          {activeTab === 'fechamento' && (
+            <FechamentoTab
+              latestDraw={latestDraw}
+              dynamicStats={dynamicStats}
+              cyclePendingNumbers={dezenasPendentesCiclo}
+              concursosNoCiclo={concursosNoCiclo}
+              aiPrediction={aiPrediction}
+              initialFixedNumbers={pendingFixedNumbers}
+              onSaveTickets={(tickets, meta) => {
+                setSavedTickets(tickets);
+                if (meta) {
+                  setActiveFechamentoMeta(meta);
+                  try {
+                    localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
+                  } catch {}
+                }
+              }}
+              onGoToSimulator={handleGoToSimulator}
+              onGoToGamesManager={(tickets, meta) => {
+                if (tickets && tickets.length > 0) setSavedTickets(tickets);
+                if (meta) {
+                  setActiveFechamentoMeta(meta);
+                  try {
+                    localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
+                  } catch {}
+                }
+                setActiveTab('jogos');
+              }}
+              isAILoading={isAILoading}
+            />
+          )}
 
-        {activeTab === 'conferencia' && (
-          <div className="space-y-6">
-            {/* Volante Oficial Interativo 5×5 */}
-            <VolanteSelector
-              selectedNumbers={conferenciaVolanteNumbers}
-              fixedNumbers={[]}
-              excludedNumbers={[]}
+          {activeTab === 'conferencia' && (
+            <div className="space-y-6">
+              {/* Volante Oficial Interativo 5×5 */}
+              <VolanteSelector
+                selectedNumbers={conferenciaVolanteNumbers}
+                fixedNumbers={[]}
+                excludedNumbers={[]}
+                statsList={dynamicStats}
+                cyclePendingNumbers={dezenasPendentesCiclo}
+                latestDraw={latestDraw}
+                onToggleNumber={handleToggleConferenciaNumber}
+                onSetFixed={() => {}}
+                onSetExcluded={() => {}}
+                onSelectSet={(nums) => setConferenciaVolanteNumbers(nums.slice(0, 15))}
+                onClear={() => setConferenciaVolanteNumbers([])}
+                targetCount={15}
+              />
+
+              {/* Módulo de Conferência Oficial de Jogos (Colocado após o Volante Oficial Interativo 5×5) */}
+              <ModuloConferenciaJogos
+                latestDraw={latestDraw}
+                generatedTickets={savedTickets}
+                inspectedVolanteNumbers={conferenciaVolanteNumbers}
+                onGoToFechamento={() => setActiveTab('fechamento')}
+              />
+            </div>
+          )}
+
+          {activeTab === 'ia_preditor' && (
+            <AIPredictorTab
+              latestDraw={latestDraw}
+              dynamicStats={dynamicStats}
+              cyclePendingNumbers={dezenasPendentesCiclo}
+              prediction={aiPrediction}
+              isLoading={isAILoading}
+              onRefreshPrediction={() => fetchAIPrediction(latestDraw)}
+              onApplyRecommendation={handleApplyAIRecsToFechamento}
+            />
+          )}
+
+          {activeTab === 'estatisticas' && (
+            <StatisticsTab
+              latestDraw={latestDraw}
               statsList={dynamicStats}
               cyclePendingNumbers={dezenasPendentesCiclo}
-              latestDraw={latestDraw}
-              onToggleNumber={handleToggleConferenciaNumber}
-              onSetFixed={() => {}}
-              onSetExcluded={() => {}}
-              onSelectSet={(nums) => setConferenciaVolanteNumbers(nums.slice(0, 15))}
-              onClear={() => setConferenciaVolanteNumbers([])}
-              targetCount={15}
+              concursosNoCiclo={concursosNoCiclo}
+              onApplyNumbers={handleApplyAIRecsToFechamento}
+              savedTickets={savedTickets}
+              fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
             />
+          )}
 
-            {/* Módulo de Conferência Oficial de Jogos (Colocado após o Volante Oficial Interativo 5×5) */}
-            <ModuloConferenciaJogos
+          {activeTab === 'simulador' && (
+            <SimulatorTab
+              tickets={savedTickets}
               latestDraw={latestDraw}
-              generatedTickets={savedTickets}
-              inspectedVolanteNumbers={conferenciaVolanteNumbers}
-              onGoToFechamento={() => setActiveTab('fechamento')}
+              onGoToGenerator={() => setActiveTab('fechamento')}
+              onGoToGamesManager={() => setActiveTab('jogos')}
             />
-          </div>
-        )}
+          )}
 
-        {activeTab === 'ia_preditor' && (
-          <AIPredictorTab
-            latestDraw={latestDraw}
-            dynamicStats={dynamicStats}
-            cyclePendingNumbers={dezenasPendentesCiclo}
-            prediction={aiPrediction}
-            isLoading={isAILoading}
-            onRefreshPrediction={() => fetchAIPrediction(latestDraw)}
-            onApplyRecommendation={handleApplyAIRecsToFechamento}
-          />
-        )}
+          {activeTab === 'jogos' && (
+            <GamesManagerTab
+              tickets={savedTickets}
+              latestDraw={latestDraw}
+              fechamentoMeta={activeFechamentoMeta}
+              onClearTickets={() => setSavedTickets([])}
+              onGoToGenerator={() => setActiveTab('fechamento')}
+            />
+          )}
 
-        {activeTab === 'estatisticas' && (
-          <StatisticsTab
-            latestDraw={latestDraw}
-            statsList={dynamicStats}
-            cyclePendingNumbers={dezenasPendentesCiclo}
-            concursosNoCiclo={concursosNoCiclo}
-            onApplyNumbers={handleApplyAIRecsToFechamento}
-            savedTickets={savedTickets}
-            fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
-          />
-        )}
+          {activeTab === 'configuracoes' && (
+            <SettingsTab
+              latestDraw={latestDraw}
+              savedTickets={savedTickets}
+              onRestoreTickets={(t) => setSavedTickets(t)}
+              onSyncNow={() => runAutoUpdate(true)}
+              isSyncing={isSyncing}
+              statsList={dynamicStats}
+              cyclePendingNumbers={dezenasPendentesCiclo}
+              concursosNoCiclo={concursosNoCiclo}
+            />
+          )}
 
-        {activeTab === 'simulador' && (
-          <SimulatorTab
-            tickets={savedTickets}
-            latestDraw={latestDraw}
-            onGoToGenerator={() => setActiveTab('fechamento')}
-            onGoToGamesManager={() => setActiveTab('jogos')}
-          />
-        )}
-
-        {activeTab === 'jogos' && (
-          <GamesManagerTab
-            tickets={savedTickets}
-            latestDraw={latestDraw}
-            fechamentoMeta={activeFechamentoMeta}
-            onClearTickets={() => setSavedTickets([])}
-            onGoToGenerator={() => setActiveTab('fechamento')}
-          />
-        )}
-
-        {activeTab === 'configuracoes' && (
-          <SettingsTab
-            latestDraw={latestDraw}
-            savedTickets={savedTickets}
-            onRestoreTickets={(t) => setSavedTickets(t)}
-            onSyncNow={() => runAutoUpdate(true)}
-            isSyncing={isSyncing}
-            statsList={dynamicStats}
-            cyclePendingNumbers={dezenasPendentesCiclo}
-            concursosNoCiclo={concursosNoCiclo}
-          />
-        )}
-
-        {activeTab === 'hostinger' && <HostingerGuideTab />}
+          {activeTab === 'hostinger' && <HostingerGuideTab />}
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}

@@ -289,9 +289,9 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       '================================================================================',
       `• Tipo de Fechamento: ${f.tipoFechamento}`,
       `• Modalidade / Matriz: ${f.modalidadeMatriz}`,
-      `• Universo de Dezenas (${f.universoDezenas.length} números): ${f.universoDezenas.map((n) => n.toString().padStart(2, '0')).join(' ')}`,
-      `• Dezenas Fixas: ${f.dezenasFixas.length > 0 ? f.dezenasFixas.map((n) => n.toString().padStart(2, '0')).join(' ') : 'Nenhuma dezena fixa'}`,
-      `• Dezenas Excluídas: ${f.dezenasExcluidas.length > 0 ? f.dezenasExcluidas.map((n) => n.toString().padStart(2, '0')).join(' ') : 'Nenhuma dezena excluída'}`,
+      `• Universo de Dezenas (${(f.universoDezenas || []).length} números): ${(f.universoDezenas || []).map((n) => n.toString().padStart(2, '0')).join(' ')}`,
+      `• Dezenas Fixas: ${(f.dezenasFixas || []).length > 0 ? f.dezenasFixas.map((n) => n.toString().padStart(2, '0')).join(' ') : 'Nenhuma dezena fixa'}`,
+      `• Dezenas Excluídas: ${(f.dezenasExcluidas || []).length > 0 ? f.dezenasExcluidas.map((n) => n.toString().padStart(2, '0')).join(' ') : 'Nenhuma dezena excluída'}`,
       '',
       '--------------------------------------------------------------------------------',
       '2. FILTROS OBRIGATÓRIOS (RESTRIÇÕES CANÔNICAS)',
@@ -1017,7 +1017,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                                 <span
                                   key={n}
                                   className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-bold text-[11px] ${
-                                    f.dezenasFixas.includes(n)
+                                    (f.dezenasFixas || []).includes(n)
                                       ? 'bg-amber-400 text-slate-950 ring-1 ring-amber-300'
                                       : 'bg-slate-800 text-slate-200 border border-slate-700'
                                   }`}
@@ -1032,7 +1032,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                           <span className="text-slate-500">•</span>
                           <span>
                             <strong className="text-white">Dezenas Fixas:</strong>{' '}
-                            {f.dezenasFixas.length > 0
+                            {(f.dezenasFixas || []).length > 0
                               ? f.dezenasFixas.map((d) => d.toString().padStart(2, '0')).join(' ')
                               : 'Nenhuma dezena fixa'}
                           </span>
@@ -1041,7 +1041,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                           <span className="text-slate-500">•</span>
                           <span>
                             <strong className="text-white">Dezenas Excluídas:</strong>{' '}
-                            {f.dezenasExcluidas.length > 0
+                            {(f.dezenasExcluidas || []).length > 0
                               ? f.dezenasExcluidas.map((d) => d.toString().padStart(2, '0')).join(' ')
                               : 'Nenhuma dezena excluída'}
                           </span>

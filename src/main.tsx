@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 // Register Service Worker for offline functionality and background notifications
@@ -35,4 +36,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary fallbackTitle="LotoSniper • Recuperação de Sistema">
+    <App />
+  </ErrorBoundary>
+);
