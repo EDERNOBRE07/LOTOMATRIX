@@ -20,14 +20,22 @@ Sistema profissional de autenticação restrita, controle de sessão seguro e Pa
    - Cadastros novos são inseridos como `'pendente'`. Usuários suspensos são marcados como `'bloqueado'`.
    - Mensagem genérica para falhas: `"Credenciais inválidas ou acesso não autorizado"`, evitando ataques de enumeração de contas.
 
-4. **Controle de Sessão e Timeout por Inatividade**:
+4. **Controle de Sessão e Middleware de Integridade em Tempo Real (`middleware_session.php`)**:
    - Cookies configurados com `HttpOnly`, `SameSite=Strict` e `Secure` (HTTPS).
    - Invalidação automática após **30 minutos de inatividade** (1800 segundos).
-   - `auth_check.php` verifica o status do usuário no banco em cada requisição. Se o administrador bloquear o usuário no painel, ele é desconectado no próximo clique.
+   - **Validação Anti-Hijacking**: Detecção em tempo real de alteração de endereço IP de rede e de User-Agent (navegador/dispositivo).
+   - **Trava Crítica no Banco MySQL**: Checagem de `status` a cada requisição. Se o administrador marcar o usuário como `'bloqueado'` ou diferente de `'ativo'`, a sessão é imediatamente destruída, os cookies expirados e o logout é forçado no próximo clique.
 
-5. **Painel do Administrador (`admin_panel.php`)**:
+5. **Serviço de E-mail Transacional & Recuperação de Senha (`email_config.php`)**:
+   - Integração com PHPMailer via servidor SMTP oficial da Hostinger (`smtp.hostinger.com`).
+   - Criptografia SSL na porta 465 (ou TLS na 587) com autenticação obrigatória.
+   - Registro de logs detalhados via `error_log()` e arquivo dedicado para diagnóstico de falhas.
+   - Template de e-mail responsivo e blindado para recuperação de senha com tokens de 1 hora.
+
+6. **Painel do Administrador (`admin.php` / `admin_panel.php`)**:
    - Restrito a usuários com `nivel = 'admin'`.
    - Gestão da Whitelist: Aprovar cadastros ('pendente' ➔ 'ativo'), Bloquear acessos instantaneamente e gerenciar níveis de permissão.
+   - Trilha de auditoria (`logs_auditoria`) com registro de IP, admin e histórico de transições.
    - Formulários protegidos com tokens anti-CSRF (`hash_equals`).
 
 ---

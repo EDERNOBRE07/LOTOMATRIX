@@ -92,10 +92,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['usuario_nivel'] = $usuario['nivel'];
                 $_SESSION['ultimo_acesso'] = time();
 
-                // Atualização do timestamp de último login e IP
-                $ipAtual = $_SERVER['REMOTE_ADDR'] ?? null;
-                $stmtUpdate = $pdo->prepare('UPDATE usuarios SET ultimo_login = NOW() WHERE id = :id');
-                $stmtUpdate->execute([':id' => $usuario['id']]);
+                // Registro da impressão digital para a camada de middleware anti-hijacking
+                $ipAtual = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+                if (strpos($ipAtual, ',') !== false) {
+                    $ipAtual = trim(explode(',', $ipAtual)[0]);
+                }
+                $_SESSION['seguranca_ip'] = $ipAtual;
+                $_SESSION['seguranca_ua'] = substr(trim($_SERVER['HTTP_USER_AGENT'] ?? 'Desconhecido'), 0, 300);
+
+                // Atualização do timestamp de último login e IP no MySQL
+                $stmtUpdate = $pdo->prepare('UPDATE usuarios SET ultimo_login = NOW(), ultimo_ip = :ip WHERE id = :id');
+                $stmtUpdate->execute([':ip' => $ipAtual, ':id' => $usuario['id']]);
 
                 // Redirecionamento condicional por perfil
                 if ($usuario['nivel'] === 'admin') {
