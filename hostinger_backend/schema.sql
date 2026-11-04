@@ -10,6 +10,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 1. Criação da Tabela `usuarios`
 CREATE TABLE IF NOT EXISTS `usuarios` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `nome` VARCHAR(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Usuário',
   `email` VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `senha` VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` ENUM('pendente', 'ativo', 'bloqueado') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pendente',
@@ -65,8 +66,9 @@ CREATE TABLE IF NOT EXISTS `logs_seguranca` (
 -- Senha Padrão: Admin@LotoSniper2026!
 -- Hash gerado via password_hash('Admin@LotoSniper2026!', PASSWORD_BCRYPT, ['cost' => 12]):
 -- $2y$12$KkQeJtK6b0k0.5iT9Pj0iOx9fJ4N6X8n0O9hT8w2v3b4k5L6m7n8o (exemplo com fallback)
-INSERT INTO `usuarios` (`email`, `senha`, `status`, `nivel`, `criado_em`)
+INSERT INTO `usuarios` (`nome`, `email`, `senha`, `status`, `nivel`, `criado_em`)
 VALUES (
+  'Administrador LotoSniper',
   'admin@lotosniper.com.br',
   '$2y$12$W98J3h2Yq0Lp3Kq6m5n8Oe3h9j0k1l2m3n4o5p6q7r8s9t0u1v2w3', -- Hash Bcrypt de produção
   'ativo',

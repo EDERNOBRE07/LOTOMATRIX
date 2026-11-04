@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { LotofacilDraw } from '../types/lotofacil';
+import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { getHistoricalNDraws } from '../services/historical100Draws';
 import {
@@ -24,6 +24,8 @@ import { soundService } from '../services/soundAlert';
 
 interface LinhaDoTempo100ConcursosComponentProps {
   latestDraw?: LotofacilDraw;
+  statsList?: DezenaStats[];
+  onSelectConcurso?: (draw: LotofacilDraw) => void;
   onApplyNumbers?: (numbers: number[]) => void;
   onNavigateToFechamento?: () => void;
 }
@@ -37,6 +39,8 @@ interface HistoricalDelayStat {
 
 export const LinhaDoTempo100ConcursosComponent: React.FC<LinhaDoTempo100ConcursosComponentProps> = ({
   latestDraw = CONCURSO_ATUAL,
+  statsList,
+  onSelectConcurso,
   onApplyNumbers,
   onNavigateToFechamento,
 }) => {
@@ -120,6 +124,10 @@ export const LinhaDoTempo100ConcursosComponent: React.FC<LinhaDoTempo100Concurso
   const handleSelectConcurso = (idx: number) => {
     setSelectedIndex(idx);
     scrollToActive(idx);
+    const targetDraw = draws[idx];
+    if (targetDraw && onSelectConcurso) {
+      onSelectConcurso(targetDraw);
+    }
     try {
       soundService.playClick();
     } catch {}

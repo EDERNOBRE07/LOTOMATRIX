@@ -653,7 +653,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           <LinhaDoTempo100ConcursosComponent
             latestDraw={latestDraw}
             statsList={statsList}
-            onSelectConcurso={(draw) => {
+            onSelectConcurso={(draw: LotofacilDraw) => {
               console.log('Concurso selecionado na linha do tempo:', draw.concurso);
             }}
           />

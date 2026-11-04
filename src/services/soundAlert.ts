@@ -295,6 +295,10 @@ class SoundService {
     this.playTickCountdown();
   }
 
+  playClick() {
+    this.playFilterClick();
+  }
+
   playSuccess() {
     this.playGoldenZoneSuccessChime();
   }

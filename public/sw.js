@@ -94,7 +94,9 @@ self.addEventListener('message', (event) => {
     event.data &&
     (event.data.type === 'SHOW_SAVED_GAMES_NOTIFICATION' ||
       event.data.type === 'SHOW_TOP5_TREND_NOTIFICATION' ||
-      event.data.type === 'SHOW_JACKPOT_NOTIFICATION')
+      event.data.type === 'SHOW_JACKPOT_NOTIFICATION' ||
+      event.data.type === 'SHOW_PRIZE_TIER_NOTIFICATION' ||
+      event.data.type === 'SHOW_NOTIFICATION')
   ) {
     const { title, options } = event.data;
     event.waitUntil(self.registration.showNotification(title, options));
