@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <div>
-                    <label for="senha" class="block text-xs font-semibold text-slate-300 mb-1">Senha (Mínimo 8 caracteres)</label>
+                    <label for="senha" class="block text-xs font-semibold text-slate-300 mb-1">Senha de Acesso</label>
                     <input 
                         type="password" 
                         id="senha" 
@@ -147,7 +147,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         required 
                         placeholder="••••••••••••"
                         class="w-full bg-slate-950/70 border border-slate-800 focus:border-emerald-500 text-white rounded-xl px-3.5 py-2.5 text-xs outline-none font-mono"
+                        oninput="avaliarForcaSenhaRegistro(this.value)"
                     >
+                    
+                    <!-- Componente Visual PasswordStrengthMeter -->
+                    <div id="meter-container" class="mt-2 space-y-1.5">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-slate-400 font-medium flex items-center gap-1">
+                                <span>Força da Senha:</span>
+                                <span id="meter-bits" class="font-mono text-slate-500 tabular-nums">(0 bits)</span>
+                            </span>
+                            <span id="meter-label" class="font-bold uppercase tracking-wider text-[10px] text-slate-500">
+                                Digite uma senha
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-5 gap-1.5 h-1.5 w-full">
+                            <div class="bar-seg h-full rounded-full bg-slate-800 transition-all duration-300"></div>
+                            <div class="bar-seg h-full rounded-full bg-slate-800 transition-all duration-300"></div>
+                            <div class="bar-seg h-full rounded-full bg-slate-800 transition-all duration-300"></div>
+                            <div class="bar-seg h-full rounded-full bg-slate-800 transition-all duration-300"></div>
+                            <div class="bar-seg h-full rounded-full bg-slate-800 transition-all duration-300"></div>
+                        </div>
+                        <div id="meter-time" class="text-[10px] text-slate-500 flex items-center justify-between">
+                            <span>Estimativa de resistência:</span>
+                            <span id="meter-estimate" class="font-medium text-slate-400">—</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div>
@@ -164,6 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <button 
                     type="submit" 
+                    id="btn-submit"
                     class="w-full mt-2 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition cursor-pointer"
                 >
                     Enviar Solicitação de Cadastro
@@ -180,5 +206,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <script>
+    function avaliarForcaSenhaRegistro(pwd) {
+        const bars = document.querySelectorAll('.bar-seg');
+        const label = document.getElementById('meter-label');
+        const bitsSpan = document.getElementById('meter-bits');
+        const estimateSpan = document.getElementById('meter-estimate');
+
+        if (!pwd || pwd.length === 0) {
+            bars.forEach(b => b.className = 'bar-seg h-full rounded-full bg-slate-800 transition-all duration-300');
+            label.innerText = 'Digite uma senha';
+            label.className = 'font-bold uppercase tracking-wider text-[10px] text-slate-500';
+            bitsSpan.innerText = '(0 bits)';
+            estimateSpan.innerText = '—';
+            return;
+        }
+
+        const len = pwd.length;
+        const hasLower = /[a-z]/.test(pwd);
+        const hasUpper = /[A-Z]/.test(pwd);
+        const hasDigit = /[0-9]/.test(pwd);
+        const hasSymbol = /[^A-Za-z0-9]/.test(pwd);
+
+        let pool = 0;
+        if (hasLower) pool += 26;
+        if (hasUpper) pool += 26;
+        if (hasDigit) pool += 10;
+        if (hasSymbol) pool += 33;
+
+        let entropy = pool > 0 ? Math.round(len * (Math.log(pool) / Math.LN2)) : 0;
+        if (len >= 12) entropy += 6;
+        if (len >= 16) entropy += 10;
+
+        bitsSpan.innerText = '(' + entropy + ' bits)';
+
+        let score = 1;
+        let config = { text: 'Muito Fraca', color: 'text-rose-400', bar: 'bg-rose-500', time: '< 1 segundo' };
+
+        if (len < 8) {
+            score = 1;
+            config = { text: 'Muito Fraca', color: 'text-rose-400', bar: 'bg-rose-500', time: '< 1 segundo' };
+        } else if (entropy < 38 || (!hasDigit && !hasSymbol)) {
+            score = 2;
+            config = { text: 'Fraca', color: 'text-orange-400', bar: 'bg-orange-500', time: 'Poucos minutos' };
+        } else if (entropy < 58) {
+            score = 3;
+            config = { text: 'Média', color: 'text-amber-400', bar: 'bg-amber-400', time: 'Vários meses' };
+        } else if (entropy < 80) {
+            score = 4;
+            config = { text: 'Forte', color: 'text-emerald-400', bar: 'bg-emerald-500', time: 'Décadas / Séculos' };
+        } else {
+            score = 5;
+            config = { text: 'Excelente (Blindada)', color: 'text-cyan-400', bar: 'bg-cyan-400', time: 'Milhões de anos' };
+        }
+
+        label.innerText = config.text;
+        label.className = 'font-bold uppercase tracking-wider text-[10px] ' + config.color;
+        estimateSpan.innerText = config.time;
+
+        bars.forEach((b, idx) => {
+            if (idx < score) {
+                b.className = 'bar-seg h-full rounded-full transition-all duration-300 ' + config.bar;
+            } else {
+                b.className = 'bar-seg h-full rounded-full bg-slate-800 transition-all duration-300';
+            }
+        });
+    }
+    </script>
 </body>
 </html>

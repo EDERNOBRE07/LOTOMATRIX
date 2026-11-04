@@ -125,12 +125,12 @@ export const SecurityStatusMonitor: React.FC = () => {
               <h3 className="text-base font-bold text-white tracking-wide">
                 Monitor de Sessão PHP & Blindagem Hostinger
               </h3>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-400">
-                PHP 8.2 / MySQL
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 font-bold">
+                session_security.php
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Status da conexão segura, integridade do token de sessão e controle de inatividade.
+              Middleware em tempo real: checagem contínua de IP, User-Agent e destruição imediata de sessão para status 'bloqueado'.
             </p>
           </div>
         </div>

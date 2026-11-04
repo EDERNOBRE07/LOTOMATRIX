@@ -148,7 +148,26 @@ export function analyzeTicket(
   }
 
   const maxConsecutivas = getMaxConsecutiveSequence(sorted);
-  const scoreIA = Math.round((scoreSum / 15) * 10) / 10;
+  let baseScore = scoreSum / 15;
+
+  // Calibração Suavizada da Zona de Ouro (185 a 215):
+  // Reduz a penalização para somas entre 211-215, evitando que bilhetes excelentes sejam descartados por ultrapassarem o antigo teto de 210.
+  if (soma >= 185 && soma <= 215) {
+    baseScore += 3.0; // Zona de Ouro integral (185 a 215)
+  } else if (soma >= 180 && soma < 185) {
+    baseScore -= 1.0;
+  } else if (soma > 215 && soma <= 222) {
+    baseScore -= (soma - 215) * 0.8; // Penalização suave e progressiva após 215
+  } else if (soma > 222) {
+    baseScore -= 6.0 + (soma - 222) * 1.5;
+  }
+
+  // Bônus de Moldura Expandida (8 a 12 dezenas na borda)
+  if (moldura >= 8 && moldura <= 12) {
+    baseScore += 1.5;
+  }
+
+  const scoreIA = Math.round(Math.max(30, Math.min(100, baseScore)) * 10) / 10;
 
   return {
     dezenas: sorted,
@@ -981,10 +1000,10 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   paresMax: 9,
   primosMin: 4, // Calibrated: 4 a 7 primos cobre >86% dos sorteios
   primosMax: 7,
-  somaMin: 180, // Vetar somas < 180 (Alerta Estatístico), concentrando 100% do orçamento na Zona de Ouro (190 a 210)
+  somaMin: 180, // Vetar somas < 180 (Alerta Estatístico), concentrando na Zona de Ouro Expandida (185 a 215)
   somaMax: 220,
-  molduraMin: 8, // Moldura canônica (8 a 11 externas)
-  molduraMax: 11,
+  molduraMin: 8, // Moldura canônica expandida (8 a 12 externas): evita overfitting estatístico que elimina resultados reais
+  molduraMax: 12,
   fibonacciMin: 3,
   fibonacciMax: 5,
   repetidasMin: 6, // Alargamento da janela de repetidas para 6 a 10 dezenas (absorve quebras e transições de ciclo)
@@ -1002,7 +1021,7 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   robustez50ParesMin: 6,
   robustez50ParesMax: 9,
   robustez50MolduraMin: 8,
-  robustez50MolduraMax: 11,
+  robustez50MolduraMax: 12, // Limite superior expandido para 12 dezenas na moldura
   fechamentoPonderadoAtivo: false,
 };
 
@@ -1125,7 +1144,7 @@ export function buildOptimalPool(
   });
 
   scoredAusentes.sort((a, b) => b.score - a.score);
-  const ausentesSelecionadas = scoredAusentes.slice(0, qtdAusentes).map((a) => a.numero);
+  let ausentesSelecionadas = scoredAusentes.slice(0, qtdAusentes).map((a) => a.numero);
 
   // Score Repetidas: prioritize top frequencies, duplas affinity, and frame balance
   const scoredRepetidas = repetidasDisponiveis.map((n) => {
@@ -1146,18 +1165,77 @@ export function buildOptimalPool(
   });
 
   scoredRepetidas.sort((a, b) => b.score - a.score);
-  const repetidasSelecionadas = scoredRepetidas.slice(0, qtdRepetidas).map((r) => r.numero);
+  let repetidasSelecionadas = scoredRepetidas.slice(0, qtdRepetidas).map((r) => r.numero);
 
-  const dezenas = [...repetidasSelecionadas, ...ausentesSelecionadas].sort((a, b) => a - b);
+  let poolComb = Array.from(new Set([...repetidasSelecionadas, ...ausentesSelecionadas]));
+
+  // =========================================================================
+  // FATOR DE ANOMALIA (INJEÇÃO DE RUÍDO COM DEZENAS FRIAS)
+  // Evita que a IA fique viciada apenas nas tendências quentes, mitigando zebras
+  // =========================================================================
+  const allDezenasSortedByFreqAsc = [...dynamicStats].sort(
+    (a, b) => (a.vezes || 2000) - (b.vezes || 2000)
+  );
+  const coldNumbers = allDezenasSortedByFreqAsc.map((s) => s.numero);
+  const qtdFriasDesejadas = targetCount >= 18 ? 2 : 1;
+  const friasNoPool = poolComb.filter((n) => coldNumbers.slice(0, 6).includes(n)).length;
+
+  if (friasNoPool < qtdFriasDesejadas) {
+    const faltamFrias = qtdFriasDesejadas - friasNoPool;
+    const candidatasFrias = coldNumbers.filter((n) => !poolComb.includes(n));
+    for (let i = 0; i < faltamFrias && i < candidatasFrias.length; i++) {
+      const dezenaFria = candidatasFrias[i];
+      // Substituir o elemento não-fixo e menos prioritário do pool
+      if (poolComb.length >= targetCount) {
+        poolComb.pop();
+      }
+      poolComb.push(dezenaFria);
+    }
+  }
+
+  // =========================================================================
+  // PROTEÇÃO CONTRA EXCLUSÃO DE BLOCOS INTEIROS (EX: 12, 13, 14, 15, 16)
+  // O motor gerador não deve permitir universos que excluam blocos inteiros
+  // =========================================================================
+  const criticalBlocks = [
+    [12, 13, 14, 15, 16], // Bloco crítico intermediário da Lotofácil
+    [1, 2, 3, 4, 5],      // Linha 1
+    [6, 7, 8, 9, 10],     // Linha 2
+    [11, 12, 13, 14, 15], // Linha 3
+    [16, 17, 18, 19, 20], // Linha 4
+    [21, 22, 23, 24, 25], // Linha 5
+  ];
+
+  for (const block of criticalBlocks) {
+    const hitsInBlock = poolComb.filter((n) => block.includes(n)).length;
+    if (hitsInBlock === 0) {
+      // Bloco inteiro ausente: injetar obrigatoriamente a melhor dezena deste bloco
+      const candidatesInBlock = block.filter((n) => !poolComb.includes(n));
+      if (candidatesInBlock.length > 0) {
+        // Encontrar a de maior pontuação do bloco
+        const bestFromBlock = candidatesInBlock.sort((a, b) => {
+          const sA = (dynamicStats.find((s) => s.numero === a)?.vezes || 0);
+          const sB = (dynamicStats.find((s) => s.numero === b)?.vezes || 0);
+          return sB - sA;
+        })[0];
+
+        // Substituir a última dezena do pool para preservar targetCount
+        if (poolComb.length >= targetCount) {
+          poolComb.pop();
+        }
+        poolComb.push(bestFromBlock);
+      }
+    }
+  }
+
+  const dezenas = Array.from(new Set(poolComb)).slice(0, targetCount).sort((a, b) => a - b);
 
   return {
     dezenas,
     dezenas18: dezenas, // compatibility alias
     repetidasSelecionadas: repetidasSelecionadas.sort((a, b) => a - b),
     ausentesSelecionadas: ausentesSelecionadas.sort((a, b) => a - b),
-    explicacao: `Matriz de ${targetCount} Dezenas calibrada pelo Concurso #${previousDraw.concurso}: ${qtdRepetidas} Repetidas (${repetidasSelecionadas.join(
-      ', '
-    )}) + ${qtdAusentes} Ausentes (${ausentesSelecionadas.join(', ')}). Alinhamento rigoroso com as Tabelas do documento oficial.`,
+    explicacao: `Matriz de ${targetCount} Dezenas calibrada pelo Concurso #${previousDraw.concurso} com Injeção de Ruído Anti-Vício e Cobertura de Blocos: ${qtdRepetidas} Repetidas + ${qtdAusentes} Ausentes (Zona de Ouro 185–215).`,
   };
 }
 
@@ -1391,11 +1469,76 @@ export function buildFilterCompliantPool({
     }
   }
 
+  // =========================================================================
+  // PROTEÇÃO CONTRA EXCLUSÃO DE BLOCOS INTEIROS (EX: 12, 13, 14, 15, 16)
+  // =========================================================================
+  const criticalBlocks = [
+    [12, 13, 14, 15, 16],
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+    [11, 12, 13, 14, 15],
+    [16, 17, 18, 19, 20],
+    [21, 22, 23, 24, 25],
+  ];
+
+  for (const block of criticalBlocks) {
+    const hitsInBlock = Array.from(chosen).filter((n) => block.includes(n)).length;
+    if (hitsInBlock === 0) {
+      const candidatesInBlock = block.filter((n) => !chosen.has(n) && !allExcluded.has(n));
+      if (candidatesInBlock.length > 0) {
+        // Encontrar a de maior pontuação do bloco
+        const bestFromBlock = candidatesInBlock.sort((a, b) => {
+          const sA = (dynamicStats.find((s) => s.numero === a)?.vezes || 0);
+          const sB = (dynamicStats.find((s) => s.numero === b)?.vezes || 0);
+          return sB - sA;
+        })[0];
+
+        // Substituir elemento não-fixo de menor peso
+        const nonFixedInChosen = Array.from(chosen).filter((n) => !allFixed.includes(n));
+        if (nonFixedInChosen.length > 0) {
+          const toRemove = nonFixedInChosen[nonFixedInChosen.length - 1];
+          chosen.delete(toRemove);
+          chosen.add(bestFromBlock);
+        }
+      }
+    }
+  }
+
+  // =========================================================================
+  // INJEÇÃO DE RUÍDO NO UNIVERSO (FATOR DE ANOMALIA COM DEZENAS FRIAS)
+  // =========================================================================
+  const allCold = [...dynamicStats]
+    .sort((a, b) => (a.vezes || 2000) - (b.vezes || 2000))
+    .map((s) => s.numero)
+    .filter((n) => !allExcluded.has(n));
+
+  const friasPresentes = Array.from(chosen).filter((n) => allCold.slice(0, 6).includes(n)).length;
+  const metaFrias = targetCount >= 18 ? 2 : 1;
+
+  if (friasPresentes < metaFrias) {
+    const faltam = metaFrias - friasPresentes;
+    const candidatasFrias = allCold.filter((n) => !chosen.has(n));
+    const nonFixedInChosen = Array.from(chosen).filter((n) => !allFixed.includes(n));
+
+    for (let i = 0; i < faltam && i < candidatasFrias.length && nonFixedInChosen.length > 0; i++) {
+      const fria = candidatasFrias[i];
+      const toRemove = nonFixedInChosen.pop();
+      if (toRemove !== undefined) {
+        chosen.delete(toRemove);
+        chosen.add(fria);
+      }
+    }
+  }
+
   const finalPool = Array.from(chosen).sort((a, b) => a - b);
   const finalMetrics = getCounts(chosen);
   const projected15Sum = Math.round((finalMetrics.sum / targetCount) * 15);
 
-  const motivoAjuste = `${finalMetrics.pairs}P/${targetCount - finalMetrics.pairs}I, ${finalMetrics.primes} Primos, ${finalMetrics.moldura} Moldura, ${finalMetrics.fibo} Fibo, ${finalMetrics.repetidas} Repetidas, ${finalMetrics.classeA} Classe A (Soma 15 Proj: ~${projected15Sum})`;
+  let motivoAjuste = `${finalMetrics.pairs}P/${targetCount - finalMetrics.pairs}I, ${finalMetrics.primes} Primos, ${finalMetrics.moldura} Moldura, ${finalMetrics.fibo} Fibo, ${finalMetrics.repetidas} Repetidas, ${finalMetrics.classeA} Classe A (Soma 15 Proj: ~${projected15Sum})`;
+
+  if (allFixed.length > 5) {
+    motivoAjuste += ` • Recomendação: ${allFixed.length} fixas selecionadas. Desencorajar >5 fixas e priorizar 3–5 (ex: Par de Ouro [11, 20]) para resiliência contra zebras.`;
+  }
 
   return {
     dezenas: finalPool,

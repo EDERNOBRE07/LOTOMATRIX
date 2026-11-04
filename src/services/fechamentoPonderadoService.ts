@@ -656,19 +656,19 @@ export function identificarClustersDensidade500(
       if (hits >= 4) freq4Plus++;
     });
 
-    // Aderência à Zona de Ouro:
-    // Para que 3 quintetos perfaçam a soma 190-210, a soma ideal de cada quinteto é 63 a 73
+    // Aderência à Zona de Ouro Expandida (185 a 215, média ~200):
+    // Para que 3 quintetos perfaçam a soma 185-215, a soma ideal de cada quinteto é 61 a 72 (média ~66.7)
     let goldScore = 100;
-    if (soma < 58 || soma > 78) {
-      goldScore -= Math.abs(soma - 68) * 4;
+    if (soma < 57 || soma > 77) {
+      goldScore -= Math.abs(soma - 67) * 2; // Penalidade suavizada de 4 para 2 (evita descartes abruptos entre 211-215)
     }
     // Paridade ideal do quinteto: 2P/3I ou 3P/2I
     if (pares !== 2 && pares !== 3) {
-      goldScore -= 20;
+      goldScore -= 18;
     }
-    // Moldura ideal do quinteto: 3 ou 4
-    if (moldura < 3 || moldura > 4) {
-      goldScore -= 15;
+    // Moldura ideal do quinteto: 2, 3 ou 4 (cobertura expandida para até 12 dezenas na borda)
+    if (moldura < 2 || moldura > 4) {
+      goldScore -= 12;
     }
     const aderenciaZonaOuro = Math.max(20, Math.min(100, goldScore));
 
@@ -849,11 +849,37 @@ export function generateFechamentoInteligentePonderado({
     }
   });
 
+  // Diluição do Peso das Fixas:
+  // O motor desencoraja chumbar mais de 3 a 5 dezenas (como na estratégia do Par de Ouro [11, 20]).
+  // As 3 a 5 de maior pontuação são mantidas fixas absolutas em 100% dos bilhetes;
+  // O restante é liberado para permutar livremente através dos clusters de densidade,
+  // trazendo máxima resiliência estatística contra zebras.
+  let effectiveFixedList = [...fixedList];
+  let fixasPermutadasCount = 0;
+
+  if (fixedList.length > 5) {
+    const scoredFixed = [...fixedList].sort((a, b) => {
+      const sA = (ipMap.get(a) || 50) * 0.45 + (forcaCicloMap.get(a) || 50) * 0.55;
+      const sB = (ipMap.get(b) || 50) * 0.45 + (forcaCicloMap.get(b) || 50) * 0.55;
+      return sB - sA;
+    });
+    // Manter as 5 principais como fixas centrais (ex: Par de Ouro [11, 20])
+    effectiveFixedList = scoredFixed.slice(0, 5);
+    fixasPermutadasCount = fixedList.length - 5;
+  }
+
   // Ordenar pool combinando 55% Força de Ciclo + 45% Índice de Performance
-  const nonFixedPool = sortedPool.filter((num) => !fixedList.includes(num));
+  const nonFixedPool = sortedPool.filter((num) => !effectiveFixedList.includes(num));
   const weightedNonFixed = [...nonFixedPool].sort((a, b) => {
-    const scoreA = (ipMap.get(a) || 50) * 0.45 + (forcaCicloMap.get(a) || 50) * 0.55;
-    const scoreB = (ipMap.get(b) || 50) * 0.45 + (forcaCicloMap.get(b) || 50) * 0.55;
+    // Dar prioridade alta para as dezenas que eram fixas excedentes para aparecerem com frequência
+    const isExcessoA = fixedList.includes(a) && !effectiveFixedList.includes(a);
+    const isExcessoB = fixedList.includes(b) && !effectiveFixedList.includes(b);
+
+    const bonusA = isExcessoA ? 25 : 0;
+    const bonusB = isExcessoB ? 25 : 0;
+
+    const scoreA = (ipMap.get(a) || 50) * 0.45 + (forcaCicloMap.get(a) || 50) * 0.55 + bonusA;
+    const scoreB = (ipMap.get(b) || 50) * 0.45 + (forcaCicloMap.get(b) || 50) * 0.55 + bonusB;
     return scoreB - scoreA;
   });
 
@@ -883,9 +909,9 @@ export function generateFechamentoInteligentePonderado({
       return null;
     }
 
-    // Conferir se dezenas fixas estão presentes
-    if (fixedList.length > 0) {
-      for (const fix of fixedList) {
+    // Conferir se dezenas fixas centrais (núcleo resiliente 3 a 5) estão presentes
+    if (effectiveFixedList.length > 0) {
+      for (const fix of effectiveFixedList) {
         if (!sorted.includes(fix)) return null;
       }
     }
@@ -988,16 +1014,20 @@ export function generateFechamentoInteligentePonderado({
   const validCandidates: CandidateItem[] = [];
   const candidateKeys = new Set<string>();
   const maxPoolCandidates = n <= 18 ? 4500 : 8500;
-  const neededNonFixed = 15 - fixedList.length;
+  const neededNonFixed = 15 - effectiveFixedList.length;
 
   let tierApplied: 1 | 2 | 3 = 1;
   let relaxExplanation = 'Todos os filtros combinados foram validados com 100% de rigor estrito.';
+
+  if (fixasPermutadasCount > 0) {
+    relaxExplanation += ` Diluição Estratégica: ${fixedList.length} fixas solicitadas. Para maximizar resiliência contra zebras, o motor preservou as 5 fixas prioritárias (Par de Ouro [11, 20] e âncoras) e permutou as demais através dos clusters de densidade.`;
+  }
 
   function searchCandidates(tier: 1 | 2 | 3) {
     function backtrack(start: number, current: number[]) {
       if (validCandidates.length >= maxPoolCandidates) return;
       if (current.length === neededNonFixed) {
-        const fullCombo = [...fixedList, ...current].sort((a, b) => a - b);
+        const fullCombo = [...effectiveFixedList, ...current].sort((a, b) => a - b);
         const key = fullCombo.join('-');
         if (!candidateKeys.has(key)) {
           const evalResult = evaluateCandidateSingle(fullCombo, tier);

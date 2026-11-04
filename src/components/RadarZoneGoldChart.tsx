@@ -38,11 +38,11 @@ export const RadarZoneGoldChart: React.FC<RadarZoneGoldChartProps> = ({
     const fibo = testGame.filter((n) => FIBONACCI.includes(n)).length;
 
     // Adherence scores normalized to 0-100:
-    // Soma: 190-210 -> 100%, 175-220 -> 80%
+    // Soma: Zona de Ouro expandida para 185-215 -> 100%, 170-225 -> 80%
     const somaAdherence =
-      soma >= 190 && soma <= 210
+      soma >= 185 && soma <= 215
         ? 100
-        : soma >= 175 && soma <= 220
+        : soma >= 170 && soma <= 225
         ? 80
         : Math.max(20, 100 - Math.abs(200 - soma) * 2);
 
@@ -62,13 +62,13 @@ export const RadarZoneGoldChart: React.FC<RadarZoneGoldChartProps> = ({
         ? 80
         : Math.max(20, 100 - Math.abs(5.5 - primos) * 25);
 
-    // Moldura: 9 or 10 -> 100%, 8 or 11 -> 80%
+    // Moldura: 8 a 12 -> 100% (evita overfitting estatístico), 7 ou 13 -> 75%
     const molduraAdherence =
-      moldura >= 9 && moldura <= 10
+      moldura >= 8 && moldura <= 12
         ? 100
-        : moldura >= 8 && moldura <= 11
-        ? 80
-        : Math.max(20, 100 - Math.abs(9.5 - moldura) * 25);
+        : moldura === 7 || moldura === 13
+        ? 75
+        : Math.max(20, 100 - Math.abs(10 - moldura) * 25);
 
     // Repetidas: 9 -> 100%, 8 or 10 -> 85%
     const repetidasAdherence =
@@ -129,7 +129,7 @@ export const RadarZoneGoldChart: React.FC<RadarZoneGoldChartProps> = ({
               <ExpertTip
                 title="Conformidade Pentagonal com a Zona de Ouro"
                 ruleCategory="Diagnóstico Multidimensional de Volante"
-                content="Avalia 5 pilares estruturais simultaneamente: Faixa de Soma (190–210), Paridade (7 a 8 Pares), Moldura Externa (9 a 11), Primos (4 a 6) e Repetidas do Concurso Anterior (8 a 10)."
+                content="Avalia 5 pilares estruturais simultaneamente: Faixa de Soma (185–215), Paridade (7 a 8 Pares), Moldura Externa (8 a 12), Primos (4 a 6) e Repetidas do Concurso Anterior (8 a 10)."
                 impact14Pontos="Bilhetes com aderência inferior a 70% no radar descartam as maiores probabilidades da distribuição combinatória. Bilhetes na Zona de Ouro (aderência ≥ 90%) aumentam em até 4,7x o retorno sobre o investimento em apostas múltiplas."
                 recommendation="Ajuste qualquer dezena com discrepância no radar até atingir um índice de aderência global superior a 85% antes de registrar o bilhete."
               />

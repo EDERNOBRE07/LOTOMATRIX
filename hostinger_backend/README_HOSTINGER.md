@@ -71,10 +71,17 @@ define('DB_PASS', 'SuaSenhaHostingerAqui');
 2. Navegue até a pasta pública de `lotosniper.com.br` (geralmente `public_html/auth` ou diretamente na raiz `public_html/`).
 3. Faça o upload dos arquivos:
    - `config.php`
+   - `conexao.php`
+   - `session_security.php` (Middleware de integridade com checagem de IP, UA e status 'bloqueado')
    - `auth_check.php`
+   - `middleware_session.php`
+   - `email_config.php` (PHPMailer SMTP Hostinger SSL 465)
    - `login.php`
-   - `register.php`
-   - `admin_panel.php`
+   - `register.php` (Cadastro com PasswordStrengthMeter)
+   - `esqueci-senha.php`
+   - `redefinir-senha.php` (Redefinição com PasswordStrengthMeter)
+   - `painel.php`
+   - `admin.php` / `admin_panel.php`
    - `logout.php`
    - `api_auth.php`
    - `.htaccess`

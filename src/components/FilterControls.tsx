@@ -72,10 +72,10 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       paresMax: 9,
       primosMin: 4,
       primosMax: 6,
-      somaMin: 190, // Regra de Ouro da Soma centrada na Zona de Ouro (190 a 210)
-      somaMax: 210,
+      somaMin: 185, // Regra de Ouro da Soma na Zona de Ouro Expandida (185 a 215)
+      somaMax: 215,
       molduraMin: 8,
-      molduraMax: 11,
+      molduraMax: 12, // Limite superior expandido para 12 evitando overfitting estatístico
       fibonacciMin: 3,
       fibonacciMax: 5,
       repetidasMin: 6, // Piso de 6 repetidas alargado para transição de ciclos
@@ -122,7 +122,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     }
 
     setAppliedNotice(
-      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (190–210), Tolerância Dinâmica (6–9 Pares), 4–6 Primos, 8–11 Moldura, 3–5 Fibonacci, 6–10 Repetidas e Sequências até 6!`
+      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (185–215), Tolerância Dinâmica (6–9 Pares), 4–6 Primos, 8–12 Moldura, 3–5 Fibonacci, 6–10 Repetidas e Sequências até 6!`
     );
     setTimeout(() => setAppliedNotice(null), 6000);
   };
@@ -134,10 +134,10 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       paresMax: 8,
       primosMin: 5,
       primosMax: 6,
-      somaMin: 190,
-      somaMax: 210,
-      molduraMin: 9,
-      molduraMax: 10,
+      somaMin: 185,
+      somaMax: 215,
+      molduraMin: 8,
+      molduraMax: 12,
       fibonacciMin: 3,
       fibonacciMax: 5,
       repetidasMin: 7,
@@ -156,7 +156,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       somaMin: 180, // Vetar somas < 180
       somaMax: 225,
       molduraMin: 8,
-      molduraMax: 11,
+      molduraMax: 12,
       fibonacciMin: 3,
       fibonacciMax: 6,
       repetidasMin: 6, // Piso dinâmico 6
@@ -358,10 +358,10 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 {/* Quick Gold Calibration */}
                 <button
                   type="button"
-                  onClick={() => update({ somaMin: 190, somaMax: 210 })}
+                  onClick={() => update({ somaMin: 185, somaMax: 215 })}
                   className="w-full py-1 text-[11px] rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 font-bold border border-indigo-500/40 transition cursor-pointer"
                 >
-                  ⚡ Calibrar Zona de Ouro Exata (190–210)
+                  ⚡ Calibrar Zona de Ouro Expandida (185–215)
                 </button>
               </div>
             </div>
@@ -538,7 +538,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Padrão dominante é 8 a 11 externas (85.7% histórico).
+                Padrão recomendado é 8 a 12 externas (evita overfitting estatístico).
               </p>
               <div className="space-y-1">
                 <div className="flex justify-between text-[10px] text-slate-400">

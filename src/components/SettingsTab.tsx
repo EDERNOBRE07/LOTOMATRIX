@@ -41,6 +41,7 @@ import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
 import { SecurityStatusMonitor } from './SecurityStatusMonitor';
+import { AuthAccountSecurityForms } from './AuthAccountSecurityForms';
 import { AdminPanel } from './AdminPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
@@ -1128,6 +1129,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="space-y-6">
           {/* Monitor de Sessão PHP com verificação de inatividade e Anti-Hijacking */}
           <SecurityStatusMonitor />
+
+          {/* Validação de Formulários com PasswordStrengthMeter em Tempo Real */}
+          <AuthAccountSecurityForms />
 
           {/* Painel Administrativo de Usuários com Aprovação / Bloqueio Whitelist */}
           <AdminPanel />

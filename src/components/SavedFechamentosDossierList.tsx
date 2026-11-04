@@ -3,6 +3,7 @@ import {
   SavedFechamentoPrognostico,
   getSavedFechamentos,
   deleteSavedFechamento,
+  deleteMultipleSavedFechamentos,
   clearAllSavedFechamentos,
   formatTicketsForConferenciaInput,
   FIBONACCI_NUMBERS,
@@ -167,16 +168,61 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   }, [expandedCardId]);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [selectedFechamentoIds, setSelectedFechamentoIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState<boolean>(false);
 
   const showFeedback = (msg: string) => {
     setFeedbackMessage(msg);
     setTimeout(() => setFeedbackMessage(null), 5000);
   };
 
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedFechamentoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedFechamentoIds.size === fechamentos.length && fechamentos.length > 0) {
+      setSelectedFechamentoIds(new Set());
+    } else {
+      setSelectedFechamentoIds(new Set(fechamentos.map((f) => f.id)));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedFechamentoIds(new Set());
+    setConfirmBulkDelete(false);
+  };
+
+  const handleExecuteBulkDelete = () => {
+    if (selectedFechamentoIds.size === 0) return;
+    const idsToDelete = Array.from(selectedFechamentoIds);
+    const updated = deleteMultipleSavedFechamentos(idsToDelete);
+    setFechamentos(updated);
+    setSelectedFechamentoIds(new Set());
+    setConfirmBulkDelete(false);
+    try {
+      soundService.playFilterClick();
+    } catch {}
+    showFeedback(`✓ ${idsToDelete.length} fechamento(s) selecionado(s) foram excluídos com sucesso.`);
+  };
+
   const handleDelete = (id: string, name: string) => {
     const updated = deleteSavedFechamento(id);
     setFechamentos(updated);
     setConfirmDeleteId(null);
+    setSelectedFechamentoIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     try {
       soundService.playFilterClick();
     } catch {}
@@ -186,6 +232,8 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const handleClearAll = () => {
     clearAllSavedFechamentos();
     setFechamentos([]);
+    setSelectedFechamentoIds(new Set());
+    setConfirmBulkDelete(false);
     try {
       soundService.playFilterClick();
     } catch {}
@@ -674,15 +722,93 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Barra de Seleção e Exclusão em Massa de Fechamentos */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectedFechamentoIds.size === fechamentos.length && fechamentos.length > 0}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-slate-700 text-rose-500 focus:ring-rose-500 cursor-pointer accent-rose-500"
+                />
+                <span className="text-xs font-bold text-slate-200">
+                  Selecionar Todos ({fechamentos.length})
+                </span>
+              </label>
+
+              {selectedFechamentoIds.size > 0 && (
+                <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                  {selectedFechamentoIds.size} de {fechamentos.length} selecionado(s)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedFechamentoIds.size > 0 ? (
+                <>
+                  {confirmBulkDelete ? (
+                    <div className="flex items-center gap-2 bg-rose-950/90 p-1.5 px-3 rounded-xl border border-rose-500/60 shadow-md">
+                      <span className="text-xs text-rose-200 font-bold">
+                        Excluir {selectedFechamentoIds.size} fechamento(s)?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleExecuteBulkDelete}
+                        className="px-2.5 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-black text-xs transition cursor-pointer"
+                        title="Confirmar exclusão em massa"
+                      >
+                        Sim, Excluir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmBulkDelete(false)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition cursor-pointer"
+                        title="Cancelar exclusão"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmBulkDelete(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                      title="Excluir todos os fechamentos marcados de uma só vez"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Excluir Selecionados ({selectedFechamentoIds.size})</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs transition cursor-pointer"
+                  >
+                    Desmarcar
+                  </button>
+                </>
+              ) : (
+                <span className="text-xs text-slate-500 italic">
+                  Marque os fechamentos desejados para exclusão em lote
+                </span>
+              )}
+            </div>
+          </div>
+
           {fechamentos.map((f, idx) => {
             const isExpanded = expandedCardId === f.id;
             const isTicketsExpanded = expandedTicketsCardId === f.id;
+            const isSelected = selectedFechamentoIds.has(f.id);
 
             return (
               <div
                 key={f.id}
                 className={`bg-slate-900/90 rounded-2xl border-2 transition-all shadow-xl ${
-                  isExpanded
+                  isSelected
+                    ? 'border-rose-500/70 bg-rose-950/15 shadow-rose-500/10'
+                    : isExpanded
                     ? 'border-amber-500/60 shadow-amber-500/10'
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
@@ -690,6 +816,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                 {/* Cabeçalho do Card */}
                 <div className="p-4 sm:p-5 border-b border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-start gap-3.5">
+                    {/* Checkbox individual para exclusão em massa */}
+                    <div className="flex items-center pt-1 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleToggleSelectOne(f.id);
+                        }}
+                        className="w-4 h-4 rounded border-slate-700 text-rose-500 focus:ring-rose-500 cursor-pointer accent-rose-500"
+                        title="Selecionar para exclusão em massa"
+                      />
+                    </div>
+
                     <span className="flex items-center justify-center px-2 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono font-black text-sm shrink-0">
                       #{(idx + 1).toString().padStart(2, '0')}
                     </span>

@@ -170,6 +170,31 @@ export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] 
   }
 }
 
+export function deleteMultipleSavedFechamentos(ids: string[]): SavedFechamentoPrognostico[] {
+  try {
+    localStorage.setItem(INITIALIZED_KEY, 'true');
+    const idsSet = new Set(ids);
+    const list = getSavedFechamentos();
+    const updated = list.filter((f) => !idsSet.has(f.id));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
+    }
+
+    // Exclui de forma assíncrona no Banco de Dados MySQL da Hostinger
+    ids.forEach((id) => {
+      fetch(`/api/mysql/fechamentos/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    });
+
+    return updated;
+  } catch (e) {
+    console.error('Falha ao excluir múltiplos fechamentos salvos:', e);
+    return [];
+  }
+}
+
 export function clearAllSavedFechamentos(): void {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');

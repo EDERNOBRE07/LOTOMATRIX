@@ -268,15 +268,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $tokenValido) {
             autocomplete="new-password"
             oninput="avaliarForcaSenha(this.value)"
           />
-          <!-- Real-Time Password Strength Meter -->
-          <div class="strength-meter-container">
-            <div class="strength-bars">
-              <div class="bar" id="bar-1"></div>
-              <div class="bar" id="bar-2"></div>
-              <div class="bar" id="bar-3"></div>
-              <div class="bar" id="bar-4"></div>
+          <!-- Real-Time Password Strength Meter (5 Estágios & Entropia) -->
+          <div class="strength-meter-container" style="margin-top: 10px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">
+                Força da Senha: <span id="strength-bits" style="font-family: monospace; color: #64748b;">(0 bits)</span>
+              </span>
+              <span id="strength-label" class="strength-text" style="font-size: 11px; font-weight: 700; text-transform: uppercase;">Digite a senha</span>
             </div>
-            <div id="strength-label" class="strength-text">Digite a senha</div>
+            <div class="strength-bars" style="display: flex; gap: 4px; height: 6px; margin-bottom: 6px;">
+              <div class="bar" id="bar-1" style="flex: 1; height: 100%; background: #1f2937; border-radius: 3px; transition: background-color 0.3s;"></div>
+              <div class="bar" id="bar-2" style="flex: 1; height: 100%; background: #1f2937; border-radius: 3px; transition: background-color 0.3s;"></div>
+              <div class="bar" id="bar-3" style="flex: 1; height: 100%; background: #1f2937; border-radius: 3px; transition: background-color 0.3s;"></div>
+              <div class="bar" id="bar-4" style="flex: 1; height: 100%; background: #1f2937; border-radius: 3px; transition: background-color 0.3s;"></div>
+              <div class="bar" id="bar-5" style="flex: 1; height: 100%; background: #1f2937; border-radius: 3px; transition: background-color 0.3s;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748b;">
+              <span>Estimativa de resistência:</span>
+              <span id="strength-time" style="color: #cbd5e1; font-weight: 500;">—</span>
+            </div>
           </div>
         </div>
 
@@ -305,43 +315,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $tokenValido) {
         document.getElementById('bar-1'),
         document.getElementById('bar-2'),
         document.getElementById('bar-3'),
-        document.getElementById('bar-4')
+        document.getElementById('bar-4'),
+        document.getElementById('bar-5')
       ];
       const label = document.getElementById('strength-label');
+      const bitsEl = document.getElementById('strength-bits');
+      const timeEl = document.getElementById('strength-time');
       
-      let pontuacao = 0;
       if (!senha) {
         bars.forEach(b => b.style.backgroundColor = '#1f2937');
         label.innerText = 'Digite a senha';
         label.style.color = '#64748b';
+        bitsEl.innerText = '(0 bits)';
+        timeEl.innerText = '—';
         return;
       }
 
-      if (senha.length >= 8) pontuacao++;
-      if (senha.length >= 12) pontuacao++;
-      if (/[A-Z]/.test(senha) && /[a-z]/.test(senha)) pontuacao++;
-      if (/[0-9]/.test(senha)) pontuacao++;
-      if (/[^A-Za-z0-9]/.test(senha)) pontuacao++;
+      const len = senha.length;
+      const hasLower = /[a-z]/.test(senha);
+      const hasUpper = /[A-Z]/.test(senha);
+      const hasDigit = /[0-9]/.test(senha);
+      const hasSymbol = /[^A-Za-z0-9]/.test(senha);
 
-      // Converter pontuação para escala de 1 a 4
-      let nivel = 1;
-      if (pontuacao >= 5) nivel = 4;
-      else if (pontuacao >= 3) nivel = 3;
-      else if (pontuacao >= 2) nivel = 2;
+      let pool = 0;
+      if (hasLower) pool += 26;
+      if (hasUpper) pool += 26;
+      if (hasDigit) pool += 10;
+      if (hasSymbol) pool += 33;
 
-      const configs = {
-        1: { texto: 'Fraca', cor: '#ef4444', bars: 1 },
-        2: { texto: 'Média', cor: '#f59e0b', bars: 2 },
-        3: { texto: 'Forte', cor: '#10b981', bars: 3 },
-        4: { texto: 'Excelente', cor: '#06b6d4', bars: 4 },
-      };
+      let entropy = pool > 0 ? Math.round(len * (Math.log(pool) / Math.LN2)) : 0;
+      if (len >= 12) entropy += 6;
+      if (len >= 16) entropy += 10;
 
-      const c = configs[nivel];
-      label.innerText = 'Força: ' + c.texto;
-      label.style.color = c.cor;
+      bitsEl.innerText = '(' + entropy + ' bits)';
+
+      let score = 1;
+      let config = { text: 'Muito Fraca', color: '#ef4444', time: '< 1 segundo' };
+
+      if (len < 8) {
+        score = 1;
+        config = { text: 'Muito Fraca', color: '#ef4444', time: '< 1 segundo' };
+      } else if (entropy < 38 || (!hasDigit && !hasSymbol)) {
+        score = 2;
+        config = { text: 'Fraca', color: '#f97316', time: 'Poucos minutos' };
+      } else if (entropy < 58) {
+        score = 3;
+        config = { text: 'Média', color: '#f59e0b', time: 'Vários meses' };
+      } else if (entropy < 80) {
+        score = 4;
+        config = { text: 'Forte', color: '#10b981', time: 'Décadas / Séculos' };
+      } else {
+        score = 5;
+        config = { text: 'Excelente (Blindada)', color: '#06b6d4', time: 'Milhões de anos' };
+      }
+
+      label.innerText = 'Força: ' + config.text;
+      label.style.color = config.color;
+      timeEl.innerText = config.time;
 
       bars.forEach((bar, index) => {
-        bar.style.backgroundColor = (index < c.bars) ? c.cor : '#1f2937';
+        bar.style.backgroundColor = (index < score) ? config.color : '#1f2937';
       });
     }
   </script>
