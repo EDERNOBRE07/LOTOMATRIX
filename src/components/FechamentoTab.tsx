@@ -32,6 +32,7 @@ import { EquilibrioEstruturalSelector } from './EquilibrioEstruturalSelector';
 import { PainelTendenciaCiclo, CycleTendencyConfig } from './PainelTendenciaCiclo';
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
+import { ErrorBoundary } from './ErrorBoundary';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
 import { TurboResult } from '../services/turboBruteForce';
@@ -2651,10 +2652,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           />
 
           {/* MAPA DE CALOR D3 DE COBERTURA DE GARANTIAS EM TEMPO REAL */}
-          <D3CoverageHeatmap
-            tickets={generatedTickets}
-            latestDraw={latestDraw}
-          />
+          <ErrorBoundary fallbackTitle="LotoSniper • Mapa de Cobertura D3">
+            <D3CoverageHeatmap
+              tickets={generatedTickets}
+              latestDraw={latestDraw}
+            />
+          </ErrorBoundary>
 
           {/* SISTEMA DE MONITORAMENTO ESTATÍSTICO DOS FECHAMENTOS GERADOS */}
           {fechamentoMonitoringSummary && (

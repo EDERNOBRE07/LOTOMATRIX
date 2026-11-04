@@ -208,10 +208,8 @@ export const MapaCalorProbabilidadesD3: React.FC<MapaCalorProbabilidadesD3Props>
         return '#334155';
       })
       .attr('stroke-width', (d) => (selectedNumbers.includes(d.numero) ? 3.5 : d.isCyclePending ? 2.5 : 1.5))
-      .transition()
-      .duration(700)
-      .ease(d3.easeCubicOut)
-      .attr('fill', (d) => colorScale(d.probabilidadePreditiva));
+      .attr('fill', (d) => colorScale(d.probabilidadePreditiva))
+      .style('transition', 'fill 0.4s ease, transform 0.2s ease');
 
     // Efeito de brilho / glow para ciclo ou topo
     cellGroups
@@ -301,21 +299,33 @@ export const MapaCalorProbabilidadesD3: React.FC<MapaCalorProbabilidadesD3Props>
     // Interações D3: Hover, MouseOut, Click
     cellGroups
       .on('mouseenter', function (_event, d) {
-        d3.select(this)
-          .select('rect')
-          .transition()
-          .duration(150)
-          .attr('transform', 'scale(1.04)')
-          .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        const rectEl = d3.select(this).select('rect');
+        if (typeof (rectEl as any).transition === 'function') {
+          (rectEl as any)
+            .transition()
+            .duration(150)
+            .attr('transform', 'scale(1.04)')
+            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        } else {
+          rectEl
+            .attr('transform', 'scale(1.04)')
+            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        }
         setHoveredData(d);
       })
       .on('mouseleave', function () {
-        d3.select(this)
-          .select('rect')
-          .transition()
-          .duration(150)
-          .attr('transform', 'scale(1)')
-          .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        const rectEl = d3.select(this).select('rect');
+        if (typeof (rectEl as any).transition === 'function') {
+          (rectEl as any)
+            .transition()
+            .duration(150)
+            .attr('transform', 'scale(1)')
+            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        } else {
+          rectEl
+            .attr('transform', 'scale(1)')
+            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
+        }
         setHoveredData(null);
       })
       .on('click', function (_event, d) {

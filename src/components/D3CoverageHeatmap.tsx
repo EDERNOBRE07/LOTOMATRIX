@@ -75,84 +75,80 @@ export const D3CoverageHeatmap: React.FC<D3CoverageHeatmapProps> = ({
   useEffect(() => {
     if (!svgRef.current || heatmapData.length === 0) return;
 
-    const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
+    try {
+      const svg = d3.select(svgRef.current);
+      svg.selectAll('*').remove();
 
-    const margin = { top: 35, right: 30, bottom: 45, left: 95 };
-    const width = 640 - margin.left - margin.right;
-    const height = 240 - margin.top - margin.bottom;
+      const margin = { top: 35, right: 30, bottom: 45, left: 95 };
+      const width = 640 - margin.left - margin.right;
+      const height = 240 - margin.top - margin.bottom;
 
-    const g = svg
-      .attr('viewBox', `0 0 640 240`)
-      .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`);
+      const g = svg
+        .attr('viewBox', `0 0 640 240`)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // X scale: Draws
-    const x = d3
-      .scaleBand<string>()
-      .range([0, width])
-      .domain(draws.map((d) => `#${d.concurso}`))
-      .padding(0.08);
+      // X scale: Draws
+      const x = d3
+        .scaleBand<string>()
+        .range([0, width])
+        .domain(draws.map((d) => `#${d.concurso}`))
+        .padding(0.08);
 
-    // Y scale: Faixas
-    const y = d3
-      .scaleBand<string>()
-      .range([height, 0])
-      .domain(faixas)
-      .padding(0.08);
+      // Y scale: Faixas
+      const y = d3
+        .scaleBand<string>()
+        .range([height, 0])
+        .domain(faixas)
+        .padding(0.08);
 
-    // Max value for color domain
-    const maxCount = Math.max(1, d3.max(heatmapData, (d) => d.count) || 1);
+      // Max value for color domain
+      const maxCount = Math.max(1, d3.max(heatmapData, (d) => d.count) || 1);
 
-    // Color interpolator for heat (Dark Slate -> Emerald -> Amber -> Gold)
-    const colorScale = d3
-      .scaleLinear<string>()
-      .domain([0, 1, Math.max(2, maxCount / 2), maxCount])
-      .range(['#0f172a', '#065f46', '#10b981', '#f59e0b']);
+      // Color interpolator for heat (Dark Slate -> Emerald -> Amber -> Gold)
+      const colorScale = d3
+        .scaleLinear<string>()
+        .domain([0, 1, Math.max(2, maxCount / 2), maxCount])
+        .range(['#0f172a', '#065f46', '#10b981', '#f59e0b']);
 
-    // X Axis
-    g.append('g')
-      .attr('transform', `translate(0, ${height})`)
-      .call(d3.axisBottom(x).tickSize(0))
-      .selectAll('text')
-      .attr('fill', '#94a3b8')
-      .attr('font-size', '10px')
-      .attr('font-family', 'monospace')
-      .attr('font-weight', '600')
-      .attr('dy', '1em');
+      // X Axis
+      g.append('g')
+        .attr('transform', `translate(0, ${height})`)
+        .call(d3.axisBottom(x).tickSize(0))
+        .selectAll('text')
+        .attr('fill', '#94a3b8')
+        .attr('font-size', '10px')
+        .attr('font-family', 'monospace')
+        .attr('font-weight', '600')
+        .attr('dy', '1em');
 
-    // Y Axis
-    g.append('g')
-      .call(d3.axisLeft(y).tickSize(0))
-      .selectAll('text')
-      .attr('fill', '#cbd5e1')
-      .attr('font-size', '11px')
-      .attr('font-weight', '600');
+      // Y Axis
+      g.append('g')
+        .call(d3.axisLeft(y).tickSize(0))
+        .selectAll('text')
+        .attr('fill', '#cbd5e1')
+        .attr('font-size', '11px')
+        .attr('font-weight', '600');
 
-    g.selectAll('.domain').remove();
+      g.selectAll('.domain').remove();
 
-    // Heatmap rects with smooth D3 animation
-    const rects = g
-      .selectAll('rect')
-      .data(heatmapData)
-      .enter()
-      .append('rect')
-      .attr('x', (d) => x(`#${d.drawConcurso}`) || 0)
-      .attr('y', (d) => y(d.faixa) || 0)
-      .attr('rx', 6)
-      .attr('ry', 6)
-      .attr('width', x.bandwidth())
-      .attr('height', y.bandwidth())
-      .attr('fill', '#0f172a')
-      .attr('stroke', '#1e293b')
-      .attr('stroke-width', 1)
-      .style('cursor', 'pointer');
-
-    rects
-      .transition()
-      .duration(450)
-      .delay((_, i) => i * 6)
-      .attr('fill', (d) => (d.count === 0 ? '#0b1120' : colorScale(d.count)));
+      // Heatmap rects with smooth native CSS animation
+      const rects = g
+        .selectAll('rect')
+        .data(heatmapData)
+        .enter()
+        .append('rect')
+        .attr('x', (d) => x(`#${d.drawConcurso}`) || 0)
+        .attr('y', (d) => y(d.faixa) || 0)
+        .attr('rx', 6)
+        .attr('ry', 6)
+        .attr('width', x.bandwidth())
+        .attr('height', y.bandwidth())
+        .attr('fill', (d) => (d.count === 0 ? '#0b1120' : colorScale(d.count)))
+        .attr('stroke', '#1e293b')
+        .attr('stroke-width', 1)
+        .style('transition', 'fill 0.3s ease, stroke 0.2s ease')
+        .style('cursor', 'pointer');
 
     // Numbers inside cells
     g.selectAll('.cell-text')
@@ -189,6 +185,9 @@ export const D3CoverageHeatmap: React.FC<D3CoverageHeatmapProps> = ({
           .attr('stroke-width', 1);
         setHoveredCell(null);
       });
+    } catch (err) {
+      console.error('Erro na renderização do mapa de calor D3:', err);
+    }
   }, [heatmapData, draws, faixas]);
 
   if (tickets.length === 0) return null;

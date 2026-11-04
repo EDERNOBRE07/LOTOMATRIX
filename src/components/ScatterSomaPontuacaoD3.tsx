@@ -320,25 +320,47 @@ export const ScatterSomaPontuacaoD3: React.FC<ScatterSomaPontuacaoD3Props> = ({
     // Mouse events
     circles
       .on('mouseenter', function (event, d) {
-        d3.select(this)
-          .transition()
-          .duration(150)
-          .attr('r', 9)
-          .attr('fill-opacity', 1)
-          .attr('stroke', '#ffffff')
-          .attr('stroke-width', 2);
+        const sel = d3.select(this);
+        if (typeof (sel as any).transition === 'function') {
+          (sel as any)
+            .transition()
+            .duration(150)
+            .attr('r', 9)
+            .attr('fill-opacity', 1)
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 2);
+        } else {
+          sel
+            .attr('r', 9)
+            .attr('fill-opacity', 1)
+            .attr('stroke', '#ffffff')
+            .attr('stroke-width', 2);
+        }
 
         setSelectedPoint(d);
         soundService.playTick();
       })
       .on('mouseleave', function (event, d) {
-        d3.select(this)
-          .transition()
-          .duration(150)
-          .attr('r', d.pontuacaoHistorica >= 14 ? 6.5 : d.faixaProbabilidade === 'ouro' ? 5 : 4)
-          .attr('fill-opacity', 0.8)
-          .attr('stroke', d.pontuacaoHistorica >= 14 ? '#ffffff' : '#0f172a')
-          .attr('stroke-width', d.pontuacaoHistorica >= 14 ? 1.5 : 1);
+        const sel = d3.select(this);
+        const targetR = d.pontuacaoHistorica >= 14 ? 6.5 : d.faixaProbabilidade === 'ouro' ? 5 : 4;
+        const targetStroke = d.pontuacaoHistorica >= 14 ? '#ffffff' : '#0f172a';
+        const targetStrokeWidth = d.pontuacaoHistorica >= 14 ? 1.5 : 1;
+
+        if (typeof (sel as any).transition === 'function') {
+          (sel as any)
+            .transition()
+            .duration(150)
+            .attr('r', targetR)
+            .attr('fill-opacity', 0.8)
+            .attr('stroke', targetStroke)
+            .attr('stroke-width', targetStrokeWidth);
+        } else {
+          sel
+            .attr('r', targetR)
+            .attr('fill-opacity', 0.8)
+            .attr('stroke', targetStroke)
+            .attr('stroke-width', targetStrokeWidth);
+        }
       })
       .on('click', function (event, d) {
         setSelectedPoint(d);
