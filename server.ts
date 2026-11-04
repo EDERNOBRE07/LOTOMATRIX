@@ -1100,6 +1100,168 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// ========================================================================
+// API DE AUTENTICAÇÃO E ADMINISTRAÇÃO HOSTINGER & MYSQL (LotoSniper Guard)
+// ========================================================================
+
+// Estado de usuários em memória para fallback/dev
+let memoryUsers = [
+  {
+    id: 1,
+    email: 'admin@lotosniper.com.br',
+    status: 'ativo',
+    nivel: 'admin',
+    criado_em: '2026-03-01 10:00:00',
+    ultimo_login: '2026-11-04 11:20:00',
+    ultimo_ip: '187.19.204.12',
+  },
+  {
+    id: 2,
+    email: 'carlos.apostador@gmail.com',
+    status: 'pendente',
+    nivel: 'usuario',
+    criado_em: '2026-11-04 09:15:33',
+    ultimo_ip: '201.86.110.45',
+  },
+  {
+    id: 3,
+    email: 'marina.loto@outlook.com',
+    status: 'pendente',
+    nivel: 'usuario',
+    criado_em: '2026-11-04 08:40:12',
+    ultimo_ip: '179.180.22.99',
+  },
+  {
+    id: 4,
+    email: 'investidor.bot@spammer.net',
+    status: 'bloqueado',
+    nivel: 'usuario',
+    criado_em: '2026-11-03 23:55:00',
+    ultimo_ip: '45.130.22.1',
+  },
+  {
+    id: 5,
+    email: 'roberto.fechamento@uol.com.br',
+    status: 'ativo',
+    nivel: 'usuario',
+    criado_em: '2026-11-02 14:10:00',
+    ultimo_ip: '189.44.12.80',
+  },
+];
+
+let memoryAuditLogs = [
+  {
+    id: 101,
+    admin_email: 'admin@lotosniper.com.br',
+    usuario_alvo_email: 'carlos.apostador@gmail.com',
+    acao: 'aprovou_usuario',
+    status_anterior: 'pendente',
+    status_novo: 'ativo',
+    ip: '187.19.204.12',
+    criado_em: '2026-11-04 10:14:22',
+  },
+  {
+    id: 100,
+    admin_email: 'admin@lotosniper.com.br',
+    usuario_alvo_email: 'investidor.bot@spammer.net',
+    acao: 'bloqueou_usuario',
+    status_anterior: 'ativo',
+    status_novo: 'bloqueado',
+    ip: '187.19.204.12',
+    criado_em: '2026-11-04 09:30:10',
+  },
+  {
+    id: 99,
+    admin_email: 'sistema',
+    usuario_alvo_email: 'roberto.fechamento@uol.com.br',
+    acao: 'redefiniu_propria_senha',
+    status_anterior: 'ativo',
+    status_novo: 'ativo',
+    ip: '189.44.12.80',
+    criado_em: '2026-11-03 18:22:05',
+  },
+];
+
+// GET: Status da sessão PHP ativa / simulação dev
+app.get('/api/session-status', (req: Request, res: Response) => {
+  const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '187.19.204.12';
+  res.json({
+    autenticado: true,
+    usuario_id: 1,
+    email: 'admin@lotosniper.com.br',
+    nivel: 'admin',
+    status: 'ativo',
+    ultimo_acesso_timestamp: Math.floor(Date.now() / 1000),
+    ultimo_acesso_formatado: new Date().toLocaleTimeString('pt-BR'),
+    ip: typeof clientIp === 'string' ? clientIp.split(',')[0].trim() : '187.19.204.12',
+    tempo_restante_segundos: 1740,
+    fingerprint_ok: true,
+    hostinger_host: 'lotosniper.com.br',
+  });
+});
+
+// POST: Encerrar sessão ativa (Logout Now)
+app.post('/api/logout', (_req: Request, res: Response) => {
+  console.log('[LotoSniper Auth] Sessão destruída a pedido do usuário.');
+  res.json({
+    sucesso: true,
+    mensagem: 'Sessão destruída com sucesso.',
+    redirecionar: '/hostinger_backend/login.php',
+  });
+});
+
+// GET: Listar todos os usuários para o AdminPanel
+app.get('/api/admin/users', (_req: Request, res: Response) => {
+  res.json({
+    sucesso: true,
+    usuarios: memoryUsers,
+    total: memoryUsers.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// POST: Alternar status de usuário (Aprovar / Bloquear)
+app.post('/api/admin/toggle-status', (req: Request, res: Response) => {
+  const { usuario_id, novo_status } = req.body;
+  const user = memoryUsers.find((u) => u.id === usuario_id);
+
+  if (!user) {
+    return res.status(404).json({ sucesso: false, erro: 'Usuário não encontrado.' });
+  }
+
+  const statusAnterior = user.status;
+  user.status = novo_status;
+
+  const acao = novo_status === 'ativo' ? 'aprovou_usuario' : 'bloqueou_usuario';
+  const newLog = {
+    id: memoryAuditLogs.length + 100,
+    admin_email: 'admin@lotosniper.com.br',
+    usuario_alvo_email: user.email,
+    acao,
+    status_anterior: statusAnterior,
+    status_novo: novo_status,
+    ip: req.socket.remoteAddress || '187.19.204.12',
+    criado_em: new Date().toLocaleString('pt-BR'),
+  };
+  memoryAuditLogs.unshift(newLog);
+
+  res.json({
+    sucesso: true,
+    mensagem: `Usuário ${user.email} atualizado para status '${novo_status}'.`,
+    usuario: user,
+  });
+});
+
+// GET: Listar logs de auditoria
+app.get('/api/admin/audit-logs', (_req: Request, res: Response) => {
+  res.json({
+    sucesso: true,
+    logs: memoryAuditLogs,
+    total: memoryAuditLogs.length,
+  });
+});
+
+
 // GET: Verify entry point (index.html) and output directory (dist) mapping
 app.get('/api/health/assets', (_req: Request, res: Response) => {
   const indexPath = path.resolve(__dirname, 'index.html');

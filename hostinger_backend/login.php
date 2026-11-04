@@ -200,7 +200,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div>
                     <div class="flex items-center justify-between mb-1.5">
                         <label for="senha" class="text-xs font-semibold text-slate-300">Senha de Acesso</label>
-                        <span class="text-[11px] text-slate-500">Criptografia BCRYPT</span>
+                        <a href="esqueci-senha.php" class="text-[11px] text-emerald-400 hover:text-emerald-300 transition">
+                            Esqueci minha senha
+                        </a>
                     </div>
                     <div class="relative">
                         <input 

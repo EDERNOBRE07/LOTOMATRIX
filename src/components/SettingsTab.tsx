@@ -39,6 +39,10 @@ import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
 import { S3CronjobManagerCard } from './S3CronjobManagerCard';
 import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
+import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
+import { SecurityStatusMonitor } from './SecurityStatusMonitor';
+import { AdminPanel } from './AdminPanel';
+import { AdminAuditLogs } from './AdminAuditLogs';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
@@ -74,7 +78,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
   >('geral');
 
   // 1. Modo de Conexão
@@ -475,6 +479,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             Conexão & Notificações
+          </button>
+          <button
+            onClick={() => setActiveSubTab('seguranca_auth')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'seguranca_auth'
+                ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 shadow-sm font-black'
+                : 'text-emerald-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Sessão & Painel Admin (Hostinger)</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+              AUTH & AUDIT
+            </span>
           </button>
           <button
             onClick={() => setActiveSubTab('alertas_agendados')}
@@ -1093,8 +1111,33 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               } catch {}
             }}
           />
+
+          {/* Painel de Controle de Notificações por Faixa de Premiação (11 a 15 Pontos) */}
+          <PrizeNotificationTiersCard />
+
+          {/* Monitor de Sessão PHP e Guardião de Segurança Hostinger */}
+          <SecurityStatusMonitor />
         </div>
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: SEGURANÇA, SESSÃO PHP & PAINEL DO ADMINISTRADOR (HOSTINGER)       */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'seguranca_auth' && (
+        <div className="space-y-6">
+          {/* Monitor de Sessão PHP com verificação de inatividade e Anti-Hijacking */}
+          <SecurityStatusMonitor />
+
+          {/* Painel Administrativo de Usuários com Aprovação / Bloqueio Whitelist */}
+          <AdminPanel />
+
+          {/* Trilha de Auditoria com Rastreabilidade de Status */}
+          <AdminAuditLogs />
+
+          {/* Controle de Notificações por Faixa de Premiação (11-15 acertos) */}
+          <PrizeNotificationTiersCard />
+        </div>
       )}
 
       {/* ========================================================================= */}

@@ -47,6 +47,7 @@ import { ComparadorFrequenciaPeriodosRecharts } from './ComparadorFrequenciaPeri
 import { EspelhoConcursoAtualModule } from './EspelhoConcursoAtualModule';
 import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
 import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
+import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -95,6 +96,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'atrasos'
+    | 'timeline_100'
     | 'mapa_calor_frequencia'
     | 'historico_roi'
     | 'espelho_concurso'
@@ -155,6 +157,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Estatística & Atrasos</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('timeline_100')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'timeline_100'
+                ? 'bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/20 font-black'
+                : 'text-cyan-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-cyan-400" />
+            <span>Linha do Tempo 100 Concursos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              100 SORTEIOS
+            </span>
           </button>
 
           <button
@@ -632,6 +649,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (
         <div className="space-y-6">
+          {/* Linha do Tempo Horizontal Navegável dos Últimos 100 Concursos com Atrasos Dinâmicos */}
+          <LinhaDoTempo100ConcursosComponent
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onSelectConcurso={(draw) => {
+              console.log('Concurso selecionado na linha do tempo:', draw.concurso);
+            }}
+          />
+
           {/* Mapa de Calor (Heatmap) de Frequência Histórica das 25 Dezenas (Gradiente Azul ao Vermelho) */}
           <MapaCalorFrequenciaHistorica
             latestDraw={latestDraw}
