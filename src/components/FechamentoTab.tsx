@@ -35,6 +35,9 @@ import { D3CoverageHeatmap } from './D3CoverageHeatmap';
 import { ErrorBoundary } from './ErrorBoundary';
 import { FechamentoErrorLogsModal } from './FechamentoErrorLogsModal';
 import { logFechamentoError, getFechamentoErrorLogs } from '../services/fechamentoErrorLogger';
+import { fechamentoWorkerClient, CombinatoricsProgress } from '../services/fechamentoWorkerClient';
+import { exportFechamentoToPdf, exportFechamentoToCsv } from '../services/fechamentoExportService';
+import { checkAndAuditUnresolvedCrash } from '../services/fechamentoPreflightSnapshot';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
 import { TurboResult } from '../services/turboBruteForce';
@@ -79,6 +82,9 @@ import {
   BookmarkCheck,
   ArrowRight,
   Bug,
+  Cpu,
+  FileText,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -166,6 +172,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [activeStrategicBox, setActiveStrategicBox] = useState<
     'curva_abc' | 'top_18' | 'pares_ouro' | 'preditor_real' | 'insights_ia' | 'garantir_filtros' | null
   >(null);
+
+  const [workerProgress, setWorkerProgress] = useState<CombinatoricsProgress | null>(null);
+
+  // Auditoria de pré-voo: Verifica se a aba anterior colapsou em tela preta e restaura dossiê
+  useEffect(() => {
+    const crashedSnapshot = checkAndAuditUnresolvedCrash();
+    if (crashedSnapshot) {
+      setDocumentMessage(
+        `⚠️ Recuperação Pós-Crash: O LotoSniper detectou que a geração anterior sofreu interrupção. Os parâmetros pré-voo foram salvos com segurança para auditoria forense.`
+      );
+      setErrorLogsCount(getFechamentoErrorLogs().length);
+    }
+  }, []);
 
   // Listener para manter contador de erros e telemetria atualizado em tempo real
   useEffect(() => {
@@ -1122,114 +1141,66 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }, 6000);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setIsGenerating(true);
+    setWorkerProgress({ percent: 15, message: 'Iniciando Web Worker combinatório...' });
     setGenerationError(null);
     const start = performance.now();
 
-    setTimeout(() => {
-      try {
-        const fullFilters: FilterCriteria = {
-          ...filters,
-          dezenasFixas: fixedNumbers,
-          dezenasExcluidas: excludedNumbers,
-        };
-        setFilters(fullFilters);
+    try {
+      const fullFilters: FilterCriteria = {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+      setFilters(fullFilters);
 
-        let tickets: GameTicket[] = [];
+      let tickets: GameTicket[] = [];
 
-        if (fullFilters.fechamentoPonderadoAtivo) {
-          const result = generateFechamentoInteligentePonderado({
-            selectedNumbers,
-            targetHits: mode.includes('13') ? 13 : 14,
-            maxTickets: preset.jogosMaximos,
-            filters: fullFilters,
-            dynamicStats,
-            latestDraw,
-            aiScores: aiPrediction?.scores,
-          });
-          tickets = result.tickets;
-          setDiscardedByRobustezCount(result.discardedByRobustezCount);
-          setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
-        } else {
-          tickets = generateFechamentoCovering(
-            selectedNumbers,
-            mode.includes('13') ? 13 : 14,
-            preset.jogosMaximos,
-            fullFilters,
-            latestDraw.dezenas,
-            aiPrediction?.scores
-          );
-        }
-
-        if (!tickets || tickets.length === 0) {
-          const diag = diagnoseGenerationFailure(
-            selectedNumbers,
-            fixedNumbers,
-            excludedNumbers,
-            fullFilters,
-            targetCount,
-            latestDraw
-          );
-          logFechamentoError({
-            stage: 'combinatoria',
-            mode,
-            targetCount,
-            selectedNumbers,
-            fixedNumbers,
-            excludedNumbers,
-            activeFilters: fullFilters,
-            drawConcurso: latestDraw.concurso,
-            drawData: latestDraw.data,
-            errorMessage: 'Nenhum bilhete gerado que satisfaça todos os filtros estritos selecionados.',
-            errorStack: diag.reasons.join(' | '),
-          });
-          setGenerationError(diag);
-          setGeneratedTickets([]);
-          return;
-        }
-
-        // Sucesso comprovado
-        setGenerationError(null);
-        const finalPrognosticoName = getFullPrognosticoFechamentoName();
-        const exportMeta: FechamentoExportMeta = {
-          strategyName: finalPrognosticoName,
-          modeName: `${preset.nome} - Matriz Pro (${tickets.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
-          garantia: preset.garantia,
-          targetCount: targetCount,
-          selectedNumbers: selectedNumbers,
-          fixedNumbers: fixedNumbers,
-          excludedNumbers: excludedNumbers,
+      if (fullFilters.fechamentoPonderadoAtivo) {
+        const result = await fechamentoWorkerClient.generatePonderado({
+          mode,
+          targetCount,
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          targetHits: mode.includes('13') ? 13 : 14,
+          maxTickets: preset.jogosMaximos,
           filters: fullFilters,
-          concurso: latestDraw.concurso,
-          dataConcurso: latestDraw.data,
-          timestamp: Date.now(),
-        };
-        try {
-          localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
-        } catch {}
+          dynamicStats,
+          latestDraw,
+          aiScores: aiPrediction?.scores,
+          onProgress: (p) => setWorkerProgress(p),
+        });
+        tickets = result.tickets;
+        setDiscardedByRobustezCount(result.discardedByRobustezCount);
+        setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
+      } else {
+        tickets = await fechamentoWorkerClient.generateCovering({
+          mode,
+          targetCount,
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          targetHits: mode.includes('13') ? 13 : 14,
+          maxTickets: preset.jogosMaximos,
+          filters: fullFilters,
+          drawDezenas: latestDraw.dezenas,
+          latestDraw,
+          aiScores: aiPrediction?.scores,
+          onProgress: (p) => setWorkerProgress(p),
+        });
+      }
 
-        setGeneratedTickets(tickets);
-        onSaveTickets(tickets, exportMeta);
-        autoSaveFechamentoPrognostico(tickets, finalPrognosticoName, exportMeta, selectedNumbers);
-        setGenerationType('matriz');
-        saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
-
-        if (soundAlertEnabled) {
-          const hasOutside = tickets.some((t) => t.soma < 190 || t.soma > 210);
-          if (hasOutside) soundService.playOutsideGoldenZoneAlert();
-          else soundService.playGoldenZoneSuccessChime();
-        }
-
-        const end = performance.now();
-        setGenerationTimeMs(Math.round(end - start));
-      } catch (err: any) {
-        console.error(err);
-        const fullFilters = {
-          ...filters,
-          dezenasFixas: fixedNumbers,
-          dezenasExcluidas: excludedNumbers,
-        };
+      if (!tickets || tickets.length === 0) {
+        const diag = diagnoseGenerationFailure(
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          fullFilters,
+          targetCount,
+          latestDraw
+        );
         logFechamentoError({
           stage: 'combinatoria',
           mode,
@@ -1240,10 +1211,121 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           activeFilters: fullFilters,
           drawConcurso: latestDraw.concurso,
           drawData: latestDraw.data,
-          errorMessage: err?.message || 'Erro inesperado durante a execução da matriz combinatória.',
-          errorName: err?.name,
-          errorStack: err?.stack,
+          errorMessage: 'Nenhum bilhete gerado que satisfaça todos os filtros estritos selecionados.',
+          errorStack: diag.reasons.join(' | '),
         });
+        setGenerationError(diag);
+        setGeneratedTickets([]);
+        return;
+      }
+
+      // Sucesso comprovado
+      setGenerationError(null);
+      const finalPrognosticoName = getFullPrognosticoFechamentoName();
+      const exportMeta: FechamentoExportMeta = {
+        strategyName: finalPrognosticoName,
+        modeName: `${preset.nome} - Matriz Pro (${tickets.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
+        garantia: preset.garantia,
+        targetCount: targetCount,
+        selectedNumbers: selectedNumbers,
+        fixedNumbers: fixedNumbers,
+        excludedNumbers: excludedNumbers,
+        filters: fullFilters,
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        timestamp: Date.now(),
+      };
+      try {
+        localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+      } catch {}
+
+      setGeneratedTickets(tickets);
+      onSaveTickets(tickets, exportMeta);
+      autoSaveFechamentoPrognostico(tickets, finalPrognosticoName, exportMeta, selectedNumbers);
+      setGenerationType('matriz');
+      saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
+
+      if (soundAlertEnabled) {
+        const hasOutside = tickets.some((t) => t.soma < 190 || t.soma > 210);
+        if (hasOutside) soundService.playOutsideGoldenZoneAlert();
+        else soundService.playGoldenZoneSuccessChime();
+      }
+
+      const end = performance.now();
+      setGenerationTimeMs(Math.round(end - start));
+    } catch (err: any) {
+      console.error(err);
+      const fullFilters = {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+      logFechamentoError({
+        stage: 'combinatoria',
+        mode,
+        targetCount,
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        activeFilters: fullFilters,
+        drawConcurso: latestDraw.concurso,
+        drawData: latestDraw.data,
+        errorMessage: err?.message || 'Erro inesperado durante a execução da matriz combinatória.',
+        errorName: err?.name,
+        errorStack: err?.stack,
+      });
+      const diag = diagnoseGenerationFailure(
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        fullFilters,
+        targetCount,
+        latestDraw
+      );
+      if (err?.message && !diag.reasons.includes(err.message)) {
+        diag.reasons.unshift(err.message);
+      }
+      setGenerationError(diag);
+      setGeneratedTickets([]);
+    } finally {
+      setIsGenerating(false);
+      setWorkerProgress(null);
+    }
+  };
+
+  // Gerador direto de Fechamento Inteligente Ponderado (Prioridade IP Frequência x Atraso & Robustez 50)
+  const handleGeneratePonderado = async () => {
+    setIsGenerating(true);
+    setWorkerProgress({ percent: 15, message: 'Alocando Web Worker para Fechamento Ponderado...' });
+    setGenerationError(null);
+    const start = performance.now();
+
+    try {
+      const fullFilters: FilterCriteria = {
+        ...filters,
+        fechamentoPonderadoAtivo: true,
+        robustezEstatisticaAtiva: true,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+      setFilters(fullFilters);
+
+      const result = await fechamentoWorkerClient.generatePonderado({
+        mode,
+        targetCount,
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        targetHits: mode.includes('13') ? 13 : 14,
+        maxTickets: preset.jogosMaximos,
+        filters: fullFilters,
+        dynamicStats,
+        latestDraw,
+        aiScores: aiPrediction?.scores,
+        onProgress: (p) => setWorkerProgress(p),
+      });
+
+      if (!result.tickets || result.tickets.length === 0) {
         const diag = diagnoseGenerationFailure(
           selectedNumbers,
           fixedNumbers,
@@ -1252,130 +1334,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           targetCount,
           latestDraw
         );
-        if (err?.message && !diag.reasons.includes(err.message)) {
-          diag.reasons.unshift(err.message);
-        }
-        setGenerationError(diag);
-        setGeneratedTickets([]);
-      } finally {
-        setIsGenerating(false);
-      }
-    }, 150);
-  };
-
-  // Gerador direto de Fechamento Inteligente Ponderado (Prioridade IP Frequência x Atraso & Robustez 50)
-  const handleGeneratePonderado = () => {
-    setIsGenerating(true);
-    setGenerationError(null);
-    const start = performance.now();
-
-    setTimeout(() => {
-      try {
-        const fullFilters: FilterCriteria = {
-          ...filters,
-          fechamentoPonderadoAtivo: true,
-          robustezEstatisticaAtiva: true,
-          dezenasFixas: fixedNumbers,
-          dezenasExcluidas: excludedNumbers,
-        };
-        setFilters(fullFilters);
-
-        const result = generateFechamentoInteligentePonderado({
-          selectedNumbers,
-          targetHits: mode.includes('13') ? 13 : 14,
-          maxTickets: preset.jogosMaximos,
-          filters: fullFilters,
-          dynamicStats,
-          latestDraw,
-          aiScores: aiPrediction?.scores,
-        });
-
-        if (!result.tickets || result.tickets.length === 0) {
-          const diag = diagnoseGenerationFailure(
-            selectedNumbers,
-            fixedNumbers,
-            excludedNumbers,
-            fullFilters,
-            targetCount,
-            latestDraw
-          );
-          logFechamentoError({
-            stage: 'ponderado',
-            mode,
-            targetCount,
-            selectedNumbers,
-            fixedNumbers,
-            excludedNumbers,
-            activeFilters: fullFilters,
-            drawConcurso: latestDraw.concurso,
-            drawData: latestDraw.data,
-            errorMessage: 'Fechamento Ponderado não encontrou combinações elegíveis com os filtros de IP e robustez ativos.',
-            errorStack: diag.reasons.join(' | '),
-          });
-          setGenerationError(diag);
-          setGeneratedTickets([]);
-          return;
-        }
-
-        setDiscardedByRobustezCount(result.discardedByRobustezCount);
-        setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
-        setGeneratedTickets(result.tickets);
-
-        const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
-        setStrategyName(newStratName);
-
-        const exportMeta: FechamentoExportMeta = {
-          strategyName: newStratName,
-          modeName: `${preset.nome} (${result.tickets.length} Jogos - Ponderado IP)`,
-          garantia: preset.garantia,
-          targetCount: targetCount,
-          selectedNumbers: selectedNumbers,
-          fixedNumbers: fixedNumbers,
-          excludedNumbers: excludedNumbers,
-          filters: fullFilters,
-          concurso: latestDraw.concurso,
-          dataConcurso: latestDraw.data,
-          timestamp: Date.now(),
-        };
-
-        try {
-          localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
-        } catch {}
-
-        const finalPonderadoName = appliedSuggestionName
-          ? `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'}) • Sugestão: ${appliedSuggestionName}`
-          : `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'})`;
-
-        onSaveTickets(result.tickets, { ...exportMeta, strategyName: finalPonderadoName });
-        autoSaveFechamentoPrognostico(
-          result.tickets,
-          finalPonderadoName,
-          { ...exportMeta, strategyName: finalPonderadoName },
-          selectedNumbers
-        );
-        setGenerationType('matriz');
-        saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
-        soundService.playGoldenZoneSuccessChime();
-
-        const clusterInfo =
-          result.clustersDensidade && result.clustersDensidade.length > 0
-            ? ` • ${result.clustersDensidade.length} Clusters de Densidade (500 Concursos) Ativados`
-            : '';
-
-        setDocumentMessage(
-          `✓ Fechamento Ponderado concluído com Clusterização por Densidade de Dezenas${clusterInfo}! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
-        );
-        setTimeout(() => setDocumentMessage(null), 6000);
-
-        const end = performance.now();
-        setGenerationTimeMs(Math.round(end - start));
-      } catch (err: any) {
-        console.error(err);
-        const fullFilters = {
-          ...filters,
-          dezenasFixas: fixedNumbers,
-          dezenasExcluidas: excludedNumbers,
-        };
         logFechamentoError({
           stage: 'ponderado',
           mode,
@@ -1386,27 +1344,138 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           activeFilters: fullFilters,
           drawConcurso: latestDraw.concurso,
           drawData: latestDraw.data,
-          errorMessage: err?.message || 'Falha no algoritmo de Fechamento Inteligente Ponderado.',
-          errorName: err?.name,
-          errorStack: err?.stack,
+          errorMessage: 'Fechamento Ponderado não encontrou combinações elegíveis com os filtros de IP e robustez ativos.',
+          errorStack: diag.reasons.join(' | '),
         });
-        const diag = diagnoseGenerationFailure(
-          selectedNumbers,
-          fixedNumbers,
-          excludedNumbers,
-          fullFilters,
-          targetCount,
-          latestDraw
-        );
-        if (err?.message && !diag.reasons.includes(err.message)) {
-          diag.reasons.unshift(err.message);
-        }
         setGenerationError(diag);
         setGeneratedTickets([]);
-      } finally {
-        setIsGenerating(false);
+        return;
       }
-    }, 150);
+
+      setDiscardedByRobustezCount(result.discardedByRobustezCount);
+      setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
+      setGeneratedTickets(result.tickets);
+
+      const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
+      setStrategyName(newStratName);
+
+      const exportMeta: FechamentoExportMeta = {
+        strategyName: newStratName,
+        modeName: `${preset.nome} (${result.tickets.length} Jogos - Ponderado IP)`,
+        garantia: preset.garantia,
+        targetCount: targetCount,
+        selectedNumbers: selectedNumbers,
+        fixedNumbers: fixedNumbers,
+        excludedNumbers: excludedNumbers,
+        filters: fullFilters,
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        timestamp: Date.now(),
+      };
+
+      try {
+        localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+      } catch {}
+
+      const finalPonderadoName = appliedSuggestionName
+        ? `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'}) • Sugestão: ${appliedSuggestionName}`
+        : `Fechamento Inteligente Ponderado (${result.sazonalidade?.agressividadeFiltros || 'Sazonalidade MM100'})`;
+
+      onSaveTickets(result.tickets, { ...exportMeta, strategyName: finalPonderadoName });
+      autoSaveFechamentoPrognostico(
+        result.tickets,
+        finalPonderadoName,
+        { ...exportMeta, strategyName: finalPonderadoName },
+        selectedNumbers
+      );
+      setGenerationType('matriz');
+      saveToAutoSave(result.tickets, mode, selectedNumbers, fullFilters, 'matriz');
+      soundService.playGoldenZoneSuccessChime();
+
+      const clusterInfo =
+        result.clustersDensidade && result.clustersDensidade.length > 0
+          ? ` • ${result.clustersDensidade.length} Clusters de Densidade (500 Concursos) Ativados`
+          : '';
+
+      setDocumentMessage(
+        `✓ Fechamento Ponderado concluído fora da thread principal! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
+      );
+      setTimeout(() => setDocumentMessage(null), 6000);
+
+      const end = performance.now();
+      setGenerationTimeMs(Math.round(end - start));
+    } catch (err: any) {
+      console.error(err);
+      const fullFilters = {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+      logFechamentoError({
+        stage: 'ponderado',
+        mode,
+        targetCount,
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        activeFilters: fullFilters,
+        drawConcurso: latestDraw.concurso,
+        drawData: latestDraw.data,
+        errorMessage: err?.message || 'Falha no algoritmo de Fechamento Inteligente Ponderado.',
+        errorName: err?.name,
+        errorStack: err?.stack,
+      });
+      const diag = diagnoseGenerationFailure(
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        fullFilters,
+        targetCount,
+        latestDraw
+      );
+      if (err?.message && !diag.reasons.includes(err.message)) {
+        diag.reasons.unshift(err.message);
+      }
+      setGenerationError(diag);
+      setGeneratedTickets([]);
+    } finally {
+      setIsGenerating(false);
+      setWorkerProgress(null);
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (generatedTickets.length === 0) return;
+    try {
+      exportFechamentoToPdf({
+        tickets: generatedTickets,
+        latestDraw,
+        meta: getCurrentExportMeta(),
+      });
+      setDocumentMessage('✓ Dossiê de jogos em PDF formatado baixado com sucesso!');
+      setTimeout(() => setDocumentMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[Export PDF] Erro:', err);
+      setDocumentMessage('⚠️ Falha ao gerar arquivo PDF: ' + (err?.message || 'Erro desconhecido'));
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (generatedTickets.length === 0) return;
+    try {
+      exportFechamentoToCsv({
+        tickets: generatedTickets,
+        latestDraw,
+        meta: getCurrentExportMeta(),
+      });
+      setDocumentMessage('✓ Planilha CSV formatada baixada com sucesso (compatível com Excel)!');
+      setTimeout(() => setDocumentMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[Export CSV] Erro:', err);
+      setDocumentMessage('⚠️ Falha ao gerar arquivo CSV: ' + (err?.message || 'Erro desconhecido'));
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
   };
 
   const handleApplyTurbo = (tickets: GameTicket[], turboRes: TurboResult) => {
@@ -2508,6 +2577,45 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
+      {/* Indicador de Processamento em Web Worker (Fora da Main Thread / Anti-Tela Preta) */}
+      {isGenerating && (
+        <div className="bg-slate-900/95 border-2 border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
+                <Cpu className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-mono">
+                    WEB WORKER ATIVO
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    Thread paralela isolada • 60 FPS ininterruptos
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-white mt-0.5">
+                  {workerProgress?.message || 'Processando combinações e restrições canônicas...'}
+                </h4>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-mono font-black text-emerald-400">
+                {workerProgress?.percent ?? 50}%
+              </span>
+            </div>
+          </div>
+
+          {/* Barra de Progresso */}
+          <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 h-2.5 rounded-full transition-all duration-300"
+              style={{ width: `${Math.max(10, Math.min(100, workerProgress?.percent ?? 50))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* AVISO EXPLICATIVO QUANDO NÃO FOR POSSÍVEL GERAR JOGOS */}
       {generationError && (
         <div className="bg-gradient-to-br from-rose-950/40 via-slate-900 to-amber-950/30 rounded-2xl border-2 border-rose-500/50 p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in duration-300">
@@ -2760,6 +2868,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               >
                 <Download className="w-3.5 h-3.5 text-slate-950" />
                 <span>Baixar TXT</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition cursor-pointer shadow-md shadow-rose-500/20"
+                title="Exportar dossiê oficial formatado em PDF pronto para conferência e impressão"
+              >
+                <FileText className="w-3.5 h-3.5 text-white" />
+                <span>Exportar PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-teal-500/20"
+                title="Exportar jogos em planilha CSV (delimitada por ponto e vírgula com UTF-8 BOM para Excel)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-950" />
+                <span>Exportar CSV</span>
               </button>
               <button
                 onClick={() => onGoToSimulator(generatedTickets)}
