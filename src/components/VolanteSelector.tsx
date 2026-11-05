@@ -10,7 +10,7 @@ import {
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics';
 import { calculateCurvaAbc } from '../services/curvaAbcService';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X } from 'lucide-react';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X, CheckCircle2 } from 'lucide-react';
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 import { soundService } from '../services/soundAlert';
 
@@ -130,14 +130,60 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     onStrategySelect?.('Equilíbrio Canônico');
   };
 
+  const [lastClickedNum, setLastClickedNum] = useState<number | null>(null);
+  const [lastActionType, setLastActionType] = useState<'selected' | 'unselected' | 'fixed' | 'unfixed' | 'excluded' | 'unexcluded' | null>(null);
+
+  // Real-time metrics computed for the selected numbers
+  const volanteStats = React.useMemo(() => {
+    const count = selectedNumbers.length;
+    const remaining = targetCount - count;
+    const percent = Math.min(100, Math.round((count / targetCount) * 100));
+    const pares = selectedNumbers.filter((n) => n % 2 === 0).length;
+    const impares = count - pares;
+    const molduraCount = selectedNumbers.filter((n) => MOLDURA.includes(n)).length;
+    const mioloCount = count - molduraCount;
+    const primosCount = selectedNumbers.filter((n) => PRIMOS.includes(n)).length;
+    const fibCount = selectedNumbers.filter((n) => FIBONACCI.includes(n)).length;
+    const soma = selectedNumbers.reduce((acc, curr) => acc + curr, 0);
+
+    return {
+      count,
+      remaining,
+      percent,
+      pares,
+      impares,
+      molduraCount,
+      mioloCount,
+      primosCount,
+      fibCount,
+      soma,
+      isExact: count === targetCount,
+      isOver: count > targetCount,
+      isUnder: count < targetCount,
+    };
+  }, [selectedNumbers, targetCount]);
+
   const handleNumberClick = (n: number) => {
+    setLastClickedNum(n);
+    soundService.playTick();
+
     if (clickMode === 'fix') {
+      const willUnfix = fixedNumbers.includes(n);
+      setLastActionType(willUnfix ? 'unfixed' : 'fixed');
       onSetFixed(n);
     } else if (clickMode === 'exclude') {
+      const willUnexclude = excludedNumbers.includes(n);
+      setLastActionType(willUnexclude ? 'unexcluded' : 'excluded');
       onSetExcluded(n);
     } else {
+      const willUnselect = selectedNumbers.includes(n);
+      setLastActionType(willUnselect ? 'unselected' : 'selected');
       onToggleNumber(n);
     }
+
+    setTimeout(() => {
+      setLastClickedNum((current) => (current === n ? null : current));
+    }, 450);
   };
 
   const [isRollingVolante, setIsRollingVolante] = useState<boolean>(false);
@@ -356,6 +402,104 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         </div>
       </div>
     </div>
+
+      {/* Real-Time Interactive Counter HUD & Visual Feedback Bar */}
+      <div className="my-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 shadow-inner">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {/* Animated Target Gauge */}
+            <div className="relative flex items-center justify-center shrink-0">
+              <motion.div
+                key={volanteStats.count}
+                initial={{ scale: 0.88, opacity: 0.8 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                className={`px-3 py-1.5 rounded-xl font-mono text-sm sm:text-base font-black flex items-baseline gap-1 shadow-inner ${
+                  volanteStats.isExact
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-emerald-500/20 ring-1 ring-emerald-400/40'
+                    : volanteStats.isOver
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-amber-500/20 ring-1 ring-amber-400/30'
+                    : 'bg-slate-800 text-slate-200 border border-slate-700'
+                }`}
+              >
+                <span className="text-xl sm:text-2xl tabular-nums leading-none">
+                  {volanteStats.count.toString().padStart(2, '0')}
+                </span>
+                <span className="text-xs text-slate-400 font-semibold">/ {targetCount}</span>
+              </motion.div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-white">Status da Seleção:</span>
+                {volanteStats.isExact && (
+                  <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Matriz Completa ({targetCount} dezenas)
+                  </span>
+                )}
+                {volanteStats.isUnder && (
+                  <span className="text-[11px] font-medium text-amber-300 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    Faltam {volanteStats.remaining} {volanteStats.remaining === 1 ? 'dezena' : 'dezenas'}
+                  </span>
+                )}
+                {volanteStats.isOver && (
+                  <span className="text-[11px] font-medium text-rose-300 flex items-center gap-1 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                    {volanteStats.count - targetCount} acima do limite ({targetCount})
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {volanteStats.isExact
+                  ? 'Matriz matemática pronta para alimentar o motor de fechamento.'
+                  : `Selecione exatamente ${targetCount} dezenas para balanceamento estatístico ideal.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Real-Time Metrics Chips */}
+          <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono">
+            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Paridade (Pares / Ímpares)">
+              <span className="text-slate-500">P/I:</span> <strong className="text-white">{volanteStats.pares}P</strong> / <strong className="text-white">{volanteStats.impares}I</strong>
+            </span>
+            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Distribuição Moldura e Miolo">
+              <span className="text-slate-500">M/C:</span> <strong className="text-amber-300">{volanteStats.molduraCount}M</strong> / <strong className="text-cyan-300">{volanteStats.mioloCount}C</strong>
+            </span>
+            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Soma das dezenas selecionadas (Faixa ideal: 185 a 215)">
+              <span className="text-slate-500">Soma:</span>{' '}
+              <strong className={volanteStats.soma >= 185 && volanteStats.soma <= 215 ? 'text-emerald-400 font-bold' : 'text-amber-300'}>
+                {volanteStats.soma}
+              </strong>
+            </span>
+            {fixedNumbers.length > 0 && (
+              <span className="px-2 py-1 rounded-lg bg-blue-950/60 border border-blue-800 text-blue-300 font-semibold">
+                Fixas: {fixedNumbers.length}
+              </span>
+            )}
+            {excludedNumbers.length > 0 && (
+              <span className="px-2 py-1 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 font-semibold">
+                Excl: {excludedNumbers.length}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Progress Bar with Fluid Animation */}
+        <div className="w-full bg-slate-800/80 rounded-full h-1.5 mt-2.5 overflow-hidden">
+          <motion.div
+            className={`h-full ${
+              volanteStats.isExact
+                ? 'bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                : volanteStats.isOver
+                ? 'bg-gradient-to-r from-amber-400 to-rose-400'
+                : 'bg-gradient-to-r from-emerald-500/70 to-amber-400'
+            }`}
+            initial={{ width: 0 }}
+            animate={{ width: `${volanteStats.percent}%` }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          />
+        </div>
+      </div>
 
       {/* Visual Filter Overlays */}
       <div className="flex flex-wrap items-center justify-between gap-2 py-3 border-b border-slate-800/60 text-xs">
@@ -625,8 +769,8 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               <motion.button
                 key={num}
                 type="button"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.88 }}
                 animate={
                   isRollingCell
                     ? {
@@ -651,13 +795,48 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                     ? { duration: 0.5, ease: 'easeOut', times: [0, 0.5, 1] }
                     : isRollingCell
                     ? { duration: 0.22, repeat: Infinity, ease: 'easeInOut' }
-                    : { duration: 0.15 }
+                    : { type: 'spring', stiffness: 500, damping: 25 }
                 }
                 onClick={() => handleNumberClick(num)}
-                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px] ${
+                className={`relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-colors duration-200 ease-out cursor-pointer select-none overflow-visible ${bgStyle} ${borderStyle} min-h-[58px] sm:min-h-[64px] ${
                   isStabilizingThis ? 'z-30 ring-2 ring-amber-300' : ''
                 }`}
               >
+                {/* Tactile expanding wave feedback on click */}
+                {lastClickedNum === num && (
+                  <motion.span
+                    initial={{ scale: 0.75, opacity: 0.9 }}
+                    animate={{ scale: 1.5, opacity: 0 }}
+                    transition={{ duration: 0.45, ease: 'easeOut' }}
+                    className={`absolute inset-0 rounded-xl pointer-events-none ring-2 ${
+                      clickMode === 'fix'
+                        ? 'ring-blue-400 bg-blue-400/25'
+                        : clickMode === 'exclude'
+                        ? 'ring-rose-400 bg-rose-400/25'
+                        : isSelected
+                        ? 'ring-emerald-400 bg-emerald-400/30'
+                        : 'ring-slate-300 bg-slate-300/15'
+                    }`}
+                  />
+                )}
+
+                {/* Micro-badge icon for state */}
+                {isSelected && !isFixed && !isExcluded && (
+                  <span className="absolute top-1 left-1 w-3 h-3 rounded-full bg-slate-950/40 flex items-center justify-center pointer-events-none">
+                    <Check className="w-2 h-2 text-slate-950 stroke-[3]" />
+                  </span>
+                )}
+                {isFixed && (
+                  <span className="absolute top-1 left-1 w-3 h-3 rounded-full bg-white/20 flex items-center justify-center pointer-events-none">
+                    <Pin className="w-2 h-2 text-white fill-current" />
+                  </span>
+                )}
+                {isExcluded && (
+                  <span className="absolute top-1 left-1 w-3 h-3 rounded-full bg-rose-500/20 flex items-center justify-center pointer-events-none">
+                    <Ban className="w-2 h-2 text-rose-300" />
+                  </span>
+                )}
+
                 {/* Intense stabilization flash aura */}
                 {isStabilizingThis && (
                   <motion.span

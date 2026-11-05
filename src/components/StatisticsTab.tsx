@@ -49,6 +49,7 @@ import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
 import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
 import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
+import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50ConcursosRecharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -104,6 +105,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'historico_roi'
     | 'espelho_concurso'
     | 'dashboard_recharts'
+    | 'frequencia_50'
     | 'scatter_soma_d3'
     | 'comparador_periodos'
     | 'widget_tendencias'
@@ -249,6 +251,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Dashboard 100 Concursos</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               RECHARTS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('frequencia_50')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'frequencia_50'
+                ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-400 fill-current" />
+            <span>Frequência 50 Concursos (Quentes & Frias)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              RECHARTS • 50 JOGOS
             </span>
           </button>
 
@@ -706,6 +723,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                 window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
               }
             }}
+          />
+
+          {/* Dashboard Recharts: Frequência nos Últimos 50 Concursos (Análise Rápida de Quentes e Frias) */}
+          <DashboardFrequencia50ConcursosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
           />
 
           {/* Widget de Tendências: 5 Dezenas Mais Sorteadas nos Últimos 20 Concursos (Recharts) */}
@@ -1494,6 +1519,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                 window.dispatchEvent(new CustomEvent('switch-tab', { detail: { tab: 'fechamento' } }));
               }
             }}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: DASHBOARD 50 CONCURSOS - QUENTES E FRIAS (RECHARTS) */}
+      {activeSubTab === 'frequencia_50' && (
+        <div className="space-y-6">
+          <DashboardFrequencia50ConcursosRecharts
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
           />
         </div>
       )}
