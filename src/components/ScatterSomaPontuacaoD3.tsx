@@ -319,23 +319,14 @@ export const ScatterSomaPontuacaoD3: React.FC<ScatterSomaPontuacaoD3Props> = ({
 
     // Mouse events
     circles
+      .style('transition', 'r 0.15s ease, fill-opacity 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease')
       .on('mouseenter', function (event, d) {
         const sel = d3.select(this);
-        if (typeof (sel as any).transition === 'function') {
-          (sel as any)
-            .transition()
-            .duration(150)
-            .attr('r', 9)
-            .attr('fill-opacity', 1)
-            .attr('stroke', '#ffffff')
-            .attr('stroke-width', 2);
-        } else {
-          sel
-            .attr('r', 9)
-            .attr('fill-opacity', 1)
-            .attr('stroke', '#ffffff')
-            .attr('stroke-width', 2);
-        }
+        sel
+          .attr('r', 9)
+          .attr('fill-opacity', 1)
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 2);
 
         setSelectedPoint(d);
         soundService.playTick();
@@ -346,21 +337,11 @@ export const ScatterSomaPontuacaoD3: React.FC<ScatterSomaPontuacaoD3Props> = ({
         const targetStroke = d.pontuacaoHistorica >= 14 ? '#ffffff' : '#0f172a';
         const targetStrokeWidth = d.pontuacaoHistorica >= 14 ? 1.5 : 1;
 
-        if (typeof (sel as any).transition === 'function') {
-          (sel as any)
-            .transition()
-            .duration(150)
-            .attr('r', targetR)
-            .attr('fill-opacity', 0.8)
-            .attr('stroke', targetStroke)
-            .attr('stroke-width', targetStrokeWidth);
-        } else {
-          sel
-            .attr('r', targetR)
-            .attr('fill-opacity', 0.8)
-            .attr('stroke', targetStroke)
-            .attr('stroke-width', targetStrokeWidth);
-        }
+        sel
+          .attr('r', targetR)
+          .attr('fill-opacity', 0.8)
+          .attr('stroke', targetStroke)
+          .attr('stroke-width', targetStrokeWidth);
       })
       .on('click', function (event, d) {
         setSelectedPoint(d);

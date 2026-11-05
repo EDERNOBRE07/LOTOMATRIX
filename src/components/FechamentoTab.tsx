@@ -33,6 +33,8 @@ import { PainelTendenciaCiclo, CycleTendencyConfig } from './PainelTendenciaCicl
 import { ClosingIntegrityValidator } from './ClosingIntegrityValidator';
 import { D3CoverageHeatmap } from './D3CoverageHeatmap';
 import { ErrorBoundary } from './ErrorBoundary';
+import { FechamentoErrorLogsModal } from './FechamentoErrorLogsModal';
+import { logFechamentoError, getFechamentoErrorLogs } from '../services/fechamentoErrorLogger';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
 import { TurboResult } from '../services/turboBruteForce';
@@ -76,6 +78,7 @@ import {
   Lightbulb,
   BookmarkCheck,
   ArrowRight,
+  Bug,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -156,11 +159,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     reasons: string[];
     suggestions: string[];
   } | null>(null);
+  const [isErrorLogsModalOpen, setIsErrorLogsModalOpen] = useState(false);
+  const [errorLogsCount, setErrorLogsCount] = useState<number>(() => getFechamentoErrorLogs().length);
 
   // Estado para sinalizar e iluminar com destaque o box escolhido em 'Sugestões Estratégicas'
   const [activeStrategicBox, setActiveStrategicBox] = useState<
     'curva_abc' | 'top_18' | 'pares_ouro' | 'preditor_real' | 'insights_ia' | 'garantir_filtros' | null
   >(null);
+
+  // Listener para manter contador de erros e telemetria atualizado em tempo real
+  useEffect(() => {
+    const handleErrUpdate = () => {
+      setErrorLogsCount(getFechamentoErrorLogs().length);
+    };
+    window.addEventListener('lotosniper-fechamento-error', handleErrUpdate);
+    return () => {
+      window.removeEventListener('lotosniper-fechamento-error', handleErrUpdate);
+    };
+  }, []);
 
   // Listener para aplicação automática de Dezenas Fixas / Par de Ouro
   useEffect(() => {
@@ -963,8 +979,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       suggestions.push('Remova algumas dezenas excluídas para permitir a formação de bilhetes válidos.');
     }
 
-    if (activeFilters.somaMin > activeFilters.somaMax) {
-      reasons.push(`Faixa de soma inválida: o valor mínimo (${activeFilters.somaMin}) é maior que o valor máximo (${activeFilters.somaMax}).`);
+    const fSomaMin = activeFilters?.somaMin ?? 175;
+    const fSomaMax = activeFilters?.somaMax ?? 220;
+    const fParesMin = activeFilters?.paresMin ?? 5;
+    const fPrimosMin = activeFilters?.primosMin ?? 3;
+    const fMolduraMin = activeFilters?.molduraMin ?? 7;
+
+    if (fSomaMin > fSomaMax) {
+      reasons.push(`Faixa de soma inválida: o valor mínimo (${fSomaMin}) é maior que o valor máximo (${fSomaMax}).`);
       suggestions.push('Ajuste o intervalo de soma para os padrões oficiais (ex: 175 a 220).');
     }
 
@@ -973,32 +995,32 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       const minPossibleSum = sortedPool.slice(0, 15).reduce((a, b) => a + b, 0);
       const maxPossibleSum = sortedPool.slice(-15).reduce((a, b) => a + b, 0);
 
-      if (activeFilters.somaMin > maxPossibleSum) {
-        reasons.push(`A soma mínima configurada (${activeFilters.somaMin}) é superior à soma máxima possível de qualquer combinação das suas dezenas selecionadas (${maxPossibleSum}).`);
+      if (fSomaMin > maxPossibleSum) {
+        reasons.push(`A soma mínima configurada (${fSomaMin}) é superior à soma máxima possível de qualquer combinação das suas dezenas selecionadas (${maxPossibleSum}).`);
         suggestions.push(`Reduza o limite de soma mínima para ${Math.min(220, maxPossibleSum)} ou inclua dezenas de numeração mais alta.`);
       }
 
-      if (activeFilters.somaMax < minPossibleSum) {
-        reasons.push(`A soma máxima configurada (${activeFilters.somaMax}) é inferior à menor soma possível com as suas dezenas selecionadas (${minPossibleSum}).`);
+      if (fSomaMax < minPossibleSum) {
+        reasons.push(`A soma máxima configurada (${fSomaMax}) é inferior à menor soma possível com as suas dezenas selecionadas (${minPossibleSum}).`);
         suggestions.push(`Aumente o limite de soma máxima para ${Math.max(175, minPossibleSum)} ou inclua dezenas menores.`);
       }
     }
 
     const totalEven = pool.filter((n) => n % 2 === 0).length;
-    if (activeFilters.paresMin > totalEven) {
-      reasons.push(`O filtro de pares exige no mínimo ${activeFilters.paresMin} pares, porém seu pool só contém ${totalEven} dezenas pares.`);
+    if (fParesMin > totalEven) {
+      reasons.push(`O filtro de pares exige no mínimo ${fParesMin} pares, porém seu pool só contém ${totalEven} dezenas pares.`);
       suggestions.push(`Reduza o mínimo de pares para no máximo ${totalEven} ou marque mais números pares no volante.`);
     }
 
     const totalPrimes = pool.filter((n) => PRIMOS.includes(n)).length;
-    if (activeFilters.primosMin > totalPrimes) {
-      reasons.push(`O filtro de primos exige no mínimo ${activeFilters.primosMin} primos, porém seu pool só contém ${totalPrimes} números primos.`);
+    if (fPrimosMin > totalPrimes) {
+      reasons.push(`O filtro de primos exige no mínimo ${fPrimosMin} primos, porém seu pool só contém ${totalPrimes} números primos.`);
       suggestions.push(`Diminua a restrição de primos ou adicione números primos (2, 3, 5, 7, 11, 13, 17, 19, 23).`);
     }
 
     const totalMoldura = pool.filter((n) => MOLDURA.includes(n)).length;
-    if (activeFilters.molduraMin > totalMoldura) {
-      reasons.push(`O filtro de moldura exige no mínimo ${activeFilters.molduraMin} dezenas na borda, mas seu pool só contém ${totalMoldura}.`);
+    if (fMolduraMin > totalMoldura) {
+      reasons.push(`O filtro de moldura exige no mínimo ${fMolduraMin} dezenas na borda, mas seu pool só contém ${totalMoldura}.`);
       suggestions.push(`Ajuste o filtro da moldura para no máximo ${totalMoldura} ou selecione mais números da borda do volante.`);
     }
 
@@ -1149,6 +1171,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             targetCount,
             latestDraw
           );
+          logFechamentoError({
+            stage: 'combinatoria',
+            mode,
+            targetCount,
+            selectedNumbers,
+            fixedNumbers,
+            excludedNumbers,
+            activeFilters: fullFilters,
+            drawConcurso: latestDraw.concurso,
+            drawData: latestDraw.data,
+            errorMessage: 'Nenhum bilhete gerado que satisfaça todos os filtros estritos selecionados.',
+            errorStack: diag.reasons.join(' | '),
+          });
           setGenerationError(diag);
           setGeneratedTickets([]);
           return;
@@ -1190,15 +1225,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
         console.error(err);
+        const fullFilters = {
+          ...filters,
+          dezenasFixas: fixedNumbers,
+          dezenasExcluidas: excludedNumbers,
+        };
+        logFechamentoError({
+          stage: 'combinatoria',
+          mode,
+          targetCount,
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          activeFilters: fullFilters,
+          drawConcurso: latestDraw.concurso,
+          drawData: latestDraw.data,
+          errorMessage: err?.message || 'Erro inesperado durante a execução da matriz combinatória.',
+          errorName: err?.name,
+          errorStack: err?.stack,
+        });
         const diag = diagnoseGenerationFailure(
           selectedNumbers,
           fixedNumbers,
           excludedNumbers,
-          {
-            ...filters,
-            dezenasFixas: fixedNumbers,
-            dezenasExcluidas: excludedNumbers,
-          },
+          fullFilters,
           targetCount,
           latestDraw
         );
@@ -1249,6 +1299,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             targetCount,
             latestDraw
           );
+          logFechamentoError({
+            stage: 'ponderado',
+            mode,
+            targetCount,
+            selectedNumbers,
+            fixedNumbers,
+            excludedNumbers,
+            activeFilters: fullFilters,
+            drawConcurso: latestDraw.concurso,
+            drawData: latestDraw.data,
+            errorMessage: 'Fechamento Ponderado não encontrou combinações elegíveis com os filtros de IP e robustez ativos.',
+            errorStack: diag.reasons.join(' | '),
+          });
           setGenerationError(diag);
           setGeneratedTickets([]);
           return;
@@ -1308,14 +1371,36 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setGenerationTimeMs(Math.round(end - start));
       } catch (err: any) {
         console.error(err);
+        const fullFilters = {
+          ...filters,
+          dezenasFixas: fixedNumbers,
+          dezenasExcluidas: excludedNumbers,
+        };
+        logFechamentoError({
+          stage: 'ponderado',
+          mode,
+          targetCount,
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          activeFilters: fullFilters,
+          drawConcurso: latestDraw.concurso,
+          drawData: latestDraw.data,
+          errorMessage: err?.message || 'Falha no algoritmo de Fechamento Inteligente Ponderado.',
+          errorName: err?.name,
+          errorStack: err?.stack,
+        });
         const diag = diagnoseGenerationFailure(
           selectedNumbers,
           fixedNumbers,
           excludedNumbers,
-          filters,
+          fullFilters,
           targetCount,
           latestDraw
         );
+        if (err?.message && !diag.reasons.includes(err.message)) {
+          diag.reasons.unshift(err.message);
+        }
         setGenerationError(diag);
         setGeneratedTickets([]);
       } finally {
@@ -1325,6 +1410,26 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   };
 
   const handleApplyTurbo = (tickets: GameTicket[], turboRes: TurboResult) => {
+    if (!tickets || tickets.length === 0) {
+      logFechamentoError({
+        stage: 'turbo',
+        mode,
+        targetCount: turboRes.poolSize,
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        activeFilters: {
+          ...filters,
+          dezenasFixas: fixedNumbers,
+          dezenasExcluidas: excludedNumbers,
+        },
+        errorMessage: 'Tentativa de carregar fechamento Turbo com bilhetes nulos ou vazios.',
+      });
+      setDocumentMessage('⚠️ Nenhum bilhete retornado pelo Gerador Turbo.');
+      setTimeout(() => setDocumentMessage(null), 5000);
+      return;
+    }
+
     setGenerationError(null);
     setGeneratedTickets(tickets);
     setGenerationType('turbo');
@@ -1540,6 +1645,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   <span>Histórico Auto-Save ({autoSaveHistory.length}/10)</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setIsErrorLogsModalOpen(true)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold transition cursor-pointer shadow-sm ${
+                  errorLogsCount > 0
+                    ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/50 text-rose-300 animate-pulse'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                }`}
+                title="Dossiê de Erros, Telemetria e Diagnóstico Assíncrono do Motor de Fechamento"
+              >
+                <Bug className="w-3.5 h-3.5" />
+                <span>Telemetria & Diagnóstico {errorLogsCount > 0 ? `(${errorLogsCount})` : ''}</span>
+              </button>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               Otimizador de Fechamentos para 14 Pontos
@@ -2458,7 +2577,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             <span className="text-slate-400 text-[11px]">
               Dica: As faixas canônicas oficiais do LotoSniper asseguram combinações estatisticamente favoráveis com alta garantia.
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsErrorLogsModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Bug className="w-3.5 h-3.5" />
+                <span>Ver Dossiê Forense de Telemetria</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -2883,6 +3011,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers={excludedNumbers}
         latestDraw={latestDraw}
         onApplyTickets={handleApplyTurbo}
+      />
+
+      {/* MODAL DE LOGS ASSÍNCRONOS E TELEMETRIA FORENSE DE FALHAS */}
+      <FechamentoErrorLogsModal
+        isOpen={isErrorLogsModalOpen}
+        onClose={() => setIsErrorLogsModalOpen(false)}
+        onRestoreDefaults={() => {
+          setFilters(DEFAULT_FILTERS);
+          setFixedNumbers(cyclePendingNumbers.slice(0, 2));
+          setExcludedNumbers([]);
+          setGenerationError(null);
+          setDocumentMessage('Filtros padrão restaurados! Tente processar a matriz novamente.');
+          setTimeout(() => setDocumentMessage(null), 5000);
+        }}
       />
     </div>
   );

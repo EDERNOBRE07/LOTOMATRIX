@@ -78,6 +78,7 @@ export const ClosingIntegrityValidator: React.FC<ClosingIntegrityValidatorProps>
         // Verify if at least one generated ticket hits >= targetHits
         let maxHits = 0;
         for (const t of tickets) {
+          if (!t || !Array.isArray(t.dezenas)) continue;
           const matches = countMatches(t.dezenas, drawn15);
           if (matches > maxHits) maxHits = matches;
           if (maxHits >= targetHits) break;
@@ -114,7 +115,7 @@ export const ClosingIntegrityValidator: React.FC<ClosingIntegrityValidatorProps>
     };
   }, [tickets, selectedNumbers, targetHits, targetCount]);
 
-  if (tickets.length === 0) return null;
+  if (!tickets || !Array.isArray(tickets) || tickets.length === 0) return null;
 
   const currentDezenas = selectedNumbers.length;
 

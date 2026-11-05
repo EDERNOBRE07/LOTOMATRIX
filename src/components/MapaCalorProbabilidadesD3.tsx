@@ -298,34 +298,22 @@ export const MapaCalorProbabilidadesD3: React.FC<MapaCalorProbabilidadesD3Props>
 
     // Interações D3: Hover, MouseOut, Click
     cellGroups
+      .select('rect')
+      .style('transition', 'transform 0.15s ease');
+
+    cellGroups
       .on('mouseenter', function (_event, d) {
         const rectEl = d3.select(this).select('rect');
-        if (typeof (rectEl as any).transition === 'function') {
-          (rectEl as any)
-            .transition()
-            .duration(150)
-            .attr('transform', 'scale(1.04)')
-            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
-        } else {
-          rectEl
-            .attr('transform', 'scale(1.04)')
-            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
-        }
+        rectEl
+          .attr('transform', 'scale(1.04)')
+          .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
         setHoveredData(d);
       })
       .on('mouseleave', function () {
         const rectEl = d3.select(this).select('rect');
-        if (typeof (rectEl as any).transition === 'function') {
-          (rectEl as any)
-            .transition()
-            .duration(150)
-            .attr('transform', 'scale(1)')
-            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
-        } else {
-          rectEl
-            .attr('transform', 'scale(1)')
-            .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
-        }
+        rectEl
+          .attr('transform', 'scale(1)')
+          .attr('transform-origin', `${actualCellSize / 2} ${actualCellSize / 2}`);
         setHoveredData(null);
       })
       .on('click', function (_event, d) {

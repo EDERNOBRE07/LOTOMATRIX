@@ -34,7 +34,7 @@ export const D3CoverageHeatmap: React.FC<D3CoverageHeatmapProps> = ({
 
   // Compute heatmap matrix data
   const heatmapData = useMemo(() => {
-    if (tickets.length === 0) return [];
+    if (!tickets || !Array.isArray(tickets) || tickets.length === 0) return [];
 
     const data: {
       drawIndex: number;
@@ -50,6 +50,7 @@ export const D3CoverageHeatmap: React.FC<D3CoverageHeatmapProps> = ({
       [11, 12, 13, 14, 15].forEach((hitTier) => {
         const matchingTickets: number[] = [];
         tickets.forEach((t) => {
+          if (!t || !Array.isArray(t.dezenas)) return;
           const hits = countMatches(t.dezenas, draw.dezenas);
           if (hits === hitTier) {
             matchingTickets.push(t.index);

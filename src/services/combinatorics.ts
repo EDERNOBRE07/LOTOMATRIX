@@ -443,8 +443,10 @@ export function generateMinimumSetCoverFechamento({
   let uncoveredRemaining = totalUniverse;
   const chosenIndices: number[] = [];
   const chosenSet = new Set<number>();
+  let greedyStep = 0;
+  const maxGreedySteps = Math.min(maxTickets * 2, 200);
 
-  while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets) {
+  while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
     let bestCandIdx = -1;
     let bestNewCovers = -1;
     let bestScore = -1;
@@ -488,7 +490,8 @@ export function generateMinimumSetCoverFechamento({
   // Elimina qualquer bilhete cujos subconjuntos já estejam cobertos por outros bilhetes escolhidos,
   // garantindo a menor quantidade estrita de jogos.
   let improved = true;
-  while (improved) {
+  let prunePass = 0;
+  while (improved && prunePass++ < 30) {
     improved = false;
     for (let p = chosenIndices.length - 1; p >= 0; p--) {
       const candIdx = chosenIndices[p];
@@ -616,9 +619,11 @@ export function generateFechamentoCovering(
   // Generate combinations efficiently with early branch pruning for n >= 16 up to 21
   const validCandidates: number[][] = [];
   const maxPoolCandidates = n <= 18 ? 4000 : 8000;
+  let evalCount = 0;
+  const MAX_RECURSION_EVALS = 25000;
 
   function collectCanonical(start: number, current: number[]) {
-    if (validCandidates.length >= maxPoolCandidates) return;
+    if (validCandidates.length >= maxPoolCandidates || evalCount++ > MAX_RECURSION_EVALS) return;
     if (current.length === 15) {
       if (isCandidateValid(current)) {
         validCandidates.push([...current]);
@@ -633,7 +638,7 @@ export function generateFechamentoCovering(
       current.push(sortedPool[i]);
       collectCanonical(i + 1, current);
       current.pop();
-      if (validCandidates.length >= maxPoolCandidates) break;
+      if (validCandidates.length >= maxPoolCandidates || evalCount > MAX_RECURSION_EVALS) break;
     }
   }
 
@@ -651,8 +656,9 @@ export function generateFechamentoCovering(
       ])
     ).filter((num) => !excluded.includes(num));
 
+    let augCount = 0;
     function collectAugmented(start: number, current: number[]) {
-      if (validCandidates.length >= maxPoolCandidates) return;
+      if (validCandidates.length >= maxPoolCandidates || augCount++ > MAX_RECURSION_EVALS) return;
       if (current.length === 15) {
         if (isCandidateValid(current)) {
           if (!validCandidates.some((c) => countMatches(c, current) === 15)) {
@@ -669,7 +675,7 @@ export function generateFechamentoCovering(
         current.push(backupPool[i]);
         collectAugmented(i + 1, current);
         current.pop();
-        if (validCandidates.length >= maxPoolCandidates) break;
+        if (validCandidates.length >= maxPoolCandidates || augCount > MAX_RECURSION_EVALS) break;
       }
     }
 
@@ -698,8 +704,9 @@ export function generateFechamentoCovering(
       return ticketPassesFilters(a, relaxedFilters) && !isCanonicalAnomaly(nums, a, concursoAnterior);
     };
 
+    let relCount = 0;
     function collectRelaxed(start: number, current: number[]) {
-      if (validCandidates.length >= maxPoolCandidates) return;
+      if (validCandidates.length >= maxPoolCandidates || relCount++ > MAX_RECURSION_EVALS) return;
       if (current.length === 15) {
         if (isRelaxedValid(current)) {
           validCandidates.push([...current]);
@@ -714,7 +721,7 @@ export function generateFechamentoCovering(
         current.push(sortedPool[i]);
         collectRelaxed(i + 1, current);
         current.pop();
-        if (validCandidates.length >= maxPoolCandidates) break;
+        if (validCandidates.length >= maxPoolCandidates || relCount > MAX_RECURSION_EVALS) break;
       }
     }
 
@@ -734,7 +741,10 @@ export function generateFechamentoCovering(
   });
 
   // Greedy covering: iteratively choose ticket that covers the most uncovered target subsets
-  while (uncovered.size > 0 && chosenTickets.length < maxTickets && validCandidates.length > 0) {
+  let greedyLoop = 0;
+  const maxGreedyLoops = Math.min(maxTickets * 2, 200);
+
+  while (uncovered.size > 0 && chosenTickets.length < maxTickets && validCandidates.length > 0 && greedyLoop++ < maxGreedyLoops) {
     let bestCandidateIdx = -1;
     let bestCoverCount = -1;
     let bestCoveredSet: number[] = [];

@@ -284,6 +284,54 @@ app.post('/api/lotofacil/sync', async (_req: Request, res: Response) => {
   });
 });
 
+// In-memory buffer for Fechamento Telemetry & Anomaly Logging
+const fechamentoErrorLogs: any[] = [];
+const MAX_SERVER_LOGS = 100;
+
+// API: Asynchronous logging endpoint for closing engine anomalies & parameter capture
+app.post('/api/fechamento-errors', (req: Request, res: Response) => {
+  try {
+    const errorData = req.body;
+    if (!errorData || typeof errorData !== 'object') {
+      return res.status(400).json({ success: false, error: 'Payload de log inválido' });
+    }
+
+    const entry = {
+      ...errorData,
+      receivedAt: new Date().toISOString(),
+      clientIp: req.ip || req.socket.remoteAddress,
+    };
+
+    fechamentoErrorLogs.unshift(entry);
+    if (fechamentoErrorLogs.length > MAX_SERVER_LOGS) {
+      fechamentoErrorLogs.pop();
+    }
+
+    console.warn(
+      `[FechamentoTelemetry] Falha registrada na etapa [${entry.stage || 'desconhecida'}]: ${entry.errorMessage} | Dezenas: ${entry.selectedNumbers?.length || 0} | Modo: ${entry.mode || 'N/A'}`
+    );
+
+    res.json({ success: true, loggedId: entry.id, count: fechamentoErrorLogs.length });
+  } catch (err: any) {
+    console.error('[FechamentoTelemetry] Erro ao gravar log de falha:', err);
+    res.status(500).json({ success: false, error: err?.message || 'Falha ao registrar telemetria' });
+  }
+});
+
+app.get('/api/fechamento-errors', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    total: fechamentoErrorLogs.length,
+    logs: fechamentoErrorLogs,
+    exportedAt: new Date().toISOString(),
+  });
+});
+
+app.delete('/api/fechamento-errors', (_req: Request, res: Response) => {
+  fechamentoErrorLogs.length = 0;
+  res.json({ success: true, message: 'Logs de erro do fechamento limpos com sucesso.' });
+});
+
 // API: Real-time AI Optimization & Predictive Machine Learning
 app.post('/api/ai/optimize', async (req: Request, res: Response) => {
   try {

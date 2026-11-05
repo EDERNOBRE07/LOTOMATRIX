@@ -363,12 +363,10 @@ export const SimulacaoBacktestD3Component: React.FC<SimulacaoBacktestD3Component
         } catch {}
       });
 
-    // Animate points with pop effect
-    if (typeof (dots as any).transition === 'function') {
-      (dots as any).transition().duration(400).attr('opacity', 1);
-    } else {
-      dots.attr('opacity', 1);
-    }
+    // Set points with CSS transition
+    dots
+      .style('transition', 'opacity 0.4s ease')
+      .attr('opacity', 1);
   }, [backtestResults, chartMetric, summaryStats.saldoFinal]);
 
   return (
