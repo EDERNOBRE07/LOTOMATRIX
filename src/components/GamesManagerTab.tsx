@@ -36,6 +36,7 @@ import {
   Square,
   AlertTriangle,
   TrendingUp,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface GamesManagerTabProps {
@@ -559,6 +560,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           >
             <Printer className="w-3.5 h-3.5 text-slate-950" />
             <span>Exportar PDF para Impressão</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('lotosniper-open-backup'))}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+            title="Backup completo e automático de jogos e configurações (JSON & Google Drive)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Backup & Drive</span>
           </button>
 
           <button

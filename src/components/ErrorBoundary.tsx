@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, RotateCcw, ShieldAlert, Layers } from 'lucide-react';
+import { AlertTriangle, RefreshCw, RotateCcw, ShieldAlert, Layers, Download } from 'lucide-react';
+import { triggerForcedJSONDownload } from '../services/backupManagerService';
 
 interface Props {
   children: ReactNode;
@@ -83,6 +84,16 @@ export class ErrorBoundary extends Component<Props, State> {
               >
                 <RefreshCw className="w-4 h-4 fill-current" />
                 <span>Restaurar Visualização</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => triggerForcedJSONDownload('lotosniper_backup_emergencia_pos_erro.json')}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer shadow-sm"
+                title="Gera um download forçado de emergência de todos os seus jogos e configurações"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-400" />
+                <span>Salvar Backup Emergencial (JSON)</span>
               </button>
 
               <button

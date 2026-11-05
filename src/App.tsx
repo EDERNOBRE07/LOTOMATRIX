@@ -14,6 +14,12 @@ import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { BackupRestoreCenterModal } from './components/BackupRestoreCenterModal';
+import {
+  saveLocalSnapshot,
+  isAutoDownloadOnSaveEnabled,
+  triggerForcedJSONDownload,
+} from './services/backupManagerService';
 import {
   sendNativeJackpotNotification,
   sendNativeTop5TrendNotification,
@@ -123,11 +129,17 @@ export default function App() {
     }
   });
 
-  // Salvar no localStorage sempre que novos jogos forem gerados
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+
+  // Salvar no localStorage sempre que novos jogos forem gerados e disparar snapshot de proteção
   useEffect(() => {
     if (savedTickets.length > 0) {
       try {
         localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
+        saveLocalSnapshot('auto');
+        if (isAutoDownloadOnSaveEnabled()) {
+          triggerForcedJSONDownload();
+        }
       } catch {}
     }
   }, [savedTickets]);
@@ -208,6 +220,13 @@ export default function App() {
     };
     window.addEventListener('switch-tab', handleSwitchTab);
     return () => window.removeEventListener('switch-tab', handleSwitchTab);
+  }, []);
+
+  // Escuta evento global para abrir a Central de Backup & Segurança
+  useEffect(() => {
+    const handleOpenBackup = () => setIsBackupModalOpen(true);
+    window.addEventListener('lotosniper-open-backup', handleOpenBackup);
+    return () => window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
   }, []);
 
   // Escuta cliques nas notificações emitidas pelo Service Worker em segundo plano
@@ -591,6 +610,7 @@ export default function App() {
         concursosNoCiclo={concursosNoCiclo}
         aiStatus={isAILoading ? 'loading' : 'ready'}
         onQuickOptimize={() => setActiveTab('fechamento')}
+        onOpenBackup={() => setIsBackupModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -944,6 +964,12 @@ export default function App() {
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
         onNavigateTab={(tab) => setActiveTab(tab as any)}
+      />
+
+      {/* Central de Backup & Segurança de Dados (Download Forçado JSON, Snapshots & Drive) */}
+      <BackupRestoreCenterModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
       />
 
       {/* Indicador de Funcionamento Offline PWA */}

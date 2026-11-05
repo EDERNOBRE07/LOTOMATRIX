@@ -11,6 +11,7 @@ import {
   X,
   Crown,
   Contrast,
+  ShieldCheck,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
@@ -24,6 +25,7 @@ interface HeaderProps {
   cyclePendingNumbers?: number[];
   concursosNoCiclo?: number;
   onQuickOptimize?: () => void;
+  onOpenBackup?: () => void;
   aiStatus: 'online' | 'ready' | 'loading';
 }
 
@@ -35,6 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
   cyclePendingNumbers = [17, 22],
   concursosNoCiclo = 4,
   onQuickOptimize,
+  onOpenBackup,
   aiStatus,
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
@@ -259,6 +262,22 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </button>
+
+          {/* Backup & Nuvem Button */}
+          {onOpenBackup && (
+            <button
+              type="button"
+              onClick={onOpenBackup}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-sm active:scale-95 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 hover:border-emerald-400"
+              title="Central de Backup: Download Forçado JSON, Snapshots de Segurança e Google Drive"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Backup</span>
+              <span className="text-[9px] font-mono uppercase bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-black hidden sm:inline">
+                JSON
+              </span>
+            </button>
+          )}
         </div>
       </div>
 

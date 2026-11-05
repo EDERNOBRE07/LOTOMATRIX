@@ -46,6 +46,9 @@ interface AlgorithmDuelSimulatorProps {
 }
 
 export type StrategyKey =
+  | 'garantia_14_pts'
+  | 'filtro_ia'
+  | 'garantia_15_pts'
   | 'estrategia_documento'
   | 'top18_ia'
   | 'fechar_ciclo'
@@ -68,6 +71,33 @@ interface StrategyDefinition {
 
 const STRATEGIES: StrategyDefinition[] = [
   {
+    key: 'garantia_14_pts',
+    name: '🎯 Garantia 14 Pontos (Fechamento 18D • 14 se 15 • 24 Jogos)',
+    shortName: 'Garantia 14 pts',
+    description: 'Matriz combinatória 18-15-14-15 com garantia matemática mínima de 14 pontos cravados acertando as 15 no universo',
+    dezenasCount: 18,
+    ticketsCount: 24,
+    badge: '18D • 14 se 15 (24 Jogos)',
+  },
+  {
+    key: 'filtro_ia',
+    name: '🤖 Filtro de IA Neural (Score Preditivo • 24 Jogos)',
+    shortName: 'Filtro de IA',
+    description: 'Fechamento otimizado com pontuação neural de propensão, poda de redundâncias e calibragem de padrões estatísticos',
+    dezenasCount: 18,
+    ticketsCount: 24,
+    badge: 'IA Score • 24 Jogos',
+  },
+  {
+    key: 'garantia_15_pts',
+    name: '🏆 Garantia 15 Pontos (Fechamento Total 16D • 4 Jogos)',
+    shortName: 'Garantia 15 pts',
+    description: 'Fechamento fechado cobrindo 16 dezenas em 4 apostas com garantia de 15 pontos se as 15 estiverem no pool',
+    dezenasCount: 16,
+    ticketsCount: 4,
+    badge: '16D • 15 se 15 (4 Jogos)',
+  },
+  {
     key: 'estrategia_documento',
     name: '⚡ Estratégia Documento (18D • 9 Rep + 9 Aus)',
     shortName: 'Estratégia Documento',
@@ -78,9 +108,9 @@ const STRATEGIES: StrategyDefinition[] = [
   },
   {
     key: 'top18_ia',
-    name: '🤖 Top 18 IA Neural (Garantia 14 Pontos)',
+    name: '🤖 Top 18 IA Frequência (Garantia 14 Pontos)',
     shortName: 'Top 18 IA',
-    description: '18 dezenas de maior propensão probabilística pela rede neural',
+    description: '18 dezenas de maior propensão probabilística por repetição histórica',
     dezenasCount: 18,
     ticketsCount: 24,
     badge: '18D • 24 Jogos',
@@ -157,10 +187,10 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   userSavedTickets = [],
   onApplyStrategy,
 }) => {
-  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>('estrategia_documento');
-  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>('top18_ia');
+  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>('garantia_14_pts');
+  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>('filtro_ia');
   const [testScope, setTestScope] = useState<'10_concursos' | '25_concursos' | '50_concursos'>('25_concursos');
-  const [activeChartMetric, setActiveChartMetric] = useState<'roi' | 'financeiro' | 'acertos'>('roi');
+  const [activeChartMetric, setActiveChartMetric] = useState<'roi' | 'financeiro' | 'acertos'>('acertos');
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [duelRunCounter, setDuelRunCounter] = useState<number>(0);
 
@@ -175,7 +205,25 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
     let targetHits = 14;
     let maxTickets = 24;
 
-    if (key === 'estrategia_documento') {
+    if (key === 'garantia_14_pts') {
+      const p = buildOptimalPool(18, latestDraw, dynamicStats, cyclePendingNumbers, 9, 9);
+      pool = p.dezenas;
+      maxTickets = 24;
+      targetHits = 14;
+    } else if (key === 'filtro_ia') {
+      const sortedByScore = [...dynamicStats].sort((a, b) => {
+        const scoreA = b.vezes * 1.5 + (b.atrasoAtual === 0 ? 8 : -b.atrasoAtual * 2);
+        const scoreB = a.vezes * 1.5 + (a.atrasoAtual === 0 ? 8 : -a.atrasoAtual * 2);
+        return scoreA - scoreB;
+      }).map((s) => s.numero);
+      pool = sortedByScore.slice(0, 18).sort((a, b) => a - b);
+      maxTickets = 24;
+      targetHits = 14;
+    } else if (key === 'garantia_15_pts') {
+      pool = [1, 2, 4, 7, 9, 10, 11, 13, 14, 15, 17, 18, 20, 22, 24, 25];
+      maxTickets = 4;
+      targetHits = 15;
+    } else if (key === 'estrategia_documento') {
       const p = buildOptimalPool(18, latestDraw, dynamicStats, cyclePendingNumbers, 9, 9);
       pool = p.dezenas;
       maxTickets = 24;

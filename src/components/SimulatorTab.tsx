@@ -140,6 +140,16 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             <span>Relatório de Eficiência (ROI 200)</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('duelo_algoritmos')}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500/25 to-pink-500/25 hover:from-rose-500/40 hover:to-pink-500/40 border border-rose-500/50 text-rose-300 font-bold text-xs transition cursor-pointer shadow-sm"
+            title="Modo Duelo: Comparar Garantia 14 pts vs Filtro de IA lado a lado em gráfico de barras de acertos"
+          >
+            <Swords className="w-4 h-4 text-rose-400" />
+            <span>⚔️ Modo Duelo (14 Pts vs IA)</span>
+          </button>
+
           {tickets.length > 0 && (
             <button
               type="button"
@@ -239,7 +249,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             }`}
           >
             <Swords className="w-4 h-4" />
-            <span>Duelo de Algoritmos</span>
+            <span>Modo Duelo (Comparativo)</span>
             <span
               className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
                 activeSubTab === 'duelo_algoritmos'
@@ -247,7 +257,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                   : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
               }`}
             >
-              ROI DUAL
+              ACERTOS • BARRAS
             </span>
           </button>
 
