@@ -9,6 +9,7 @@ import {
   DEFAULT_FILTERS,
   FECHAMENTO_PRESETS,
 } from '../services/combinatorics';
+import { getSavedFechamentos, SavedFechamentoPrognostico } from '../services/savedFechamentosStorage';
 import {
   ResponsiveContainer,
   BarChart,
@@ -42,6 +43,7 @@ interface AlgorithmDuelSimulatorProps {
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];
   userSavedTickets?: GameTicket[];
+  savedFechamentosList?: SavedFechamentoPrognostico[];
   onApplyStrategy?: (numbers: number[], targetHits?: number) => void;
 }
 
@@ -57,7 +59,8 @@ export type StrategyKey =
   | 'ouro_17'
   | 'agressivo_19'
   | 'aleatorio_baseline'
-  | 'meus_jogos';
+  | 'meus_jogos'
+  | (string & {});
 
 interface StrategyDefinition {
   key: StrategyKey;
@@ -185,17 +188,70 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   dynamicStats = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
   userSavedTickets = [],
+  savedFechamentosList,
   onApplyStrategy,
 }) => {
-  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>('garantia_14_pts');
-  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>('filtro_ia');
+  const [savedFechamentos, setSavedFechamentos] = useState<SavedFechamentoPrognostico[]>(() => {
+    return savedFechamentosList && savedFechamentosList.length > 0 ? savedFechamentosList : getSavedFechamentos();
+  });
+
+  // Atualiza fechamentos salvos caso mudem no storage
+  React.useEffect(() => {
+    const handleUpdated = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setSavedFechamentos(e.detail);
+      } else {
+        setSavedFechamentos(getSavedFechamentos());
+      }
+    };
+    window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdated);
+    return () => window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdated);
+  }, []);
+
+  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>(() => {
+    const list = getSavedFechamentos();
+    if (list.length >= 1) return `saved_${list[0].id}`;
+    return 'garantia_14_pts';
+  });
+  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>(() => {
+    const list = getSavedFechamentos();
+    if (list.length >= 2) return `saved_${list[1].id}`;
+    return 'filtro_ia';
+  });
   const [testScope, setTestScope] = useState<'10_concursos' | '25_concursos' | '50_concursos'>('25_concursos');
   const [activeChartMetric, setActiveChartMetric] = useState<'roi' | 'financeiro' | 'acertos'>('acertos');
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [duelRunCounter, setDuelRunCounter] = useState<number>(0);
 
+  const getStrategyConfig = (key: string): StrategyDefinition => {
+    if (key.startsWith('saved_')) {
+      const id = key.replace('saved_', '');
+      const found = savedFechamentos.find((f) => f.id === id);
+      if (found) {
+        return {
+          key: key as any,
+          name: `📂 ${found.modalidadeMatriz || 'Fechamento Salvo'} (${found.totalJogos || found.tickets.length} Jogos)`,
+          shortName: (found.modalidadeMatriz || 'Fechamento Salvo').slice(0, 22),
+          description: `Fechamento salvo (${found.dataCriacao || `Conc #${found.concurso}`}) com ${found.universoDezenas?.length || 18} dezenas e ${found.tickets.length} apostas.`,
+          dezenasCount: found.universoDezenas?.length || 18,
+          ticketsCount: found.tickets.length,
+          badge: `${found.tickets.length} Jogos • Salvo`,
+        };
+      }
+    }
+    return STRATEGIES.find((s) => s.key === key) || STRATEGIES[0];
+  };
+
   // Gera o conjunto de jogos de cada estratégia
   const generateTicketsForStrategy = (key: StrategyKey): { tickets: GameTicket[]; pool: number[] } => {
+    if (key.startsWith('saved_')) {
+      const id = key.replace('saved_', '');
+      const found = savedFechamentos.find((f) => f.id === id);
+      if (found && found.tickets.length > 0) {
+        return { tickets: found.tickets, pool: found.universoDezenas || [] };
+      }
+    }
+
     if (key === 'meus_jogos' && userSavedTickets.length > 0) {
       const allNums = Array.from(new Set(userSavedTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
       return { tickets: userSavedTickets, pool: allNums };
