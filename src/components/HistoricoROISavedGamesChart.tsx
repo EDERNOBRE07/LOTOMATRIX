@@ -3,6 +3,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -71,8 +73,10 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
     return list.length > 0 ? list[0].id : 'default_fallback';
   });
 
-  // Métrica ativa do gráfico de barras: 'roi' (Percentual %) | 'lucro' (Líquido R$) | 'comparativo' (Retorno vs Custo)
+  // Métrica ativa do gráfico: 'roi' (Percentual %) | 'lucro' (Líquido R$) | 'comparativo' (Retorno vs Custo)
   const [viewMetric, setViewMetric] = useState<'roi' | 'lucro' | 'comparativo'>('roi');
+  // Tipo de visualização: Gráfico de Área (solicitado pelo usuário) ou Gráfico de Barras
+  const [chartType, setChartType] = useState<'area' | 'bar'>('area');
 
   // Atualiza fechamentos salvos caso haja alteração recente
   const handleRefresh = () => {
@@ -374,44 +378,74 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
             </select>
           </div>
 
-          {/* Alternador de Métrica Visualizada */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800 self-start lg:self-auto">
-            <button
-              type="button"
-              onClick={() => setViewMetric('roi')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                viewMetric === 'roi'
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              ROI (%)
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMetric('lucro')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                viewMetric === 'lucro'
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Retorno Líquido (R$)
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMetric('comparativo')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                viewMetric === 'comparativo'
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Prêmios vs Custo
-            </button>
+          {/* Alternador de Métrica e Tipo de Gráfico */}
+          <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+            {/* Tipo: Área vs Barras */}
+            <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setChartType('area')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  chartType === 'area'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🌊 Gráfico de Área
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType('bar')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  chartType === 'bar'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📊 Barras
+              </button>
+            </div>
+
+            {/* Métrica Visualizada */}
+            <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewMetric('roi')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMetric === 'roi'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                ROI (%)
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMetric('lucro')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMetric === 'lucro'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Retorno Líquido (R$)
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMetric('comparativo')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  viewMetric === 'comparativo'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Prêmios vs Custo
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
 
       {/* Cartões de Indicadores Chave de ROI (KPI Cards) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -516,89 +550,184 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
         {/* Container do Gráfico Recharts */}
         <div className="w-full h-80 sm:h-96">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={roiData}
-              margin={{ top: 15, right: 15, left: 10, bottom: 25 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} vertical={false} />
-              <XAxis
-                dataKey="concursoLabel"
-                stroke="#94a3b8"
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
-                interval={0}
-                angle={-35}
-                textAnchor="end"
-              />
-              <YAxis
-                stroke="#94a3b8"
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
-                unit={viewMetric === 'roi' ? '%' : ' R$'}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine
-                y={0}
-                stroke="#94a3b8"
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                label={{
-                  value: 'Break-even (0%)',
-                  fill: '#94a3b8',
-                  fontSize: 10,
-                  position: 'insideTopLeft',
-                }}
-              />
-
-              {viewMetric === 'roi' && (
-                <Bar dataKey="roiPercent" name="ROI (%)" radius={[4, 4, 0, 0]}>
-                  {roiData.map((entry, index) => {
-                    const color =
-                      entry.roiPercent >= 0
-                        ? '#10b981' // emerald-500
-                        : entry.roiPercent >= -60
-                        ? '#f59e0b' // amber-500
-                        : '#ef4444'; // rose-500
-                    return <Cell key={`cell-roi-${index}`} fill={color} />;
-                  })}
-                </Bar>
-              )}
-
-              {viewMetric === 'lucro' && (
-                <Bar dataKey="lucroLiquido" name="Saldo Líquido (R$)" radius={[4, 4, 0, 0]}>
-                  {roiData.map((entry, index) => {
-                    const color =
-                      entry.lucroLiquido >= 0
-                        ? '#10b981'
-                        : entry.lucroLiquido >= -(entry.custo * 0.6)
-                        ? '#f59e0b'
-                        : '#ef4444';
-                    return <Cell key={`cell-lucro-${index}`} fill={color} />;
-                  })}
-                </Bar>
-              )}
-
-              {viewMetric === 'comparativo' && (
-                <>
-                  <Legend
-                    wrapperStyle={{ paddingTop: 10, fontSize: 11 }}
-                    iconType="circle"
+            {chartType === 'area' ? (
+              <AreaChart
+                data={roiData}
+                margin={{ top: 15, right: 15, left: 10, bottom: 25 }}
+              >
+                <defs>
+                  <linearGradient id="areaGradientEmerald" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="areaGradientLucro" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="areaGradientCusto" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} vertical={false} />
+                <XAxis
+                  dataKey="concursoLabel"
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  unit={viewMetric === 'roi' ? '%' : ' R$'}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine
+                  y={0}
+                  stroke="#94a3b8"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  label={{
+                    value: 'Break-even (0%)',
+                    fill: '#94a3b8',
+                    fontSize: 10,
+                    position: 'insideTopLeft',
+                  }}
+                />
+                {viewMetric === 'roi' && (
+                  <Area
+                    type="monotone"
+                    dataKey="roiPercent"
+                    name="ROI (%)"
+                    stroke="#10b981"
+                    strokeWidth={2.5}
+                    fill="url(#areaGradientEmerald)"
+                    dot={{ r: 3, fill: '#34d399' }}
+                    activeDot={{ r: 6, fill: '#f59e0b' }}
                   />
-                  <Bar
-                    dataKey="retorno"
-                    name="Prêmios Ganhos (R$)"
-                    fill="#10b981"
-                    radius={[4, 4, 0, 0]}
+                )}
+                {viewMetric === 'lucro' && (
+                  <Area
+                    type="monotone"
+                    dataKey="lucroLiquido"
+                    name="Saldo Líquido (R$)"
+                    stroke="#38bdf8"
+                    strokeWidth={2.5}
+                    fill="url(#areaGradientLucro)"
+                    dot={{ r: 3, fill: '#38bdf8' }}
+                    activeDot={{ r: 6, fill: '#10b981' }}
                   />
-                  <Bar
-                    dataKey="custo"
-                    name="Custo da Aposta (R$)"
-                    fill="#64748b"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </>
-              )}
-            </BarChart>
+                )}
+                {viewMetric === 'comparativo' && (
+                  <>
+                    <Legend wrapperStyle={{ paddingTop: 10, fontSize: 11 }} iconType="circle" />
+                    <Area
+                      type="monotone"
+                      dataKey="retorno"
+                      name="Prêmios Ganhos (R$)"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      fill="url(#areaGradientEmerald)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="custo"
+                      name="Custo da Aposta (R$)"
+                      stroke="#94a3b8"
+                      strokeWidth={1.5}
+                      fill="url(#areaGradientCusto)"
+                    />
+                  </>
+                )}
+              </AreaChart>
+            ) : (
+              <BarChart
+                data={roiData}
+                margin={{ top: 15, right: 15, left: 10, bottom: 25 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} vertical={false} />
+                <XAxis
+                  dataKey="concursoLabel"
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  unit={viewMetric === 'roi' ? '%' : ' R$'}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine
+                  y={0}
+                  stroke="#94a3b8"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  label={{
+                    value: 'Break-even (0%)',
+                    fill: '#94a3b8',
+                    fontSize: 10,
+                    position: 'insideTopLeft',
+                  }}
+                />
+
+                {viewMetric === 'roi' && (
+                  <Bar dataKey="roiPercent" name="ROI (%)" radius={[4, 4, 0, 0]}>
+                    {roiData.map((entry, index) => {
+                      const color =
+                        entry.roiPercent >= 0
+                          ? '#10b981'
+                          : entry.roiPercent >= -60
+                          ? '#f59e0b'
+                          : '#ef4444';
+                      return <Cell key={`cell-roi-${index}`} fill={color} />;
+                    })}
+                  </Bar>
+                )}
+
+                {viewMetric === 'lucro' && (
+                  <Bar dataKey="lucroLiquido" name="Saldo Líquido (R$)" radius={[4, 4, 0, 0]}>
+                    {roiData.map((entry, index) => {
+                      const color =
+                        entry.lucroLiquido >= 0
+                          ? '#10b981'
+                          : entry.lucroLiquido >= -(entry.custo * 0.6)
+                          ? '#f59e0b'
+                          : '#ef4444';
+                      return <Cell key={`cell-lucro-${index}`} fill={color} />;
+                    })}
+                  </Bar>
+                )}
+
+                {viewMetric === 'comparativo' && (
+                  <>
+                    <Legend
+                      wrapperStyle={{ paddingTop: 10, fontSize: 11 }}
+                      iconType="circle"
+                    />
+                    <Bar
+                      dataKey="retorno"
+                      name="Prêmios Ganhos (R$)"
+                      fill="#10b981"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="custo"
+                      name="Custo da Aposta (R$)"
+                      fill="#64748b"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </>
+                )}
+              </BarChart>
+            )}
           </ResponsiveContainer>
         </div>
+
 
         {/* Resumo de Faixas Premiadas (11 a 15 Pontos) */}
         <div className="mt-6 pt-5 border-t border-slate-800/80">

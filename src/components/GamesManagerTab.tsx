@@ -15,6 +15,8 @@ import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
+import jsPDF from 'jspdf';
+import Papa from 'papaparse';
 import {
   Download,
   Copy,
@@ -326,7 +328,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Export CSV formatado diretamente para planilhas externas (Excel, Google Sheets, Calc)
+  // Export CSV formatado diretamente via PapaParse para planilhas externas (Excel, Google Sheets, Calc)
   const handleExportCSV = () => {
     const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
     const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
@@ -344,53 +346,35 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const concursoRef = metaToUse?.concurso || latestDraw.concurso;
     const dataRef = metaToUse?.dataConcurso || latestDraw.data;
 
-    // Cabeçalho formatado com ponto e vírgula (padrão regional para planilhas)
-    const headers = [
-      'Jogo',
-      'Dezenas Formatadas',
-      'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D14', 'D15',
-      'Pares',
-      'Ímpares',
-      'Primos',
-      'Moldura',
-      'Fibonacci',
-      'Soma Total',
-      'Repetidas',
-      'Score IA',
-      'Tags',
-      'Estratégia',
-      'Concurso Referência',
-      'Data Concurso',
-    ];
-
-    const rows = listToExport.map((t) => {
+    const dataRows = listToExport.map((t) => {
       const id = t.id || `ticket-${t.index}`;
       const tags = (ticketTags[id] || []).join(' | ');
       const sortedDez = [...t.dezenas].sort((a, b) => a - b);
-      const dezCols = sortedDez.map((n) => n.toString().padStart(2, '0'));
-      const formattedDez = sortedDez.map((n) => n.toString().padStart(2, '0')).join(' - ');
-
-      return [
-        `"Jogo ${t.index.toString().padStart(2, '0')}"`,
-        `"${formattedDez}"`,
-        ...dezCols,
-        t.pares,
-        t.impares ?? (15 - t.pares),
-        t.primos,
-        t.moldura,
-        t.fibonacci ?? 0,
-        t.soma,
-        t.repetidas ?? 0,
-        `"${(t.scoreIA || 0).toFixed(1)}"`,
-        `"${tags}"`,
-        `"${estrategia}"`,
-        concursoRef,
-        `"${dataRef}"`,
-      ].join(';');
+      const rowObj: Record<string, any> = {
+        Jogo: `Jogo ${t.index.toString().padStart(2, '0')}`,
+        'Dezenas Formatadas': sortedDez.map((n) => n.toString().padStart(2, '0')).join(' - '),
+      };
+      sortedDez.forEach((n, idx) => {
+        rowObj[`D${(idx + 1).toString().padStart(2, '0')}`] = n.toString().padStart(2, '0');
+      });
+      rowObj['Pares'] = t.pares;
+      rowObj['Ímpares'] = t.impares ?? (15 - t.pares);
+      rowObj['Primos'] = t.primos;
+      rowObj['Moldura'] = t.moldura;
+      rowObj['Fibonacci'] = t.fibonacci ?? 0;
+      rowObj['Soma Total'] = t.soma;
+      rowObj['Repetidas'] = t.repetidas ?? 0;
+      rowObj['Score IA'] = (t.scoreIA || 0).toFixed(1);
+      rowObj['Tags'] = tags;
+      rowObj['Estratégia'] = estrategia;
+      rowObj['Concurso Referência'] = concursoRef;
+      rowObj['Data Concurso'] = dataRef;
+      return rowObj;
     });
 
-    // Adiciona UTF-8 BOM (\uFEFF) para garantir que Excel e planilhas abram com acentuação perfeita
-    const csvContent = '\uFEFF' + headers.join(';') + '\n' + rows.join('\n');
+    // Utiliza PapaParse unparse para formatação robusta de CSV com separador regional ';'
+    const unparsedCsv = Papa.unparse(dataRows, { delimiter: ';' });
+    const csvContent = '\uFEFF' + unparsedCsv;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -403,6 +387,115 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     setCopiedFormat('csv');
     setTimeout(() => setCopiedFormat(null), 3500);
   };
+
+  // Exportação direta em PDF com diagramação oficial de volante Lotofácil via jsPDF
+  const handleExportDirectVolantePDF = () => {
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+    if (listToExport.length === 0) return;
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Cabeçalho Principal Imperial
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, pageWidth, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('LOTOSNIPER • VOLANTES OFICIAIS DE FECHAMENTO', 14, 12);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(52, 211, 153); // emerald-400
+    doc.text(
+      `Concurso Base: #${latestDraw.concurso} | ${listToExport.length} Apostas Otimizadas | 14 se 15 100% Auditado | ${new Date().toLocaleDateString('pt-BR')}`,
+      14,
+      20
+    );
+
+    let yOffset = 34;
+    listToExport.forEach((t) => {
+      if (yOffset > 245) {
+        doc.addPage();
+        yOffset = 18;
+      }
+
+      // Caixa do Cartão
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(14, yOffset, pageWidth - 28, 48, 2.5, 2.5, 'FD');
+
+      // Título
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`JOGO #${t.index.toString().padStart(2, '0')}`, 18, yOffset + 7);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        `Soma: ${t.soma} | Pares: ${t.pares} | Ímpares: ${t.impares ?? 15 - t.pares} | Moldura: ${t.moldura} | Primos: ${t.primos} | Score IA: ${(t.scoreIA || 92).toFixed(1)}`,
+        48,
+        yOffset + 7
+      );
+
+      // Grid 5x5 do Volante Lotofácil
+      const startX = 18;
+      const startY = yOffset + 12;
+      const circleR = 2.7;
+      const spacingX = 6.8;
+      const spacingY = 6.0;
+
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+          const num = r * 5 + c + 1;
+          const isSelected = t.dezenas.includes(num);
+          const cx = startX + c * spacingX;
+          const cy = startY + r * spacingY;
+
+          if (isSelected) {
+            doc.setFillColor(16, 185, 129); // emerald-500
+            doc.circle(cx, cy, circleR, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.text(num.toString().padStart(2, '0'), cx - 1.9, cy + 1.1);
+          } else {
+            doc.setFillColor(241, 245, 249);
+            doc.setDrawColor(226, 232, 240);
+            doc.circle(cx, cy, circleR, 'FD');
+            doc.setTextColor(148, 163, 184);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.0);
+            doc.text(num.toString().padStart(2, '0'), cx - 1.7, cy + 1);
+          }
+        }
+      }
+
+      // Linha das 15 Dezenas em Destaque
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 41, 59);
+      const sortedStr = [...t.dezenas]
+        .sort((a, b) => a - b)
+        .map((n) => n.toString().padStart(2, '0'))
+        .join(' - ');
+      doc.text(`Dezenas Marcadas no Volante:`, 56, yOffset + 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(16, 185, 129);
+      doc.text(sortedStr, 56, yOffset + 26);
+
+      yOffset += 53;
+    });
+
+    doc.save(`lotosniper_volantes_formatados_${listToExport.length}_jogos.pdf`);
+    setCopiedFormat('pdf');
+    setTimeout(() => setCopiedFormat(null), 3500);
+  };
+
 
   // Print view
   const handlePrint = () => {

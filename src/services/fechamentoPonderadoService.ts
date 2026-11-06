@@ -8,6 +8,7 @@ import {
   getMaxConsecutiveSequence,
 } from './combinatorics';
 import { getHistorical100Draws } from './historical100Draws';
+import { getAllSavedTicketsSet } from './savedFechamentosStorage';
 
 export interface PerformanceIndexResult {
   numero: number;
@@ -1100,9 +1101,12 @@ export function generateFechamentoInteligentePonderado({
   const chosenIPs: number[] = [];
   const chosenClusters: (string | undefined)[] = [];
 
+  // Consulta histórico de fechamentos salvos para evitar tickets redundantes entre gerações
+  const savedTicketsSet = getAllSavedTicketsSet();
+
   while (uncovered.size > 0 && chosenTickets.length < maxTickets && validCandidates.length > 0) {
     let bestIdx = -1;
-    let bestCombinedWeight = -1;
+    let bestCombinedWeight = -999999;
     let bestCoveredSet: number[] = [];
 
     const searchLimit = Math.min(validCandidates.length, 300);
@@ -1118,8 +1122,14 @@ export function generateFechamentoInteligentePonderado({
         }
       }
 
+      // Penaliza tickets que já foram salvos em fechamentos anteriores
+      const candKey = cand.dezenas.join('-');
+      const isAlreadySaved = savedTicketsSet.has(candKey);
+      const savedPenalty = isAlreadySaved ? 35 : 0;
+      const jitter = Math.random() * 0.2;
+
       // Combina cobertura de subconjuntos com o Índice de Performance da combinação
-      const weight = coverCount * 1.5 + (cand.scorePonderado / 100) * 2.0;
+      const weight = (coverCount * 1.5) + (cand.scorePonderado / 100) * 2.0 + jitter - savedPenalty;
 
       if (weight > bestCombinedWeight) {
         bestCombinedWeight = weight;
@@ -1143,12 +1153,22 @@ export function generateFechamentoInteligentePonderado({
     }
   }
 
-  // Complementar até maxTickets caso ainda restem vagas, sempre sem duplicatas
+  // Complementar até maxTickets caso ainda restem vagas, priorizando bilhetes inéditos
   const uniqueMap = new Map<string, { dezenas: number[]; ip: number; cluster?: string }>();
   chosenTickets.forEach((t, i) => {
     uniqueMap.set(t.join('-'), { dezenas: t, ip: chosenIPs[i] || 70, cluster: chosenClusters[i] });
   });
 
+  // Primeiro passo: adicionar candidatos que NÃO estão nos jogos salvos
+  for (const cand of validCandidates) {
+    if (uniqueMap.size >= maxTickets) break;
+    const key = cand.dezenas.join('-');
+    if (!uniqueMap.has(key) && !savedTicketsSet.has(key)) {
+      uniqueMap.set(key, { dezenas: cand.dezenas, ip: cand.ipMedio, cluster: cand.matchedClusterId });
+    }
+  }
+
+  // Segundo passo: se ainda faltar, preenche com os demais candidatos
   for (const cand of validCandidates) {
     if (uniqueMap.size >= maxTickets) break;
     const key = cand.dezenas.join('-');
@@ -1156,6 +1176,7 @@ export function generateFechamentoInteligentePonderado({
       uniqueMap.set(key, { dezenas: cand.dezenas, ip: cand.ipMedio, cluster: cand.matchedClusterId });
     }
   }
+
 
   // Se por restrição matemática extrema do pool ainda faltar bilhetes para maxTickets,
   // sintetizar permutações válidas mantendo fixas e soma >= 180

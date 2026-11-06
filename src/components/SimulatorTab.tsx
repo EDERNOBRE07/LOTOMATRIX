@@ -11,6 +11,7 @@ import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
 import { AlgorithmDuelSimulator } from './AlgorithmDuelSimulator';
 import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
 import { QuickBacktestD3Area } from './QuickBacktestD3Area';
+import { MapaCalorProbabilidadeVolante10 } from './MapaCalorProbabilidadeVolante10';
 import {
   Play,
   RotateCcw,
@@ -53,6 +54,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   };
   const [activeSubTab, setActiveSubTab] = useState<
     | 'quick_backtest'
+    | 'mapa_calor_volante_10'
     | 'backtest'
     | 'backtest_d3'
     | 'duelo_algoritmos'
@@ -60,6 +62,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     | 'calculadora'
     | 'animacao'
     | 'espelho'
+
   >('quick_backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
@@ -208,7 +211,29 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('mapa_calor_volante_10')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer font-bold ${
+              activeSubTab === 'mapa_calor_volante_10'
+                ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 fill-current" />
+            <span>Mapa de Calor 10 Concursos</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'mapa_calor_volante_10'
+                  ? 'bg-amber-950 text-amber-200 border border-amber-400/40'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}
+            >
+              VOLANTE 5×5
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('backtest')}
+
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
               activeSubTab === 'backtest'
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-bold'
@@ -349,7 +374,10 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           onGoToGenerator={onGoToGenerator}
           onGoToGamesManager={handleGoToGamesManager}
         />
+      ) : activeSubTab === 'mapa_calor_volante_10' ? (
+        <MapaCalorProbabilidadeVolante10 latestDraw={latestDraw} />
       ) : activeSubTab === 'backtest_d3' ? (
+
         <SimulacaoBacktestD3Component
           currentTickets={tickets}
           latestDraw={latestDraw}

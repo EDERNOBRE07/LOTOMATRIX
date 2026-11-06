@@ -195,6 +195,91 @@ export function deleteMultipleSavedFechamentos(ids: string[]): SavedFechamentoPr
   }
 }
 
+/**
+ * Retorna um Set com todas as combinações de 15 dezenas já salvas em Meus Jogos
+ * Formato da chave canônica: "1-2-3-4-5-6-7-8-9-10-11-12-13-14-15"
+ */
+export function getAllSavedTicketsSet(): Set<string> {
+  const set = new Set<string>();
+  try {
+    const list = getSavedFechamentos();
+    for (const f of list) {
+      if (Array.isArray(f.tickets)) {
+        for (const t of f.tickets) {
+          if (Array.isArray(t.dezenas) && t.dezenas.length === 15) {
+            const sortedKey = [...t.dezenas].sort((a, b) => a - b).join('-');
+            set.add(sortedKey);
+          }
+        }
+      }
+    }
+  } catch {}
+  return set;
+}
+
+/**
+ * Diagnostica fechamentos idênticos ou redundantes salvos na base
+ */
+export function getDuplicateFechamentosReport(): {
+  totalFechamentos: number;
+  duplicateCount: number;
+  duplicateClosureIds: string[];
+  redundantTicketsCount: number;
+  uniqueTicketCount: number;
+} {
+  const list = getSavedFechamentos();
+  const seenMatrixSignatures = new Map<string, string>(); // signature -> first id
+  const duplicateClosureIds: string[] = [];
+  const seenTickets = new Set<string>();
+  let redundantTicketsCount = 0;
+
+  for (const f of list) {
+    // Assinatura do fechamento baseada na matriz de tickets
+    const ticketKeys = (f.tickets || [])
+      .map((t) => [...t.dezenas].sort((a, b) => a - b).join('-'))
+      .sort()
+      .join('|');
+
+    if (ticketKeys.length > 0) {
+      if (seenMatrixSignatures.has(ticketKeys)) {
+        duplicateClosureIds.push(f.id);
+      } else {
+        seenMatrixSignatures.set(ticketKeys, f.id);
+      }
+    }
+
+    // Contagem de tickets individuais redundantes
+    for (const t of f.tickets || []) {
+      const key = [...t.dezenas].sort((a, b) => a - b).join('-');
+      if (seenTickets.has(key)) {
+        redundantTicketsCount++;
+      } else {
+        seenTickets.add(key);
+      }
+    }
+  }
+
+  return {
+    totalFechamentos: list.length,
+    duplicateCount: duplicateClosureIds.length,
+    duplicateClosureIds,
+    redundantTicketsCount,
+    uniqueTicketCount: seenTickets.size,
+  };
+}
+
+/**
+ * Remove automaticamente todos os fechamentos duplicados mantendo apenas a primeira ocorrência
+ */
+export function removeDuplicateFechamentos(): { removedCount: number; remainingCount: number } {
+  const report = getDuplicateFechamentosReport();
+  if (report.duplicateClosureIds.length === 0) {
+    return { removedCount: 0, remainingCount: report.totalFechamentos };
+  }
+  const updated = deleteMultipleSavedFechamentos(report.duplicateClosureIds);
+  return { removedCount: report.duplicateClosureIds.length, remainingCount: updated.length };
+}
+
 export function clearAllSavedFechamentos(): void {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
@@ -204,6 +289,7 @@ export function clearAllSavedFechamentos(): void {
     }
   } catch {}
 }
+
 
 export function createInitialSampleFechamento(): SavedFechamentoPrognostico {
   const universo = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 22, 23, 24, 25];

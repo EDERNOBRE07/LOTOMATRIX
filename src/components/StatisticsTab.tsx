@@ -50,6 +50,7 @@ import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
 import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
 import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50ConcursosRecharts';
+import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRecharts';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -106,6 +107,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'espelho_concurso'
     | 'dashboard_recharts'
     | 'frequencia_50'
+    | 'scatter_atraso_freq'
     | 'scatter_soma_d3'
     | 'comparador_periodos'
     | 'widget_tendencias'
@@ -270,7 +272,23 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('scatter_atraso_freq')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'scatter_atraso_freq'
+                ? 'bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/25 font-black'
+                : 'text-cyan-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            <span>Dispersão Atraso × Frequência</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              RECHARTS • 25 DEZENAS
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('scatter_soma_d3')}
+
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'scatter_soma_d3'
                 ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black'
@@ -1535,8 +1553,20 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
+      {/* SUBTAB DEDICADA: DISPERSÃO ATRASO × FREQUÊNCIA (RECHARTS) */}
+      {activeSubTab === 'scatter_atraso_freq' && (
+        <div className="space-y-6">
+          <ScatterAtrasoFrequenciaRecharts
+            latestDraw={latestDraw}
+            customStats={statsList}
+            onSelectDezena={onApplyNumbers ? (num) => onApplyNumbers([num]) : undefined}
+          />
+        </div>
+      )}
+
       {/* SUBTAB DEDICADA: DISPERSÃO SOMA × PONTUAÇÃO (D3.JS) */}
       {activeSubTab === 'scatter_soma_d3' && (
+
         <div className="space-y-6">
           <ScatterSomaPontuacaoD3
             latestDraw={latestDraw}

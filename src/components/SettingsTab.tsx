@@ -41,6 +41,7 @@ import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
 import { SecurityStatusMonitor } from './SecurityStatusMonitor';
+import { OrcamentoLimitesManager } from './OrcamentoLimitesManager';
 import { AuthAccountSecurityForms } from './AuthAccountSecurityForms';
 import { AdminPanel } from './AdminPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
@@ -650,8 +651,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
         <div className="space-y-5">
+          {/* Configurador de Limites de Aposta & Simulador de Orçamento Mensal */}
+          <OrcamentoLimitesManager />
+
           {/* Seletor de Tema: Modo Escuro Padrão vs Modo Gold Imperial */}
           <ThemeSelectorModule />
+
 
           {/* Relatório de Eficiência com IA Gemini (Análise dos Jogos Salvos vs Últimos 50 Concursos) */}
           <RelatorioEficienciaGeminiCard

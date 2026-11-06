@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   SavedFechamentoPrognostico,
   getSavedFechamentos,
   deleteSavedFechamento,
   deleteMultipleSavedFechamentos,
   clearAllSavedFechamentos,
+  getDuplicateFechamentosReport,
+  removeDuplicateFechamentos,
   formatTicketsForConferenciaInput,
   FIBONACCI_NUMBERS,
   exportBackupJSON,
@@ -170,6 +172,9 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedFechamentoIds, setSelectedFechamentoIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState<boolean>(false);
+
+  // Diagnóstico de fechamentos redundantes ou idênticos
+  const dupReport = useMemo(() => getDuplicateFechamentosReport(), [fechamentos]);
 
   const showFeedback = (msg: string) => {
     setFeedbackMessage(msg);
@@ -571,8 +576,47 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         </div>
       </div>
 
+      {/* Card de Diagnóstico de Redundância e Duplicatas entre Fechamentos */}
+      {dupReport.duplicateCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-950/60 via-slate-900 to-rose-950/60 border-2 border-amber-500/60 rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+              <Flame className="w-6 h-6 text-amber-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Auditoria de Redundância Ativa
+                </span>
+                <h4 className="text-sm sm:text-base font-black text-white">
+                  Detectados {dupReport.duplicateCount} fechamentos 100% idênticos ({dupReport.redundantTicketsCount} bilhetes repetidos)
+                </h4>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                A matriz combinatória identificou fechamentos cópias gerados com os mesmos parâmetros. Limpar as duplicatas manterá apenas o primeiro fechamento único, liberando espaço e evitando apostas redundantes.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const res = removeDuplicateFechamentos();
+              setFechamentos(getSavedFechamentos());
+              soundService.playGoldenZoneSuccessChime();
+              showFeedback(`✓ Removidos ${res.removedCount} fechamentos duplicados com sucesso!`);
+            }}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg shadow-amber-500/20 shrink-0 flex items-center gap-2 active:scale-95"
+          >
+            <Trash2 className="w-4 h-4 fill-current" />
+            <span>Limpar {dupReport.duplicateCount} Fechamentos Duplicados</span>
+          </button>
+        </div>
+      )}
+
       {/* Card de Notificações Push em Segundo Plano via Service Worker */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border-2 border-emerald-500/40 rounded-3xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/20 shrink-0">

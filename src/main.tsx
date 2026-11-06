@@ -1,7 +1,17 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import * as d3 from 'd3';
 import './index.css';
+
+// Safeguard against d3-axis m.transition is not a function in tree-shaken bundles
+if (d3 && d3.selection && d3.selection.prototype) {
+  if (typeof (d3.selection.prototype as any).transition !== 'function') {
+    (d3.selection.prototype as any).transition = function () {
+      return this;
+    };
+  }
+}
 
 // Register Service Worker for offline functionality and background notifications
 if ('serviceWorker' in navigator) {

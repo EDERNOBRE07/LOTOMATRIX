@@ -41,6 +41,8 @@ import { checkAndAuditUnresolvedCrash } from '../services/fechamentoPreflightSna
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
 import { TurboResult } from '../services/turboBruteForce';
+import { CalculadoraMinima14Pontos } from './CalculadoraMinima14Pontos';
+import { getOrcamentoConfig, OrcamentoConfig } from './OrcamentoLimitesManager';
 import { soundService } from '../services/soundAlert';
 import { analyzeGamesList, MonitoringSummary } from '../services/statisticalMonitor';
 import {
@@ -127,6 +129,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     intensity: 'moderado',
     fixedPending: false,
   }));
+
+  // Configurações de Limites Financeiros e Orçamento
+  const [orcamentoConfig, setOrcamentoConfig] = useState<OrcamentoConfig>(() => getOrcamentoConfig());
+
+  useEffect(() => {
+    const handleOrcamento = (e: any) => {
+      if (e.detail) setOrcamentoConfig(e.detail);
+    };
+    window.addEventListener('lotosniper-orcamento-updated', handleOrcamento);
+    return () => window.removeEventListener('lotosniper-orcamento-updated', handleOrcamento);
+  }, []);
 
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>(() => {
     try {
@@ -2464,8 +2477,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             )}
           </div>
 
+          {/* Calculadora de Apostas Mínimas Garantia 14 Pontos */}
+          <CalculadoraMinima14Pontos
+            fixedCount={fixedNumbers.length}
+            selectedCount={selectedNumbers.length}
+            currentMatrixSize={targetCount as (16 | 17 | 18)}
+            onApplyMatrixSize={(size) => {
+              if (size === 16) setMode('16_14_15');
+              else if (size === 17) setMode('17_14_15');
+              else setMode('18_14_15');
+              if (selectedNumbers.length > size) {
+                setSelectedNumbers(selectedNumbers.slice(0, size));
+              }
+              soundService.playFilterClick();
+            }}
+          />
+
           {/* Action Row & Process Buttons */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-1">
+
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs text-slate-300 font-semibold">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -2928,8 +2958,32 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             />
           )}
 
+          {/* Alerta de Limite de Orçamento por Fechamento Excedido */}
+          {orcamentoConfig.notificarAoExceder &&
+            generatedTickets.length * orcamentoConfig.custoPorAposta > orcamentoConfig.limitePorFechamento && (
+              <div className="bg-gradient-to-r from-amber-950/80 via-slate-900 to-rose-950/80 border-2 border-amber-500/70 rounded-2xl p-4 sm:p-5 shadow-2xl flex items-start gap-3.5">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-amber-400 animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Teto Financeiro Ultrapassado
+                    </span>
+                    <h4 className="text-sm sm:text-base font-black text-white">
+                      Volume de apostas excede o limite configurado (R$ {(generatedTickets.length * orcamentoConfig.custoPorAposta).toFixed(2).replace('.', ',')} &gt; R$ {orcamentoConfig.limitePorFechamento.toFixed(2).replace('.', ',')})
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    Seu limite máximo por fechamento é de <strong>R$ {orcamentoConfig.limitePorFechamento.toFixed(2).replace('.', ',')}</strong>. Para se adequar à sua gestão de banca, utilize mais dezenas fixas na Calculadora de Apostas Mínimas para reduzir a quantidade de bilhetes ou ajuste o limite em <strong>Configurações</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+
           {/* Componente Totalizador de Custos para os Fechamentos Gerados */}
           <TotalizadorDeCustos
+
             preset={preset}
             mode={mode}
             targetCount={targetCount}

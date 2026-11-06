@@ -19,6 +19,7 @@ import {
   countClasseADezenas,
   calculateCurvaAbc,
 } from './curvaAbcService';
+import { getAllSavedTicketsSet } from './savedFechamentosStorage';
 import {
   calculateIndicePerformance,
   calculateTicketPerformanceIndex,
@@ -446,10 +447,13 @@ export function generateMinimumSetCoverFechamento({
   let greedyStep = 0;
   const maxGreedySteps = Math.min(maxTickets * 2, 200);
 
+  // Consulta histórico de fechamentos salvos para evitar tickets redundantes entre gerações
+  const savedTicketsSet = getAllSavedTicketsSet();
+
   while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
     let bestCandIdx = -1;
+    let bestCombinedGain = -999999;
     let bestNewCovers = -1;
-    let bestScore = -1;
 
     for (let i = 0; i < candCount; i++) {
       if (chosenSet.has(i)) continue;
@@ -462,16 +466,29 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      if (newCovers > bestNewCovers || (newCovers === bestNewCovers && candScores[i] > bestScore)) {
-        bestNewCovers = newCovers;
+      if (newCovers <= 0) continue;
+
+      // Penaliza tickets que já foram salvos em fechamentos anteriores do usuário
+      const candKey = candidateCombos[i].join('-');
+      const isAlreadySaved = savedTicketsSet.has(candKey);
+      const savedPenalty = isAlreadySaved ? 50 : 0;
+
+      // Injeta variância estocástica leve para desempate entre coberturas equivalentes
+      // Isso garante que gerações sucessivas com o mesmo universo explorem vértices distintos
+      const jitter = Math.random() * 0.25;
+      const combinedGain = (newCovers * 10) + (candScores[i] / 100) + jitter - savedPenalty;
+
+      if (combinedGain > bestCombinedGain) {
+        bestCombinedGain = combinedGain;
         bestCandIdx = i;
-        bestScore = candScores[i];
+        bestNewCovers = newCovers;
       }
     }
 
     if (bestCandIdx === -1 || bestNewCovers <= 0) {
       break;
     }
+
 
     chosenSet.add(bestCandIdx);
     chosenIndices.push(bestCandIdx);
@@ -743,8 +760,10 @@ export function generateFechamentoCovering(
   // Greedy covering: iteratively choose ticket that covers the most uncovered target subsets
   let greedyLoop = 0;
   const maxGreedyLoops = Math.min(maxTickets * 2, 200);
+  const savedTicketsSet = getAllSavedTicketsSet();
 
   while (uncovered.size > 0 && chosenTickets.length < maxTickets && validCandidates.length > 0 && greedyLoop++ < maxGreedyLoops) {
+
     let bestCandidateIdx = -1;
     let bestCoverCount = -1;
     let bestCoveredSet: number[] = [];
@@ -765,7 +784,11 @@ export function generateFechamentoCovering(
 
       const analysis = analyzeTicket(cand, concursoAnterior, aiScores);
       const scoreWeight = analysis.scoreIA / 100;
-      const weightedCoverage = coverCount + scoreWeight * 0.5;
+      const candKey = cand.join('-');
+      const isAlreadySaved = savedTicketsSet.has(candKey);
+      const savedPenalty = isAlreadySaved ? 25 : 0;
+      const jitter = Math.random() * 0.2;
+      const weightedCoverage = (coverCount * 2) + (scoreWeight * 0.5) + jitter - savedPenalty;
 
       if (weightedCoverage > bestCoverCount) {
         bestCoverCount = weightedCoverage;
@@ -781,6 +804,7 @@ export function generateFechamentoCovering(
     const chosen = validCandidates[bestCandidateIdx];
     chosenTickets.push(chosen);
     validCandidates.splice(bestCandidateIdx, 1);
+
 
     for (const coveredIdx of bestCoveredSet) {
       uncovered.delete(coveredIdx);

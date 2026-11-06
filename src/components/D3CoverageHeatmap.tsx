@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
+
+if (d3 && d3.selection && d3.selection.prototype && typeof (d3.selection.prototype as any).transition !== 'function') {
+  (d3.selection.prototype as any).transition = function () {
+    return this;
+  };
+}
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { countMatches } from '../services/combinatorics';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
