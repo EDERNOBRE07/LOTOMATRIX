@@ -31,11 +31,23 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
 
   // Form State for new/edit rule
   const [formNome, setFormNome] = useState('');
+  const [formTipoRegra, setFormTipoRegra] = useState<'resultado_performance' | 'dezenas_radar'>('resultado_performance');
   const [formOperador, setFormOperador] = useState<'E' | 'OU'>('E');
-  const [formRadarAtivo, setFormRadarAtivo] = useState(true);
+  
+  // Performance conditions (SE acertos > 13 E ROI > 50%)
+  const [formAcertosAtivo, setFormAcertosAtivo] = useState(true);
+  const [formAcertosCriterio, setFormAcertosCriterio] = useState<'>' | '>=' | '=='>('>');
+  const [formAcertosValor, setFormAcertosValor] = useState(13);
+  const [formRoiAtivo, setFormRoiAtivo] = useState(true);
+  const [formRoiCriterio, setFormRoiCriterio] = useState<'>' | '>='>('>');
+  const [formRoiValor, setFormRoiValor] = useState(50);
+  const [formAcaoEntao, setFormAcaoEntao] = useState<'notificacao_urgente' | 'alerta_sonoro' | 'push_browser' | 'todos'>('notificacao_urgente');
+
+  // Dezenas/Radar conditions
+  const [formRadarAtivo, setFormRadarAtivo] = useState(false);
   const [formRadarCriterio, setFormRadarCriterio] = useState<'forca_minima' | 'probabilidade_minima' | 'top3'>('forca_minima');
   const [formRadarValor, setFormRadarValor] = useState(70);
-  const [formAtrasoAtivo, setFormAtrasoAtivo] = useState(true);
+  const [formAtrasoAtivo, setFormAtrasoAtivo] = useState(false);
   const [formAtrasoCriterio, setFormAtrasoCriterio] = useState<'atraso_minimo' | 'atraso_maior_medio' | 'pendente_ciclo'>('atraso_minimo');
   const [formAtrasoValor, setFormAtrasoValor] = useState(2);
   const [formDezenas, setFormDezenas] = useState<number[]>([17, 22]);
@@ -79,18 +91,72 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
     }
   };
 
+  // Presets rápidos
+  const applyPresetOuro = () => {
+    setFormNome('SE acertos > 13 E ROI > 50% ENTÃO disparar notificação urgente');
+    setFormTipoRegra('resultado_performance');
+    setFormOperador('E');
+    setFormAcertosAtivo(true);
+    setFormAcertosCriterio('>');
+    setFormAcertosValor(13);
+    setFormRoiAtivo(true);
+    setFormRoiCriterio('>');
+    setFormRoiValor(50);
+    setFormAcaoEntao('notificacao_urgente');
+    setFormRadarAtivo(false);
+    setFormAtrasoAtivo(false);
+    setIsCreating(true);
+  };
+
+  const applyPreset14Pontos = () => {
+    setFormNome('SE acertos >= 14 ENTÃO disparar notificação urgente');
+    setFormTipoRegra('resultado_performance');
+    setFormOperador('OU');
+    setFormAcertosAtivo(true);
+    setFormAcertosCriterio('>=');
+    setFormAcertosValor(14);
+    setFormRoiAtivo(false);
+    setFormAcaoEntao('notificacao_urgente');
+    setIsCreating(true);
+  };
+
+  const applyPresetRadarAtraso = () => {
+    setFormNome('SE Radar ≥ 80% E Atraso ≥ 2 ENTÃO disparar notificação urgente');
+    setFormTipoRegra('dezenas_radar');
+    setFormOperador('E');
+    setFormRadarAtivo(true);
+    setFormRadarCriterio('forca_minima');
+    setFormRadarValor(80);
+    setFormAtrasoAtivo(true);
+    setFormAtrasoCriterio('atraso_minimo');
+    setFormAtrasoValor(2);
+    setFormAcertosAtivo(false);
+    setFormRoiAtivo(false);
+    setFormAcaoEntao('notificacao_urgente');
+    setFormDezenas([1, 3, 11, 17, 20, 22]);
+    setIsCreating(true);
+  };
+
   // Open edit modal/form
   const handleEditRule = (rule: HybridAlertRule) => {
     setEditingRuleId(rule.id);
     setFormNome(rule.nome);
+    setFormTipoRegra(rule.tipoRegra || (rule.acertosAtivo || rule.roiAtivo ? 'resultado_performance' : 'dezenas_radar'));
     setFormOperador(rule.operador);
+    setFormAcertosAtivo(rule.acertosAtivo ?? false);
+    setFormAcertosCriterio(rule.acertosCriterio ?? '>');
+    setFormAcertosValor(rule.acertosValor ?? 13);
+    setFormRoiAtivo(rule.roiAtivo ?? false);
+    setFormRoiCriterio(rule.roiCriterio ?? '>');
+    setFormRoiValor(rule.roiValor ?? 50);
+    setFormAcaoEntao(rule.acaoEntao ?? 'notificacao_urgente');
     setFormRadarAtivo(rule.radarAtivo);
     setFormRadarCriterio(rule.radarCriterio);
     setFormRadarValor(rule.radarValor);
     setFormAtrasoAtivo(rule.atrasoAtivo);
     setFormAtrasoCriterio(rule.atrasoCriterio);
     setFormAtrasoValor(rule.atrasoValor);
-    setFormDezenas(rule.dezenasMonitoradas);
+    setFormDezenas(rule.dezenasMonitoradas || []);
     setIsCreating(true);
   };
 
@@ -101,7 +167,7 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
       alert('Informe um nome para a Regra de Alerta.');
       return;
     }
-    if (formDezenas.length === 0) {
+    if (formTipoRegra === 'dezenas_radar' && formDezenas.length === 0) {
       alert('Selecione pelo menos 1 dezena no conjunto monitorado.');
       return;
     }
@@ -112,7 +178,16 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
           ? {
               ...r,
               nome: formNome,
+              tipoRegra: formTipoRegra,
               operador: formOperador,
+              acertosAtivo: formAcertosAtivo,
+              acertosCriterio: formAcertosCriterio,
+              acertosValor: formAcertosValor,
+              roiAtivo: formRoiAtivo,
+              roiCriterio: formRoiCriterio,
+              roiValor: formRoiValor,
+              acaoEntao: formAcaoEntao,
+              notificacaoUrgente: formAcaoEntao === 'notificacao_urgente' || formAcaoEntao === 'todos',
               radarAtivo: formRadarAtivo,
               radarCriterio: formRadarCriterio,
               radarValor: formRadarValor,
@@ -129,8 +204,17 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
       const newRule: HybridAlertRule = {
         id: `hibrido-${Date.now()}`,
         nome: formNome,
+        tipoRegra: formTipoRegra,
         ativa: true,
         operador: formOperador,
+        acertosAtivo: formAcertosAtivo,
+        acertosCriterio: formAcertosCriterio,
+        acertosValor: formAcertosValor,
+        roiAtivo: formRoiAtivo,
+        roiCriterio: formRoiCriterio,
+        roiValor: formRoiValor,
+        acaoEntao: formAcaoEntao,
+        notificacaoUrgente: formAcaoEntao === 'notificacao_urgente' || formAcaoEntao === 'todos',
         radarAtivo: formRadarAtivo,
         radarCriterio: formRadarCriterio,
         radarValor: formRadarValor,
@@ -162,15 +246,23 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
   // Test firing a rule notification
   const handleTestTrigger = (rule: HybridAlertRule) => {
     const evalResult = evaluations[rule.id] || evaluateHybridRule(rule, latestDraw, statsList, cicloAusentes);
-    const activeDezenas = evalResult.dezenasGatilho.length > 0 ? evalResult.dezenasGatilho : rule.dezenasMonitoradas;
-    const dezStr = activeDezenas.map((d) => d.toString().padStart(2, '0')).join(', ');
-    
+    const isPerformance = rule.tipoRegra === 'resultado_performance' || rule.acertosAtivo || rule.roiAtivo;
+
     soundService.playGoldenZoneSuccessChime();
-    fireBrowserPushNotification(
-      `⚡ [TESTE] Alerta Híbrido: ${rule.nome}`,
-      `Condição '${rule.operador}' testada com sucesso para dezenas [${dezStr}] no Concurso #${latestDraw.concurso}.`
-    );
-    alert(`Disparo simulado com sucesso!\nRegra: ${rule.nome}\nCondição: ${rule.operador}\nDezenas: [${dezStr}]`);
+
+    if (isPerformance) {
+      const title = `🚨 [NOTIFICAÇÃO URGENTE] ${rule.nome}`;
+      const body = `Condição de Performance atendida: SE acertos ${rule.acertosCriterio || '>'} ${rule.acertosValor ?? 13} ${rule.operador} ROI ${rule.roiCriterio || '>'} ${rule.roiValor ?? 50}% ENTÃO Notificação Urgente!`;
+      fireBrowserPushNotification(title, body);
+      alert(`⚡ [DISPARO DE TESTE URGENTE]\n${title}\n\n${body}\n\n✓ Notificação push e alerta sonoro emitidos.`);
+    } else {
+      const activeDezenas = evalResult.dezenasGatilho.length > 0 ? evalResult.dezenasGatilho : rule.dezenasMonitoradas;
+      const dezStr = activeDezenas.map((d) => d.toString().padStart(2, '0')).join(', ');
+      const title = `⚡ [TESTE] Alerta Híbrido: ${rule.nome}`;
+      const body = `Condição '${rule.operador}' testada com sucesso para dezenas [${dezStr}] no Concurso #${latestDraw.concurso}.`;
+      fireBrowserPushNotification(title, body);
+      alert(`Disparo simulado com sucesso!\nRegra: ${rule.nome}\nCondição: ${rule.operador}\nDezenas: [${dezStr}]`);
+    }
   };
 
   return (
@@ -227,6 +319,52 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
             className="px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all"
           >
             Restaurar
+          </button>
+        </div>
+      </div>
+
+      {/* Presets Rápidos com Lógica SE-ENTÃO */}
+      <div className="mb-6 p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-amber-300 flex items-center gap-1.5">
+            <span className="text-base">⚡</span>
+            Modelos de Regras SE-ENTÃO Pré-Configuradas (1-Clique para Ativar):
+          </span>
+          <span className="text-[10px] font-mono text-slate-500">Gatilhos Críticos</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={applyPresetOuro}
+            className="p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs text-left font-bold transition flex items-center gap-2.5 cursor-pointer shadow-sm group active:scale-95"
+          >
+            <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
+            <div>
+              <div className="text-[11px] font-black text-white">Super Acertos & ROI</div>
+              <div className="text-[10px] text-amber-400 font-mono">SE acertos &gt; 13 E ROI &gt; 50% ENTÃO Notificação Urgente</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={applyPreset14Pontos}
+            className="p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs text-left font-bold transition flex items-center gap-2.5 cursor-pointer shadow-sm group active:scale-95"
+          >
+            <span className="text-xl group-hover:scale-110 transition-transform">🎯</span>
+            <div>
+              <div className="text-[11px] font-black text-white">Garantia 14 Pontos+</div>
+              <div className="text-[10px] text-emerald-400 font-mono">SE acertos &gt;= 14 ENTÃO Notificação Urgente</div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={applyPresetRadarAtraso}
+            className="p-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs text-left font-bold transition flex items-center gap-2.5 cursor-pointer shadow-sm group active:scale-95"
+          >
+            <span className="text-xl group-hover:scale-110 transition-transform">⚡</span>
+            <div>
+              <div className="text-[11px] font-black text-white">Radar Ouro + Atraso</div>
+              <div className="text-[10px] text-cyan-400 font-mono">SE Radar ≥ 80% E Atraso ≥ 2 ENTÃO Notificar</div>
+            </div>
           </button>
         </div>
       </div>
@@ -300,7 +438,164 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
             </div>
           </div>
 
+          {/* Seletor do Tipo de Gatilho (Performance vs Dezenas) */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Tipo de Gatilho da Regra
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setFormTipoRegra('resultado_performance')}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  formTipoRegra === 'resultado_performance'
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-md shadow-amber-500/10'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs font-black uppercase text-white">🎯 Performance (Acertos & ROI)</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">SE acertos &gt; 13 E ROI &gt; 50% ENTÃO Notificação Urgente</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormTipoRegra('dezenas_radar')}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  formTipoRegra === 'dezenas_radar'
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-md shadow-cyan-500/10'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="text-xs font-black uppercase text-white">🔢 Dezenas (Radar & Atraso)</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">SE Radar ≥ 80% E Atraso ≥ 2 ENTÃO Notificar</div>
+              </button>
+            </div>
+          </div>
+
+          {/* BLOCO PERFORMANCE: SE ACERTOS > X E ROI > Y% ENTÃO ... */}
+          {formTipoRegra === 'resultado_performance' && (
+            <div className="space-y-4">
+              {/* Condição 1: Acertos */}
+              <div className="p-4 rounded-xl border bg-amber-950/20 border-amber-500/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formAcertosAtivo}
+                      onChange={(e) => setFormAcertosAtivo(e.target.checked)}
+                      className="rounded text-amber-500 focus:ring-amber-500 bg-slate-900 border-slate-700 w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-amber-300">
+                      🎯 Condição 1: Volume de Acertos na Lotofácil
+                    </span>
+                  </label>
+                  <span className="text-xs text-amber-400/80 font-mono">Bilhetes Premiados</span>
+                </div>
+
+                {formAcertosAtivo && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs text-slate-300 mb-1">Critério de Acertos</label>
+                      <select
+                        value={formAcertosCriterio}
+                        onChange={(e) => setFormAcertosCriterio(e.target.value as any)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                      >
+                        <option value=">">Maior que (&gt;)</option>
+                        <option value=">=">Maior ou igual (&gt;=)</option>
+                        <option value="==">Exatamente igual (==)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-300 mb-1">Pontuação Gatilho</label>
+                      <select
+                        value={formAcertosValor}
+                        onChange={(e) => setFormAcertosValor(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-amber-300 font-bold font-mono"
+                      >
+                        <option value={11}>11 Pontos</option>
+                        <option value={12}>12 Pontos</option>
+                        <option value={13}>13 Pontos (Gatilho Recomendado)</option>
+                        <option value={14}>14 Pontos (Grande Prêmio)</option>
+                        <option value={15}>15 Pontos (Jackpot Máximo)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Condição 2: Retorno sobre Investimento (ROI %) */}
+              <div className="p-4 rounded-xl border bg-emerald-950/20 border-emerald-500/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formRoiAtivo}
+                      onChange={(e) => setFormRoiAtivo(e.target.checked)}
+                      className="rounded text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700 w-4 h-4"
+                    />
+                    <span className="text-sm font-bold text-emerald-300">
+                      💰 Condição 2: Retorno sobre Investimento (ROI %)
+                    </span>
+                  </label>
+                  <span className="text-xs text-emerald-400/80 font-mono">Lucro Líquido Real</span>
+                </div>
+
+                {formRoiAtivo && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs text-slate-300 mb-1">Critério de ROI</label>
+                      <select
+                        value={formRoiCriterio}
+                        onChange={(e) => setFormRoiCriterio(e.target.value as any)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                      >
+                        <option value=">">Maior que (&gt;)</option>
+                        <option value=">=">Maior ou igual (&gt;=)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-300 mb-1">Percentual Mínimo de ROI: {formRoiValor}%</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={300}
+                        step={10}
+                        value={formRoiValor}
+                        onChange={(e) => setFormRoiValor(Number(e.target.value))}
+                        className="w-full accent-emerald-500 cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0% (Empate)</span>
+                        <span>50% (Lucro Sólido)</span>
+                        <span>100%+ (Super Lucro)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Ação ENTÃO */}
+              <div className="p-4 rounded-xl border bg-rose-950/20 border-rose-500/40 space-y-2">
+                <label className="block text-xs font-bold text-rose-300">
+                  🚨 AÇÃO 'ENTÃO': Execução do Alerta
+                </label>
+                <select
+                  value={formAcaoEntao}
+                  onChange={(e) => setFormAcaoEntao(e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold"
+                >
+                  <option value="notificacao_urgente">Disparar Notificação Urgente no Navegador + Alarme</option>
+                  <option value="alerta_sonoro">Tocar Som de Alerta Sonoro de Ouro</option>
+                  <option value="push_browser">Enviar Push Notification Nativo (Service Worker)</option>
+                  <option value="todos">Todos (Notificação Urgente + Som + Push)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Bloco Condição 1: Radar de Tendências Quentes */}
+          {formTipoRegra === 'dezenas_radar' && (
+            <>
           <div className={`p-4 rounded-xl border transition-all ${
             formRadarAtivo ? 'bg-amber-950/20 border-amber-500/40' : 'bg-slate-900/50 border-slate-800 opacity-60'
           }`}>
@@ -493,6 +788,8 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
               })}
             </div>
           </div>
+          </>
+          )}
 
           {/* Botões de Ação do Form */}
           <div className="flex items-center justify-end gap-3 pt-2">
@@ -568,29 +865,48 @@ export const RegrasAlertaHibridoComponent: React.FC<RegrasAlertaHibridoProps> = 
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 pt-1">
-                      {rule.radarAtivo && (
-                        <span className="flex items-center gap-1 text-amber-300/90">
-                          🔥 Radar: {rule.radarCriterio === 'forca_minima' && `Força ≥ ${rule.radarValor}%`}
-                          {rule.radarCriterio === 'probabilidade_minima' && `Prob. ≥ ${rule.radarValor}%`}
-                          {rule.radarCriterio === 'top3' && 'Top 3 do Radar'}
+                    {/* Descrição dos critérios */}
+                    {rule.tipoRegra === 'resultado_performance' || rule.acertosAtivo || rule.roiAtivo ? (
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs pt-1">
+                        <span className="font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                          SE acertos {rule.acertosCriterio || '>'} {rule.acertosValor ?? 13}
                         </span>
-                      )}
-
-                      <span className="text-slate-600 font-bold">{rule.operador}</span>
-
-                      {rule.atrasoAtivo && (
-                        <span className="flex items-center gap-1 text-rose-300/90">
-                          ⏱️ Atraso: {rule.atrasoCriterio === 'atraso_minimo' && `Atraso ≥ ${rule.atrasoValor} conc.`}
-                          {rule.atrasoCriterio === 'atraso_maior_medio' && 'Superior à média'}
-                          {rule.atrasoCriterio === 'pendente_ciclo' && 'Pendente de Ciclo'}
+                        <span className="text-slate-400 font-black">{rule.operador}</span>
+                        <span className="font-mono text-emerald-300 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                          ROI {rule.roiCriterio || '>'} {rule.roiValor ?? 50}%
                         </span>
-                      )}
+                        <span className="text-rose-400 font-bold flex items-center gap-1">
+                          <span>ENTÃO</span>
+                          <span className="bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded border border-rose-500/40">
+                            🚨 Disparar Notificação Urgente
+                          </span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 pt-1">
+                        {rule.radarAtivo && (
+                          <span className="flex items-center gap-1 text-amber-300/90">
+                            🔥 Radar: {rule.radarCriterio === 'forca_minima' && `Força ≥ ${rule.radarValor}%`}
+                            {rule.radarCriterio === 'probabilidade_minima' && `Prob. ≥ ${rule.radarValor}%`}
+                            {rule.radarCriterio === 'top3' && 'Top 3 do Radar'}
+                          </span>
+                        )}
 
-                      <span className="text-slate-500">
-                        • Monitorando: <strong className="text-slate-300">{rule.dezenasMonitoradas.length} dezenas</strong>
-                      </span>
-                    </div>
+                        <span className="text-slate-600 font-bold">{rule.operador}</span>
+
+                        {rule.atrasoAtivo && (
+                          <span className="flex items-center gap-1 text-rose-300/90">
+                            ⏱️ Atraso: {rule.atrasoCriterio === 'atraso_minimo' && `Atraso ≥ ${rule.atrasoValor} conc.`}
+                            {rule.atrasoCriterio === 'atraso_maior_medio' && 'Superior à média'}
+                            {rule.atrasoCriterio === 'pendente_ciclo' && 'Pendente de Ciclo'}
+                          </span>
+                        )}
+
+                        <span className="text-slate-500">
+                          • Monitorando: <strong className="text-slate-300">{rule.dezenasMonitoradas.length} dezenas</strong>
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Ações da Regra */}

@@ -119,10 +119,103 @@ export async function syncWithMySQLHostinger(): Promise<{
   };
 }
 
-export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico): void {
+/**
+ * Computa um hash canônico determinístico para a matriz de apostas de um fechamento.
+ * Cada aposta tem suas dezenas ordenadas e todos os bilhetes são ordenados em ordem lexicográfica.
+ */
+export function computeFechamentoHash(tickets: GameTicket[]): string {
+  if (!tickets || tickets.length === 0) return '';
+  return tickets
+    .map((t) => [...t.dezenas].sort((a, b) => a - b).join('-'))
+    .sort()
+    .join('|');
+}
+
+/**
+ * Verifica se um fechamento é duplicado antes da persistência:
+ * 1. Verifica se já existe um fechamento com hash idêntico
+ * 2. Verifica se 100% dos tickets já existem salvos em outros fechamentos
+ */
+export function checkFechamentoDuplicateStatus(tickets: GameTicket[]): {
+  isDuplicate: boolean;
+  reason?: 'IDENTICAL_HASH' | 'ALL_TICKETS_EXIST';
+  message?: string;
+  existingClosureId?: string;
+  repeatedCount: number;
+  totalTickets: number;
+} {
+  if (!tickets || tickets.length === 0) {
+    return { isDuplicate: false, repeatedCount: 0, totalTickets: 0 };
+  }
+
+  const newHash = computeFechamentoHash(tickets);
+  const list = getSavedFechamentos();
+  const savedTicketsSet = getAllSavedTicketsSet();
+
+  // 1. Verificação por Hash Idêntico
+  for (const saved of list) {
+    const savedHash = computeFechamentoHash(saved.tickets || []);
+    if (savedHash && savedHash === newHash) {
+      return {
+        isDuplicate: true,
+        reason: 'IDENTICAL_HASH',
+        message: `Fechamento idêntico já cadastrado (${saved.tipoFechamento || saved.id}).`,
+        existingClosureId: saved.id,
+        repeatedCount: tickets.length,
+        totalTickets: tickets.length,
+      };
+    }
+  }
+
+  // 2. Verificação de 100% dos bilhetes já salvos
+  let repeatedTickets = 0;
+  for (const t of tickets) {
+    if (t.dezenas && t.dezenas.length === 15) {
+      const key = [...t.dezenas].sort((a, b) => a - b).join('-');
+      if (savedTicketsSet.has(key)) {
+        repeatedTickets++;
+      }
+    }
+  }
+
+  if (repeatedTickets === tickets.length && tickets.length > 0) {
+    return {
+      isDuplicate: true,
+      reason: 'ALL_TICKETS_EXIST',
+      message: '100% dos bilhetes deste fechamento já estão salvos em outros fechamentos.',
+      repeatedCount: repeatedTickets,
+      totalTickets: tickets.length,
+    };
+  }
+
+  return {
+    isDuplicate: false,
+    repeatedCount: repeatedTickets,
+    totalTickets: tickets.length,
+  };
+}
+
+export function saveFechamentoPrognostico(
+  fechamento: SavedFechamentoPrognostico,
+  options: { force?: boolean } = {}
+): { success: boolean; isDuplicate?: boolean; reason?: string } {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
     const list = getSavedFechamentos();
+
+    // Verificação de Hash / Duplicidade contra registros existentes
+    if (!options.force) {
+      const check = checkFechamentoDuplicateStatus(fechamento.tickets);
+      if (check.isDuplicate) {
+        console.warn(`[LotoSniper Anti-Duplicata] Bloqueio de salvamento: ${check.message}`);
+        return {
+          success: false,
+          isDuplicate: true,
+          reason: check.message,
+        };
+      }
+    }
+
     // Prepend new prognostic
     const updated = [fechamento, ...list.filter((f) => f.id !== fechamento.id)];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 50))); // Keep last 50
@@ -143,8 +236,11 @@ export function saveFechamentoPrognostico(fechamento: SavedFechamentoPrognostico
       .catch((err) => {
         console.warn('[Hostinger MySQL] Sincronização offline, mantido em cache local seguro:', err);
       });
-  } catch (e) {
+
+    return { success: true, isDuplicate: false };
+  } catch (e: any) {
     console.error('Falha ao salvar fechamento:', e);
+    return { success: false, reason: e?.message || 'Erro ao persistir fechamento' };
   }
 }
 
@@ -217,67 +313,129 @@ export function getAllSavedTicketsSet(): Set<string> {
   return set;
 }
 
-/**
- * Diagnostica fechamentos idênticos ou redundantes salvos na base
- */
-export function getDuplicateFechamentosReport(): {
+export interface DuplicateFechamentosReport {
   totalFechamentos: number;
   duplicateCount: number;
   duplicateClosureIds: string[];
   redundantTicketsCount: number;
   uniqueTicketCount: number;
-} {
+  totalTicketsCount: number;
+  uniqueMatrixCount: number;
+  diversityRatePercent: number;
+  redundancyRatePercent: number;
+  hasLowVarianceAlert: boolean;
+  duplicateReasons: Record<string, string>;
+}
+
+/**
+ * Diagnostica fechamentos idênticos ou que contenham 100% de tickets repetidos já salvos
+ */
+export function getDuplicateFechamentosReport(): DuplicateFechamentosReport {
   const list = getSavedFechamentos();
   const seenMatrixSignatures = new Map<string, string>(); // signature -> first id
   const duplicateClosureIds: string[] = [];
+  const duplicateReasons: Record<string, string> = {};
   const seenTickets = new Set<string>();
   let redundantTicketsCount = 0;
+  let totalTicketsCount = 0;
 
+  // Primeiro passo: Identifica matrizes exatamente idênticas (mesmo hash canônico)
   for (const f of list) {
-    // Assinatura do fechamento baseada na matriz de tickets
-    const ticketKeys = (f.tickets || [])
-      .map((t) => [...t.dezenas].sort((a, b) => a - b).join('-'))
-      .sort()
-      .join('|');
-
-    if (ticketKeys.length > 0) {
-      if (seenMatrixSignatures.has(ticketKeys)) {
+    const hash = computeFechamentoHash(f.tickets || []);
+    if (hash.length > 0) {
+      if (seenMatrixSignatures.has(hash)) {
         duplicateClosureIds.push(f.id);
+        duplicateReasons[f.id] = `Matriz 100% idêntica ao fechamento ${seenMatrixSignatures.get(hash)}`;
       } else {
-        seenMatrixSignatures.set(ticketKeys, f.id);
-      }
-    }
-
-    // Contagem de tickets individuais redundantes
-    for (const t of f.tickets || []) {
-      const key = [...t.dezenas].sort((a, b) => a - b).join('-');
-      if (seenTickets.has(key)) {
-        redundantTicketsCount++;
-      } else {
-        seenTickets.add(key);
+        seenMatrixSignatures.set(hash, f.id);
       }
     }
   }
 
+  // Segundo passo: Para os fechamentos não marcados por hash idêntico,
+  // verifica se 100% dos seus bilhetes já existem no conjunto acumulado dos fechamentos anteriores
+  const cumulativeTickets = new Set<string>();
+  for (const f of list) {
+    const tickets = f.tickets || [];
+    totalTicketsCount += tickets.length;
+
+    let ticketsInThisClosureExisting = 0;
+    for (const t of tickets) {
+      if (Array.isArray(t.dezenas) && t.dezenas.length === 15) {
+        const key = [...t.dezenas].sort((a, b) => a - b).join('-');
+        if (cumulativeTickets.has(key)) {
+          ticketsInThisClosureExisting++;
+        }
+        if (seenTickets.has(key)) {
+          redundantTicketsCount++;
+        } else {
+          seenTickets.add(key);
+        }
+      }
+    }
+
+    // Se todos os bilhetes deste fechamento já existiam antes e ele ainda não foi marcado
+    if (
+      tickets.length > 0 &&
+      ticketsInThisClosureExisting === tickets.length &&
+      !duplicateClosureIds.includes(f.id)
+    ) {
+      duplicateClosureIds.push(f.id);
+      duplicateReasons[f.id] = 'Todos os 100% dos bilhetes já foram salvos em outros fechamentos anteriores';
+    }
+
+    // Adiciona os bilhetes deste fechamento ao cumulativo
+    for (const t of tickets) {
+      if (Array.isArray(t.dezenas) && t.dezenas.length === 15) {
+        cumulativeTickets.add([...t.dezenas].sort((a, b) => a - b).join('-'));
+      }
+    }
+  }
+
+  const uniqueMatrixCount = seenMatrixSignatures.size;
+  const total = list.length;
+  const diversityRatePercent = total > 0 ? Math.round((uniqueMatrixCount / total) * 100) : 100;
+  const redundancyRatePercent =
+    totalTicketsCount > 0 ? Math.round((redundantTicketsCount / totalTicketsCount) * 100) : 0;
+  const hasLowVarianceAlert = diversityRatePercent < 80 || duplicateClosureIds.length > 0;
+
   return {
-    totalFechamentos: list.length,
+    totalFechamentos: total,
     duplicateCount: duplicateClosureIds.length,
     duplicateClosureIds,
     redundantTicketsCount,
     uniqueTicketCount: seenTickets.size,
+    totalTicketsCount,
+    uniqueMatrixCount,
+    diversityRatePercent,
+    redundancyRatePercent,
+    hasLowVarianceAlert,
+    duplicateReasons,
   };
 }
 
 /**
- * Remove automaticamente todos os fechamentos duplicados mantendo apenas a primeira ocorrência
+ * Remove automaticamente todos os fechamentos duplicados mantendo apenas os originais únicos
  */
-export function removeDuplicateFechamentos(): { removedCount: number; remainingCount: number } {
+export function removeDuplicateFechamentos(): {
+  removedCount: number;
+  remainingCount: number;
+  details: string;
+} {
   const report = getDuplicateFechamentosReport();
   if (report.duplicateClosureIds.length === 0) {
-    return { removedCount: 0, remainingCount: report.totalFechamentos };
+    return {
+      removedCount: 0,
+      remainingCount: report.totalFechamentos,
+      details: 'Nenhum fechamento duplicado encontrado.',
+    };
   }
   const updated = deleteMultipleSavedFechamentos(report.duplicateClosureIds);
-  return { removedCount: report.duplicateClosureIds.length, remainingCount: updated.length };
+  return {
+    removedCount: report.duplicateClosureIds.length,
+    remainingCount: updated.length,
+    details: `${report.duplicateClosureIds.length} fechamento(s) cópias/redundantes removidos com sucesso.`,
+  };
 }
 
 export function clearAllSavedFechamentos(): void {

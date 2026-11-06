@@ -51,6 +51,8 @@ import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosCom
 import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
 import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50ConcursosRecharts';
 import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRecharts';
+import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard';
+import { RadarTendenciasFourierCard } from './RadarTendenciasFourierCard';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -99,6 +101,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'taxa_diversidade'
+    | 'radar_fourier'
     | 'atrasos'
     | 'comparativo_concursos'
     | 'timeline_100'
@@ -154,6 +158,36 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('taxa_diversidade')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'taxa_diversidade'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Taxa de Diversidade dos Fechamentos</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              HASH & DUPLICATAS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('radar_fourier')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'radar_fourier'
+                ? 'bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-slate-950 shadow-md shadow-cyan-500/25 font-black ring-1 ring-cyan-300'
+                : 'text-cyan-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>Radar de Tendência de Fourier</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              100 CONCURSOS
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('atrasos')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -698,6 +732,23 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </span>
         </div>
       </div>
+
+      {/* SUBTAB: TAXA DE DIVERSIDADE DOS FECHAMENTOS (HASH & AUDITORIA DE VARIÂNCIA) */}
+      {activeSubTab === 'taxa_diversidade' && (
+        <div className="space-y-6">
+          <TaxaDiversidadeFechamentosCard />
+        </div>
+      )}
+
+      {/* SUBTAB: RADAR DE TENDÊNCIA DE DEZENAS (ANÁLISE DE FOURIER - 100 CONCURSOS) */}
+      {activeSubTab === 'radar_fourier' && (
+        <div className="space-y-6">
+          <RadarTendenciasFourierCard
+            latestDraw={latestDraw}
+            onApplyDezenas={onApplyNumbers}
+          />
+        </div>
+      )}
 
       {/* SUBTAB 1: ATRASOS DAS DEZENAS & ESTATÍSTICAS FUNDAMENTAIS */}
       {activeSubTab === 'atrasos' && (

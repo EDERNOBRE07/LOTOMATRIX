@@ -11,7 +11,13 @@ import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
 import { AnaliseROISavedGames } from './AnaliseROISavedGames';
-import { getSavedFechamentos } from '../services/savedFechamentosStorage';
+import {
+  getSavedFechamentos,
+  getDuplicateFechamentosReport,
+  removeDuplicateFechamentos,
+  DuplicateFechamentosReport,
+} from '../services/savedFechamentosStorage';
+import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
@@ -63,6 +69,34 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>('fechamentos_salvos');
+
+  // Relatório de duplicatas e limpeza automática
+  const [dupReport, setDupReport] = useState<DuplicateFechamentosReport>(() => getDuplicateFechamentosReport());
+  const [duplicateActionFeedback, setDuplicateActionFeedback] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleUpdate = () => {
+      setDupReport(getDuplicateFechamentosReport());
+    };
+    window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+    return () => window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+  }, []);
+
+  const handleLimpezaDuplicatas = () => {
+    const report = getDuplicateFechamentosReport();
+    if (report.duplicateCount === 0) {
+      setDuplicateActionFeedback('Nenhum fechamento duplicado ou 100% redundante encontrado na sua base!');
+      setTimeout(() => setDuplicateActionFeedback(null), 4000);
+      return;
+    }
+    const res = removeDuplicateFechamentos();
+    setDupReport(getDuplicateFechamentosReport());
+    try {
+      soundService.playGoldenZoneSuccessChime();
+    } catch {}
+    setDuplicateActionFeedback(`✓ ${res.details}`);
+    setTimeout(() => setDuplicateActionFeedback(null), 5000);
+  };
 
   // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
   const [ticketTags, setTicketTags] = useState<Record<string, string[]>>(() => {
@@ -667,6 +701,25 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
           <button
             type="button"
+            onClick={handleLimpezaDuplicatas}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+              dupReport.duplicateCount > 0
+                ? 'bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black animate-pulse'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+            }`}
+            title="Identificar e remover automaticamente fechamentos idênticos ou que contenham 100% de tickets repetidos"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Limpeza de Duplicatas</span>
+            {dupReport.duplicateCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 font-mono text-[10px] font-black">
+                {dupReport.duplicateCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
             className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
           >
@@ -675,6 +728,21 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </button>
         </div>
       </div>
+
+      {duplicateActionFeedback && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{duplicateActionFeedback}</span>
+          </div>
+          <button
+            onClick={() => setDuplicateActionFeedback(null)}
+            className="text-slate-400 hover:text-white text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* VISÃO 1: DOSSIÊ DE FECHAMENTOS SALVOS */}
       {activeSection === 'fechamentos_salvos' && (

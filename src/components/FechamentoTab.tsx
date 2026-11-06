@@ -1075,10 +1075,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     fechamentoType: string,
     metaData: FechamentoExportMeta,
     activePool: number[]
-  ) => {
+  ): { success: boolean; isDuplicate?: boolean; reason?: string } => {
     try {
       const f = metaData.filters || filters;
-      saveFechamentoPrognostico({
+      const res = saveFechamentoPrognostico({
         id: `fechamento-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         timestamp: Date.now(),
         dataCriacao: new Date().toLocaleString('pt-BR'),
@@ -1122,8 +1122,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         totalJogos: ticketsToSave.length,
         custoTotal: ticketsToSave.length * VALOR_APOSTA_LOTOFACIL,
       });
-    } catch (e) {
+      return res;
+    } catch (e: any) {
       console.warn('Falha ao auto-salvar prognóstico de fechamento:', e);
+      return { success: false, reason: e?.message };
     }
   };
 
@@ -1136,12 +1138,22 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       ...getCurrentExportMeta(),
       strategyName: finalPrognosticoName,
     };
-    autoSaveFechamentoPrognostico(
+    const saveRes = autoSaveFechamentoPrognostico(
       generatedTickets,
       finalPrognosticoName,
       meta,
       selectedNumbers
     );
+
+    if (saveRes?.isDuplicate) {
+      soundService.playFilterClick();
+      setDocumentMessage(
+        `⚠️ Verificação Anti-Duplicata: ${saveRes.reason || 'Este fechamento contém matriz idêntica ou 100% dos bilhetes já salvos'}. Os bilhetes continuam na tela para apostar, mas não foram duplicados no banco.`
+      );
+      setTimeout(() => setDocumentMessage(null), 8000);
+      return;
+    }
+
     onSaveTickets(generatedTickets, meta);
     soundService.playGoldenZoneSuccessChime();
     setHasSavedInJogosSalvos(true);
