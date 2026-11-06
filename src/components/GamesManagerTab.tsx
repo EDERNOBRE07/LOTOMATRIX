@@ -19,7 +19,7 @@ import {
 } from '../services/savedFechamentosStorage';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
-import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
+import { downloadTicketsVolantePDF, VolanteExportStyle } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import jsPDF from 'jspdf';
 import Papa from 'papaparse';
@@ -68,6 +68,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
+  const [pdfExportStyle, setPdfExportStyle] = useState<VolanteExportStyle>('oficial');
   const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>('fechamentos_salvos');
 
   // Relatório de duplicatas e limpeza automática
@@ -595,7 +596,11 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       downloadTicketsVolantePDF(listToExport, {
         concurso: concursoRef,
         dataConcurso: dataRef,
-        titulo: 'LOTOSNIPER GOLD • VOLANTES DE APOSTA OFICIAIS 5X5',
+        titulo:
+          pdfExportStyle === 'economico'
+            ? 'LOTOSNIPER • LISTA OTIMIZADA DE JOGOS (ECONOMIA DE TINTA)'
+            : 'LOTOSNIPER GOLD • VOLANTES DE APOSTA OFICIAIS 5X5',
+        style: pdfExportStyle,
       });
       setCopiedFormat('pdf');
       setTimeout(() => setCopiedFormat(null), 4000);
@@ -819,14 +824,60 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               <span>Exportar CSV</span>
             </button>
 
-            {/* Botão Exportar PDF com layout de volantes oficiais 5x5 */}
+            {/* Seletor de Estilo de Impressão PDF (Oficial 5x5 vs Lista Econômica) */}
+            <div className="flex items-center bg-slate-950/90 p-0.5 rounded-xl border border-slate-700/80 shadow-inner">
+              <span className="text-[10px] text-slate-400 font-bold px-2 uppercase tracking-wider hidden lg:inline">
+                Estilo PDF:
+              </span>
+              <button
+                type="button"
+                onClick={() => setPdfExportStyle('oficial')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  pdfExportStyle === 'oficial'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Modelo Aposta Oficial: Grid 5x5 estilo volante oficial da Caixa com marcação visual"
+              >
+                <span>Grid 5×5 Oficial</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPdfExportStyle('economico')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  pdfExportStyle === 'economico'
+                    ? 'bg-emerald-400 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Modelo Lista Otimizada: Focado em economia máxima de tinta (monocromático, 10 jogos por folha)"
+              >
+                <span>Lista Econômica</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-slate-900/50 text-slate-950 font-mono font-black">
+                  -90% Tinta
+                </span>
+              </button>
+            </div>
+
+            {/* Botão Exportar PDF com layout de acordo com o estilo selecionado */}
             <button
               onClick={handleDirectVolantePDF}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/25 via-yellow-500/25 to-amber-500/25 hover:from-amber-500/35 text-amber-300 border border-amber-500/50 text-xs font-black transition cursor-pointer shadow-md shadow-amber-500/15 active:scale-95"
-              title="Gerar e baixar diretamente o arquivo PDF com os volantes oficiais 5x5 diagramados prontos para impressão"
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer shadow-md active:scale-95 ${
+                pdfExportStyle === 'economico'
+                  ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 shadow-emerald-500/25 ring-1 ring-emerald-300'
+                  : 'bg-gradient-to-r from-amber-500/25 via-yellow-500/25 to-amber-500/25 hover:from-amber-500/35 text-amber-300 border border-amber-500/50 shadow-amber-500/15'
+              }`}
+              title={
+                pdfExportStyle === 'economico'
+                  ? 'Gerar e baixar PDF no Modelo Lista Otimizada (monocromático, alta densidade e economia máxima de toner)'
+                  : 'Gerar e baixar PDF no Modelo Aposta Oficial com o grid 5x5 diagramado para marcação'
+              }
             >
-              <Printer className="w-3.5 h-3.5 text-amber-400" />
-              <span>Baixar PDF (Volantes 5×5)</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>
+                {pdfExportStyle === 'economico'
+                  ? 'Baixar PDF (Lista Econômica)'
+                  : 'Baixar PDF (Volantes 5×5)'}
+              </span>
             </button>
 
             {/* Botão Exportar PDF Profissional para Lotérica com Marca d'Água e Custo Estimado */}

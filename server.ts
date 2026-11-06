@@ -958,22 +958,96 @@ app.post('/api/mysql/fechamentos', async (req: Request, res: Response) => {
   });
 });
 
-// DELETE: Excluir fechamento
+// DELETE: Excluir fechamento por ID
 app.delete('/api/mysql/fechamentos/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) return res.status(400).json({ success: false, error: 'ID obrigatório' });
 
+  let deletedFromMySQL = false;
   if (isMysqlConnected && mysqlPool) {
     try {
-      await mysqlPool.query('DELETE FROM lotosniper_saved_fechamentos WHERE id = ?', [id]);
-    } catch {}
+      const [result]: any = await mysqlPool.query('DELETE FROM lotosniper_saved_fechamentos WHERE id = ?', [id]);
+      deletedFromMySQL = (result?.affectedRows ?? 0) > 0;
+      console.log(`[Hostinger MySQL] Fechamento ${id} deletado do MySQL (affected: ${result?.affectedRows || 0})`);
+    } catch (err) {
+      console.warn(`[Hostinger MySQL] Erro ao deletar fechamento ${id} do MySQL:`, err);
+    }
   }
 
   const current = readLocalFallbackFechamentos();
   const updated = current.filter((x: any) => x.id !== id);
   writeLocalFallbackFechamentos(updated);
 
-  res.json({ success: true, deleted: id });
+  res.json({
+    success: true,
+    deleted: id,
+    deletedFromMySQL,
+    remainingCount: updated.length,
+  });
+});
+
+// DELETE: Exclusão em lote ou limpeza total de fechamentos salvos
+app.delete('/api/mysql/fechamentos', async (req: Request, res: Response) => {
+  const { ids, all } = (req.body || {}) as { ids?: string[]; all?: boolean };
+
+  if (all) {
+    let purgedFromMySQL = false;
+    if (isMysqlConnected && mysqlPool) {
+      try {
+        await mysqlPool.query('TRUNCATE TABLE lotosniper_saved_fechamentos');
+        purgedFromMySQL = true;
+        console.log('[Hostinger MySQL] Tabela lotosniper_saved_fechamentos truncada com sucesso.');
+      } catch (e) {
+        try {
+          await mysqlPool.query('DELETE FROM lotosniper_saved_fechamentos');
+          purgedFromMySQL = true;
+          console.log('[Hostinger MySQL] Registros de lotosniper_saved_fechamentos deletados via DELETE.');
+        } catch (err) {
+          console.warn('[Hostinger MySQL] Erro ao truncar tabela de fechamentos:', err);
+        }
+      }
+    }
+
+    writeLocalFallbackFechamentos([]);
+    console.log('[LotoSniper Cache] Todos os fechamentos do fallback local foram apagados.');
+    return res.json({
+      success: true,
+      clearedAll: true,
+      purgedFromMySQL,
+      remainingCount: 0,
+    });
+  }
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    let deletedCountMySQL = 0;
+    if (isMysqlConnected && mysqlPool) {
+      try {
+        const placeholders = ids.map(() => '?').join(',');
+        const [result]: any = await mysqlPool.query(
+          `DELETE FROM lotosniper_saved_fechamentos WHERE id IN (${placeholders})`,
+          ids
+        );
+        deletedCountMySQL = result?.affectedRows || 0;
+        console.log(`[Hostinger MySQL] ${deletedCountMySQL} fechamentos excluídos em lote.`);
+      } catch (err) {
+        console.warn('[Hostinger MySQL] Erro na exclusão em lote:', err);
+      }
+    }
+
+    const current = readLocalFallbackFechamentos();
+    const idsSet = new Set(ids);
+    const updated = current.filter((x: any) => !idsSet.has(x.id));
+    writeLocalFallbackFechamentos(updated);
+
+    return res.json({
+      success: true,
+      deletedIds: ids,
+      deletedCountMySQL,
+      remainingCount: updated.length,
+    });
+  }
+
+  return res.status(400).json({ success: false, error: 'Parâmetro "ids" (array) ou "all: true" obrigatório' });
 });
 
 // POST: Testar conexão com Hostinger MySQL

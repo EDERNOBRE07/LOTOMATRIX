@@ -16,11 +16,14 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { LotofacilDraw, GameTicket } from '../types/lotofacil';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
-import {
-  SavedFechamentoPrognostico,
-  getSavedFechamentos,
-} from '../services/savedFechamentosStorage';
+import { SavedFechamentoPrognostico, getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { countMatches } from '../services/combinatorics';
+import { getHistoricalNDraws } from '../services/historical100Draws';
+import {
+  FiltroIntervaloTempoEstatisticas,
+  TimeRangeInterval,
+  TIME_RANGE_OPTIONS,
+} from './FiltroIntervaloTempoEstatisticas';
 import {
   TrendingUp,
   DollarSign,
@@ -40,6 +43,8 @@ import {
 
 interface HistoricoROISavedGamesChartProps {
   latestDraw?: LotofacilDraw;
+  initialTimeRange?: TimeRangeInterval;
+  onTimeRangeChange?: (range: TimeRangeInterval) => void;
 }
 
 interface DrawRoiData {
@@ -61,7 +66,25 @@ interface DrawRoiData {
 
 export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartProps> = ({
   latestDraw = CONCURSO_ATUAL,
+  initialTimeRange = '30_dias',
+  onTimeRangeChange,
 }) => {
+  // Intervalo de tempo ativo para o cálculo do ROI
+  const [timeRange, setTimeRange] = useState<TimeRangeInterval>(initialTimeRange);
+
+  React.useEffect(() => {
+    if (initialTimeRange && initialTimeRange !== timeRange) {
+      setTimeRange(initialTimeRange);
+    }
+  }, [initialTimeRange]);
+
+  const handleTimeRangeChange = (newRange: TimeRangeInterval) => {
+    setTimeRange(newRange);
+    if (onTimeRangeChange) {
+      onTimeRangeChange(newRange);
+    }
+  };
+
   // Lista de fechamentos salvos
   const [savedFechamentos, setSavedFechamentos] = useState<SavedFechamentoPrognostico[]>(() =>
     getSavedFechamentos()
@@ -87,13 +110,13 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
     }
   };
 
-  // Os últimos 20 concursos históricos ordenados cronologicamente (do mais antigo para o mais recente)
-  const last20DrawsChronological: LotofacilDraw[] = useMemo(() => {
-    // Pega os 20 mais recentes de RECENT_DRAWS
-    const slice20 = RECENT_DRAWS.slice(0, 20);
-    // Ordena do menor concurso para o maior (ordem cronológica para o eixo X)
-    return [...slice20].sort((a, b) => a.concurso - b.concurso);
-  }, []);
+  // Concursos históricos filtrados dinamicamente pelo intervalo temporal selecionado
+  const filteredDrawsChronological: LotofacilDraw[] = useMemo(() => {
+    const opt = TIME_RANGE_OPTIONS.find((o) => o.id === timeRange) || TIME_RANGE_OPTIONS[0];
+    const draws = getHistoricalNDraws(opt.drawCount, latestDraw);
+    // Ordena do menor concurso para o maior (ordem cronológica para o eixo X do gráfico de área)
+    return [...draws].sort((a, b) => a.concurso - b.concurso);
+  }, [timeRange, latestDraw]);
 
   // Bilhetes da estratégia selecionada
   const activeTickets: GameTicket[] = useMemo(() => {
@@ -151,7 +174,7 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
       return acc + 3.5;
     }, 0);
 
-    return last20DrawsChronological.map((draw) => {
+    return filteredDrawsChronological.map((draw) => {
       let hits11 = 0;
       let hits12 = 0;
       let hits13 = 0;
@@ -206,7 +229,7 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
         totalPremiados,
       };
     });
-  }, [last20DrawsChronological, activeTickets]);
+  }, [filteredDrawsChronological, activeTickets]);
 
   // Métricas agregadas dos 20 concursos
   const summaryMetrics = useMemo(() => {
@@ -314,8 +337,17 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
     );
   };
 
+  const activeTimeOption = TIME_RANGE_OPTIONS.find((o) => o.id === timeRange) || TIME_RANGE_OPTIONS[0];
+
   return (
     <div className="space-y-6">
+      {/* Seletor de Intervalo de Tempo Específico para ROI */}
+      <FiltroIntervaloTempoEstatisticas
+        value={timeRange}
+        onChange={handleTimeRangeChange}
+        latestDraw={latestDraw}
+      />
+
       {/* Cabeçalho do Card */}
       <div className="bg-slate-900/95 border-2 border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -326,14 +358,14 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg sm:text-xl font-black text-white">
-                  Histórico de Retorno sobre Investimento (ROI) • Últimos 20 Concursos
+                  Histórico de Retorno sobre Investimento (ROI) • {activeTimeOption.label}
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
-                  20 Concursos Oficiais Caixa
+                  {filteredDrawsChronological.length} Concursos ({activeTimeOption.badge})
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Auditoria de rentabilidade real com base nas premiações oficiais da Caixa Econômica Federal (11 a 15 acertos) confrontadas com o custo de aposta dos fechamentos salvos.
+                Auditoria de rentabilidade real calculada nos últimos {filteredDrawsChronological.length} concursos oficiais da Caixa (11 a 15 acertos) confrontados com o custo dos fechamentos salvos.
               </p>
             </div>
           </div>

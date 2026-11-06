@@ -30,6 +30,47 @@ export interface SavedFechamentoPrognostico {
 
 const STORAGE_KEY = 'lotosniper_saved_prognosticos';
 const INITIALIZED_KEY = 'lotosniper_prognosticos_initialized';
+const TOMBSTONES_KEY = 'lotosniper_deleted_fechamento_ids';
+
+/**
+ * Retorna o conjunto de IDs de fechamentos que foram deletados pelo usuário.
+ * Isso impede que sincronizações de rede tragam de volta (resurrect) fechamentos já excluídos.
+ */
+export function getDeletedFechamentoIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(TOMBSTONES_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set<string>();
+  } catch {
+    return new Set<string>();
+  }
+}
+
+/**
+ * Registra IDs excluídos no tombstone persistente.
+ */
+export function recordDeletedFechamentoIds(ids: string[]): void {
+  try {
+    const current = getDeletedFechamentoIds();
+    ids.forEach((id) => current.add(id));
+    const arr = Array.from(current).slice(-500); // Mantém até 500 tombstones
+    localStorage.setItem(TOMBSTONES_KEY, JSON.stringify(arr));
+  } catch {}
+}
+
+/**
+ * Remove o ID do tombstone se o usuário criar ou re-salvar explicitamente o fechamento.
+ */
+export function unmarkDeletedFechamentoId(id: string): void {
+  try {
+    const current = getDeletedFechamentoIds();
+    if (current.has(id)) {
+      current.delete(id);
+      localStorage.setItem(TOMBSTONES_KEY, JSON.stringify(Array.from(current)));
+    }
+  } catch {}
+}
 
 export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
   try {
@@ -83,8 +124,21 @@ export async function syncWithMySQLHostinger(): Promise<{
           const fetchJson = await fetchRes.json();
           if (fetchJson.success && Array.isArray(fetchJson.fechamentos) && fetchJson.fechamentos.length > 0) {
             const remote = fetchJson.fechamentos;
+            const deletedIds = getDeletedFechamentoIds();
+
+            // Purgar no servidor qualquer fechamento que foi previamente deletado localmente
+            const ghosts = remote.filter((r: any) => deletedIds.has(r.id));
+            if (ghosts.length > 0) {
+              fetch('/api/mysql/fechamentos', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ghosts.map((g: any) => g.id) }),
+              }).catch(() => {});
+            }
+
+            // Apenas adiciona ao local fechamentos remotos que NÃO foram deletados e não constam no local
             const existingIds = new Set(localList.map((x) => x.id));
-            const toAdd = remote.filter((r: any) => !existingIds.has(r.id));
+            const toAdd = remote.filter((r: any) => !existingIds.has(r.id) && !deletedIds.has(r.id));
             if (toAdd.length > 0) {
               const merged = [...localList, ...toAdd];
               localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -217,6 +271,7 @@ export function saveFechamentoPrognostico(
     }
 
     // Prepend new prognostic
+    unmarkDeletedFechamentoId(fechamento.id);
     const updated = [fechamento, ...list.filter((f) => f.id !== fechamento.id)];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 50))); // Keep last 50
     if (typeof window !== 'undefined') {
@@ -247,6 +302,7 @@ export function saveFechamentoPrognostico(
 export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
+    recordDeletedFechamentoIds([id]);
     const list = getSavedFechamentos();
     const updated = list.filter((f) => f.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -254,10 +310,17 @@ export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] 
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
 
-    // Exclui de forma assíncrona no Banco de Dados MySQL da Hostinger
+    // Exclui de forma assíncrona no Banco de Dados MySQL da Hostinger e no cache local
     fetch(`/api/mysql/fechamentos/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-    }).catch(() => {});
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        console.log(`[Hostinger MySQL] Fechamento ${id} deletado no banco:`, res);
+      })
+      .catch((err) => {
+        console.warn(`[Hostinger MySQL] Exclusão offline gravada no tombstone para o ID ${id}:`, err);
+      });
 
     return updated;
   } catch (e) {
@@ -269,6 +332,7 @@ export function deleteSavedFechamento(id: string): SavedFechamentoPrognostico[] 
 export function deleteMultipleSavedFechamentos(ids: string[]): SavedFechamentoPrognostico[] {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
+    recordDeletedFechamentoIds(ids);
     const idsSet = new Set(ids);
     const list = getSavedFechamentos();
     const updated = list.filter((f) => !idsSet.has(f.id));
@@ -277,12 +341,19 @@ export function deleteMultipleSavedFechamentos(ids: string[]): SavedFechamentoPr
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
     }
 
-    // Exclui de forma assíncrona no Banco de Dados MySQL da Hostinger
-    ids.forEach((id) => {
-      fetch(`/api/mysql/fechamentos/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      }).catch(() => {});
-    });
+    // Exclui em lote no Banco de Dados MySQL da Hostinger
+    fetch('/api/mysql/fechamentos', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        console.log(`[Hostinger MySQL] ${ids.length} fechamentos excluídos em lote no banco:`, res);
+      })
+      .catch((err) => {
+        console.warn('[Hostinger MySQL] Erro ao deletar múltiplos fechamentos:', err);
+      });
 
     return updated;
   } catch (e) {
@@ -441,11 +512,31 @@ export function removeDuplicateFechamentos(): {
 export function clearAllSavedFechamentos(): void {
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
+    const existing = getSavedFechamentos();
+    if (existing.length > 0) {
+      recordDeletedFechamentoIds(existing.map((f) => f.id));
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: [] }));
     }
-  } catch {}
+
+    // Exclui todos os registros no Banco de Dados MySQL da Hostinger e limpa o cache
+    fetch('/api/mysql/fechamentos', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        console.log('[Hostinger MySQL] Todos os fechamentos foram removidos do banco MySQL:', res);
+      })
+      .catch((err) => {
+        console.warn('[Hostinger MySQL] Erro ao limpar todos os fechamentos no backend:', err);
+      });
+  } catch (e) {
+    console.error('Falha ao limpar todos os fechamentos salvos:', e);
+  }
 }
 
 

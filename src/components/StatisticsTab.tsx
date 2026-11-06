@@ -53,6 +53,7 @@ import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50C
 import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRecharts';
 import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard';
 import { RadarTendenciasFourierCard } from './RadarTendenciasFourierCard';
+import { FiltroIntervaloTempoEstatisticas, TimeRangeInterval } from './FiltroIntervaloTempoEstatisticas';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -145,6 +146,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     'dezena' | 'atraso_desc' | 'vezes_desc'
   >('atraso_desc');
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState<boolean>(false);
+  const [globalTimeRange, setGlobalTimeRange] = useState<TimeRangeInterval>('6_meses');
 
   // Sorted views of the 25 numbers
   const sortedDezenas = [...statsList].sort((a, b) => {
@@ -839,8 +841,12 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }}
           />
 
-          {/* Gráfico de Histórico de Retorno sobre Investimento (ROI • 20 Concursos) com Recharts */}
-          <HistoricoROISavedGamesChart latestDraw={latestDraw} />
+          {/* Gráfico de Histórico de Retorno sobre Investimento (ROI com Intervalos Temporais) com Recharts */}
+          <HistoricoROISavedGamesChart
+            latestDraw={latestDraw}
+            initialTimeRange={globalTimeRange}
+            onTimeRangeChange={setGlobalTimeRange}
+          />
 
           {/* 1. Top 15 Dezenas Mais Sorteadas nos Últimos 10 Concursos */}
           <Top15FrequenciaUltimos10Card

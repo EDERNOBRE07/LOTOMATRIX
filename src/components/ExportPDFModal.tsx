@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
 import { CONCURSO_ATUAL, MOLDURA, PRIMOS, FIBONACCI } from '../data/lotofacilData';
 import { SavedFechamentoPrognostico } from '../services/savedFechamentosStorage';
+import { downloadTicketsVolantePDF } from '../services/goldPdfGenerator';
 import {
   Printer,
   Download,
@@ -445,23 +446,62 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Download Modelo Aposta Oficial 5x5 via jsPDF */}
+            <button
+              type="button"
+              onClick={() => {
+                downloadTicketsVolantePDF(validTickets, {
+                  concurso: resolvedConcurso,
+                  dataConcurso: resolvedData,
+                  titulo: `LOTOSNIPER GOLD • VOLANTES 5X5 (${strategyName})`,
+                  style: 'oficial',
+                });
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer active:scale-95 shadow-sm"
+              title="Baixar diretamente em PDF o Modelo Aposta Oficial com Grid 5x5 formatado via jsPDF"
+            >
+              <Download className="w-3.5 h-3.5 text-amber-400" />
+              <span>PDF Volante 5×5</span>
+            </button>
+
+            {/* Download Modelo Lista Otimizada (Economia de Tinta) via jsPDF */}
+            <button
+              type="button"
+              onClick={() => {
+                downloadTicketsVolantePDF(validTickets, {
+                  concurso: resolvedConcurso,
+                  dataConcurso: resolvedData,
+                  titulo: `LOTOSNIPER • LISTA OTIMIZADA (${strategyName})`,
+                  style: 'economico',
+                });
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/40 text-xs font-bold transition cursor-pointer active:scale-95 shadow-sm"
+              title="Baixar diretamente em PDF o Modelo Lista Otimizada focado em economia máxima de tinta (monocromático, 10 jogos/página)"
+            >
+              <Printer className="w-3.5 h-3.5 text-teal-400" />
+              <span>Lista Econômica</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-teal-500/20 text-teal-200 font-mono">
+                -90% Tinta
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={handleDownloadHTML}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer"
             >
-              <Download className="w-4 h-4 text-amber-400" />
-              <span>Baixar Arquivo HTML Gold</span>
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
+              <span>HTML</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black transition shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black transition shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95"
             >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir / Salvar PDF Gold</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimir / Salvar</span>
             </button>
           </div>
         </div>

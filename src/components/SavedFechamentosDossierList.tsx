@@ -18,7 +18,7 @@ import { soundService } from '../services/soundAlert';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
 import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
-import { downloadGoldFechamentoPDF } from '../services/goldPdfGenerator';
+import { downloadGoldFechamentoPDF, downloadTicketsVolantePDF, VolanteExportStyle } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
 import {
@@ -362,6 +362,29 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar PDF para lotérica.');
+    }
+  };
+
+  const handleDownloadVolantesStyle = (f: SavedFechamentoPrognostico, style: VolanteExportStyle) => {
+    try {
+      downloadTicketsVolantePDF(f.tickets, {
+        concurso: f.concurso,
+        dataConcurso: f.dataConcurso,
+        titulo:
+          style === 'economico'
+            ? `LOTOSNIPER • LISTA OTIMIZADA DE JOGOS (${f.tipoFechamento})`
+            : `LOTOSNIPER GOLD • VOLANTES DE APOSTA 5X5 (${f.tipoFechamento})`,
+        style,
+      });
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(
+        style === 'economico'
+          ? `✓ PDF "Lista Otimizada (Econômico)" gerado para "${f.tipoFechamento}"!`
+          : `✓ PDF "Volantes Oficiais 5×5" gerado para "${f.tipoFechamento}"!`
+      );
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar PDF de volantes.');
     }
   };
 
@@ -929,15 +952,29 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       <span>Visualizar & Imprimir</span>
                     </button>
 
-                    {/* Botão Baixar PDF Direto (jsPDF Gold) */}
+                    {/* Botão Baixar Volante 5x5 Oficial */}
                     <button
                       type="button"
-                      onClick={() => handleDownloadPdfDirect(f)}
+                      onClick={() => handleDownloadVolantesStyle(f, 'oficial')}
                       className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-                      title="Baixar arquivo PDF Gold formatado diretamente via jsPDF"
+                      title="Baixar volantes no Modelo Aposta Oficial com grid 5x5 pronto para marcação"
                     >
                       <Download className="w-4 h-4 text-amber-400" />
-                      <span>Baixar PDF Gold</span>
+                      <span>Volante 5×5</span>
+                    </button>
+
+                    {/* Botão Baixar Lista Otimizada Econômica (Economia de Tinta) */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadVolantesStyle(f, 'economico')}
+                      className="px-3 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                      title="Baixar lista otimizada com economia de tinta (layout monocromático de alta densidade)"
+                    >
+                      <Printer className="w-4 h-4 text-teal-400" />
+                      <span>Lista Econômica</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-teal-500/20 text-teal-200 font-mono">
+                        -90% Tinta
+                      </span>
                     </button>
 
                     {/* Botão Gerar PDF Oficial para Lotérica com Marca d'Água e Custos Estimados */}
