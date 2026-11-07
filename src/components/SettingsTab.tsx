@@ -38,6 +38,7 @@ import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
 import { S3CronjobManagerCard } from './S3CronjobManagerCard';
 import { CloudBackupModule } from './CloudBackupModule';
+import { BackupCloudPro } from './BackupCloudPro';
 import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
@@ -623,7 +624,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             <Cloud className="w-3.5 h-3.5" />
-            <span>Backup Cloud & Drive</span>
+            <span>Backup Cloud Pro</span>
             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">
               Google Drive
             </span>
@@ -1430,9 +1431,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Backup Cloud & Google Drive Sync */}
+          {/* Backup Cloud Pro (Google Drive Sync & Agendamento) */}
           <div className="pt-2">
-            <CloudBackupModule latestDraw={latestDraw} />
+            <BackupCloudPro latestDraw={latestDraw} />
           </div>
 
           {/* Backup MySQL Hostinger no Servidor */}
@@ -1446,11 +1447,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* SUBTAB: BACKUP CLOUD & GOOGLE DRIVE SYNC                                  */}
+      {/* SUBTAB: BACKUP CLOUD PRO (GOOGLE DRIVE SYNC & AGENDAMENTO)                */}
       {/* ========================================================================= */}
       {activeSubTab === 'backup_cloud' && (
         <div className="space-y-6">
-          <CloudBackupModule latestDraw={latestDraw} />
+          <BackupCloudPro latestDraw={latestDraw} />
         </div>
       )}
 

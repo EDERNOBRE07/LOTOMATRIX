@@ -722,7 +722,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             title="Backup completo e automático de jogos e configurações (JSON & Google Drive)"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Backup & Drive</span>
+            <span>Backup Cloud Pro</span>
           </button>
 
           <button
