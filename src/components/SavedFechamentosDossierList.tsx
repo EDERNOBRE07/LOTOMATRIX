@@ -172,6 +172,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedFechamentoIds, setSelectedFechamentoIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState<boolean>(false);
+  const [confirmClearAll, setConfirmClearAll] = useState<boolean>(false);
 
   // Diagnóstico de fechamentos redundantes ou idênticos
   const dupReport = useMemo(() => getDuplicateFechamentosReport(), [fechamentos]);
@@ -216,7 +217,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     try {
       soundService.playFilterClick();
     } catch {}
-    showFeedback(`✓ ${idsToDelete.length} fechamento(s) selecionado(s) foram excluídos com sucesso.`);
+    showFeedback(`✓ ${idsToDelete.length} fechamentos selecionados foram excluídos definitivamente do Banco MySQL Hostinger e do armazenamento local.`);
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -231,18 +232,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     try {
       soundService.playFilterClick();
     } catch {}
-    showFeedback(`✓ Fechamento "${name}" excluído com sucesso.`);
+    showFeedback(`✓ Fechamento "${name}" excluído definitivamente do Banco de Dados MySQL Hostinger e do armazenamento local.`);
   };
 
   const handleClearAll = () => {
+    const count = fechamentos.length;
     clearAllSavedFechamentos();
     setFechamentos([]);
     setSelectedFechamentoIds(new Set());
     setConfirmBulkDelete(false);
+    setConfirmClearAll(false);
     try {
       soundService.playFilterClick();
     } catch {}
-    showFeedback('Todos os fechamentos salvos foram removidos.');
+    showFeedback(`✓ Todos os ${count} fechamentos foram excluídos definitivamente do Banco MySQL Hostinger e do armazenamento local.`);
   };
 
   const handleLoadInConferencia = (fechamento: SavedFechamentoPrognostico) => {
@@ -579,14 +582,35 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             )}
 
             {fechamentos.length > 1 && (
-              <button
-                onClick={handleClearAll}
-                className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
-                title="Limpar todos os fechamentos salvos"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Limpar Histórico</span>
-              </button>
+              confirmClearAll ? (
+                <div className="flex items-center gap-1.5 bg-rose-950/90 p-1.5 rounded-xl border border-rose-500/60 shadow-md">
+                  <span className="text-[11px] text-rose-200 font-bold px-1">Excluir todos do banco?</span>
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="px-2.5 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-black text-xs transition cursor-pointer"
+                  >
+                    Sim, Limpar Tudo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearAll(false)}
+                    className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 transition cursor-pointer"
+                  >
+                    Não
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearAll(true)}
+                  className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                  title="Limpar todos os fechamentos salvos do banco de dados e do armazenamento local"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Limpar Histórico</span>
+                </button>
+              )
             )}
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}

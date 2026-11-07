@@ -54,6 +54,7 @@ import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRechar
 import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard';
 import { RadarTendenciasFourierCard } from './RadarTendenciasFourierCard';
 import { FiltroIntervaloTempoEstatisticas, TimeRangeInterval } from './FiltroIntervaloTempoEstatisticas';
+import { GraficoCustoRetornoAcumulado } from './GraficoCustoRetornoAcumulado';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -102,6 +103,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'custo_retorno_acumulado'
     | 'taxa_diversidade'
     | 'radar_fourier'
     | 'atrasos'
@@ -160,6 +162,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('custo_retorno_acumulado')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'custo_retorno_acumulado'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Custo vs Retorno Acumulado</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              BREAKEVEN & ROI
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('taxa_diversidade')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -1574,10 +1591,27 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
+      {/* SUBTAB DEDICADA: CUSTO VS RETORNO FINANCEIRO ACUMULADO (BREAKEVEN & RENTABILIDADE) */}
+      {activeSubTab === 'custo_retorno_acumulado' && (
+        <div className="space-y-6">
+          <GraficoCustoRetornoAcumulado
+            latestDraw={latestDraw}
+            initialTimeRange={globalTimeRange}
+            onTimeRangeChange={setGlobalTimeRange}
+            savedTickets={savedTickets}
+            fechamentoNome={fechamentoNome}
+          />
+        </div>
+      )}
+
       {/* SUBTAB DEDICADA: HISTÓRICO DE RETORNO SOBRE INVESTIMENTO (ROI - 20 CONCURSOS COM RECHARTS) */}
       {activeSubTab === 'historico_roi' && (
         <div className="space-y-6">
-          <HistoricoROISavedGamesChart latestDraw={latestDraw} />
+          <HistoricoROISavedGamesChart
+            latestDraw={latestDraw}
+            initialTimeRange={globalTimeRange}
+            onTimeRangeChange={setGlobalTimeRange}
+          />
         </div>
       )}
 
@@ -1617,6 +1651,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             latestDraw={latestDraw}
             customStats={statsList}
             onSelectDezena={onApplyNumbers ? (num) => onApplyNumbers([num]) : undefined}
+            initialTimeRange={globalTimeRange}
+            onTimeRangeChange={setGlobalTimeRange}
           />
         </div>
       )}

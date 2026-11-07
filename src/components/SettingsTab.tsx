@@ -37,6 +37,7 @@ import { StorageSyncManager } from './StorageSyncManager';
 import { CycleMonitoringCard } from './CycleMonitoringCard';
 import { RelatorioEficienciaGeminiCard } from './RelatorioEficienciaGeminiCard';
 import { S3CronjobManagerCard } from './S3CronjobManagerCard';
+import { CloudBackupModule } from './CloudBackupModule';
 import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
@@ -80,8 +81,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache'
+    'geral' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
   >('geral');
+
+  useEffect(() => {
+    const handleOpenBackup = () => setActiveSubTab('backup_cloud');
+    window.addEventListener('lotosniper-open-backup', handleOpenBackup);
+    return () => window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
+  }, []);
 
   // 1. Modo de Conexão
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(() => {
@@ -605,6 +612,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <span>Backtesting Histórico (100)</span>
             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
               100 Sorteios
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('backup_cloud')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'backup_cloud'
+                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 text-slate-950 font-black shadow-sm ring-1 ring-cyan-300'
+                : 'text-cyan-400 hover:text-white'
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>Backup Cloud & Drive</span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">
+              Google Drive
             </span>
           </button>
           <button
@@ -1409,6 +1430,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
+          {/* Backup Cloud & Google Drive Sync */}
+          <div className="pt-2">
+            <CloudBackupModule latestDraw={latestDraw} />
+          </div>
+
           {/* Backup MySQL Hostinger no Servidor */}
           <div className="pt-2">
             <HostingerMySQLConfigModule
@@ -1416,6 +1442,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               savedTickets={savedTickets}
             />
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB: BACKUP CLOUD & GOOGLE DRIVE SYNC                                  */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'backup_cloud' && (
+        <div className="space-y-6">
+          <CloudBackupModule latestDraw={latestDraw} />
         </div>
       )}
 
