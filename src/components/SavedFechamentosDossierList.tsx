@@ -925,11 +925,16 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       #{(idx + 1).toString().padStart(2, '0')}
                     </span>
                     <div className="space-y-1">
-                      {/* Linha 1: ⚡(Tipo de Fechamento) - (Para concurso: Concurso Base Caixa # N° + 1) */}
+                      {/* Linha 1: ⚡(Tipo de Fechamento com Filtros e Dossiê) */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 leading-snug">
                           <span>
-                            ⚡{f.tipoFechamento.replace(/^⚡\s*/, '')} - (Para concurso: Concurso Base Caixa #{f.concurso + 1})
+                            ⚡{f.tipoFechamento.replace(/^⚡\s*/, '')}
+                            {!f.tipoFechamento.includes('Concurso #') && !f.tipoFechamento.includes('Alvo:') && (
+                              <span className="text-slate-400 font-semibold text-xs ml-1.5">
+                                (Alvo: Concurso Caixa #{f.concurso + 1})
+                              </span>
+                            )}
                           </span>
                         </h3>
                       </div>

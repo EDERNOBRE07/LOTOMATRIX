@@ -55,6 +55,7 @@ import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard
 import { RadarTendenciasFourierCard } from './RadarTendenciasFourierCard';
 import { FiltroIntervaloTempoEstatisticas, TimeRangeInterval } from './FiltroIntervaloTempoEstatisticas';
 import { GraficoCustoRetornoAcumulado } from './GraficoCustoRetornoAcumulado';
+import { DistribuicaoProbabilidadeCurvaNormal } from './DistribuicaoProbabilidadeCurvaNormal';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -104,6 +105,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'custo_retorno_acumulado'
+    | 'distribuicao_probabilidade'
     | 'taxa_diversidade'
     | 'radar_fourier'
     | 'atrasos'
@@ -174,6 +176,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Custo vs Retorno Acumulado</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               BREAKEVEN & ROI
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('distribuicao_probabilidade')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'distribuicao_probabilidade'
+                ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black ring-1 ring-amber-300'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4 text-amber-300" />
+            <span>Distribuição de Probabilidade</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              CURVA NORMAL RECHARTS
             </span>
           </button>
 
@@ -1598,6 +1615,17 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             latestDraw={latestDraw}
             initialTimeRange={globalTimeRange}
             onTimeRangeChange={setGlobalTimeRange}
+            savedTickets={savedTickets}
+            fechamentoNome={fechamentoNome}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: DISTRIBUIÇÃO DE PROBABILIDADE (CURVA NORMAL GAUSSIANA & RECHARTS) */}
+      {activeSubTab === 'distribuicao_probabilidade' && (
+        <div className="space-y-6">
+          <DistribuicaoProbabilidadeCurvaNormal
+            latestDraw={latestDraw}
             savedTickets={savedTickets}
             fechamentoNome={fechamentoNome}
           />

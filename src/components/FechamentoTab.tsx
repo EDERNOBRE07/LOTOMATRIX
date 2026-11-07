@@ -611,11 +611,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [appliedSuggestionName, setAppliedSuggestionName] = useState<string | null>(null);
 
   const getFullPrognosticoFechamentoName = (): string => {
-    const baseModel = activeModel || strategyName || `Modelo ${preset.nome}`;
-    if (appliedSuggestionName) {
-      return `${baseModel} • Sugestão: ${appliedSuggestionName}`;
-    }
-    return baseModel;
+    const baseModel = activeModel || strategyName || `Fechamento ${preset?.nome || 'Matriz Pro'}`;
+    const cleanModel = baseModel.replace(/^⚡\s*/, '');
+    const garantiaStr = preset?.garantia ? ` (${preset.garantia})` : ' (Garantia 14 se 15)';
+    const ticketCount = generatedTickets.length > 0 ? generatedTickets.length : (preset?.jogosMaximos || 24);
+
+    // Tipos de Filtros Canônicos e Avançados Calibrados
+    const filterTokens: string[] = [];
+    if (filters.somaMin && filters.somaMax) filterTokens.push(`Soma ${filters.somaMin}-${filters.somaMax}`);
+    if (filters.paresMin && filters.paresMax) filterTokens.push(`Pares ${filters.paresMin}-${filters.paresMax}`);
+    if (filters.molduraMin && filters.molduraMax) filterTokens.push(`Moldura ${filters.molduraMin}-${filters.molduraMax}`);
+    if (filters.primosMin && filters.primosMax) filterTokens.push(`Primos ${filters.primosMin}-${filters.primosMax}`);
+    if (filters.fibonacciMin && filters.fibonacciMax) filterTokens.push(`Fib ${filters.fibonacciMin}-${filters.fibonacciMax}`);
+    if (filters.repetidasMin && filters.repetidasMax) filterTokens.push(`Rep ${filters.repetidasMin}-${filters.repetidasMax}`);
+    if (fixedNumbers && fixedNumbers.length > 0) filterTokens.push(`Fixas: [${[...fixedNumbers].sort((a,b)=>a-b).join(',')}]`);
+    if (excludedNumbers && excludedNumbers.length > 0) filterTokens.push(`Excl: [${[...excludedNumbers].sort((a,b)=>a-b).join(',')}]`);
+
+    const filtersDesc = filterTokens.length > 0 ? ` [Filtros: ${filterTokens.join(' | ')}]` : '';
+    const suggestionDesc = appliedSuggestionName ? ` • Sugestão: ${appliedSuggestionName}` : '';
+    const targetConcurso = latestDraw?.concurso ? ` (Para Concurso #${latestDraw.concurso + 1})` : '';
+
+    return `⚡ ${cleanModel} • ${targetCount} Dezenas • ${ticketCount} Jogos${garantiaStr}${filtersDesc}${suggestionDesc}${targetConcurso}`;
   };
 
   const applyStrategyModel = (modelType: string, overrideTargetCount?: number) => {
@@ -1085,7 +1101,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         concurso: latestDraw.concurso,
         dataConcurso: latestDraw.data,
         tipoFechamento: fechamentoType,
-        modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} - Matriz Pro (${ticketsToSave.length} Jogos - Garantia ${preset?.garantia || '14 Pontos'} (com 35% de chance de 15))`,
+        modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} (${(activePool.length > 0 ? activePool : selectedNumbers).length} Dezenas • ${ticketsToSave.length} Jogos • Garantia ${preset?.garantia || '14 Pontos (com 35% de chance de 15)'}) [Filtros: Soma ${f.somaMin}-${f.somaMax} | Pares ${f.paresMin}-${f.paresMax} | Moldura ${f.molduraMin}-${f.molduraMax} | Primos ${f.primosMin}-${f.primosMax} | Fib ${f.fibonacciMin}-${f.fibonacciMax} | Rep ${f.repetidasMin}-${f.repetidasMax}]`,
         universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
         dezenasFixas: metaData.fixedNumbers || fixedNumbers || [],
         dezenasExcluidas: metaData.excludedNumbers || excludedNumbers || [],
@@ -2757,7 +2773,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       {/* Generated Games Table Display */}
       {generatedTickets.length > 0 && (
         <>
-          {/* MODAL DE CONFIRMAÇÃO COM OPÇÃO DIRETA 'IR PARA JOGOS SALVOS' */}
+          {/* MODAL DE CONFIRMAÇÃO COM OPÇÃO DIRETA 'CONFERIR JOGOS SALVOS' */}
           {showSavedConfirmationModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
               <div className="bg-slate-900 border-2 border-emerald-400 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 text-center">
@@ -2766,7 +2782,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-white">
-                    ✓ Fechamento Salvo com Sucesso!
+                    ✓ Jogo Salvo com Sucesso!
                   </h3>
                   <p className="text-xs text-slate-300 mt-2 leading-relaxed">
                     Os <strong>{generatedTickets.length} bilhetes</strong> foram arquivados com sucesso em <strong>Jogos Salvos</strong> com seu dossiê técnico, filtros canônicos e métricas de cobertura.
@@ -2781,10 +2797,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       if (onGoToGamesManager) {
                         onGoToGamesManager(generatedTickets, getCurrentExportMeta());
                       }
+                      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
                     }}
                     className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 hover:scale-102 active:scale-95 ring-2 ring-amber-300"
                   >
-                    <span>Ir para Jogos Salvos</span>
+                    <span>Conferir Jogos Salvos</span>
                     <ArrowRight className="w-4 h-4 text-slate-950" />
                   </button>
 
@@ -2819,7 +2836,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                         : 'bg-amber-400 text-slate-950'
                     }`}
                   >
-                    {hasSavedInJogosSalvos ? '✓ FECHAMENTO SALVO' : 'FECHAMENTO REALIZADO'}
+                    {hasSavedInJogosSalvos ? '✓ JOGO SALVO COM SUCESSO' : 'FECHAMENTO REALIZADO'}
                   </span>
                   <span className="text-xs text-amber-300 font-mono font-bold">
                     {generatedTickets.length} Bilhetes Otimizados ({preset.garantia})
@@ -2827,12 +2844,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </div>
                 <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
                   {hasSavedInJogosSalvos
-                    ? 'Fechamento Salvo em "Jogos Salvos"!'
+                    ? '✓ Jogo Salvo com Sucesso em "Jogos Salvos"!'
                     : 'Salvar este fechamento em "Jogos Salvos"?'}
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
                   {hasSavedInJogosSalvos
-                    ? 'O fechamento está arquivado com sucesso no seu banco de dados. Você pode acessá-lo na aba Jogos para conferência, exportação em PDF e filtros.'
+                    ? 'O fechamento foi arquivado com sucesso no seu banco de dados com dossiê técnico completo e filtros canônicos. Clique no botão ao lado para conferir seus jogos salvos agora.'
                     : 'Arquiva o dossiê técnico com filtros canônicos, ativa auditoria com notificações push via Service Worker e permite carregar direto na conferência.'}
                 </p>
               </div>
@@ -2845,10 +2862,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     type="button"
                     onClick={() => {
                       if (onGoToGamesManager) onGoToGamesManager(generatedTickets, getCurrentExportMeta());
+                      window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
                     }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 shadow-amber-500/30 hover:scale-105 active:scale-95 ring-2 ring-amber-300"
                   >
-                    <span>Ir para Jogos Salvos</span>
+                    <span>Conferir Jogos Salvos</span>
                     <ArrowRight className="w-4 h-4 text-slate-950" />
                   </button>
 
@@ -2856,7 +2874,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     type="button"
                     onClick={handleManualSaveFechamento}
                     className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                    title="Fechamento já arquivado no banco"
+                    title="Fechamento já arquivado no banco. Clique para salvar novamente como cópia se desejar."
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Salvo no Banco</span>
@@ -2917,28 +2935,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* Botão Salvar Fechamento em Jogos Salvos */}
-              <button
-                type="button"
-                onClick={handleManualSaveFechamento}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black text-xs transition cursor-pointer shadow-md active:scale-95 ${
-                  hasSavedInJogosSalvos
-                    ? 'bg-emerald-400 text-slate-950 shadow-emerald-500/30'
-                    : 'bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-500/30 ring-1 ring-amber-300'
-                }`}
-                title="Salvar fechamento e incluir o prognóstico técnico completo em 'Jogos Salvos'"
-              >
-                {hasSavedInJogosSalvos ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 fill-current" />
-                    <span>Fechamento Salvo em "Jogos Salvos"!</span>
-                  </>
-                ) : (
-                  <>
-                    <BookmarkCheck className="w-3.5 h-3.5 text-slate-950" />
-                    <span>Salvar Fechamento em "Jogos Salvos"</span>
-                  </>
-                )}
-              </button>
+              {hasSavedInJogosSalvos ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onGoToGamesManager) onGoToGamesManager(generatedTickets, getCurrentExportMeta());
+                    window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black text-xs transition cursor-pointer shadow-md bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 hover:scale-102 ring-1 ring-amber-300"
+                  title="Conferir jogos arquivados na aba Jogos Salvos"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 fill-current" />
+                  <span>Conferir Jogos Salvos</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleManualSaveFechamento}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black text-xs transition cursor-pointer shadow-md active:scale-95 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-500/30 ring-1 ring-amber-300"
+                  title="Salvar fechamento e incluir o prognóstico técnico completo em 'Jogos Salvos'"
+                >
+                  <BookmarkCheck className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Salvar Fechamento em "Jogos Salvos"</span>
+                </button>
+              )}
 
               <button
                 onClick={handleCopyAll}
