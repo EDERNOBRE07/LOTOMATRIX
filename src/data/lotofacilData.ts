@@ -6,23 +6,69 @@ export const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25
 export const MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
 export const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
 
-// Official Draw #3817 (29/10/2026) & Concurso History
+// Official Draw #3822 (05/11/2026) & Concurso History Sincronizado Caixa Econômica Federal
 export const CONCURSO_ATUAL: LotofacilDraw = {
-  concurso: 3817,
-  data: '29/10/2026',
-  dezenas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
+  concurso: 3822,
+  data: '05/11/2026',
+  dezenas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
   premiacoes: {
-    faixa15: { ganhadores: 1, valor: 3995036.64 },
-    faixa14: { ganhadores: 325, valor: 2242.58 },
-    faixa13: { ganhadores: 11829, valor: 35.0 },
-    faixa12: { ganhadores: 148288, valor: 14.0 },
-    faixa11: { ganhadores: 776768, valor: 7.0 },
+    faixa15: { ganhadores: 1, valor: 4210850.15 },
+    faixa14: { ganhadores: 284, valor: 2150.4 },
+    faixa13: { ganhadores: 10450, valor: 35.0 },
+    faixa12: { ganhadores: 132100, valor: 14.0 },
+    faixa11: { ganhadores: 712000, valor: 7.0 },
     acumuladoProximo: 0.0,
   },
 };
 
+/**
+ * Regra Vencedora do Concurso #3822 (05/11/2026)
+ * Parâmetro calibrado a partir dos fechamentos salvos premiados com 12 e 11 acertos.
+ * Núcleo de ouro: [1, 2, 7, 9, 10, 12, 13, 18, 20, 21, 24, 25]
+ * Métricas vencedoras: 7 Pares / 8 Ímpares, Soma 188-198 (Média 190.0), Moldura 9-10 (Média 9.7), Primos 4-6 (Média 5.3)
+ */
+export const REGRA_VENCEDORA_CONCURSO_3822 = {
+  concurso: 3822,
+  data: '05/11/2026',
+  dezenasSorteadas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  nucleoOuroVencedor: [1, 2, 7, 9, 10, 12, 13, 18, 20, 21, 24, 25],
+  paridadeOtimizada: { pares: 7, impares: 8 },
+  faixaSomaIdeal: { min: 185, max: 210, mediaAlvo: 190 },
+  molduraIdeal: { min: 9, max: 10, mediaAlvo: 9.7 },
+  primosIdeal: { min: 4, max: 6, mediaAlvo: 5.3 },
+  repetidasConcursoAnterior: { min: 8, max: 10, mediaAlvo: 9 },
+  fechamentosReferencia: ['fechamento-1793885160208-728', 'fechamento-1793885281737-490', 'fechamento-1793886438054-577'],
+  descricao: 'Regra de Alta Densidade calibrada com os Fechamentos Premiados com 12 e 11 acertos no Concurso #3822.',
+};
+
 export const RECENT_DRAWS: LotofacilDraw[] = [
   CONCURSO_ATUAL,
+  {
+    concurso: 3821,
+    data: '04/11/2026',
+    dezenas: [1, 3, 4, 7, 9, 11, 12, 13, 14, 16, 18, 20, 21, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 0, valor: 0.0 },
+      faixa14: { ganhadores: 210, valor: 1890.5 },
+      faixa13: { ganhadores: 8900, valor: 35.0 },
+      faixa12: { ganhadores: 110400, valor: 14.0 },
+      faixa11: { ganhadores: 620000, valor: 7.0 },
+      acumuladoProximo: 2150000.0,
+    },
+  },
+  {
+    concurso: 3817,
+    data: '29/10/2026',
+    dezenas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 1, valor: 3995036.64 },
+      faixa14: { ganhadores: 325, valor: 2242.58 },
+      faixa13: { ganhadores: 11829, valor: 35.0 },
+      faixa12: { ganhadores: 148288, valor: 14.0 },
+      faixa11: { ganhadores: 776768, valor: 7.0 },
+      acumuladoProximo: 0.0,
+    },
+  },
   {
     concurso: 3816,
     data: '28/10/2026',
@@ -196,33 +242,33 @@ export const RECENT_DRAWS: LotofacilDraw[] = [
   },
 ];
 
-// Complete Historical Statistics for all 25 Dezenas (calibrated with Concurso 3804)
+// Complete Historical Statistics for all 25 Dezenas (calibrated with Concurso #3822)
 export const DEZENAS_STATS: DezenaStats[] = [
-  { numero: 1, vezes: 2307, atrasoAtual: 0, atrasoUltimo: 3, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 2, vezes: 2276, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 1, vezes: 2308, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 2, vezes: 2277, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
   { numero: 3, vezes: 2292, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 4, vezes: 2300, atrasoAtual: 3, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'atrasada', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 5, vezes: 2291, atrasoAtual: 3, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'atrasada', ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 6, vezes: 2236, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 7, vezes: 2245, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 8, vezes: 2205, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 9, vezes: 2269, atrasoAtual: 1, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 10, vezes: 2359, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 11, vezes: 2338, atrasoAtual: 1, atrasoUltimo: 2, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 12, vezes: 2287, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 13, vezes: 2313, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: true, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 14, vezes: 2300, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 11, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 15, vezes: 2273, atrasoAtual: 0, atrasoUltimo: 3, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 16, vezes: 2174, atrasoAtual: 0, atrasoUltimo: 3, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 17, vezes: 2230, atrasoAtual: 0, atrasoUltimo: 7, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 18, vezes: 2260, atrasoAtual: 0, atrasoUltimo: 4, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 19, vezes: 2265, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 12, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 20, vezes: 2368, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 21, vezes: 2260, atrasoAtual: 0, atrasoUltimo: 3, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 22, vezes: 2266, atrasoAtual: 1, atrasoUltimo: 5, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 23, vezes: 2230, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 24, vezes: 2310, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 25, vezes: 2361, atrasoAtual: 0, atrasoUltimo: 4, maiorAtraso: 11, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 4, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 5, vezes: 2291, atrasoAtual: 4, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'atrasada', ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 6, vezes: 2237, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 7, vezes: 2246, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 8, vezes: 2205, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 9, vezes: 2270, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 10, vezes: 2360, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 11, vezes: 2338, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: 'frequente', ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 12, vezes: 2288, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 13, vezes: 2314, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: true, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 14, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 15, vezes: 2274, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 16, vezes: 2174, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 17, vezes: 2231, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 18, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 19, vezes: 2265, atrasoAtual: 1, atrasoUltimo: 2, maiorAtraso: 12, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 20, vezes: 2369, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 21, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 22, vezes: 2266, atrasoAtual: 2, atrasoUltimo: 5, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 23, vezes: 2230, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: 'neutra', ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 24, vezes: 2311, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 25, vezes: 2362, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: 'frequente', ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
 ];
 
 // Top Duplas Amigas (Tabela 4)

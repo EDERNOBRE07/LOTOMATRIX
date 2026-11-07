@@ -236,23 +236,30 @@ export function downloadGoldFechamentoPDF(fechamento: SavedFechamentoPrognostico
   doc.save(filename);
 }
 
-/**
 export type VolanteExportStyle = 'oficial' | 'economico';
+export type PdfFontSizePreference = 'compact' | 'normal' | 'large';
+export type PdfMarginPreference = 'compact' | 'normal' | 'wide';
+
+export interface GenerateTicketsPdfOptions {
+  concurso?: number;
+  dataConcurso?: string;
+  titulo?: string;
+  style?: VolanteExportStyle;
+  fontSize?: PdfFontSizePreference;
+  margin?: PdfMarginPreference;
+  includeStatsFooter?: boolean;
+}
 
 /**
  * Gera arquivo PDF profissional contendo o layout dos volantes da Lotofácil
  * Suporta dois estilos:
  * 1. 'oficial': Modelo Aposta Oficial com Grid 5x5 completo
  * 2. 'economico': Modelo Lista Otimizada focado em economia de tinta e alta densidade (10 jogos por folha)
+ * Permite customização de tamanho de fonte, margens e inclusão de resumo estatístico no rodapé.
  */
 export function generateTicketsVolantePDF(
   tickets: any[],
-  options: {
-    concurso?: number;
-    dataConcurso?: string;
-    titulo?: string;
-    style?: VolanteExportStyle;
-  } = {}
+  options: GenerateTicketsPdfOptions = {}
 ): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -262,10 +269,40 @@ export function generateTicketsVolantePDF(
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 12;
 
-  const concurso = options.concurso || 3817;
-  const dataConcurso = options.dataConcurso || new Date().toLocaleDateString('pt-BR');
+  // Margem configurável: compacta (6mm), normal (12mm) ou ampla (18mm)
+  const marginPreference = options.margin || 'normal';
+  const margin = marginPreference === 'compact' ? 6 : marginPreference === 'wide' ? 18 : 12;
+
+  // Escala de fonte configurável: compacta (0.85), normal (1.0), grande (1.18)
+  const fontPreference = options.fontSize || 'normal';
+  const fontScale = fontPreference === 'compact' ? 0.85 : fontPreference === 'large' ? 1.18 : 1.0;
+
+  const includeStatsFooter = options.includeStatsFooter !== false; // default true
+
+  // Cálculo prévio do resumo estatístico consolidado dos tickets
+  const totalJogos = tickets.length;
+  let sumTotal = 0;
+  let parTotal = 0;
+  let moldTotal = 0;
+  let primTotal = 0;
+  tickets.forEach((t) => {
+    const dezs: number[] = t.dezenas || t;
+    sumTotal += t.soma ?? dezs.reduce((a: number, b: number) => a + b, 0);
+    parTotal += t.pares ?? dezs.filter((n: number) => n % 2 === 0).length;
+    moldTotal += t.moldura ?? dezs.filter((n: number) => [1,2,3,4,5,6,10,11,15,16,20,21,22,23,24,25].includes(n)).length;
+    primTotal += t.primos ?? dezs.filter((n: number) => [2,3,5,7,11,13,17,19,23].includes(n)).length;
+  });
+  const mediaSoma = totalJogos > 0 ? (sumTotal / totalJogos).toFixed(1) : '190.0';
+  const mediaPares = totalJogos > 0 ? (parTotal / totalJogos).toFixed(1) : '7.0';
+  const mediaImpares = totalJogos > 0 ? (15 - Number(mediaPares)).toFixed(1) : '8.0';
+  const mediaMoldura = totalJogos > 0 ? (moldTotal / totalJogos).toFixed(1) : '9.5';
+  const mediaPrimos = totalJogos > 0 ? (primTotal / totalJogos).toFixed(1) : '5.2';
+
+  const statsFooterText = `RESUMO TÉCNICO: ${totalJogos} Jogos • Média Soma: ${mediaSoma} (Zona de Ouro) • Paridade: ${mediaPares}P/${mediaImpares}I • Moldura: ${mediaMoldura} • Primos: ${mediaPrimos}`;
+
+  const concurso = options.concurso || 3822;
+  const dataConcurso = options.dataConcurso || '05/11/2026';
   const style = options.style || 'oficial';
 
   // ==========================================
@@ -386,15 +423,28 @@ export function generateTicketsVolantePDF(
       });
 
       // Rodapé da Página
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        'LOTOSNIPER • Modelo Lista Otimizada • Layout de Alta Densidade e Economia de Tinta',
-        pageWidth / 2,
-        pageHeight - 5,
-        { align: 'center' }
-      );
+      if (includeStatsFooter) {
+        doc.setFillColor(241, 245, 249);
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.2);
+        const footerBoxH = 5.2;
+        const footerBoxY = pageHeight - Math.max(margin, 8) - footerBoxH + 2;
+        doc.roundedRect(margin, footerBoxY, pageWidth - margin * 2, footerBoxH, 1, 1, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.4 * fontScale);
+        doc.setTextColor(30, 41, 59);
+        doc.text(statsFooterText, pageWidth / 2, footerBoxY + 3.6, { align: 'center' });
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7 * fontScale);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          'LOTOSNIPER • Modelo Lista Otimizada • Layout de Alta Densidade e Economia de Tinta',
+          pageWidth / 2,
+          pageHeight - 5,
+          { align: 'center' }
+        );
+      }
     }
 
     return doc;
@@ -540,16 +590,29 @@ export function generateTicketsVolantePDF(
       doc.text('LotoSniper Gold', x + colWidth - 4, footerY + 5, { align: 'right' });
     });
 
-    // Rodapé da Página
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      'LOTOSNIPER • Sistema de Inteligência para Lotofácil • Modelo Aposta Oficial 5×5 para Marcação em Lotéricas',
-      pageWidth / 2,
-      pageHeight - 5,
-      { align: 'center' }
-    );
+    // Rodapé da Página Oficial
+    if (includeStatsFooter) {
+      doc.setFillColor(254, 243, 199); // amber-100
+      doc.setDrawColor(245, 158, 11); // amber-500
+      doc.setLineWidth(0.3);
+      const footerBoxH = 5.2;
+      const footerBoxY = pageHeight - Math.max(margin, 8) - footerBoxH + 2;
+      doc.roundedRect(margin, footerBoxY, pageWidth - margin * 2, footerBoxH, 1, 1, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.4 * fontScale);
+      doc.setTextColor(146, 64, 14); // amber-800
+      doc.text(statsFooterText, pageWidth / 2, footerBoxY + 3.6, { align: 'center' });
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7 * fontScale);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        'LOTOSNIPER • Sistema de Inteligência para Lotofácil • Modelo Aposta Oficial 5×5 para Marcação em Lotéricas',
+        pageWidth / 2,
+        pageHeight - 5,
+        { align: 'center' }
+      );
+    }
   }
 
   return doc;
@@ -557,17 +620,12 @@ export function generateTicketsVolantePDF(
 
 export function downloadTicketsVolantePDF(
   tickets: any[],
-  options: {
-    concurso?: number;
-    dataConcurso?: string;
-    titulo?: string;
-    style?: VolanteExportStyle;
-  } = {}
+  options: GenerateTicketsPdfOptions = {}
 ): void {
   const doc = generateTicketsVolantePDF(tickets, options);
   const style = options.style || 'oficial';
   const prefix = style === 'economico' ? 'lotosniper_lista_otimizada_economica' : 'volantes_lotosniper_oficiais_5x5';
-  const filename = `${prefix}_${tickets.length}_jogos_concurso_${options.concurso || 3817}.pdf`;
+  const filename = `${prefix}_${tickets.length}_jogos_concurso_${options.concurso || 3822}.pdf`;
   doc.save(filename);
 }
 

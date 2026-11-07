@@ -100,6 +100,8 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
   const [viewMetric, setViewMetric] = useState<'roi' | 'lucro' | 'comparativo'>('roi');
   // Tipo de visualização: Gráfico de Área (solicitado pelo usuário) ou Gráfico de Barras
   const [chartType, setChartType] = useState<'area' | 'bar'>('area');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
 
   // Atualiza fechamentos salvos caso haja alteração recente
   const handleRefresh = () => {
@@ -110,13 +112,26 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
     }
   };
 
-  // Concursos históricos filtrados dinamicamente pelo intervalo temporal selecionado
+  // Concursos históricos filtrados dinamicamente pelo intervalo temporal ou data picker selecionado
   const filteredDrawsChronological: LotofacilDraw[] = useMemo(() => {
     const opt = TIME_RANGE_OPTIONS.find((o) => o.id === timeRange) || TIME_RANGE_OPTIONS[0];
-    const draws = getHistoricalNDraws(opt.drawCount, latestDraw);
+    let draws = getHistoricalNDraws(opt.drawCount, latestDraw);
+
+    if (customStartDate || customEndDate) {
+      draws = getHistoricalNDraws(350, latestDraw).filter((d) => {
+        const parts = (d.data || '').split('/');
+        if (parts.length === 3) {
+          const drawDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          if (customStartDate && drawDate < customStartDate) return false;
+          if (customEndDate && drawDate > customEndDate) return false;
+        }
+        return true;
+      });
+    }
+
     // Ordena do menor concurso para o maior (ordem cronológica para o eixo X do gráfico de área)
     return [...draws].sort((a, b) => a.concurso - b.concurso);
-  }, [timeRange, latestDraw]);
+  }, [timeRange, latestDraw, customStartDate, customEndDate]);
 
   // Bilhetes da estratégia selecionada
   const activeTickets: GameTicket[] = useMemo(() => {
@@ -380,6 +395,104 @@ export const HistoricoROISavedGamesChart: React.FC<HistoricoROISavedGamesChartPr
             <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
             <span>Atualizar Dados</span>
           </button>
+        </div>
+
+        {/* SELETOR DE INTERVALO DE TEMPO & DATA PICKER DINÂMICO PARA O GRÁFICO DE ÁREA */}
+        <div className="mt-4 p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-emerald-400" />
+              <span>Filtrar Período do ROI:</span>
+            </span>
+
+            {/* Botões Rápidos: Últimos 30 dias, Últimos 6 meses, Todo o histórico */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  handleTimeRangeChange('30_dias');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                  timeRange === '30_dias' && !customStartDate && !customEndDate
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-300'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                }`}
+              >
+                Últimos 30 dias
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  handleTimeRangeChange('6_meses');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                  timeRange === '6_meses' && !customStartDate && !customEndDate
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-300'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                }`}
+              >
+                Últimos 6 meses
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  handleTimeRangeChange('todo_historico');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                  timeRange === 'todo_historico' && !customStartDate && !customEndDate
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-300'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                }`}
+              >
+                Todo o histórico
+              </button>
+            </div>
+          </div>
+
+          {/* Data Picker Customizado: De / Até */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-slate-400">Data Picker:</span>
+            <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-mono">De</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-700">
+              <span className="text-[10px] text-slate-400 font-mono">Até</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="bg-transparent text-white text-xs font-mono focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            {(customStartDate || customEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                }}
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 cursor-pointer"
+                title="Limpar seleção de datas customizadas"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Seletor de Estratégia e Alternador de Métricas */}

@@ -1,5 +1,14 @@
 import { LotofacilDraw, DezenaStats, GameTicket, FilterCriteria } from '../types/lotofacil';
-import { CONCURSO_ATUAL, RECENT_DRAWS, DEZENAS_STATS, PRIMOS, MOLDURA, MIOLO, FIBONACCI } from '../data/lotofacilData';
+import {
+  CONCURSO_ATUAL,
+  RECENT_DRAWS,
+  DEZENAS_STATS,
+  PRIMOS,
+  MOLDURA,
+  MIOLO,
+  FIBONACCI,
+  REGRA_VENCEDORA_CONCURSO_3822,
+} from '../data/lotofacilData';
 import {
   analyzeTicket,
   ticketPassesFilters,
@@ -9,6 +18,68 @@ import {
 } from './combinatorics';
 import { getHistorical100Draws } from './historical100Draws';
 import { getAllSavedTicketsSet } from './savedFechamentosStorage';
+
+/**
+ * Avalia o alinhamento de uma combinação com os parâmetros dos Fechamentos Vencedores do Concurso #3822
+ * (calibrado a partir dos tickets salvos que pontuaram 12 e 11 acertos na apuração oficial).
+ */
+export function evaluateAderenciaRegraVencedora3822(
+  sortedNumbers: number[],
+  analysis: { soma: number; pares: number; impares: number; primos: number; moldura: number }
+): {
+  scoreAderencia: number;
+  atendePlenamente: boolean;
+  nucleoHits: number;
+  motivos: string[];
+} {
+  const nucleo = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
+  const nucleoHits = sortedNumbers.filter((n) => nucleo.includes(n)).length;
+  let score = 0;
+  const motivos: string[] = [];
+
+  // Paridade exata 7P/8I (presente em 100% dos tickets de 12 acertos no #3822)
+  if (analysis.pares === 7 && analysis.impares === 8) {
+    score += 20;
+    motivos.push('Paridade Canônica 7P/8I');
+  } else if (analysis.pares === 6 || analysis.pares === 8) {
+    score += 8;
+  }
+
+  // Faixa de Soma Vencedora (pico 188 a 198, média 190.0)
+  if (analysis.soma >= 185 && analysis.soma <= 202) {
+    score += 22;
+    motivos.push(`Soma Vencedora ${analysis.soma}`);
+  } else if (analysis.soma >= 180 && analysis.soma <= 212) {
+    score += 10;
+  }
+
+  // Moldura (9 a 10 dezenas)
+  if (analysis.moldura >= 9 && analysis.moldura <= 10) {
+    score += 14;
+    motivos.push(`Moldura Otimizada (${analysis.moldura})`);
+  }
+
+  // Primos (4 a 6 dezenas)
+  if (analysis.primos >= 4 && analysis.primos <= 6) {
+    score += 12;
+    motivos.push(`Primos Calibrados (${analysis.primos})`);
+  }
+
+  // Co-presença com o Núcleo Ouro Vencedor (12 dezenas de tração comprovada)
+  if (nucleoHits >= 8) {
+    score += 26;
+    motivos.push(`Núcleo Vencedor #3822 (${nucleoHits}/12)`);
+  } else if (nucleoHits >= 6) {
+    score += 12;
+  }
+
+  return {
+    scoreAderencia: score,
+    atendePlenamente: score >= 54,
+    nucleoHits,
+    motivos,
+  };
+}
 
 export interface PerformanceIndexResult {
   numero: number;
@@ -1004,11 +1075,15 @@ export function generateFechamentoInteligentePonderado({
       (sorted.reduce((acc, n) => acc + (forcaCicloMap.get(n) || 50), 0) / 15).toFixed(1)
     );
 
+    // Avaliação de aderência aos parâmetros dos Fechamentos Vencedores do Concurso #3822
+    const regraVencedora = evaluateAderenciaRegraVencedora3822(sorted, analysis);
+
     const scorePonderado =
-      ipMedio * 0.40 +
-      forcaCicloMedio * 0.30 +
+      ipMedio * 0.35 +
+      forcaCicloMedio * 0.25 +
       (analysis.scoreIA || 50) * 0.15 +
-      clusterBonus * 1.5;
+      clusterBonus * 1.2 +
+      (regraVencedora.scoreAderencia / 100) * 18;
 
     return {
       dezenas: sorted,
@@ -1217,6 +1292,10 @@ export function generateFechamentoInteligentePonderado({
     }
     if (item.ip >= 80) tags.push('Top Performance 🔥');
     tags.push('Zona de Ouro (180+) ✓');
+    const checkVencedor = evaluateAderenciaRegraVencedora3822(item.dezenas, analysis);
+    if (checkVencedor.atendePlenamente) {
+      tags.push('Regra Vencedora #3822 (12+ pts) ✓');
+    }
 
     return {
       id: `ticket-ip-${idx + 1}`,

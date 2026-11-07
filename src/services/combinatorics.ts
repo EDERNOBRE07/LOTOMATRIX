@@ -6,6 +6,7 @@ import {
   CONCURSO_ATUAL,
   DEZENAS_STATS,
   TOP_DUPLAS,
+  REGRA_VENCEDORA_CONCURSO_3822,
 } from '../data/lotofacilData';
 import {
   FilterCriteria,
@@ -473,10 +474,15 @@ export function generateMinimumSetCoverFechamento({
       const isAlreadySaved = savedTicketsSet.has(candKey);
       const savedPenalty = isAlreadySaved ? 50 : 0;
 
+      // Injeta bônus para combinações alinhadas com os Fechamentos Vencedores do Concurso #3822
+      let winningBonus = 0;
+      const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
+      const nucleoHits = candidateCombos[i].filter((n) => nucleoVencedor.includes(n)).length;
+      if (nucleoHits >= 8) winningBonus += 0.8;
+
       // Injeta variância estocástica leve para desempate entre coberturas equivalentes
-      // Isso garante que gerações sucessivas com o mesmo universo explorem vértices distintos
       const jitter = Math.random() * 0.25;
-      const combinedGain = (newCovers * 10) + (candScores[i] / 100) + jitter - savedPenalty;
+      const combinedGain = (newCovers * 10) + (candScores[i] / 100) + winningBonus + jitter - savedPenalty;
 
       if (combinedGain > bestCombinedGain) {
         bestCombinedGain = combinedGain;
@@ -788,7 +794,17 @@ export function generateFechamentoCovering(
       const isAlreadySaved = savedTicketsSet.has(candKey);
       const savedPenalty = isAlreadySaved ? 25 : 0;
       const jitter = Math.random() * 0.2;
-      const weightedCoverage = (coverCount * 2) + (scoreWeight * 0.5) + jitter - savedPenalty;
+
+      // Bônus de calibração para a Regra Vencedora do Concurso #3822
+      let winningBonus = 0;
+      const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
+      const nucleoHits = cand.filter((n) => nucleoVencedor.includes(n)).length;
+      if (nucleoHits >= 8) winningBonus += 0.35;
+      if (analysis.pares === 7 && analysis.impares === 8) winningBonus += 0.25;
+      if (analysis.soma >= 185 && analysis.soma <= 202) winningBonus += 0.25;
+      if (analysis.moldura >= 9 && analysis.moldura <= 10) winningBonus += 0.15;
+
+      const weightedCoverage = (coverCount * 2) + (scoreWeight * 0.5) + winningBonus + jitter - savedPenalty;
 
       if (weightedCoverage > bestCoverCount) {
         bestCoverCount = weightedCoverage;

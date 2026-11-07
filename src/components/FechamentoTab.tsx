@@ -1130,6 +1130,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   };
 
   const [hasSavedInJogosSalvos, setHasSavedInJogosSalvos] = useState(false);
+  const [showSavedConfirmationModal, setShowSavedConfirmationModal] = useState(false);
 
   const handleManualSaveFechamento = () => {
     if (generatedTickets.length === 0) return;
@@ -1157,13 +1158,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     onSaveTickets(generatedTickets, meta);
     soundService.playGoldenZoneSuccessChime();
     setHasSavedInJogosSalvos(true);
+    setShowSavedConfirmationModal(true);
     setDocumentMessage(
       `✓ Fechamento "${finalPrognosticoName}" (${generatedTickets.length} bilhetes) salvo com sucesso em "Jogos Salvos"! Dossiê técnico completo arquivado.`
     );
-    setTimeout(() => {
-      setHasSavedInJogosSalvos(false);
-      setDocumentMessage(null);
-    }, 6000);
   };
 
   const handleGenerate = async () => {
@@ -2759,63 +2757,119 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       {/* Generated Games Table Display */}
       {generatedTickets.length > 0 && (
         <>
+          {/* MODAL DE CONFIRMAÇÃO COM OPÇÃO DIRETA 'IR PARA JOGOS SALVOS' */}
+          {showSavedConfirmationModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+              <div className="bg-slate-900 border-2 border-emerald-400 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white">
+                    ✓ Fechamento Salvo com Sucesso!
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                    Os <strong>{generatedTickets.length} bilhetes</strong> foram arquivados com sucesso em <strong>Jogos Salvos</strong> com seu dossiê técnico, filtros canônicos e métricas de cobertura.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSavedConfirmationModal(false);
+                      if (onGoToGamesManager) {
+                        onGoToGamesManager(generatedTickets, getCurrentExportMeta());
+                      }
+                    }}
+                    className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 hover:scale-102 active:scale-95 ring-2 ring-amber-300"
+                  >
+                    <span>Ir para Jogos Salvos</span>
+                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSavedConfirmationModal(false)}
+                    className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer whitespace-nowrap"
+                  >
+                    Permanecer Aqui
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* BANNER PROMINENTE OFERECENDO OPÇÃO DE SALVAR O FECHAMENTO EM JOGOS SALVOS */}
           <div className="bg-gradient-to-r from-amber-500/25 via-slate-900 to-amber-500/20 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-amber-500/15 animate-fadeIn">
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/30 shrink-0">
-                <BookmarkCheck className="w-6 h-6 text-slate-950" />
+                {hasSavedInJogosSalvos ? (
+                  <CheckCircle2 className="w-6 h-6 text-slate-950" />
+                ) : (
+                  <BookmarkCheck className="w-6 h-6 text-slate-950" />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-mono">
-                    FECHAMENTO REALIZADO
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full font-mono ${
+                      hasSavedInJogosSalvos
+                        ? 'bg-emerald-400 text-slate-950'
+                        : 'bg-amber-400 text-slate-950'
+                    }`}
+                  >
+                    {hasSavedInJogosSalvos ? '✓ FECHAMENTO SALVO' : 'FECHAMENTO REALIZADO'}
                   </span>
                   <span className="text-xs text-amber-300 font-mono font-bold">
                     {generatedTickets.length} Bilhetes Otimizados ({preset.garantia})
                   </span>
                 </div>
                 <h3 className="text-base sm:text-lg font-black text-white mt-0.5">
-                  Salvar este fechamento em "Jogos Salvos"?
+                  {hasSavedInJogosSalvos
+                    ? 'Fechamento Salvo em "Jogos Salvos"!'
+                    : 'Salvar este fechamento em "Jogos Salvos"?'}
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Arquiva o dossiê técnico com filtros canônicos, ativa auditoria com notificações push via Service Worker e permite carregar direto na conferência.
+                  {hasSavedInJogosSalvos
+                    ? 'O fechamento está arquivado com sucesso no seu banco de dados. Você pode acessá-lo na aba Jogos para conferência, exportação em PDF e filtros.'
+                    : 'Arquiva o dossiê técnico com filtros canônicos, ativa auditoria com notificações push via Service Worker e permite carregar direto na conferência.'}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-              <button
-                type="button"
-                onClick={handleManualSaveFechamento}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg active:scale-95 ${
-                  hasSavedInJogosSalvos
-                    ? 'bg-emerald-400 text-slate-950 shadow-emerald-500/30'
-                    : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 shadow-amber-500/30 hover:scale-105 ring-2 ring-amber-300'
-                }`}
-              >
-                {hasSavedInJogosSalvos ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                    <span>✓ Fechamento Salvo com Sucesso!</span>
-                  </>
-                ) : (
-                  <>
-                    <BookmarkCheck className="w-4 h-4 text-slate-950" />
-                    <span>Salvar Fechamento em Jogos Salvos</span>
-                  </>
-                )}
-              </button>
+              {hasSavedInJogosSalvos ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onGoToGamesManager) onGoToGamesManager(generatedTickets, getCurrentExportMeta());
+                    }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 shadow-amber-500/30 hover:scale-105 active:scale-95 ring-2 ring-amber-300"
+                  >
+                    <span>Ir para Jogos Salvos</span>
+                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                  </button>
 
-              {hasSavedInJogosSalvos && (
+                  <button
+                    type="button"
+                    onClick={handleManualSaveFechamento}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    title="Fechamento já arquivado no banco"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Salvo no Banco</span>
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (onGoToGamesManager) onGoToGamesManager(generatedTickets, getCurrentExportMeta());
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  onClick={handleManualSaveFechamento}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg active:scale-95 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 shadow-amber-500/30 hover:scale-105 ring-2 ring-amber-300"
                 >
-                  <span>Ver em Jogos Salvos</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <BookmarkCheck className="w-4 h-4 text-slate-950" />
+                  <span>Salvar Fechamento em Jogos Salvos</span>
                 </button>
               )}
             </div>

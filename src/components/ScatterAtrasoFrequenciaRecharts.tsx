@@ -374,5 +374,7 @@ export const ScatterAtrasoFrequenciaRecharts: React.FC<ScatterAtrasoFrequenciaPr
         </div>
       </div>
     </div>
+  </div>
   );
 };
+

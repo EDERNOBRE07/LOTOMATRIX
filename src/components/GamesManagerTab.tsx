@@ -19,7 +19,12 @@ import {
 } from '../services/savedFechamentosStorage';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
-import { downloadTicketsVolantePDF, VolanteExportStyle } from '../services/goldPdfGenerator';
+import {
+  downloadTicketsVolantePDF,
+  VolanteExportStyle,
+  PdfFontSizePreference,
+  PdfMarginPreference,
+} from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import jsPDF from 'jspdf';
 import Papa from 'papaparse';
@@ -45,6 +50,9 @@ import {
   AlertTriangle,
   TrendingUp,
   ShieldCheck,
+  SlidersHorizontal,
+  ChevronDown,
+  Settings2,
 } from 'lucide-react';
 
 interface GamesManagerTabProps {
@@ -69,6 +77,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
   const [pdfExportStyle, setPdfExportStyle] = useState<VolanteExportStyle>('oficial');
+  const [pdfPreferences, setPdfPreferences] = useState<{
+    fontSize: PdfFontSizePreference;
+    margin: PdfMarginPreference;
+    includeStatsFooter: boolean;
+  }>({
+    fontSize: 'normal',
+    margin: 'normal',
+    includeStatsFooter: true,
+  });
+  const [isPdfConfigOpen, setIsPdfConfigOpen] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>('fechamentos_salvos');
 
   // Relatório de duplicatas e limpeza automática
@@ -601,6 +619,9 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             ? 'LOTOSNIPER • LISTA OTIMIZADA DE JOGOS (ECONOMIA DE TINTA)'
             : 'LOTOSNIPER GOLD • VOLANTES DE APOSTA OFICIAIS 5X5',
         style: pdfExportStyle,
+        fontSize: pdfPreferences.fontSize,
+        margin: pdfPreferences.margin,
+        includeStatsFooter: pdfPreferences.includeStatsFooter,
       });
       setCopiedFormat('pdf');
       setTimeout(() => setCopiedFormat(null), 4000);
@@ -856,6 +877,129 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                   -90% Tinta
                 </span>
               </button>
+            </div>
+
+            {/* Menu Suspenso (Dropdown) para Configurar Preferências de Exportação do PDF */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsPdfConfigOpen(!isPdfConfigOpen)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer border shadow-sm ${
+                  isPdfConfigOpen
+                    ? 'bg-slate-800 border-amber-400 text-amber-300 ring-2 ring-amber-400/20'
+                    : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+                title="Configurar preferências do PDF: tamanho da fonte, margens do documento e resumo estatístico no rodapé"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                <span>Preferências PDF</span>
+                <ChevronDown
+                  className={`w-3 h-3 text-slate-400 transition-transform ${
+                    isPdfConfigOpen ? 'rotate-180 text-amber-400' : ''
+                  }`}
+                />
+              </button>
+
+              {isPdfConfigOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-88 bg-slate-900/98 border-2 border-slate-700 rounded-2xl p-4 shadow-2xl z-50 backdrop-blur-xl animate-fadeIn space-y-3.5 text-xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Settings2 className="w-4 h-4 text-amber-400" />
+                      <div>
+                        <span className="font-black text-white text-xs block">Preferências de Exportação PDF</span>
+                        <span className="text-[10px] text-slate-400 block font-normal">Ajuste de tipografia, margens e rodapé técnico</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPdfConfigOpen(false)}
+                      className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Tamanho da Fonte */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-300 font-bold text-[11px]">
+                      Tamanho da Fonte dos Jogos:
+                    </label>
+                    <select
+                      value={pdfPreferences.fontSize}
+                      onChange={(e) =>
+                        setPdfPreferences((prev) => ({
+                          ...prev,
+                          fontSize: e.target.value as PdfFontSizePreference,
+                        }))
+                      }
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer font-medium"
+                    >
+                      <option value="normal">Padrão (10pt) • Equilíbrio e Nitidez</option>
+                      <option value="compact">Compacto (8.5pt) • Alta Densidade</option>
+                      <option value="large">Grande (12pt) • Alta Legibilidade / Idosos</option>
+                    </select>
+                  </div>
+
+                  {/* Margens do Documento */}
+                  <div className="space-y-1">
+                    <label className="block text-slate-300 font-bold text-[11px]">
+                      Margens da Folha A4:
+                    </label>
+                    <select
+                      value={pdfPreferences.margin}
+                      onChange={(e) =>
+                        setPdfPreferences((prev) => ({
+                          ...prev,
+                          margin: e.target.value as PdfMarginPreference,
+                        }))
+                      }
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer font-medium"
+                    >
+                      <option value="normal">Normal (12mm) • Margem Padrão ABNT</option>
+                      <option value="compact">Estreita (6mm) • Máximo Aproveitamento</option>
+                      <option value="wide">Ampla (18mm) • Espaçamento Confortável</option>
+                    </select>
+                  </div>
+
+                  {/* Resumo Estatístico no Rodapé */}
+                  <div className="pt-2 border-t border-slate-800">
+                    <label className="flex items-start gap-2.5 cursor-pointer p-2 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition">
+                      <input
+                        type="checkbox"
+                        checked={pdfPreferences.includeStatsFooter}
+                        onChange={(e) =>
+                          setPdfPreferences((prev) => ({
+                            ...prev,
+                            includeStatsFooter: e.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 rounded border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                      />
+                      <div className="select-none">
+                        <span className="font-bold text-slate-200 block text-[11px]">
+                          Incluir Resumo Estatístico no Rodapé
+                        </span>
+                        <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">
+                          Imprime no rodapé de cada página: Média de Soma (Zona de Ouro), Paridade predominante, Moldura e Primos.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-800/80">
+                    <span>
+                      Estilo: <strong className="text-amber-300">{pdfExportStyle === 'economico' ? 'Lista Econômica' : 'Grid 5×5 Oficial'}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsPdfConfigOpen(false)}
+                      className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer shadow-sm transition"
+                    >
+                      Salvar Opções
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Botão Exportar PDF com layout de acordo com o estilo selecionado */}
