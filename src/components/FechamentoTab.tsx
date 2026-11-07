@@ -2036,17 +2036,31 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       {/* Success Notification for Document Strategy Pool */}
       {documentMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in">
+        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in flex-wrap">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{documentMessage}</span>
           </div>
-          <button
-            onClick={() => setDocumentMessage(null)}
-            className="text-emerald-400/70 hover:text-emerald-200 text-xs font-semibold cursor-pointer"
-          >
-            Fechar
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {documentMessage.includes('salvo com sucesso') && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+                }}
+                className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <span>Ver Jogos Salvos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={() => setDocumentMessage(null)}
+              className="text-emerald-400/70 hover:text-emerald-200 text-xs font-semibold cursor-pointer px-2 py-1"
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       )}
 
@@ -2801,7 +2815,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     }}
                     className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 hover:scale-102 active:scale-95 ring-2 ring-amber-300"
                   >
-                    <span>Conferir Jogos Salvos</span>
+                    <span>Ver Jogos Salvos</span>
                     <ArrowRight className="w-4 h-4 text-slate-950" />
                   </button>
 
@@ -2849,7 +2863,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
                   {hasSavedInJogosSalvos
-                    ? 'O fechamento foi arquivado com sucesso no seu banco de dados com dossiê técnico completo e filtros canônicos. Clique no botão ao lado para conferir seus jogos salvos agora.'
+                    ? 'O fechamento foi arquivado com sucesso no seu banco de dados com dossiê técnico completo e filtros canônicos. Clique no botão ao lado para ver seus jogos salvos agora.'
                     : 'Arquiva o dossiê técnico com filtros canônicos, ativa auditoria com notificações push via Service Worker e permite carregar direto na conferência.'}
                 </p>
               </div>
@@ -2866,7 +2880,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 shadow-amber-500/30 hover:scale-105 active:scale-95 ring-2 ring-amber-300"
                   >
-                    <span>Conferir Jogos Salvos</span>
+                    <span>Ver Jogos Salvos</span>
                     <ArrowRight className="w-4 h-4 text-slate-950" />
                   </button>
 
@@ -2946,7 +2960,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   title="Conferir jogos arquivados na aba Jogos Salvos"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-slate-950 fill-current" />
-                  <span>Conferir Jogos Salvos</span>
+                  <span>Ver Jogos Salvos</span>
                 </button>
               ) : (
                 <button

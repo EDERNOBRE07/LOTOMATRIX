@@ -15,6 +15,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BackupRestoreCenterModal } from './components/BackupRestoreCenterModal';
+import { FechamentoSavedToastAlert } from './components/FechamentoSavedToastAlert';
 import {
   saveLocalSnapshot,
   isAutoDownloadOnSaveEnabled,
@@ -599,6 +600,9 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Dev Server Health Check Alert Banner (Activates if server connection or assets fail) */}
       <DevServerHealthStatus showPillInHeader={false} />
+
+      {/* Alerta Global Flutuante de Fechamento Salvo com Botão Ver Jogos Salvos */}
+      <FechamentoSavedToastAlert />
 
       {/* Header with live synchronization controls */}
       <Header

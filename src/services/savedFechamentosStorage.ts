@@ -276,6 +276,19 @@ export function saveFechamentoPrognostico(
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 50))); // Keep last 50
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-fechamento-saved-alert', {
+          detail: {
+            id: fechamento.id,
+            title: '✓ Fechamento Salvo com Sucesso!',
+            name: fechamento.tipoFechamento,
+            totalJogos: fechamento.totalJogos || fechamento.tickets?.length || 24,
+            garantia: fechamento.modalidadeMatriz,
+            concurso: fechamento.concurso,
+            timestamp: fechamento.timestamp,
+          },
+        })
+      );
     }
 
     // Grava de forma assíncrona no Banco de Dados MySQL da Hostinger (u376010332_LotoSniper)
