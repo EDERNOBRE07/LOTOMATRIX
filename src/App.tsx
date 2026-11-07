@@ -92,9 +92,9 @@ export default function App() {
   useEffect(() => {
     try {
       const savedTheme = localStorage.getItem('lotosniper_theme') || 'gold';
-      document.documentElement.classList.remove('theme-gold', 'theme-high-contrast');
+      document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
       if (savedTheme === 'high_contrast') {
-        document.documentElement.classList.add('theme-high-contrast');
+        document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
       } else if (savedTheme === 'gold') {
         document.documentElement.classList.add('theme-gold');
       }

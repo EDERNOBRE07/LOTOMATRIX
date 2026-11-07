@@ -11,6 +11,7 @@ import {
   X,
   Crown,
   Contrast,
+  Moon,
   ShieldCheck,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
@@ -46,24 +47,35 @@ export const Header: React.FC<HeaderProps> = ({
       const saved = localStorage.getItem('lotosniper_theme');
       if (saved === 'high_contrast') return 'high_contrast';
       if (saved === 'gold') return 'gold';
+      if (saved === 'slate') return 'slate';
       return 'gold';
     } catch {
       return 'gold';
     }
   });
 
+  React.useEffect(() => {
+    const handleThemeEvent = (e: any) => {
+      if (e.detail) {
+        setCurrentTheme(e.detail);
+      }
+    };
+    window.addEventListener('lotosniper-theme-changed', handleThemeEvent);
+    return () => window.removeEventListener('lotosniper-theme-changed', handleThemeEvent);
+  }, []);
+
   const toggleTheme = () => {
-    // Alterna entre o modo 'Gold' e 'Alto Contraste' (monocromático para leitura noturna prolongada)
-    const nextTheme = currentTheme === 'gold' ? 'high_contrast' : 'gold';
+    // Alterna entre o modo 'Gold' e 'Modo Noturno (Alto Contraste / Preto Absoluto)'
+    const nextTheme = currentTheme === 'high_contrast' ? 'gold' : 'high_contrast';
     setCurrentTheme(nextTheme);
     try {
       localStorage.setItem('lotosniper_theme', nextTheme);
       if (typeof document !== 'undefined') {
-        document.documentElement.classList.remove('theme-gold', 'theme-high-contrast');
+        document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
         if (nextTheme === 'gold') {
           document.documentElement.classList.add('theme-gold');
         } else if (nextTheme === 'high_contrast') {
-          document.documentElement.classList.add('theme-high-contrast');
+          document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
         }
         window.dispatchEvent(new CustomEvent('lotosniper-theme-changed', { detail: nextTheme }));
       }
@@ -249,8 +261,8 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {currentTheme === 'high_contrast' ? (
               <>
-                <Contrast className="w-3.5 h-3.5 text-zinc-950" />
-                <span>Alto Contraste</span>
+                <Moon className="w-3.5 h-3.5 text-zinc-950 fill-current" />
+                <span>Modo Noturno</span>
                 <span className="text-[9px] font-mono uppercase bg-black text-white px-1 py-0.2 rounded font-black hidden sm:inline">
                   P&B
                 </span>

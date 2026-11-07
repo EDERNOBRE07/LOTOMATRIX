@@ -127,15 +127,20 @@ html.theme-gold footer {
 /* ========================================================================= */
 html.theme-high-contrast,
 body.theme-high-contrast,
-.theme-high-contrast {
+.theme-high-contrast,
+html.theme-night-contrast,
+body.theme-night-contrast,
+.theme-night-contrast {
   --theme-bg-deep: #000000;
-  --theme-bg-surface: #0a0a0a;
-  --theme-bg-card: #121212;
-  --theme-border-hc: #52525b;
+  --theme-bg-surface: #09090b;
+  --theme-bg-card: #121214;
+  --theme-border-hc: #3f3f46;
 }
 
 html.theme-high-contrast,
-html.theme-high-contrast body {
+html.theme-high-contrast body,
+html.theme-night-contrast,
+html.theme-night-contrast body {
   background-color: #000000 !important;
   color: #ffffff !important;
 }
@@ -143,6 +148,8 @@ html.theme-high-contrast body {
 /* Surfaces */
 html.theme-high-contrast .bg-slate-950,
 html.theme-high-contrast .bg-slate-950\/95,
+html.theme-night-contrast .bg-slate-950,
+html.theme-night-contrast .bg-slate-950\/95,
 html.theme-high-contrast .bg-slate-950\/90,
 html.theme-high-contrast .bg-slate-950\/80,
 html.theme-high-contrast .bg-slate-950\/70,
