@@ -212,7 +212,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   }, []);
 
-  // Listener para aplicação automática de Dezenas Fixas / Par de Ouro
+  // Listener para aplicação automática de Dezenas Fixas / 3 Âncoras / Par de Ouro
   useEffect(() => {
     if (initialFixedNumbers && initialFixedNumbers.length > 0) {
       setFixedNumbers((prev) =>
@@ -222,17 +222,47 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         const union = Array.from(new Set([...initialFixedNumbers, ...prev])).sort((a, b) => a - b);
         return union.slice(0, targetCount);
       });
-      setStrategyName(
-        `Par de Ouro [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
-      );
+      const isAnchors = initialFixedNumbers.length === 3;
+      const title = isAnchors
+        ? `3 Dezenas Âncoras [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
+        : `Par de Ouro [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`;
+      setStrategyName(title);
       setDocumentMessage(
-        `Par de Ouro [${initialFixedNumbers
+        `✓ ${isAnchors ? '3 Dezenas Âncoras' : 'Par de Ouro'} [${initialFixedNumbers
           .map((n) => n.toString().padStart(2, '0'))
-          .join(', ')}] aplicado com sucesso como restrição fixa no Fechamento!`
+          .join(', ')}] fixadas com sucesso na Matriz de Fechamento!`
       );
       setTimeout(() => setDocumentMessage(null), 6000);
     }
   }, [initialFixedNumbers, targetCount]);
+
+  // Listener para evento 'lotosniper-fix-anchors'
+  useEffect(() => {
+    const handleFixAnchorsEvent = (e: any) => {
+      const nums = e.detail?.numbers || e.detail?.anchors;
+      if (Array.isArray(nums) && nums.length > 0) {
+        setFixedNumbers((prev) => Array.from(new Set([...prev, ...nums])).sort((a, b) => a - b));
+        setSelectedNumbers((prev) => {
+          const union = Array.from(new Set([...nums, ...prev])).sort((a, b) => a - b);
+          return union.slice(0, targetCount);
+        });
+        setStrategyName(
+          `3 Dezenas Âncoras [${nums.map((n: number) => n.toString().padStart(2, '0')).join(', ')}]`
+        );
+        setDocumentMessage(
+          `✓ 3 Dezenas Âncoras [${nums
+            .map((n: number) => n.toString().padStart(2, '0'))
+            .join(', ')}] fixadas com sucesso na Matriz de Fechamento!`
+        );
+        soundService.playGoldenZoneSuccessChime();
+        setTimeout(() => setDocumentMessage(null), 6000);
+      }
+    };
+    window.addEventListener('lotosniper-fix-anchors', handleFixAnchorsEvent);
+    return () => {
+      window.removeEventListener('lotosniper-fix-anchors', handleFixAnchorsEvent);
+    };
+  }, [targetCount]);
 
   // Listener para aplicação dinâmica de Filtros de Combinações de Vazio
   useEffect(() => {

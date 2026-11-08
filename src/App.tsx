@@ -893,6 +893,10 @@ export default function App() {
               isLoading={isAILoading}
               onRefreshPrediction={() => fetchAIPrediction(latestDraw)}
               onApplyRecommendation={handleApplyAIRecsToFechamento}
+              onFixAnchors={(anchors) => {
+                setPendingFixedNumbers(anchors);
+                setActiveTab('fechamento');
+              }}
             />
           )}
 

@@ -21,6 +21,8 @@ import { TrendRadarPublicFeed } from './TrendRadarPublicFeed';
 import { Heatmap100Concursos } from './Heatmap100Concursos';
 import { AIRecommendationsBacktest10Module } from './AIRecommendationsBacktest10Module';
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
+import { DezenasAncorasPredictorCard } from './DezenasAncorasPredictorCard';
+import { D3ConservadorVsOusadoChart } from './D3ConservadorVsOusadoChart';
 import {
   Sparkles,
   Cpu,
@@ -47,6 +49,7 @@ interface AIPredictorTabProps {
   isLoading: boolean;
   onRefreshPrediction: () => void;
   onApplyRecommendation: (numbers: number[]) => void;
+  onFixAnchors?: (numbers: number[]) => void;
 }
 
 interface TooltipPayloadItem {
@@ -108,6 +111,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   isLoading,
   onRefreshPrediction,
   onApplyRecommendation,
+  onFixAnchors,
 }) => {
   const [selectedGoldenBetIndex, setSelectedGoldenBetIndex] = useState<number>(0);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(() => {
@@ -400,6 +404,14 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         </div>
       </div>
 
+      {/* COMPONENTE EXCLUSIVO: 3 DEZENAS ÂNCORAS SUGERIDAS PELA IA (CICLO & TENDÊNCIA ATUAL) */}
+      <DezenasAncorasPredictorCard
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        onFixAnchors={onFixAnchors || onApplyRecommendation}
+      />
+
       {/* Sorteio Dinâmico com Rolling Numbers (Framer Motion) */}
       <RollingNumbersSorteio
         finalNumbers={recomendadas18}
@@ -484,6 +496,15 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         latestDraw={latestDraw}
         recomendadas18={recomendadas18}
         currentTaxaConfianca={currentConfidence}
+      />
+
+      {/* ========================================================================= */}
+      {/* GRÁFICO COMPARATIVO D3.JS: PRECISÃO HISTÓRICA CONSERVADORA VS OUSADA      */}
+      {/* ========================================================================= */}
+      <D3ConservadorVsOusadoChart
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
       />
 
       {/* ========================================================================= */}
