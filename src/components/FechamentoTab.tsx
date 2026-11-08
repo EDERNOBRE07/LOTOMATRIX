@@ -94,6 +94,8 @@ import {
   FileText,
   FileSpreadsheet,
   Printer,
+  Users,
+  Calculator,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -159,6 +161,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const [fixedNumbers, setFixedNumbers] = useState<number[]>(cyclePendingNumbers.slice(0, 2));
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
+  const [showBolaoSimulator, setShowBolaoSimulator] = useState(false);
   const [filters, setFilters] = useState<FilterCriteria>(() => {
     const curvaAbcConfig = getCurvaAbcFilterConfig();
     const voidConfig = getVoidExclusionConfig();
@@ -2780,6 +2783,49 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
+      {/* Atalho & Painel de Planejamento de Bolão Oficial Caixa */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                Calculadora de Bolão Oficial (Normas Caixa Econômica Federal)
+              </h4>
+              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+                MÍN. R$ 12,00 / BOLÃO • COTA R$ 4,00
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Simule cotas sugeridas (2 a 100), rateio por participante e prêmios multiplicados para 14 pontos em apostas múltiplas (15 a 20 dezenas).
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowBolaoSimulator((prev) => !prev)}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border shrink-0 ${
+            showBolaoSimulator
+              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+              : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5 text-current" />
+          <span>{showBolaoSimulator ? 'Ocultar Calculadora' : 'Simular Bolão Caixa'}</span>
+        </button>
+      </div>
+
+      {/* Exibição da Calculadora no Planejamento (quando não há jogos gerados na tela) */}
+      {showBolaoSimulator && generatedTickets.length === 0 && (
+        <BolaoOficialCaixaCalculator
+          totalJogos={preset.jogosMaximos}
+          isModo16Dezenas={mode === '16_14_15'}
+        />
+      )}
+
       {/* Indicador de Processamento em Web Worker (Fora da Main Thread / Anti-Tela Preta) */}
       {isGenerating && (
         <div className="bg-slate-900/95 border-2 border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3 animate-in fade-in duration-200">
@@ -3334,6 +3380,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
                     {ticket.repetidas} Rep. #{latestDraw.concurso}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 font-mono border border-emerald-500/20">
+                    B1: {(ticket.bola1 ?? ticket.dezenas[0]).toString().padStart(2, '0')} | B15: {(ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1]).toString().padStart(2, '0')}
                   </span>
                 </div>
               </div>

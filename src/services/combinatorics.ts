@@ -140,11 +140,12 @@ export function isHistorical15Collision(
   return false;
 }
 
-// Helper: Detecta padrões visuais viciados que pulverizam rateios (linhas/colunas cheias ou PAs óbvias)
+// Helper: Detecta padrões visuais óbvios que pulverizam rateios (progressões de 5+ dezenas, linhas/colunas cheias ou diagonais)
 export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean; reason?: string } {
   const numSet = new Set(numbers);
+  const sorted = [...numbers].sort((a, b) => a - b);
 
-  // 1. Linha horizontal inteira no volante 5x5 (5 dezenas em linha)
+  // 1. Linha horizontal inteira no volante 5x5 (5 dezenas em linha: 1-5, 6-10, 11-15, 16-20, 21-25)
   const LINHAS = [
     [1, 2, 3, 4, 5],
     [6, 7, 8, 9, 10],
@@ -158,7 +159,7 @@ export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean
     }
   }
 
-  // 2. Coluna vertical inteira no volante 5x5 (5 dezenas em coluna)
+  // 2. Coluna vertical inteira no volante 5x5 (5 dezenas em coluna: colunas 1 a 5)
   const COLUNAS = [
     [1, 6, 11, 16, 21],
     [2, 7, 12, 17, 22],
@@ -172,34 +173,93 @@ export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean
     }
   }
 
-  // 3. Progressões aritméticas óbvias com razão 1 ou 2 de 6 ou mais números
-  const sorted = [...numbers].sort((a, b) => a - b);
-  let ap1 = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === sorted[i - 1] + 1) {
-      ap1++;
-      if (ap1 >= 6) {
-        return { isVicious: true, reason: `Sequência de ${ap1} dezenas consecutivas consecutivas (razão 1)` };
-      }
-    } else {
-      ap1 = 1;
-    }
+  // 3. Diagonais completas do volante 5x5
+  const DIAGONAL_PRINCIPAL = [1, 7, 13, 19, 25];
+  if (DIAGONAL_PRINCIPAL.every((n) => numSet.has(n))) {
+    return { isVicious: true, reason: 'Diagonal principal completa (01-07-13-19-25) no volante 5x5' };
+  }
+  const DIAGONAL_SECUNDARIA = [5, 9, 13, 17, 21];
+  if (DIAGONAL_SECUNDARIA.every((n) => numSet.has(n))) {
+    return { isVicious: true, reason: 'Diagonal secundária completa (05-09-13-17-21) no volante 5x5' };
   }
 
-  let ap2 = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === sorted[i - 1] + 2) {
-      ap2++;
-      if (ap2 >= 6) {
-        return { isVicious: true, reason: `Progressão aritmética de ${ap2} dezenas em passo 2` };
+  // 4. Progressões aritméticas óbvias de 5 ou mais dezenas (passos r = 1, 2, 3, 4, 5)
+  for (let r = 1; r <= 5; r++) {
+    for (const start of sorted) {
+      let count = 1;
+      let curr = start;
+      const seq = [curr];
+      while (numSet.has(curr + r)) {
+        curr += r;
+        seq.push(curr);
+        count++;
       }
-    } else if (sorted[i] !== sorted[i - 1]) {
-      ap2 = 1;
+      if (count >= 5) {
+        const desc = r === 1 ? 'consecutivas' : `em passo de ${r} em ${r}`;
+        return {
+          isVicious: true,
+          reason: `Progressão aritmética óbvia de ${count} dezenas (${seq.map((n) => n.toString().padStart(2, '0')).join('-')}) ${desc}`,
+        };
+      }
     }
   }
 
   return { isVicious: false };
 }
+
+export interface AuditoriaAnomaliasResultado {
+  aprovado: boolean;
+  motivoBloqueio?: string;
+  isColisaoHistorica: boolean;
+  isPadraoVisualObvio: boolean;
+  concursoColisao?: number;
+}
+
+/**
+ * Função Oficial: 'Auditoria de Anomalias Estatísticas'
+ * Bloqueia automaticamente jogos idênticos a concursos anteriores da Caixa ou
+ * que apresentem padrões visuais óbvios (progressões de 5+ dezenas, linhas, colunas e diagonais)
+ * para evitar pulverização de rateios e apostas em combinações esgotadas.
+ */
+export function auditoriaAnomaliasEstatisticas(
+  numbers: number[],
+  historicalDraws: LotofacilDraw[] = RECENT_DRAWS
+): AuditoriaAnomaliasResultado {
+  const sorted = [...numbers].sort((a, b) => a - b);
+
+  // 1. Bloqueio automático de jogos idênticos a concursos anteriores
+  for (const draw of historicalDraws) {
+    if (draw.dezenas && draw.dezenas.length === 15) {
+      if (countMatches(sorted, draw.dezenas) === 15) {
+        return {
+          aprovado: false,
+          motivoBloqueio: `Jogo 100% idêntico ao Concurso #${draw.concurso} (${draw.data}). Bloqueado pela Auditoria Anti-Colisão para evitar repetição histórica esgotada.`,
+          isColisaoHistorica: true,
+          isPadraoVisualObvio: false,
+          concursoColisao: draw.concurso,
+        };
+      }
+    }
+  }
+
+  // 2. Bloqueio automático de padrões visuais óbvios (progressões de 5+ dezenas, linhas, colunas, diagonais)
+  const pattern = hasViciousVisualPattern(sorted);
+  if (pattern.isVicious) {
+    return {
+      aprovado: false,
+      motivoBloqueio: `Padrão visual óbvio bloqueado: ${pattern.reason}. Evita rateios excessivos e jogos com alta pulverização de prêmio.`,
+      isColisaoHistorica: false,
+      isPadraoVisualObvio: true,
+    };
+  }
+
+  return {
+    aprovado: true,
+    isColisaoHistorica: false,
+    isPadraoVisualObvio: false,
+  };
+}
+
 
 // Analyze a 15-number ticket with Cruz, Extremas e Métricas Canônicas
 export function analyzeTicket(
