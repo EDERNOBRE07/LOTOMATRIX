@@ -1,6 +1,6 @@
 import { GameTicket, LotofacilDraw, FilterCriteria } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
-import { FIBONACCI, PRIMOS, MOLDURA } from '../data/lotofacilData';
+import { FIBONACCI, PRIMOS, MOLDURA, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 export interface FechamentoExportMeta {
   strategyName?: string;
@@ -161,6 +161,12 @@ export function generateFechamentoTxtContent({
     `• Dezenas na Moldura (16 externas): ${filters.molduraMin} a ${filters.molduraMax} dezenas [Moldura Oficial: ${MOLDURA.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
   );
   lines.push(
+    `• Cruz da Lotofácil (9 dezenas centrais): ${filters.cruzMin ?? 4} a ${filters.cruzMax ?? 7} dezenas (Zona de Ouro: 5 a 6) [Cruz: ${CRUZ_DEZENAS.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
+  );
+  lines.push(
+    `• Bolas Extremas do Bilhete: Bola 1 [${filters.bola1Min ?? 1}..${filters.bola1Max ?? 4}] e Bola 15 [${filters.bola15Min ?? 22}..${filters.bola15Max ?? 25}]`
+  );
+  lines.push(
     `• Números Primos: ${filters.primosMin} a ${filters.primosMax} dezenas [Primos: ${PRIMOS.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
   );
   lines.push(
@@ -183,9 +189,10 @@ export function generateFechamentoTxtContent({
     const primos = t.primos ?? t.dezenas.filter((n) => PRIMOS.includes(n)).length;
     const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
     const moldura = t.moldura ?? t.dezenas.filter((n) => MOLDURA.includes(n)).length;
+    const cruz = t.cruz ?? t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
     const fibo = t.fibonacci ?? t.dezenas.filter((n) => FIBONACCI.includes(n)).length;
 
-    const statsInfo = `[Soma: ${soma} | ${pares}P/${impares}I | ${primos} Primos | ${moldura} Moldura | ${fibo} Fibo]`;
+    const statsInfo = `[Soma: ${soma} | ${pares}P/${impares}I | ${primos} Primos | ${moldura} Moldura | ${cruz} Cruz | ${fibo} Fibo]`;
 
     const numbersStr = t.dezenas.map((n) => n.toString().padStart(2, '0')).join(' ');
 

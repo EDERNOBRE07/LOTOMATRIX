@@ -6,6 +6,13 @@ export const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25
 export const MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
 export const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
 
+// Cruz da Lotofácil (Linha 3 e Coluna 3 no volante 5x5: 9 dezenas)
+export const CRUZ_DEZENAS = [3, 8, 11, 12, 13, 14, 15, 18, 23];
+
+// Bolas Extremas (Bola 1 e Bola 15 do bilhete)
+export const BOLAS_EXTREMAS_INICIO = [1, 2, 3, 4]; // Ideal: 1 ou 2
+export const BOLAS_EXTREMAS_FIM = [22, 23, 24, 25]; // Ideal: 24 ou 25
+
 // Official Draw #3822 (05/11/2026) & Concurso History Sincronizado Caixa Econômica Federal
 export const CONCURSO_ATUAL: LotofacilDraw = {
   concurso: 3822,
@@ -240,7 +247,130 @@ export const RECENT_DRAWS: LotofacilDraw[] = [
     data: '22/09/2026',
     dezenas: [1, 3, 4, 6, 8, 9, 10, 12, 14, 15, 17, 19, 21, 23, 25],
   },
+  {
+    concurso: 3785,
+    data: '21/09/2026',
+    dezenas: [2, 3, 4, 7, 9, 10, 11, 13, 14, 16, 18, 20, 22, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 1750230.1 }, faixa14: { ganhadores: 312, valor: 1680.0 }, faixa13: { ganhadores: 11200, valor: 35.0 }, faixa12: { ganhadores: 135000, valor: 14.0 }, faixa11: { ganhadores: 710000, valor: 7.0 } },
+  },
+  {
+    concurso: 3784,
+    data: '19/09/2026',
+    dezenas: [1, 2, 5, 6, 8, 10, 12, 13, 15, 17, 18, 19, 21, 23, 24],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 890400.0 }, faixa14: { ganhadores: 295, valor: 1720.0 }, faixa13: { ganhadores: 10400, valor: 35.0 }, faixa12: { ganhadores: 129000, valor: 14.0 }, faixa11: { ganhadores: 680000, valor: 7.0 } },
+  },
+  {
+    concurso: 3783,
+    data: '18/09/2026',
+    dezenas: [1, 3, 4, 7, 8, 10, 11, 12, 14, 16, 17, 20, 22, 24, 25],
+  },
+  {
+    concurso: 3782,
+    data: '17/09/2026',
+    dezenas: [2, 3, 6, 7, 9, 11, 13, 15, 16, 18, 19, 21, 23, 24, 25],
+  },
+  {
+    concurso: 3781,
+    data: '16/09/2026',
+    dezenas: [1, 4, 5, 6, 8, 9, 10, 12, 14, 15, 17, 19, 20, 22, 25],
+  },
+  {
+    concurso: 3780,
+    data: '15/09/2026',
+    dezenas: [2, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 21, 23, 24],
+    premiacoes: { faixa15: { ganhadores: 3, valor: 540300.0 }, faixa14: { ganhadores: 340, valor: 1510.0 }, faixa13: { ganhadores: 12100, valor: 35.0 }, faixa12: { ganhadores: 142000, valor: 14.0 }, faixa11: { ganhadores: 750000, valor: 7.0 } },
+  },
+  {
+    concurso: 3779,
+    data: '14/09/2026',
+    dezenas: [1, 2, 4, 6, 7, 9, 11, 12, 13, 15, 17, 19, 22, 24, 25],
+  },
+  {
+    concurso: 3778,
+    data: '12/09/2026',
+    dezenas: [1, 3, 5, 6, 8, 10, 12, 14, 15, 16, 18, 20, 21, 23, 25],
+  },
+  {
+    concurso: 3777,
+    data: '11/09/2026',
+    dezenas: [2, 4, 5, 7, 8, 9, 11, 13, 14, 17, 18, 19, 20, 22, 24],
+  },
+  {
+    concurso: 3776,
+    data: '10/09/2026',
+    dezenas: [1, 2, 3, 6, 7, 9, 10, 12, 13, 15, 16, 19, 21, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 1650800.0 }, faixa14: { ganhadores: 280, valor: 1790.0 }, faixa13: { ganhadores: 9800, valor: 35.0 }, faixa12: { ganhadores: 121000, valor: 14.0 }, faixa11: { ganhadores: 640000, valor: 7.0 } },
+  },
+  {
+    concurso: 3775,
+    data: '09/09/2026',
+    dezenas: [3, 4, 5, 7, 8, 10, 11, 12, 14, 17, 18, 20, 22, 23, 25],
+  },
+  {
+    concurso: 3774,
+    data: '08/09/2026',
+    dezenas: [1, 2, 4, 6, 8, 9, 10, 13, 15, 16, 17, 19, 21, 22, 24],
+  },
+  {
+    concurso: 3773,
+    data: '05/09/2026',
+    dezenas: [2, 3, 5, 6, 7, 10, 11, 12, 14, 15, 18, 20, 21, 23, 25],
+  },
+  {
+    concurso: 3772,
+    data: '04/09/2026',
+    dezenas: [1, 3, 4, 6, 7, 9, 11, 13, 15, 16, 17, 19, 20, 24, 25],
+  },
+  {
+    concurso: 3771,
+    data: '03/09/2026',
+    dezenas: [2, 4, 5, 8, 9, 10, 12, 13, 14, 16, 18, 21, 22, 23, 25],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 780000.0 }, faixa14: { ganhadores: 310, valor: 1610.0 }, faixa13: { ganhadores: 10500, valor: 35.0 }, faixa12: { ganhadores: 131000, valor: 14.0 }, faixa11: { ganhadores: 690000, valor: 7.0 } },
+  },
+  {
+    concurso: 3770,
+    data: '02/09/2026',
+    dezenas: [1, 2, 3, 5, 7, 8, 10, 11, 14, 15, 17, 19, 20, 22, 24],
+  },
+  {
+    concurso: 3769,
+    data: '01/09/2026',
+    dezenas: [1, 4, 6, 7, 9, 10, 12, 13, 15, 16, 18, 20, 21, 23, 25],
+  },
+  {
+    concurso: 3768,
+    data: '31/08/2026',
+    dezenas: [2, 3, 5, 6, 8, 11, 12, 14, 15, 17, 18, 19, 22, 24, 25],
+  },
+  {
+    concurso: 3767,
+    data: '29/08/2026',
+    dezenas: [1, 3, 4, 7, 8, 9, 10, 13, 14, 16, 17, 19, 20, 21, 24],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 1820400.0 }, faixa14: { ganhadores: 335, valor: 1530.0 }, faixa13: { ganhadores: 11800, valor: 35.0 }, faixa12: { ganhadores: 141000, valor: 14.0 }, faixa11: { ganhadores: 740000, valor: 7.0 } },
+  },
+  {
+    concurso: 3766,
+    data: '28/08/2026',
+    dezenas: [2, 4, 5, 6, 8, 10, 11, 12, 15, 16, 18, 20, 22, 23, 25],
+  },
+  {
+    concurso: 3765,
+    data: '27/08/2026',
+    dezenas: [1, 2, 3, 6, 7, 9, 11, 13, 14, 15, 17, 19, 21, 24, 25],
+  },
+  {
+    concurso: 3764,
+    data: '26/08/2026',
+    dezenas: [1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 18, 20, 21, 23, 25],
+  },
+  {
+    concurso: 3763,
+    data: '25/08/2026',
+    dezenas: [2, 3, 6, 8, 9, 10, 11, 14, 15, 16, 18, 19, 22, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 850000.0 }, faixa14: { ganhadores: 320, valor: 1600.0 }, faixa13: { ganhadores: 11000, valor: 35.0 }, faixa12: { ganhadores: 133000, valor: 14.0 }, faixa11: { ganhadores: 700000, valor: 7.0 } },
+  },
 ];
+
 
 // Complete Historical Statistics for all 25 Dezenas (calibrated with Concurso #3822)
 export const DEZENAS_STATS: DezenaStats[] = [

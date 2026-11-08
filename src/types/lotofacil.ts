@@ -53,6 +53,15 @@ export interface FilterCriteria {
   maxConsecutivas: number;
   dezenasFixas: number[];
   dezenasExcluidas: number[];
+  cruzMin?: number;
+  cruzMax?: number;
+  bola1Min?: number;
+  bola1Max?: number;
+  bola15Min?: number;
+  bola15Max?: number;
+  apenasZonaDeOuroPrimos?: boolean;
+  antiColisaoHistoricaAtiva?: boolean;
+  antiPadraoViciadoAtivo?: boolean;
   curvaAbcAtiva?: boolean;
   minDezenasClasseA?: number;
   combinacoesVazioExcluidas?: [number, number][];
@@ -75,6 +84,7 @@ export type FechamentoMode =
   | '20_14_15'
   | '18_13_14'
   | '21_13_15'
+  | 'desdobramento_25_blocos'
   | 'surpresinha_inteligente';
 
 export interface FechamentoPreset {
@@ -98,7 +108,11 @@ export interface GameTicket {
   moldura: number;
   miolo: number;
   fibonacci: number;
+  cruz?: number;
+  bola1?: number;
+  bola15?: number;
   repetidas: number;
+
   maxConsecutivas: number;
   scoreIA: number;
   tags?: string[];

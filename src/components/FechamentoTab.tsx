@@ -8,12 +8,14 @@ import {
   DezenaStats,
   FechamentoExportMeta,
 } from '../types/lotofacil';
-import { CONCURSO_ATUAL, DEZENAS_STATS, PRIMOS, MOLDURA } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, RECENT_DRAWS, DEZENAS_STATS, PRIMOS, MOLDURA } from '../data/lotofacilData';
+
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
 import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
+  generateDesdobramento25Blocos,
   generateFibonacciOptimizedGames,
   DEFAULT_FILTERS,
   buildOptimalPool,
@@ -22,7 +24,10 @@ import {
   generateFechamentoInteligentePonderado,
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
+import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
+import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
+
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { saveFechamentoPrognostico } from '../services/savedFechamentosStorage';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
@@ -611,8 +616,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const newTarget = p.dezenasNecessarias;
     setMode(key);
 
+    if (key === 'desdobramento_25_blocos') {
+      const all25 = Array.from({ length: 25 }, (_, i) => i + 1);
+      setSelectedNumbers(all25);
+      const newName = 'Cobertura Total 25 Dezenas (Blocos Cruzados)';
+      setStrategyName(newName);
+      setActiveModel(newName);
+      setDocumentMessage(
+        '✓ Cobertura Total 25 Dezenas: 10 jogos cobrindo 100% do volante com 9 repetidas e 6 ausentes'
+      );
+      soundService.playGoldenZoneSuccessChime();
+      setTimeout(() => setDocumentMessage(null), 6000);
+      return;
+    }
+
     // Carrega a estratégia de fechamento preservando 100% dos filtros selecionados
     const calibrated = buildFilterCompliantPool({
+
       targetCount: newTarget,
       filters,
       previousDraw: latestDraw,
@@ -1263,7 +1283,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       let tickets: GameTicket[] = [];
 
-      if (fullFilters.fechamentoPonderadoAtivo) {
+      if (mode === 'desdobramento_25_blocos') {
+        tickets = generateDesdobramento25Blocos({
+          baseDraw: latestDraw,
+          maxGames: 10,
+          iterations: 200,
+          aiScores: aiPrediction?.scores,
+        });
+      } else if (fullFilters.fechamentoPonderadoAtivo) {
         const result = await fechamentoWorkerClient.generatePonderado({
           mode,
           targetCount,
@@ -1282,6 +1309,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setDiscardedByRobustezCount(result.discardedByRobustezCount);
         setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
       } else {
+
         tickets = await fechamentoWorkerClient.generateCovering({
           mode,
           targetCount,
@@ -1904,6 +1932,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
           {(
             [
+              'desdobramento_25_blocos',
               'surpresinha_inteligente',
               '16_14_15',
               '17_14_15',
@@ -1914,6 +1943,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               '21_13_15',
             ] as FechamentoMode[]
           ).map((key) => {
+
             const p = FECHAMENTO_PRESETS[key];
             const isSelected = mode === key;
             const custoFechamento = p.jogosMaximos * VALOR_APOSTA_LOTOFACIL;
@@ -2378,8 +2408,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
+      {/* Componente de Filtro de Tendência dos Últimos 3 Concursos */}
+      <FiltroTendencia3Concursos
+        recentDraws={RECENT_DRAWS}
+        selectedNumbers={selectedNumbers}
+        fixedNumbers={fixedNumbers}
+        excludedNumbers={excludedNumbers}
+        onToggleNumber={handleToggleNumber}
+        onSetFixedNumbers={(nums) => setFixedNumbers(nums)}
+        onSetExcludedNumbers={(nums) => setExcludedNumbers(nums)}
+        onAddNumbersToSelected={(nums) => {
+          const combined = Array.from(new Set([...selectedNumbers, ...nums])).slice(0, targetCount);
+          setSelectedNumbers(combined);
+        }}
+      />
+
+
       {/* Volante 5x5 Grid */}
       <VolanteSelector
+
         selectedNumbers={selectedNumbers}
         fixedNumbers={fixedNumbers}
         excludedNumbers={excludedNumbers}
@@ -3276,6 +3323,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   <span className="px-1.5 py-0.5 rounded bg-amber-950/40 text-amber-300 font-mono border border-amber-500/20">
                     {ticket.moldura} Moldura
                   </span>
+                  <span className="px-1.5 py-0.5 rounded bg-blue-950/40 text-blue-300 font-mono border border-blue-500/20">
+                    {ticket.cruz ?? 0} Cruz
+                  </span>
                   <span className="px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 font-mono border border-cyan-500/20">
                     {ticket.fibonacci} Fibo
                   </span>
@@ -3289,9 +3339,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </div>
             ))}
           </div>
+
+          {/* Calculadora Oficial de Bolão Caixa Econômica Federal */}
+          <div className="pt-2">
+            <BolaoOficialCaixaCalculator
+              totalJogos={generatedTickets.length}
+              isModo16Dezenas={mode === '16_14_15'}
+            />
+          </div>
         </div>
         </>
       )}
+
       {/* Modal de Histórico de Auto-Save (Últimas 10 Gerações) */}
       {isAutoSaveModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

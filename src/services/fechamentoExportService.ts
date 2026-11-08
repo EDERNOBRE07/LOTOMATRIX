@@ -7,8 +7,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GameTicket, LotofacilDraw, FilterCriteria } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
-import { PRIMOS, MOLDURA, FIBONACCI } from '../data/lotofacilData';
+import { PRIMOS, MOLDURA, FIBONACCI, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { FechamentoExportMeta } from './txtExportFormatter';
+
 
 export interface FechamentoExportOptions {
   tickets: GameTicket[];
@@ -118,6 +119,7 @@ export function exportFechamentoToPdf({
     const primos = t.primos ?? t.dezenas.filter((n) => PRIMOS.includes(n)).length;
     const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
     const moldura = t.moldura ?? t.dezenas.filter((n) => MOLDURA.includes(n)).length;
+    const cruz = t.cruz ?? t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
     const repetidas = t.repetidas ?? (previousDrawDezenas.length > 0 ? t.dezenas.filter((n) => previousDrawDezenas.includes(n)).length : '-');
 
     const formattedNumbers = t.dezenas.map((n) => n.toString().padStart(2, '0')).join('  ');
@@ -129,6 +131,7 @@ export function exportFechamentoToPdf({
       `${pares}P / ${impares}I`,
       primos.toString(),
       moldura.toString(),
+      cruz.toString(),
       repetidas.toString(),
     ];
   });
@@ -143,9 +146,11 @@ export function exportFechamentoToPdf({
         'Paridade',
         'Primos',
         'Moldura',
+        'Cruz',
         'Repet.',
       ],
     ],
+
     body: tableBody,
     theme: 'striped',
     headStyles: {

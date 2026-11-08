@@ -3,7 +3,11 @@ import {
   MOLDURA,
   MIOLO,
   FIBONACCI,
+  CRUZ_DEZENAS,
+  BOLAS_EXTREMAS_INICIO,
+  BOLAS_EXTREMAS_FIM,
   CONCURSO_ATUAL,
+  RECENT_DRAWS,
   DEZENAS_STATS,
   TOP_DUPLAS,
   REGRA_VENCEDORA_CONCURSO_3822,
@@ -61,6 +65,11 @@ export function isFibonacci(n: number): boolean {
   return FIBONACCI.includes(n);
 }
 
+// Helper: Check if number belongs to the Lotofácil Cross (Cruz: Linha 3 + Coluna 3)
+export function isCruz(n: number): boolean {
+  return CRUZ_DEZENAS.includes(n);
+}
+
 // Maximum consecutive sequence in sorted array
 export function getMaxConsecutiveSequence(sortedNumbers: number[]): number {
   if (sortedNumbers.length === 0) return 0;
@@ -114,7 +123,85 @@ export function countMatches(arr1: number[], arr2: number[]): number {
   return matches;
 }
 
-// Analyze a 15-number ticket
+// Helper: Verifica colisão de 15 pontos com qualquer concurso histórico da Caixa
+export function isHistorical15Collision(
+  numbers: number[],
+  historicalDraws: LotofacilDraw[] = RECENT_DRAWS
+): boolean {
+  if (numbers.length !== 15) return false;
+  const sorted = [...numbers].sort((a, b) => a - b);
+  for (const draw of historicalDraws) {
+    if (draw.dezenas && draw.dezenas.length === 15) {
+      if (countMatches(sorted, draw.dezenas) === 15) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Helper: Detecta padrões visuais viciados que pulverizam rateios (linhas/colunas cheias ou PAs óbvias)
+export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean; reason?: string } {
+  const numSet = new Set(numbers);
+
+  // 1. Linha horizontal inteira no volante 5x5 (5 dezenas em linha)
+  const LINHAS = [
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+    [11, 12, 13, 14, 15],
+    [16, 17, 18, 19, 20],
+    [21, 22, 23, 24, 25],
+  ];
+  for (let l = 0; l < LINHAS.length; l++) {
+    if (LINHAS[l].every((n) => numSet.has(n))) {
+      return { isVicious: true, reason: `Linha horizontal completa #${l + 1} (${LINHAS[l].join('-')}) no volante 5x5` };
+    }
+  }
+
+  // 2. Coluna vertical inteira no volante 5x5 (5 dezenas em coluna)
+  const COLUNAS = [
+    [1, 6, 11, 16, 21],
+    [2, 7, 12, 17, 22],
+    [3, 8, 13, 18, 23],
+    [4, 9, 14, 19, 24],
+    [5, 10, 15, 20, 25],
+  ];
+  for (let c = 0; c < COLUNAS.length; c++) {
+    if (COLUNAS[c].every((n) => numSet.has(n))) {
+      return { isVicious: true, reason: `Coluna vertical completa #${c + 1} (${COLUNAS[c].join('-')}) no volante 5x5` };
+    }
+  }
+
+  // 3. Progressões aritméticas óbvias com razão 1 ou 2 de 6 ou mais números
+  const sorted = [...numbers].sort((a, b) => a - b);
+  let ap1 = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i - 1] + 1) {
+      ap1++;
+      if (ap1 >= 6) {
+        return { isVicious: true, reason: `Sequência de ${ap1} dezenas consecutivas consecutivas (razão 1)` };
+      }
+    } else {
+      ap1 = 1;
+    }
+  }
+
+  let ap2 = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i - 1] + 2) {
+      ap2++;
+      if (ap2 >= 6) {
+        return { isVicious: true, reason: `Progressão aritmética de ${ap2} dezenas em passo 2` };
+      }
+    } else if (sorted[i] !== sorted[i - 1]) {
+      ap2 = 1;
+    }
+  }
+
+  return { isVicious: false };
+}
+
+// Analyze a 15-number ticket with Cruz, Extremas e Métricas Canônicas
 export function analyzeTicket(
   numbers: number[],
   concursoAnterior: number[] = CONCURSO_ATUAL.dezenas,
@@ -128,6 +215,7 @@ export function analyzeTicket(
   let moldura = 0;
   let miolo = 0;
   let fibonacci = 0;
+  let cruz = 0;
   let repetidas = 0;
   let scoreSum = 0;
 
@@ -139,6 +227,7 @@ export function analyzeTicket(
     if (isMoldura(n)) moldura++;
     if (isMiolo(n)) miolo++;
     if (isFibonacci(n)) fibonacci++;
+    if (isCruz(n)) cruz++;
     if (concursoAnterior.includes(n)) repetidas++;
 
     if (aiScores && aiScores[n - 1] !== undefined) {
@@ -149,17 +238,18 @@ export function analyzeTicket(
     }
   }
 
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
   const maxConsecutivas = getMaxConsecutiveSequence(sorted);
   let baseScore = scoreSum / 15;
 
   // Calibração Suavizada da Zona de Ouro (185 a 215):
-  // Reduz a penalização para somas entre 211-215, evitando que bilhetes excelentes sejam descartados por ultrapassarem o antigo teto de 210.
   if (soma >= 185 && soma <= 215) {
     baseScore += 3.0; // Zona de Ouro integral (185 a 215)
   } else if (soma >= 180 && soma < 185) {
     baseScore -= 1.0;
   } else if (soma > 215 && soma <= 222) {
-    baseScore -= (soma - 215) * 0.8; // Penalização suave e progressiva após 215
+    baseScore -= (soma - 215) * 0.8;
   } else if (soma > 222) {
     baseScore -= 6.0 + (soma - 222) * 1.5;
   }
@@ -167,6 +257,47 @@ export function analyzeTicket(
   // Bônus de Moldura Expandida (8 a 12 dezenas na borda)
   if (moldura >= 8 && moldura <= 12) {
     baseScore += 1.5;
+  }
+
+  // Bônus / Calibração da Cruz da Lotofácil (Zona de Ouro: 5 a 6 dezenas na Cruz)
+  if (cruz >= 5 && cruz <= 6) {
+    baseScore += 2.0; // Zona de Ouro da Cruz
+  } else if (cruz === 4 || cruz === 7) {
+    baseScore += 0.5; // Intervalo padrão aceitável
+  } else {
+    baseScore -= 2.5; // Desvio extremo na Cruz
+  }
+
+  // Bônus / Calibração de Bolas Extremas (Bola 1 e Bola 15)
+  if (bola1 === 1 || bola1 === 2) {
+    baseScore += 1.0; // Ponta inicial ideal
+  } else if (BOLAS_EXTREMAS_INICIO.includes(bola1)) {
+    baseScore += 0.4;
+  } else {
+    baseScore -= 2.0; // Bola 1 muito alta (>= 5)
+  }
+
+  if (bola15 === 24 || bola15 === 25) {
+    baseScore += 1.0; // Ponta final ideal
+  } else if (BOLAS_EXTREMAS_FIM.includes(bola15)) {
+    baseScore += 0.4;
+  } else {
+    baseScore -= 2.0; // Bola 15 muito baixa (<= 21)
+  }
+
+  // Refinamento Zona de Ouro de Primos (5 a 6 números primos > 70% histórico)
+  if (primos === 5 || primos === 6) {
+    baseScore += 1.5;
+  } else if (primos === 4 || primos === 7) {
+    baseScore += 0.3;
+  }
+
+  // Penalização severa de colisão histórica de 15 pontos ou padrões viciados
+  if (isHistorical15Collision(sorted)) {
+    baseScore -= 15.0;
+  }
+  if (hasViciousVisualPattern(sorted).isVicious) {
+    baseScore -= 12.0;
   }
 
   const scoreIA = Math.round(Math.max(30, Math.min(100, baseScore)) * 10) / 10;
@@ -180,13 +311,16 @@ export function analyzeTicket(
     moldura,
     miolo,
     fibonacci,
+    cruz,
+    bola1,
+    bola15,
     repetidas,
     maxConsecutivas,
     scoreIA,
   };
 }
 
-// Check ticket against filters
+// Check ticket against filters (inclui Cruz, Bolas Extremas, Zona de Ouro Primos, Anti-Colisão e Anti-Padrão)
 export function ticketPassesFilters(
   ticket: Omit<GameTicket, 'id' | 'index'>,
   filters: FilterCriteria
@@ -198,6 +332,37 @@ export function ticketPassesFilters(
   if (ticket.fibonacci < filters.fibonacciMin || ticket.fibonacci > filters.fibonacciMax) return false;
   if (ticket.repetidas < filters.repetidasMin || ticket.repetidas > filters.repetidasMax) return false;
   if (ticket.maxConsecutivas > filters.maxConsecutivas) return false;
+
+  // Filtro Geométrico: Cruz da Lotofácil (Padrão 4 a 7; Zona de Ouro: 5 a 6)
+  if (filters.cruzMin !== undefined && ticket.cruz !== undefined) {
+    if (ticket.cruz < filters.cruzMin || ticket.cruz > (filters.cruzMax ?? 7)) return false;
+  }
+
+  // Filtro de Bolas Extremas (Bola 1 e Bola 15)
+  const b1 = ticket.bola1 ?? ticket.dezenas[0];
+  const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
+
+  if (filters.bola1Min !== undefined && filters.bola1Max !== undefined) {
+    if (b1 < filters.bola1Min || b1 > filters.bola1Max) return false;
+  }
+  if (filters.bola15Min !== undefined && filters.bola15Max !== undefined) {
+    if (b15 < filters.bola15Min || b15 > filters.bola15Max) return false;
+  }
+
+  // Refinamento Zona de Ouro de Primos: 5 a 6 primos estrito quando requisitado
+  if (filters.apenasZonaDeOuroPrimos) {
+    if (ticket.primos < 5 || ticket.primos > 6) return false;
+  }
+
+  // Auditoria Anti-Colisão Histórica (evita apostar em combinações que já saíram com 15 pontos)
+  if (filters.antiColisaoHistoricaAtiva) {
+    if (isHistorical15Collision(ticket.dezenas)) return false;
+  }
+
+  // Auditoria Anti-Padrão Viciado (evita linhas inteiras, colunas inteiras e PAs óbvias)
+  if (filters.antiPadraoViciadoAtivo) {
+    if (hasViciousVisualPattern(ticket.dezenas).isVicious) return false;
+  }
 
   // Check required fixed numbers
   const fixed = filters?.dezenasFixas || [];
@@ -234,8 +399,7 @@ export function ticketPassesFilters(
     }
   }
 
-  // NOVO: FILTRO DE ROBUSTEZ ESTATÍSTICA (BASE ÚLTIMAS 50 APURAÇÕES)
-  // Descarte automático de combinações com soma, paridade ou moldura fora do intervalo provável das 50 apurações
+  // FILTRO DE ROBUSTEZ ESTATÍSTICA (BASE ÚLTIMAS 50 APURAÇÕES)
   if (filters.robustezEstatisticaAtiva) {
     const somaMin = filters.robustez50SomaMin ?? 180;
     const somaMax = filters.robustez50SomaMax ?? 220;
@@ -252,10 +416,9 @@ export function ticketPassesFilters(
   return true;
 }
 
-
 /**
  * Check if a ticket has any statistical anomaly matching the Monitoring System
- * (Soma 170-225, Pares 5-10, Primos 3-8, Moldura 7-12, Repetidas 6-12, Sequência <= 5)
+ * (Soma 180-225, Pares 5-10, Primos 3-8, Moldura 7-12, Repetidas 6-12, Sequência <= 6, Cruz 3-8, Bola1 <= 4, Bola15 >= 22)
  * Descarte de Fechamentos Improváveis (Filtro Anti-Inconsistência)
  */
 export function isCanonicalAnomaly(
@@ -266,17 +429,26 @@ export function isCanonicalAnomaly(
   const sorted = [...numbers].sort((a, b) => a - b);
   const soma = analysis?.soma ?? sorted.reduce((acc, curr) => acc + curr, 0);
   const pares = analysis?.pares ?? sorted.filter((n) => n % 2 === 0).length;
-  const impares = 15 - pares;
   const primos = analysis?.primos ?? sorted.filter((n) => PRIMOS.includes(n)).length;
   const moldura = analysis?.moldura ?? sorted.filter((n) => MOLDURA.includes(n)).length;
+  const cruz = analysis?.cruz ?? sorted.filter((n) => CRUZ_DEZENAS.includes(n)).length;
   const maxSequencia = analysis?.maxConsecutivas ?? getMaxConsecutiveSequence(sorted);
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
 
   // Canonical constraints - descarta fechamentos matematicamente improváveis
-  if (soma < 180 || soma > 225) return true; // Vetar automaticamente soma < 180 (alerta estatístico de soma baixa)
+  if (soma < 180 || soma > 225) return true; // Vetar automaticamente soma < 180
   if (pares < 5 || pares > 10) return true;  // Extremos (<5 ou >10 pares somam <0.4% histórico)
   if (primos < 3 || primos > 8) return true;  // Primos fora do padrão Caixa (4-7 canônico)
   if (moldura < 7 || moldura > 12) return true; // Moldura descalibrada
-  if (maxSequencia > 6) return true;        // Sequências de até 6 seguidas autorizadas (>6 ocorrem em <0.4%)
+  if (maxSequencia > 6) return true;        // Sequências de até 6 seguidas autorizadas
+  if (cruz < 3 || cruz > 8) return true;     // Cruz da Lotofácil fora dos limites seguros (canônico 4-7)
+  if (bola1 > 4) return true;                // Bola 1 deve ser 1, 2, 3 ou 4
+  if (bola15 < 22) return true;              // Bola 15 deve ser 22, 23, 24 ou 25
+
+  // Bloqueio de padrão visual viciado e colisão histórica de 15 pontos
+  if (isHistorical15Collision(sorted)) return true;
+  if (hasViciousVisualPattern(sorted).isVicious) return true;
 
   // Validação de repetidas do concurso anterior (piso dinâmico alargado para 6 dezenas)
   if (concursoAnterior && concursoAnterior.length === 15) {
@@ -301,10 +473,13 @@ export function isJogoPlauzivelLotofacil(
   const impares = 15 - pares;
   const primos = analysis?.primos ?? sorted.filter((n) => PRIMOS.includes(n)).length;
   const moldura = analysis?.moldura ?? sorted.filter((n) => MOLDURA.includes(n)).length;
+  const cruz = analysis?.cruz ?? sorted.filter((n) => CRUZ_DEZENAS.includes(n)).length;
   const maxSequencia = analysis?.maxConsecutivas ?? getMaxConsecutiveSequence(sorted);
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
 
   if (soma < 180 || soma > 225) {
-    return { valido: false, motivoDescarte: `Soma (${soma}) inferior a 180 (alerta estatístico vetado pelo LotoSniper)` };
+    return { valido: false, motivoDescarte: `Soma (${soma}) fora da faixa permitida (180 a 225)` };
   }
   if (pares < 5 || pares > 10) {
     return { valido: false, motivoDescarte: `Paridade extrema (${pares}P / ${impares}I) com chance inferior a 0.4%` };
@@ -313,10 +488,26 @@ export function isJogoPlauzivelLotofacil(
     return { valido: false, motivoDescarte: `Primos fora da curva (${primos} primos). O padrão oficial é 4 a 7` };
   }
   if (moldura < 7 || moldura > 12) {
-    return { valido: false, motivoDescarte: `Moldura (${moldura}) com desvio extremo do padrão (8 a 11)` };
+    return { valido: false, motivoDescarte: `Moldura (${moldura}) com desvio extremo do padrão (8 a 12)` };
+  }
+  if (cruz < 3 || cruz > 8) {
+    return { valido: false, motivoDescarte: `Cruz da Lotofácil com ${cruz} dezenas (padrão canônico: 4 a 7)` };
+  }
+  if (bola1 > 4) {
+    return { valido: false, motivoDescarte: `Bola 1 iniciada em ${bola1} (deve iniciar em 01, 02, 03 ou 04)` };
+  }
+  if (bola15 < 22) {
+    return { valido: false, motivoDescarte: `Bola 15 terminada em ${bola15} (deve encerrar em 22, 23, 24 ou 25)` };
   }
   if (maxSequencia > 6) {
     return { valido: false, motivoDescarte: `Sequência de ${maxSequencia} números consecutivos em fila (máximo permitido: 6)` };
+  }
+  if (isHistorical15Collision(sorted)) {
+    return { valido: false, motivoDescarte: `Combinação 100% idêntica a concurso anterior da Caixa (bloqueio anti-colisão)` };
+  }
+  const pattern = hasViciousVisualPattern(sorted);
+  if (pattern.isVicious) {
+    return { valido: false, motivoDescarte: `Padrão viciado rejeitado: ${pattern.reason}` };
   }
   if (concursoAnterior && concursoAnterior.length === 15) {
     const repetidas = analysis?.repetidas ?? countMatches(sorted, concursoAnterior);
@@ -327,6 +518,7 @@ export function isJogoPlauzivelLotofacil(
 
   return { valido: true };
 }
+
 
 /**
  * Redução por Cobertura Mínima (Set Cover Problem) com Aceleração por Bitmasks
@@ -862,6 +1054,161 @@ export function generateFechamentoCovering(
 }
 
 /**
+ * Desdobramento Total 25 Dezenas (Blocos Cruzados 5x3 + 5x2)
+ *
+ * Algoritmo Canônico:
+ * 1. Divide as 15 sorteadas do concurso base em 5 trincas: S1..S5
+ * 2. Divide as 10 ausentes do concurso base em 5 duplas: A1..A5
+ * 3. Cria 5 superblocos de 5 dezenas fundindo Bloco[i] = Si + Ai
+ * 4. Combina os 5 blocos 3 a 3: C(5, 3) = 10 jogos de 15 dezenas (ou 9 se excluído o menor score)
+ * 5. Garante matematicamente 100% das 25 dezenas, exatamente 9 repetidas + 6 ausentes por bilhete
+ * 6. Otimização Monte Carlo (200 iterações) na montagem dos blocos para maximizar a Zona de Ouro
+ *    (Soma 190-210, Paridade 7P/8I ou 8P/7I, Primos 5-6, Cruz 5-6, Bola 1 <= 2 e Bola 15 >= 24)
+ */
+export interface Desdobramento25BlocosOptions {
+  baseDraw?: LotofacilDraw;
+  maxGames?: 9 | 10;
+  iterations?: number;
+  aiScores?: number[];
+}
+
+export function generateDesdobramento25Blocos(
+  options: Desdobramento25BlocosOptions = {}
+): GameTicket[] {
+  const baseDraw = options.baseDraw || CONCURSO_ATUAL;
+  const maxGames = options.maxGames ?? 10;
+  const iterations = options.iterations ?? 200;
+  const aiScores = options.aiScores;
+
+  const sorteadas = [...baseDraw.dezenas].sort((a, b) => a - b);
+  const ausentes: number[] = [];
+  for (let n = 1; n <= 25; n++) {
+    if (!sorteadas.includes(n)) ausentes.push(n);
+  }
+
+  // Combinações C(5, 3) dos 5 superblocos (índices 0 a 4)
+  const blockTrios: [number, number, number][] = [
+    [0, 1, 2],
+    [0, 1, 3],
+    [0, 1, 4],
+    [0, 2, 3],
+    [0, 2, 4],
+    [0, 3, 4],
+    [1, 2, 3],
+    [1, 2, 4],
+    [1, 3, 4],
+    [2, 3, 4],
+  ];
+
+  let bestScore = -Infinity;
+  let bestBlocks: number[][] = [];
+
+  // Otimização Monte Carlo (200 iterações)
+  for (let iter = 0; iter < iterations; iter++) {
+    const shuffledSort = [...sorteadas].sort(() => Math.random() - 0.5);
+    const shuffledAus = [...ausentes].sort(() => Math.random() - 0.5);
+
+    const candidateBlocks: number[][] = [];
+    for (let i = 0; i < 5; i++) {
+      const trioSort = shuffledSort.slice(i * 3, i * 3 + 3);
+      const duoAus = shuffledAus.slice(i * 2, i * 2 + 2);
+      candidateBlocks.push([...trioSort, ...duoAus].sort((a, b) => a - b));
+    }
+
+    let iterationScore = 0;
+    let validCount = 0;
+
+    for (const trio of blockTrios) {
+      const ticketNums = Array.from(
+        new Set([
+          ...candidateBlocks[trio[0]],
+          ...candidateBlocks[trio[1]],
+          ...candidateBlocks[trio[2]],
+        ])
+      ).sort((a, b) => a - b);
+
+      if (ticketNums.length !== 15) continue;
+
+      const a = analyzeTicket(ticketNums, baseDraw.dezenas, aiScores);
+      let tScore = a.scoreIA;
+
+      // Pontuação calibrada da Zona de Ouro
+      if (a.soma >= 190 && a.soma <= 210) tScore += 18;
+      else if (a.soma >= 185 && a.soma <= 215) tScore += 10;
+      else if (a.soma < 180 || a.soma > 220) tScore -= 20;
+
+      if ((a.pares === 7 && a.impares === 8) || (a.pares === 8 && a.impares === 7)) {
+        tScore += 15;
+      } else if (a.pares === 6 && a.impares === 9) {
+        tScore += 8;
+      }
+
+      if (a.primos === 5 || a.primos === 6) {
+        tScore += 14;
+      }
+
+      const ticketCruz = a.cruz ?? 0;
+      if (ticketCruz >= 5 && ticketCruz <= 6) {
+        tScore += 12;
+      } else if (ticketCruz >= 4 && ticketCruz <= 7) {
+        tScore += 5;
+      }
+
+
+      if (ticketNums[0] === 1 || ticketNums[0] === 2) tScore += 8;
+      else if (ticketNums[0] <= 4) tScore += 4;
+      else tScore -= 12;
+
+      if (ticketNums[14] === 24 || ticketNums[14] === 25) tScore += 8;
+      else if (ticketNums[14] >= 22) tScore += 4;
+      else tScore -= 12;
+
+      if (isHistorical15Collision(ticketNums)) tScore -= 80;
+      if (hasViciousVisualPattern(ticketNums).isVicious) tScore -= 50;
+
+      iterationScore += tScore;
+      validCount++;
+    }
+
+    if (validCount === 10 && iterationScore > bestScore) {
+      bestScore = iterationScore;
+      bestBlocks = candidateBlocks;
+    }
+  }
+
+  // Gera os 10 bilhetes finais a partir dos melhores blocos encontrados
+  const ticketsWithAnalysis = blockTrios.map((trio) => {
+    const ticketNums = Array.from(
+      new Set([
+        ...bestBlocks[trio[0]],
+        ...bestBlocks[trio[1]],
+        ...bestBlocks[trio[2]],
+      ])
+    ).sort((a, b) => a - b);
+    const analysis = analyzeTicket(ticketNums, baseDraw.dezenas, aiScores);
+    return { ticketNums, analysis };
+  });
+
+  // Ordena por score decrescente
+  ticketsWithAnalysis.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
+
+  // Se solicitado 9 jogos, exclui o jogo com menor pontuação
+  const selectedTickets = maxGames === 9 ? ticketsWithAnalysis.slice(0, 9) : ticketsWithAnalysis;
+
+  return selectedTickets.map((item, idx) => ({
+    id: `ticket-25blocos-${idx + 1}`,
+    index: idx + 1,
+    ...item.analysis,
+    tags: [
+      'Cobertura 25 Dezenas',
+      '9 Repetidas + 6 Ausentes',
+      item.analysis.scoreIA >= 85 ? 'Zona de Ouro Pro' : 'Blocos Cruzados',
+    ],
+  }));
+}
+
+
+/**
  * Standard Presets for Lotofácil Desdobramentos
  */
 export const FECHAMENTO_PRESETS: Record<
@@ -939,6 +1286,15 @@ export const FECHAMENTO_PRESETS: Record<
     reducaoPercentual: 99.9,
     descricao: 'Cobertura de 84% de todo o volante de 25 dezenas com investimento acessível.',
   },
+  'desdobramento_25_blocos': {
+    nome: 'Cobertura Total 25 Dezenas (10 Jogos - Blocos Cruzados)',
+    dezenasNecessarias: 25,
+    jogosMaximos: 10,
+    garantia: '100% Volante (9 Repetidas + 6 Ausentes)',
+    condicao: 'Todos os 10 jogos com 9 repetidas e 6 ausentes cobrindo as 25 dezenas',
+    reducaoPercentual: 99.99,
+    descricao: 'Divide as 15 sorteadas em 5 trincas e 10 ausentes em 5 duplas com otimização Monte Carlo (200 iterações) na Zona de Ouro.',
+  },
   'surpresinha_inteligente': {
     nome: 'Surpresinha Algorítmica Inteligente (IA & Filtros)',
     dezenasNecessarias: 15,
@@ -949,6 +1305,7 @@ export const FECHAMENTO_PRESETS: Record<
     descricao: 'Gera bilhetes de 15 dezenas calibrados diretamente pela Inteligência Artificial.',
   },
 };
+
 
 export const VALOR_APOSTA_LOTOFACIL = 3.50;
 
@@ -1061,6 +1418,15 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   repetidasMin: 6, // Alargamento da janela de repetidas para 6 a 10 dezenas (absorve quebras e transições de ciclo)
   repetidasMax: 10,
   maxConsecutivas: 6, // Permite sequências de até 6 números consecutivos (ex: blocos 01-04, 16-18, 14-19)
+  cruzMin: 4, // Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
+  cruzMax: 7,
+  bola1Min: 1, // Bola 1 deve ser 1, 2, 3 ou 4 (idealmente 1 ou 2)
+  bola1Max: 4,
+  bola15Min: 22, // Bola 15 deve ser 22, 23, 24 ou 25 (idealmente 24 ou 25)
+  bola15Max: 25,
+  apenasZonaDeOuroPrimos: false, // Quando ativo restringe estritamente para 5 ou 6 primos (>70% histórico)
+  antiColisaoHistoricaAtiva: true, // Bloqueia combinações 100% idênticas a concursos anteriores da Caixa
+  antiPadraoViciadoAtivo: true, // Veta linhas/colunas cheias e sequências em PA óbvias
   dezenasFixas: [],
   dezenasExcluidas: [],
   curvaAbcAtiva: false,

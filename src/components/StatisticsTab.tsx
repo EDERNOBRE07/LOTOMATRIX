@@ -5,8 +5,11 @@ import {
   PARIDADE_HISTORICA,
   PRIMOS_HISTORICA,
   CONCURSO_ATUAL,
+  RECENT_DRAWS,
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { D3SimuladorHistoricoIntervaloChart } from './D3SimuladorHistoricoIntervaloChart';
+
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
 import { QuentesFriasModule } from './QuentesFriasModule';
@@ -108,9 +111,11 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'simulador_historico_d3'
     | 'custo_retorno_acumulado'
     | 'distribuicao_probabilidade'
     | 'curva_somas_d3'
+
     | 'taxa_diversidade'
     | 'radar_fourier'
     | 'atrasos'
@@ -182,6 +187,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
+            onClick={() => setActiveSubTab('simulador_historico_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'simulador_historico_d3'
+                ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4 text-emerald-300" />
+            <span>Simulador Histórico D3.js</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              10 A 50 CONCURSOS
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('custo_retorno_acumulado')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'custo_retorno_acumulado'
@@ -195,6 +215,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               BREAKEVEN & ROI
             </span>
           </button>
+
 
           <button
             onClick={() => setActiveSubTab('distribuicao_probabilidade')}
@@ -1650,8 +1671,20 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
+      {/* SUBTAB DEDICADA: SIMULADOR HISTÓRICO COM D3.JS (10 A 50 CONCURSOS) */}
+      {activeSubTab === 'simulador_historico_d3' && (
+        <div className="space-y-6">
+          <D3SimuladorHistoricoIntervaloChart
+            tickets={savedTickets}
+            historicalDraws={RECENT_DRAWS}
+            fechamentoNome={fechamentoNome}
+          />
+        </div>
+      )}
+
       {/* SUBTAB DEDICADA: CUSTO VS RETORNO FINANCEIRO ACUMULADO (BREAKEVEN & RENTABILIDADE) */}
       {activeSubTab === 'custo_retorno_acumulado' && (
+
         <div className="space-y-6">
           <GraficoCustoRetornoAcumulado
             latestDraw={latestDraw}

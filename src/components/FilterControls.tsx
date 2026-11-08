@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilterCriteria, LotofacilDraw } from '../types/lotofacil';
-import { CONCURSO_ATUAL, FIBONACCI } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, FIBONACCI, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { DEFAULT_FILTERS } from '../services/combinatorics';
 import { soundService } from '../services/soundAlert';
 import {
@@ -641,6 +641,110 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 />
               </div>
             </div>
+
+            {/* 2.5 FILTRO GEOMÉTRICO: CRUZ DA LOTOFÁCIL (9 DEZENAS CENTRAIS) */}
+            <div className="bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border border-blue-500/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Square className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
+                </div>
+                <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded border border-blue-400/40">
+                  {filters.cruzMin ?? 4}–{filters.cruzMax ?? 7} dezenas
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Linha 3 e Coluna 3: <span className="font-mono text-blue-300 font-semibold">{CRUZ_DEZENAS.map(n => n.toString().padStart(2, '0')).join(', ')}</span>.
+              </p>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => update({ cruzMin: 5, cruzMax: 6 })}
+                    className={`px-2 py-1 text-[10px] rounded font-bold border transition cursor-pointer ${
+                      filters.cruzMin === 5 && filters.cruzMax === 6
+                        ? 'bg-blue-500 text-slate-950 border-blue-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    5 a 6 (Zona Ouro)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ cruzMin: 4, cruzMax: 7 })}
+                    className={`px-2 py-1 text-[10px] rounded font-bold border transition cursor-pointer ${
+                      filters.cruzMin === 4 && filters.cruzMax === 7
+                        ? 'bg-blue-500 text-slate-950 border-blue-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    4 a 7 (Padrão)
+                  </button>
+                </div>
+
+                <div className="flex justify-between text-[10px] text-slate-400">
+                  <span>Mín: {filters.cruzMin ?? 4}</span>
+                  <span>Máx: {filters.cruzMax ?? 7}</span>
+                </div>
+                <input
+                  type="range"
+                  min="3"
+                  max="8"
+                  value={filters.cruzMax ?? 7}
+                  onChange={(e) => update({ cruzMax: parseInt(e.target.value, 10) })}
+                  className="w-full accent-blue-400 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* 2.6 FILTRO DE BOLAS EXTREMAS (BOLA 1 E BOLA 15) & REFINAMENTO PRIMOS */}
+            <div className="bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 p-4 rounded-2xl border border-emerald-500/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">Extremidades (Bola 1 / 15)</span>
+                </div>
+                <span className="font-mono text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                  B1:[01-04] • B15:[22-25]
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Evita sequências viciadas e garante abertura em 01-04 e encerramento em 22-25.
+              </p>
+
+              <div className="space-y-2 pt-1 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-300">Primos Zona de Ouro (5-6):</span>
+                  <button
+                    type="button"
+                    onClick={() => update({ apenasZonaDeOuroPrimos: !filters.apenasZonaDeOuroPrimos })}
+                    className={`px-2 py-0.5 text-[10px] rounded font-bold border transition cursor-pointer ${
+                      filters.apenasZonaDeOuroPrimos
+                        ? 'bg-rose-500 text-slate-950 border-rose-400'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {filters.apenasZonaDeOuroPrimos ? '✓ 5 a 6 Primos' : '4 a 7 Primos'}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-300">Anti-Colisão 15 Pts:</span>
+                  <button
+                    type="button"
+                    onClick={() => update({ antiColisaoHistoricaAtiva: !filters.antiColisaoHistoricaAtiva })}
+                    className={`px-2 py-0.5 text-[10px] rounded font-bold border transition cursor-pointer ${
+                      filters.antiColisaoHistoricaAtiva !== false
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {filters.antiColisaoHistoricaAtiva !== false ? '✓ Ativo' : 'Inativo'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
 
             {/* 2.5 SELETOR DE CURVA ABC (CLASSE A - 80% FREQUÊNCIA HISTÓRICA) */}
             <div className="bg-gradient-to-br from-amber-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-amber-500/40 space-y-3 sm:col-span-2">

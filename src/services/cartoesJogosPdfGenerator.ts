@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
 import { FechamentoExportMeta } from './txtExportFormatter';
+import { CRUZ_DEZENAS } from '../data/lotofacilData';
 
 export interface CartoesExportOptions {
   tickets: GameTicket[];
@@ -210,15 +211,17 @@ function renderSingleBetCard(
   const impares = 15 - pares;
   const moldura = ticket.moldura ?? ticket.dezenas.filter((n) => [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25].includes(n)).length;
   const primos = ticket.primos ?? ticket.dezenas.filter((n) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length;
+  const cruz = ticket.cruz ?? ticket.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.2);
   doc.setTextColor(71, 85, 105);
   doc.text(
-    `Soma: ${soma} | Paridade: ${pares}P / ${impares}I | Moldura: ${moldura} | Primos: ${primos}`,
+    `Soma: ${soma} | Paridade: ${pares}P/${impares}I | Moldura: ${moldura} | Cruz: ${cruz} | Primos: ${primos}`,
     x + 3.5,
     footerY + 9
   );
+
 
   // Linha com os 15 números em texto para conferência rápida
   const dezenasLinha = [...ticket.dezenas]
