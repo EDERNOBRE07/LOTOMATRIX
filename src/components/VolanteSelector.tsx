@@ -271,7 +271,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     current = current.filter((n) => !excludedNumbers.includes(n));
 
     if (current.length >= targetCount) {
-      runRollingAnimation(current.slice(0, targetCount).sort((a, b) => a - b), 'Auto-completar Volante');
+      runRollingAnimation(current.slice(0, targetCount).sort((a, b) => a - b), 'Auto Completar');
       return;
     }
 
@@ -287,7 +287,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       .map((s) => s.numero);
 
     const fullSet = [...current, ...candidates].sort((a, b) => a - b);
-    runRollingAnimation(fullSet, `Auto-completar (${fullSet.length} Dezenas)`);
+    runRollingAnimation(fullSet, 'Auto Completar');
   };
 
   // 2. Gerar: calcula um pool ideal com animação rolling numbers
@@ -359,7 +359,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             title="Auto-completar as dezenas restantes com animação mecânica de rolling numbers antes de estabilizar"
           >
             <Sparkles className="w-3.5 h-3.5 fill-current text-slate-950" />
-            <span>Auto-completar</span>
+            <span>Auto Completar</span>
           </button>
 
           {/* Click Mode Toggle */}

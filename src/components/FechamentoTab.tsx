@@ -37,6 +37,7 @@ import { FechamentoErrorLogsModal } from './FechamentoErrorLogsModal';
 import { logFechamentoError, getFechamentoErrorLogs } from '../services/fechamentoErrorLogger';
 import { fechamentoWorkerClient, CombinatoricsProgress } from '../services/fechamentoWorkerClient';
 import { exportFechamentoToPdf, exportFechamentoToCsv } from '../services/fechamentoExportService';
+import { exportCartoesJogosToPdf } from '../services/cartoesJogosPdfGenerator';
 import { checkAndAuditUnresolvedCrash } from '../services/fechamentoPreflightSnapshot';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
@@ -87,6 +88,7 @@ import {
   Cpu,
   FileText,
   FileSpreadsheet,
+  Printer,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -604,15 +606,46 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   };
 
   // Modelo de Prognóstico Ativo
-  const [activeModel, setActiveModel] = useState<string>(
-    '⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)'
-  );
+  const [activeModel, setActiveModel] = useState<string>('Fechamento Clássico');
   // Sugestão Estratégica Incorporada na Matriz (para composição do nome em Jogos Salvos)
   const [appliedSuggestionName, setAppliedSuggestionName] = useState<string | null>(null);
 
+  // Mapeamento canônico rigoroso dos nomes conforme diretriz:
+  // Modelos de Matriz: 'Fechamento Clássico', 'Top 18 IA', 'Insights de Filtro IA', 'Fechar Ciclo', 'Equilíbrio Canônico'
+  // Sugestões Estratégicas: 'Curva ABC', 'Top 18 IA', 'Pares de Ouro', 'Preditor Real', 'Insights IA', 'Garantir Filtros'
+  // Outras Funções: 'Auto Completar', 'Top 15 Quentes', 'Tendência de Ciclo'
+  const getCanonicalFechamentoTypeName = (): string => {
+    if (appliedSuggestionName) {
+      if (appliedSuggestionName === 'Curva ABC' || appliedSuggestionName.includes('Curva ABC')) return 'Curva ABC';
+      if (appliedSuggestionName === 'Top 18 IA' || appliedSuggestionName.includes('Top 18')) return 'Top 18 IA';
+      if (appliedSuggestionName === 'Pares de Ouro' || appliedSuggestionName.includes('Par')) return 'Pares de Ouro';
+      if (appliedSuggestionName === 'Preditor Real' || appliedSuggestionName.includes('Preditor')) return 'Preditor Real';
+      if (appliedSuggestionName === 'Insights IA' || appliedSuggestionName.includes('Insights')) return 'Insights IA';
+      if (appliedSuggestionName === 'Garantir Filtros' || appliedSuggestionName.includes('Garantir')) return 'Garantir Filtros';
+      if (appliedSuggestionName === 'Auto Completar' || appliedSuggestionName.includes('Auto')) return 'Auto Completar';
+      if (appliedSuggestionName === 'Top 15 Quentes' || appliedSuggestionName.includes('Quentes')) return 'Top 15 Quentes';
+      if (appliedSuggestionName === 'Tendência de Ciclo' || appliedSuggestionName.includes('Ciclo')) return 'Tendência de Ciclo';
+    }
+
+    const m = activeModel || strategyName || '';
+    if (m.includes('Insights de Filtro') || m.includes('Insights de Filtros')) return 'Insights de Filtro IA';
+    if (m.includes('Top 18') || (m.includes('Top') && !m.includes('15'))) return 'Top 18 IA';
+    if (m.includes('Fechar Ciclo') || m.includes('Ciclo')) return 'Fechar Ciclo';
+    if (m.includes('Equilíbrio Canônico') || m.includes('Equilibrio')) return 'Equilíbrio Canônico';
+    if (m.includes('Curva ABC')) return 'Curva ABC';
+    if (m.includes('Pares de Ouro') || m.includes('Par de Ouro')) return 'Pares de Ouro';
+    if (m.includes('Preditor Real') || m.includes('Preditor')) return 'Preditor Real';
+    if (m.includes('Insights IA')) return 'Insights IA';
+    if (m.includes('Garantir Filtros')) return 'Garantir Filtros';
+    if (m.includes('Auto Completar') || m.includes('Auto')) return 'Auto Completar';
+    if (m.includes('Top 15 Quentes') || m.includes('Quentes')) return 'Top 15 Quentes';
+    if (m.includes('Tendência de Ciclo')) return 'Tendência de Ciclo';
+
+    return 'Fechamento Clássico';
+  };
+
   const getFullPrognosticoFechamentoName = (): string => {
-    const baseModel = activeModel || strategyName || `Fechamento ${preset?.nome || 'Matriz Pro'}`;
-    const cleanModel = baseModel.replace(/^⚡\s*/, '');
+    const canonicalName = getCanonicalFechamentoTypeName();
     const garantiaStr = preset?.garantia ? ` (${preset.garantia})` : ' (Garantia 14 se 15)';
     const ticketCount = generatedTickets.length > 0 ? generatedTickets.length : (preset?.jogosMaximos || 24);
 
@@ -628,17 +661,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     if (excludedNumbers && excludedNumbers.length > 0) filterTokens.push(`Excl: [${[...excludedNumbers].sort((a,b)=>a-b).join(',')}]`);
 
     const filtersDesc = filterTokens.length > 0 ? ` [Filtros: ${filterTokens.join(' | ')}]` : '';
-    const suggestionDesc = appliedSuggestionName ? ` • Sugestão: ${appliedSuggestionName}` : '';
     const targetConcurso = latestDraw?.concurso ? ` (Para Concurso #${latestDraw.concurso + 1})` : '';
 
-    return `⚡ ${cleanModel} • ${targetCount} Dezenas • ${ticketCount} Jogos${garantiaStr}${filtersDesc}${suggestionDesc}${targetConcurso}`;
+    return `⚡ ${canonicalName} • ${targetCount} Dezenas • ${ticketCount} Jogos${garantiaStr}${filtersDesc}${targetConcurso}`;
   };
 
   const applyStrategyModel = (modelType: string, overrideTargetCount?: number) => {
     const tCount = overrideTargetCount ?? targetCount;
-    setActiveModel(modelType);
+    setAppliedSuggestionName(null);
+    setActiveStrategicBox(null);
 
-    if (modelType.includes('Insights de Filtros da IA') || modelType === 'Insights de Filtros da IA') {
+    if (modelType.includes('Insights de Filtro') || modelType.includes('Insights de Filtros')) {
       let voidPairs = filters.combinacoesVazioExcluidas || [];
       try {
         if (voidPairs.length === 0) {
@@ -690,15 +723,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       });
 
       setSelectedNumbers(calibrated.dezenas);
-      const name = '⚡ Insights de Filtros da IA (Filtros & Fechamento Ideal)';
+      const name = 'Insights de Filtro IA';
       setStrategyName(name);
-      setActiveModel('Insights de Filtros da IA');
+      setActiveModel('Insights de Filtro IA');
       setDocumentMessage(
-        `✓ Modelo "Insights de Filtros da IA" ativado: Fechamento ideal gerado com 100% dos filtros recomendados para o Concurso #${latestDraw.concurso + 1} (${calibrated.motivoAjuste})`
+        `✓ Modelo "Insights de Filtro IA" ativado: Fechamento ideal gerado com 100% dos filtros recomendados para o Concurso #${latestDraw.concurso + 1} (${calibrated.motivoAjuste})`
       );
       soundService.playGoldenZoneSuccessChime();
       setTimeout(() => setDocumentMessage(null), 6000);
-    } else if (modelType.includes('Clássico') || modelType.includes('Documento')) {
+    } else if (modelType.includes('Clássico') || modelType.includes('Classico') || modelType.includes('Documento')) {
       const optimal = buildFilterCompliantPool({
         targetCount: tCount,
         filters,
@@ -711,11 +744,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers,
       });
       setSelectedNumbers(optimal.dezenas);
-      const name = '⚡ Fechamento Clássico (Filtros & Proporções Canônicas)';
+      const name = 'Fechamento Clássico';
       setStrategyName(name);
+      setActiveModel('Fechamento Clássico');
       setDocumentMessage(`Fechamento Clássico aplicado com filtros ativos: ${optimal.motivoAjuste}`);
       setTimeout(() => setDocumentMessage(null), 6000);
-    } else if (modelType === 'Top 18 IA' || (modelType.includes('Top') && !modelType.includes('Insights'))) {
+    } else if (modelType.includes('Top 18') || (modelType.includes('Top') && !modelType.includes('15'))) {
       const sorted = [...dynamicStats]
         .sort((a, b) => {
           const scoreA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes / 24 + a.atrasoAtual * 5;
@@ -726,11 +760,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         .map((s) => s.numero)
         .sort((a, b) => a - b);
       setSelectedNumbers(sorted);
-      const name = tCount === 18 ? 'Top 18 IA' : `Top 18 IA (Top ${tCount} Dezenas)`;
+      const name = 'Top 18 IA';
       setStrategyName(name);
-      setDocumentMessage(`Top ${tCount} IA aplicado: dezenas ranqueadas com maior índice preditivo.`);
+      setActiveModel('Top 18 IA');
+      setDocumentMessage(`Top 18 IA aplicado: dezenas ranqueadas com maior índice preditivo.`);
       setTimeout(() => setDocumentMessage(null), 5000);
-    } else if (modelType.includes('Fechar Ciclo')) {
+    } else if (modelType.includes('Fechar Ciclo') || modelType.includes('Ciclo')) {
       const cycleFocus = Array.from(
         new Set([
           2, 7, 10,
@@ -742,17 +777,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         .slice(0, tCount)
         .sort((a, b) => a - b);
       setSelectedNumbers(cycleFocus);
-      const name = 'Fechar Ciclo (2, 7, 10)';
+      const name = 'Fechar Ciclo';
       setStrategyName(name);
-      setDocumentMessage(`Modelo Fechar Ciclo (2, 7, 10) aplicado: foco na conclusão do ciclo atual da Lotofácil.`);
+      setActiveModel('Fechar Ciclo');
+      setDocumentMessage(`Modelo Fechar Ciclo aplicado: foco na conclusão do ciclo atual da Lotofácil.`);
       setTimeout(() => setDocumentMessage(null), 5000);
-    } else if (modelType.includes('Equilíbrio')) {
+    } else if (modelType.includes('Equilíbrio') || modelType.includes('Equilibrio')) {
       const eq = [1, 2, 3, 5, 7, 8, 10, 11, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25]
         .slice(0, tCount)
         .sort((a, b) => a - b);
       setSelectedNumbers(eq);
       const name = 'Equilíbrio Canônico';
       setStrategyName(name);
+      setActiveModel('Equilíbrio Canônico');
       setDocumentMessage(`Equilíbrio Canônico aplicado: harmonia exata de moldura, miolo, primos e fibonacci.`);
       setTimeout(() => setDocumentMessage(null), 5000);
     }
@@ -761,7 +798,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 1. Aplicar Top 18 no Fechamento
   const handleApplyTop18 = () => {
     setActiveStrategicBox('top_18');
-    setAppliedSuggestionName('Top 18 IA (Calor & Probabilidade)');
+    setAppliedSuggestionName('Top 18 IA');
     setMode('18_14_15');
     const sorted18 = [...dynamicStats]
       .sort((a, b) => {
@@ -774,9 +811,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       .sort((a, b) => a - b);
 
     setSelectedNumbers(sorted18);
-    const fullName = `${activeModel || 'Top 18 IA'} • Sugestão: Top 18 IA (Calor & Probabilidade)`;
-    setStrategyName(fullName);
-    setDocumentMessage('✓ Matriz Pro de 18 Dezenas (Top 18 IA) aplicada e incorporada ao nome do Fechamento!');
+    setStrategyName('Top 18 IA');
+    setActiveModel('Top 18 IA');
+    setDocumentMessage('✓ Top 18 IA aplicado e incorporado ao nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -784,16 +821,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 2. Aplicar Pares de Ouro
   const handleApplyParesDeOuro = () => {
     setActiveStrategicBox('pares_ouro');
-    setAppliedSuggestionName('Par de Ouro [11, 20]');
+    setAppliedSuggestionName('Pares de Ouro');
     const goldenPair = [11, 20];
     setFixedNumbers((prev) => Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b));
     setSelectedNumbers((prev) => {
       const merged = Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b);
       return merged.slice(0, targetCount);
     });
-    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Par de Ouro [11, 20]`;
-    setStrategyName(fullName);
-    setDocumentMessage('✓ Par de Ouro [11, 20] fixado e incorporado ao nome do Fechamento!');
+    setStrategyName('Pares de Ouro');
+    setActiveModel('Pares de Ouro');
+    setDocumentMessage('✓ Pares de Ouro [11, 20] fixado e incorporado ao nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -801,7 +838,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 3. Aplicar Preditor em Tempo Real da Lotofácil
   const handleApplyRealTimePredictor = () => {
     setActiveStrategicBox('preditor_real');
-    setAppliedSuggestionName('Preditor em Tempo Real');
+    setAppliedSuggestionName('Preditor Real');
     const ranked = [...dynamicStats]
       .sort((a, b) => {
         const probA = aiPrediction?.scores ? aiPrediction.scores[a.numero - 1] : a.vezes;
@@ -813,9 +850,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       .sort((a, b) => a - b);
 
     setSelectedNumbers(ranked);
-    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Preditor em Tempo Real`;
-    setStrategyName(fullName);
-    setDocumentMessage(`✓ Sugestões do Preditor em Tempo Real incorporadas na matriz de ${targetCount} dezenas e no nome do fechamento!`);
+    setStrategyName('Preditor Real');
+    setActiveModel('Preditor Real');
+    setDocumentMessage(`✓ Preditor Real incorporado na matriz de ${targetCount} dezenas e no nome do fechamento!`);
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -823,7 +860,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 4. Aplicar Insights Diários da IA (Carrega TODOS os Filtros Presetados e calibra a matriz 5x5)
   const handleApplyDailyAIInsights = () => {
     setActiveStrategicBox('insights_ia');
-    setAppliedSuggestionName('Insights Diários da IA (Filtros Presetados)');
+    setAppliedSuggestionName('Insights IA');
     let voidPairs = filters.combinacoesVazioExcluidas || [];
     try {
       if (voidPairs.length === 0) {
@@ -881,10 +918,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     });
 
     setSelectedNumbers(calibrated.dezenas);
-    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Insights Diários da IA (Filtros Presetados)`;
-    setStrategyName(fullName);
+    setStrategyName('Insights IA');
+    setActiveModel('Insights IA');
     setDocumentMessage(
-      `✓ Insights Diários da IA: todos os filtros presetados carregados e incorporados no nome do Fechamento!`
+      `✓ Insights IA: todos os filtros presetados carregados e incorporados no nome do Fechamento!`
     );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 6000);
@@ -893,7 +930,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 5. Garantir Incorporação dos Filtros Canônicos
   const handleEnsureFilters = () => {
     setActiveStrategicBox('garantir_filtros');
-    setAppliedSuggestionName('Filtros Canônicos (Zona de Ouro)');
+    setAppliedSuggestionName('Garantir Filtros');
     const updatedFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 185,
@@ -913,9 +950,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasExcluidas: excludedNumbers,
     };
     handleFiltersChange(updatedFilters, true);
-    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Filtros Canônicos (Zona de Ouro)`;
-    setStrategyName(fullName);
-    setDocumentMessage('✓ Filtros Canônicos calibrados na Zona de Ouro e incorporados no nome do Fechamento!');
+    setStrategyName('Garantir Filtros');
+    setActiveModel('Garantir Filtros');
+    setDocumentMessage('✓ Garantir Filtros calibrado na Zona de Ouro e incorporado no nome do Fechamento!');
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -923,7 +960,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // 6. Aplicar Curva ABC (Classe A - 80% Frequência Histórica)
   const handleApplyCurvaAbcClasseA = () => {
     setActiveStrategicBox('curva_abc');
-    setAppliedSuggestionName('Curva ABC (Classe A - 80% Pareto)');
+    setAppliedSuggestionName('Curva ABC');
     const updatedFilters: FilterCriteria = {
       ...filters,
       curvaAbcAtiva: true,
@@ -933,10 +970,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
     handleFiltersChange(updatedFilters, true);
-    const fullName = `${activeModel || `Modelo ${preset.nome}`} • Sugestão: Curva ABC (Classe A - 80% Pareto)`;
-    setStrategyName(fullName);
+    setStrategyName('Curva ABC');
+    setActiveModel('Curva ABC');
     setDocumentMessage(
-      `✓ Dezenas da Classe A aplicadas no volante 5×5 e incorporadas no nome do Fechamento!`
+      `✓ Curva ABC aplicada no volante 5×5 e incorporada no nome do Fechamento!`
     );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
@@ -1100,7 +1137,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dataCriacao: new Date().toLocaleString('pt-BR'),
         concurso: latestDraw.concurso,
         dataConcurso: latestDraw.data,
-        tipoFechamento: fechamentoType,
+        tipoFechamento: getCanonicalFechamentoTypeName(),
         modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} (${(activePool.length > 0 ? activePool : selectedNumbers).length} Dezenas • ${ticketsToSave.length} Jogos • Garantia ${preset?.garantia || '14 Pontos (com 35% de chance de 15)'}) [Filtros: Soma ${f.somaMin}-${f.somaMax} | Pares ${f.paresMin}-${f.paresMax} | Moldura ${f.molduraMin}-${f.molduraMax} | Primos ${f.primosMin}-${f.primosMax} | Fib ${f.fibonacciMin}-${f.fibonacciMax} | Rep ${f.repetidasMin}-${f.repetidasMax}]`,
         universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
         dezenasFixas: metaData.fixedNumbers || fixedNumbers || [],
@@ -1496,6 +1533,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     } catch (err: any) {
       console.error('[Export PDF] Erro:', err);
       setDocumentMessage('⚠️ Falha ao gerar arquivo PDF: ' + (err?.message || 'Erro desconhecido'));
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
+
+  const handleExportCartoesPDF = () => {
+    if (generatedTickets.length === 0) return;
+    try {
+      exportCartoesJogosToPdf({
+        tickets: generatedTickets,
+        latestDraw,
+        meta: getCurrentExportMeta(),
+        fechamentoNome: getCanonicalFechamentoTypeName(),
+      });
+      soundService.playGoldenZoneSuccessChime();
+      setDocumentMessage('✓ Cartões de Jogos da Lotofácil (layout oficial 5×5) gerados em PDF para impressão!');
+      setTimeout(() => setDocumentMessage(null), 5000);
+    } catch (err: any) {
+      console.error('[Export Cartões PDF] Erro:', err);
+      setDocumentMessage('⚠️ Falha ao gerar cartões PDF: ' + (err?.message || 'Erro desconhecido'));
       setTimeout(() => setDocumentMessage(null), 5000);
     }
   };
@@ -3007,6 +3063,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               >
                 <FileText className="w-3.5 h-3.5 text-white" />
                 <span>Exportar PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCartoesPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/25 ring-1 ring-amber-300 active:scale-95"
+                title="Imprimir cartões de jogos no padrão oficial da Lotofácil (grid 5x5 com marcas de corte) prontos para aposta"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-950" />
+                <span>Imprimir Cartões (PDF)</span>
               </button>
               <button
                 type="button"

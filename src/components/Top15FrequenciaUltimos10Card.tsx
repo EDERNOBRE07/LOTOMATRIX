@@ -108,7 +108,7 @@ export const Top15FrequenciaUltimos10Card: React.FC<Top15FrequenciaUltimos10Card
     } else if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('lotosniper-apply-numbers-to-fechamento', {
-          detail: { numbers: top15Numbers, strategyName: 'Top 15 Mais Frequentes (Últimos 10 Concursos)' },
+          detail: { numbers: top15Numbers, strategyName: 'Top 15 Quentes' },
         })
       );
     }

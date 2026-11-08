@@ -98,6 +98,8 @@ const CustomConfidenceTooltip: React.FC<CustomTooltipProps> = ({ active, payload
   return null;
 };
 
+export type RiskLevel = 'conservador' | 'equilibrado' | 'ousado';
+
 export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
@@ -108,32 +110,92 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   onApplyRecommendation,
 }) => {
   const [selectedGoldenBetIndex, setSelectedGoldenBetIndex] = useState<number>(0);
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>(() => {
+    try {
+      const saved = localStorage.getItem('lotosniper_ai_risk_level');
+      if (saved === 'conservador' || saved === 'equilibrado' || saved === 'ousado') {
+        return saved;
+      }
+    } catch {}
+    return 'equilibrado';
+  });
 
-  const scores =
-    prediction?.scores ||
-    dynamicStats.map((s) => {
-      let sc = 50;
-      if (cyclePendingNumbers.includes(s.numero)) sc = 95;
-      else if ([11, 20, 25, 10, 13, 24, 1, 4].includes(s.numero)) sc = 82;
-      else if (latestDraw.dezenas.includes(s.numero)) sc = 68;
-      return sc;
+  const handleRiskChange = (lvl: RiskLevel) => {
+    setRiskLevel(lvl);
+    try {
+      localStorage.setItem('lotosniper_ai_risk_level', lvl);
+    } catch {}
+  };
+
+  const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
+
+  // Cálculo de pesos baseado no nível de risco selecionado:
+  // Conservador: 80% tendência histórica recente / 20% padrão Fibonacci
+  // Equilibrado: 50% tendência histórica recente / 50% padrão Fibonacci
+  // Ousado: 25% tendência histórica recente / 75% padrão Fibonacci & ciclos
+  const weights = React.useMemo(() => {
+    switch (riskLevel) {
+      case 'conservador':
+        return { hist: 0.8, fibo: 0.2, label: '80% Histórico / 20% Fibonacci' };
+      case 'ousado':
+        return { hist: 0.25, fibo: 0.75, label: '25% Histórico / 75% Fibonacci' };
+      case 'equilibrado':
+      default:
+        return { hist: 0.5, fibo: 0.5, label: '50% Histórico / 50% Fibonacci' };
+    }
+  }, [riskLevel]);
+
+  const scores = React.useMemo(() => {
+    const maxVezes = Math.max(...dynamicStats.map((s) => s.vezes), 1);
+
+    return Array.from({ length: 25 }, (_, i) => {
+      const num = i + 1;
+      const stat = dynamicStats.find((s) => s.numero === num);
+      const isCycle = cyclePendingNumbers.includes(num);
+      const isRecentDraw = latestDraw.dezenas.includes(num);
+      const isFibonacci = FIBONACCI_NUMBERS.includes(num);
+
+      // Score de tendência histórica recente (0-100)
+      const freqScore = stat ? (stat.vezes / maxVezes) * 70 : 45;
+      const repScore = isRecentDraw ? 25 : 10;
+      const cycleHistScore = isCycle ? 15 : 0;
+      const histScore = Math.min(98, freqScore + repScore + cycleHistScore);
+
+      // Score de padrão Fibonacci & aceleração de quebra (0-100)
+      let fiboScore = 40;
+      if (isFibonacci) {
+        fiboScore = 88;
+        if ([1, 2, 3, 5].includes(num)) fiboScore += 6;
+      }
+      if (isCycle) fiboScore = Math.max(fiboScore, 96);
+      if ([11, 20, 25, 10, 13, 24].includes(num)) fiboScore += 10;
+
+      // Ponderação canônica conforme riskLevel
+      const blended = weights.hist * histScore + weights.fibo * fiboScore;
+      return Math.round(Math.min(99, Math.max(35, blended)));
+    });
+  }, [dynamicStats, cyclePendingNumbers, latestDraw.dezenas, weights]);
+
+  const recomendadas18 = React.useMemo(() => {
+    // Ranqueia dezenas 1 a 25 pelo score calculado
+    const ranked = Array.from({ length: 25 }, (_, i) => ({
+      numero: i + 1,
+      score: scores[i],
+    })).sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.numero - b.numero;
     });
 
-  const optimalFallback = buildOptimal18Pool(
-    latestDraw,
-    dynamicStats,
-    cyclePendingNumbers,
-    9,
-    9
-  );
+    return ranked.slice(0, 18).map((r) => r.numero).sort((a, b) => a - b);
+  }, [scores]);
 
-  const recomendadas18 = prediction?.dezenasRecomendadas18 || optimalFallback.dezenas18;
-
-  const goldenBets = prediction?.dezenasRecomendadas15_Ouro || [
-    recomendadas18.slice(0, 15),
-    [...recomendadas18.slice(1, 15), recomendadas18[0]].sort((a, b) => a - b),
-    [...recomendadas18.slice(2, 16), recomendadas18[1]].sort((a, b) => a - b),
-  ];
+  const goldenBets = React.useMemo(() => {
+    return [
+      recomendadas18.slice(0, 15),
+      [...recomendadas18.slice(1, 15), recomendadas18[0]].sort((a, b) => a - b),
+      [...recomendadas18.slice(3, 18)].sort((a, b) => a - b),
+    ];
+  }, [recomendadas18]);
 
   const scoresMap = React.useMemo(() => {
     const map: { [num: number]: number } = {};
@@ -236,6 +298,105 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* MENU DE CONFIGURAÇÃO: NÍVEL DE RISCO DA PREDIÇÃO IA */}
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <Compass className="w-5 h-5 text-amber-400" />
+              <h3 className="text-sm font-bold text-white">
+                Menu de Configuração: Nível de Risco da Predição
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Ajuste o perfil de calibração matemática entre o <span className="text-amber-300 font-semibold">Padrão Fibonacci</span> e a <span className="text-emerald-300 font-semibold">Tendência Histórica Recente</span>.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+            <span className="text-[10px] text-slate-400 font-mono px-2">Ponderação Ativa:</span>
+            <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+              {weights.label}
+            </span>
+          </div>
+        </div>
+
+        {/* Seletores de Nível de Risco */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {/* Conservador */}
+          <button
+            type="button"
+            onClick={() => handleRiskChange('conservador')}
+            className={`p-3.5 rounded-xl border text-left transition cursor-pointer relative ${
+              riskLevel === 'conservador'
+                ? 'bg-emerald-500/15 border-emerald-400 ring-2 ring-emerald-400/40 shadow-lg shadow-emerald-500/15'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className={`w-4 h-4 ${riskLevel === 'conservador' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                <span className="text-xs font-bold text-white">Conservador</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                80% / 20%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Prioriza 80% a frequência dos últimos sorteios e a repetição de 9 sorteadas do Concurso #{latestDraw.concurso}, minimizando volatilidade.
+            </p>
+          </button>
+
+          {/* Equilibrado */}
+          <button
+            type="button"
+            onClick={() => handleRiskChange('equilibrado')}
+            className={`p-3.5 rounded-xl border text-left transition cursor-pointer relative ${
+              riskLevel === 'equilibrado'
+                ? 'bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/40 shadow-lg shadow-amber-500/15'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className={`w-4 h-4 ${riskLevel === 'equilibrado' ? 'text-amber-400' : 'text-slate-400'}`} />
+                <span className="text-xs font-bold text-white">Equilibrado (Recomendado)</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                50% / 50%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Equilíbrio harmônico entre a proporção áurea de Fibonacci e as oscilações de curto prazo para cobrir 14 e 15 pontos.
+            </p>
+          </button>
+
+          {/* Ousado */}
+          <button
+            type="button"
+            onClick={() => handleRiskChange('ousado')}
+            className={`p-3.5 rounded-xl border text-left transition cursor-pointer relative ${
+              riskLevel === 'ousado'
+                ? 'bg-cyan-500/15 border-cyan-400 ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/15'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className={`w-4 h-4 ${riskLevel === 'ousado' ? 'text-cyan-400' : 'text-slate-400'}`} />
+                <span className="text-xs font-bold text-white">Ousado</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-500/20 px-1.5 py-0.5 rounded">
+                25% / 75%
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+              Pondera 75% no padrão Fibonacci, quebra agressiva de ciclos ({cyclePendingNumbers.join(', ')}) e busca por premiações únicas de alta cotação.
+            </p>
+          </button>
         </div>
       </div>
 

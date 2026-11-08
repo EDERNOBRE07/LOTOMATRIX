@@ -56,6 +56,8 @@ import { RadarTendenciasFourierCard } from './RadarTendenciasFourierCard';
 import { FiltroIntervaloTempoEstatisticas, TimeRangeInterval } from './FiltroIntervaloTempoEstatisticas';
 import { GraficoCustoRetornoAcumulado } from './GraficoCustoRetornoAcumulado';
 import { DistribuicaoProbabilidadeCurvaNormal } from './DistribuicaoProbabilidadeCurvaNormal';
+import { CurvaDistribuicaoSomasD3 } from './CurvaDistribuicaoSomasD3';
+import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket } from '../types/lotofacil';
 import {
   BarChart,
@@ -82,6 +84,8 @@ import {
   DollarSign,
   ShieldAlert,
   GitCompare,
+  Download,
+  FileJson,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -106,6 +110,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     | 'custo_retorno_acumulado'
     | 'distribuicao_probabilidade'
+    | 'curva_somas_d3'
     | 'taxa_diversidade'
     | 'radar_fourier'
     | 'atrasos'
@@ -152,6 +157,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState<boolean>(false);
   const [globalTimeRange, setGlobalTimeRange] = useState<TimeRangeInterval>('6_meses');
 
+  const handleExportRelatorioJSON = () => {
+    try {
+      exportHistoricoRoiProbabilidadeJSON({
+        latestDraw,
+        savedTickets,
+        timeRange: globalTimeRange,
+      });
+    } catch (e) {
+      console.error('Erro ao exportar relatório JSON:', e);
+    }
+  };
+
   // Sorted views of the 25 numbers
   const sortedDezenas = [...statsList].sort((a, b) => {
     if (atrasoSortOrder === 'atraso_desc') return b.atrasoAtual - a.atrasoAtual;
@@ -191,6 +208,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Distribuição de Probabilidade</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
               CURVA NORMAL RECHARTS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('curva_somas_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'curva_somas_d3'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/25 font-black ring-1 ring-amber-300'
+                : 'text-amber-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4 text-amber-300" />
+            <span>Curva de Somas D3.js</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              D3.JS GAUSS
             </span>
           </button>
 
@@ -754,7 +786,17 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportRelatorioJSON}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition cursor-pointer shadow-sm active:scale-95"
+            title="Exportar Relatório Histórico Completo de ROI e Distribuição de Probabilidade em formato JSON formatado"
+          >
+            <FileJson className="w-4 h-4 text-cyan-400" />
+            <span>Exportar JSON</span>
+          </button>
+
           <button
             onClick={() => setIsPerformanceModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition cursor-pointer"
@@ -1628,6 +1670,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             latestDraw={latestDraw}
             savedTickets={savedTickets}
             fechamentoNome={fechamentoNome}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: CURVA DE DISTRIBUIÇÃO DE SOMAS (D3.JS) */}
+      {activeSubTab === 'curva_somas_d3' && (
+        <div className="space-y-6">
+          <CurvaDistribuicaoSomasD3
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
           />
         </div>
       )}

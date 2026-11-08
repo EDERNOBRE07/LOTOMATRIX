@@ -20,6 +20,7 @@ import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { downloadGoldFechamentoPDF, downloadTicketsVolantePDF, VolanteExportStyle } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
+import { exportCartoesJogosToPdf } from '../services/cartoesJogosPdfGenerator';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
 import {
   FileText,
@@ -388,6 +389,21 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar PDF de volantes.');
+    }
+  };
+
+  const handleDownloadCartoesOficiaisPDF = (f: SavedFechamentoPrognostico) => {
+    try {
+      exportCartoesJogosToPdf({
+        tickets: f.tickets,
+        latestDraw,
+        fechamentoNome: f.tipoFechamento,
+      });
+      soundService.playGoldenZoneSuccessChime();
+      showFeedback(`✓ Cartões de Jogos em layout oficial (grid 5×5) gerados para "${f.tipoFechamento}"!`);
+    } catch (err) {
+      console.error(err);
+      showFeedback('Erro ao gerar cartões de jogos PDF.');
     }
   };
 
@@ -979,6 +995,17 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     >
                       <Printer className="w-4 h-4 text-slate-950" />
                       <span>Visualizar & Imprimir</span>
+                    </button>
+
+                    {/* Botão Baixar Cartões de Jogos Oficiais para Impressão */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadCartoesOficiaisPDF(f)}
+                      className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 ring-1 ring-amber-300"
+                      title="Imprimir cartões de jogos da Lotofácil (layout profissional 4 volantes por folha A4 com grid 5x5 e marcas de corte)"
+                    >
+                      <Printer className="w-4 h-4 text-slate-950" />
+                      <span>Imprimir Cartões (PDF)</span>
                     </button>
 
                     {/* Botão Baixar Volante 5x5 Oficial */}
