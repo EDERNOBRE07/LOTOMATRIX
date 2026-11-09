@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
-import { soundService } from '../services/soundAlert';
+import { soundService, Alert13PlusSoundType } from '../services/soundAlert';
 import { countMatches } from '../services/combinatorics';
 import { sendNativeJackpotNotification } from '../services/nativeNotificationService';
 import {
@@ -51,6 +51,25 @@ export const JackpotAlertConfigModule: React.FC<JackpotAlertConfigModuleProps> =
       return true;
     }
   });
+
+  // 2.1. Seletor de Som de Alerta para 13+ Pontos ('padrao' | 'sino_ouro' | 'silencioso')
+  const [sound13PlusType, setSound13PlusType] = useState<Alert13PlusSoundType>(() =>
+    soundService.get13PlusSoundType()
+  );
+
+  const handleSelectSound13Plus = (type: Alert13PlusSoundType) => {
+    setSound13PlusType(type);
+    soundService.set13PlusSoundType(type);
+    if (type === 'silencioso') {
+      showNotice('Modo Silencioso ativado para notificações de 13+ pontos.');
+    } else if (type === 'sino_ouro') {
+      soundService.playSinoDeOuro();
+      showNotice('Sino de Ouro selecionado! Tocando prévia do carrilhão.');
+    } else {
+      soundService.play14PontosCelebrationSound();
+      showNotice('Alerta Padrão selecionado! Tocando fanfarra tradicional.');
+    }
+  };
 
   // 3. Alerta Push Notification
   const [pushEnabled, setPushEnabled] = useState<boolean>(() => {
@@ -380,6 +399,141 @@ export const JackpotAlertConfigModule: React.FC<JackpotAlertConfigModuleProps> =
               <Radio className="w-3 h-3" />
               <span>Disparar Push de Teste</span>
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Seletor de Som de Alerta para Notificações de 13+ Pontos */}
+      <div className="bg-slate-950/90 rounded-xl border border-slate-800 p-4 space-y-3 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <Volume2 className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <span>Som de Alerta para Notificações de 13+ Pontos</span>
+                <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  Web Audio API
+                </span>
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Selecione o efeito acústico disparado para bilhetes premiados com 13, 14 ou 15 acertos
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* Opção 1: Alerta Padrão */}
+          <div
+            onClick={() => handleSelectSound13Plus('padrao')}
+            className={`p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+              sound13PlusType === 'padrao'
+                ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/40 text-white shadow-sm'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>🔔 Alerta Padrão</span>
+                </span>
+                {sound13PlusType === 'padrao' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    ATIVO
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                Fanfarra tradicional de premiação da Caixa em tríade maior (C5-E5-G5-C6).
+              </p>
+            </div>
+            <div className="pt-2.5 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  soundService.play14PontosCelebrationSound();
+                  showNotice('Tocando prévia: Alerta Padrão');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold transition cursor-pointer border border-slate-700"
+              >
+                <Play className="w-2.5 h-2.5 fill-current text-amber-400" />
+                <span>Ouvir</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Opção 2: Sino de Ouro */}
+          <div
+            onClick={() => handleSelectSound13Plus('sino_ouro')}
+            className={`p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+              sound13PlusType === 'sino_ouro'
+                ? 'bg-gradient-to-br from-amber-500/25 via-yellow-500/15 to-slate-900 border-amber-400 ring-1 ring-amber-400/40 text-white shadow-md'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Sino de Ouro</span>
+                </span>
+                {sound13PlusType === 'sino_ouro' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    ATIVO
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                Carrilhão harmônico cristalino metálico de alta frequência (C6-E6-G6-C7).
+              </p>
+            </div>
+            <div className="pt-2.5 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  soundService.playSinoDeOuro();
+                  showNotice('Tocando prévia: Sino de Ouro');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold transition cursor-pointer border border-amber-500/40"
+              >
+                <Play className="w-2.5 h-2.5 fill-current" />
+                <span>Ouvir</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Opção 3: Modo Silencioso */}
+          <div
+            onClick={() => handleSelectSound13Plus('silencioso')}
+            className={`p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between ${
+              sound13PlusType === 'silencioso'
+                ? 'bg-rose-500/15 border-rose-400 ring-1 ring-rose-400/40 text-white shadow-sm'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Modo Silencioso</span>
+                </span>
+                {sound13PlusType === 'silencioso' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    ATIVO
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                Silencia reprodução de áudio, mantendo exclusivamente notificações visuais e push nativas.
+              </p>
+            </div>
+            <div className="pt-2.5 flex justify-end">
+              <span className="text-[10px] text-slate-500 font-mono italic">Mudo</span>
+            </div>
           </div>
         </div>
       </div>

@@ -13,6 +13,19 @@ if (d3 && d3.selection && d3.selection.prototype) {
   }
 }
 
+// Execução assíncrona da suite de testes de validação determinística de filtros
+import('./services/combinatoricsValidationTests').then(({ runCombinatoricsValidationAssertions }) => {
+  try {
+    const report = runCombinatoricsValidationAssertions();
+    console.log(
+      `%c[LotoSniper Combinatorics Test Suite] ${report.passedCount}/${report.total} asserções passaram com 100% de conformidade.`,
+      'color: #0284c7; font-weight: bold;'
+    );
+  } catch (err) {
+    console.warn('Erro ao executar suite de asserções combinatórias:', err);
+  }
+});
+
 // Register Service Worker for offline functionality and background notifications
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

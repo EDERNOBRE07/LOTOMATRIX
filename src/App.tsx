@@ -909,6 +909,7 @@ export default function App() {
               onApplyNumbers={handleApplyAIRecsToFechamento}
               savedTickets={savedTickets}
               fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
+              filters={activeFechamentoMeta?.filters}
             />
           )}
 

@@ -277,14 +277,90 @@ class SoundService {
   }
 
   // Play anomaly alert sound
+  // Play crystalline "Sino de Ouro" harmonic bell chime for golden prizes
+  playSinoDeOuro() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      // Golden Bell harmonics (C6, E6, G6, B6, C7) with metallic resonance and long decay
+      const harmonics = [
+        { freq: 1046.5, gain: 0.16, decay: 1.1 },
+        { freq: 1318.51, gain: 0.12, decay: 0.9 },
+        { freq: 1567.98, gain: 0.10, decay: 0.8 },
+        { freq: 1975.53, gain: 0.08, decay: 0.7 },
+        { freq: 2093.0, gain: 0.06, decay: 0.6 },
+      ];
+
+      harmonics.forEach(({ freq, gain: initGain, decay }, idx) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.03);
+        // Subtle bell pitch envelope shimmer
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.998, now + decay);
+
+        gainNode.gain.setValueAtTime(initGain, now + idx * 0.03);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(now + idx * 0.03);
+        osc.stop(now + decay);
+      });
+    } catch (e) {}
+  }
+
+  // Get current user preference for 13+ alert sound ('padrao' | 'sino_ouro' | 'silencioso')
+  get13PlusSoundType(): 'padrao' | 'sino_ouro' | 'silencioso' {
+    if (typeof window === 'undefined') return 'padrao';
+    try {
+      const val = localStorage.getItem('lotosniper_sound_13_plus_type');
+      if (val === 'sino_ouro' || val === 'silencioso' || val === 'padrao') {
+        return val;
+      }
+    } catch {}
+    return 'padrao';
+  }
+
+  // Set user preference for 13+ alert sound
+  set13PlusSoundType(type: 'padrao' | 'sino_ouro' | 'silencioso'): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('lotosniper_sound_13_plus_type', type);
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-13plus-sound-changed', { detail: type })
+      );
+    } catch {}
+  }
+
+  // Play alert for 13+ points respecting user choice
+  play13PlusAlert(soundType?: 'padrao' | 'sino_ouro' | 'silencioso') {
+    const selected = soundType || this.get13PlusSoundType();
+    if (selected === 'silencioso') {
+      return; // Modo silencioso ativo
+    }
+    if (selected === 'sino_ouro') {
+      this.playSinoDeOuro();
+    } else {
+      // 'padrao'
+      this.play14PontosCelebrationSound();
+    }
+  }
+
+  // Play anomaly alert sound
   playAnomalyDetected() {
     this.playOutsideGoldenZoneAlert();
   }
 
   // Test current alert sound configuration
-  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' | 'ciclo' = '14_pontos') {
+  testAlertSound(type: '14_pontos' | '15_pontos' | 'chime' | 'oportunidade' | 'ciclo' | 'sino_ouro' = '14_pontos') {
     if (type === '15_pontos') this.play15PontosJackpotSound();
     else if (type === '14_pontos') this.play14PontosCelebrationSound();
+    else if (type === 'sino_ouro') this.playSinoDeOuro();
     else if (type === 'oportunidade') this.playOpportunityAlert();
     else if (type === 'ciclo') this.playCycleAlertSound();
     else this.playGoldenZoneSuccessChime();
@@ -308,4 +384,5 @@ class SoundService {
   }
 }
 
+export type Alert13PlusSoundType = 'padrao' | 'sino_ouro' | 'silencioso';
 export const soundService = new SoundService();

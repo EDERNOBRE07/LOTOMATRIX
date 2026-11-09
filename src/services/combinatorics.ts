@@ -380,102 +380,237 @@ export function analyzeTicket(
   };
 }
 
-// Check ticket against filters (inclui Cruz, Bolas Extremas, Zona de Ouro Primos, Anti-Colisão e Anti-Padrão)
-export function ticketPassesFilters(
-  ticket: Omit<GameTicket, 'id' | 'index'>,
-  filters: FilterCriteria
-): boolean {
-  if (ticket.pares < filters.paresMin || ticket.pares > filters.paresMax) return false;
-  if (ticket.primos < filters.primosMin || ticket.primos > filters.primosMax) return false;
-  if (ticket.soma < filters.somaMin || ticket.soma > filters.somaMax) return false;
-  if (ticket.moldura < filters.molduraMin || ticket.moldura > filters.molduraMax) return false;
-  if (ticket.fibonacci < filters.fibonacciMin || ticket.fibonacci > filters.fibonacciMax) return false;
-  if (ticket.repetidas < filters.repetidasMin || ticket.repetidas > filters.repetidasMax) return false;
-  if (ticket.maxConsecutivas > filters.maxConsecutivas) return false;
+export interface FilterValidationResult {
+  isValid: boolean;
+  reason?: string;
+  violations: string[];
+  metrics: {
+    soma: number;
+    pares: number;
+    impares: number;
+    primos: number;
+    moldura: number;
+    cruz: number;
+    fibonacci: number;
+    repetidas: number;
+    maxConsecutivas: number;
+    bola1: number;
+    bola15: number;
+  };
+}
 
-  // Filtro Geométrico: Cruz da Lotofácil (Padrão 4 a 7; Zona de Ouro: 5 a 6)
-  if (filters.cruzAtiva !== false && filters.cruzMin !== undefined && ticket.cruz !== undefined) {
-    if (ticket.cruz < filters.cruzMin || ticket.cruz > (filters.cruzMax ?? 7)) return false;
+/**
+ * Validador síncrono e determinístico do pipeline combinatório.
+ * Audita rigorosamente uma combinação de 15 dezenas contra todos os parâmetros do activeFilterConfig.
+ */
+export function validateFilters(
+  combination: number[] | Omit<GameTicket, 'id' | 'index'>,
+  activeFilterConfig: FilterCriteria,
+  concursoAnterior: number[] = CONCURSO_ATUAL.dezenas
+): FilterValidationResult {
+  const dezenas = Array.isArray(combination)
+    ? [...combination].sort((a, b) => a - b)
+    : combination.dezenas;
+  const analysis = Array.isArray(combination)
+    ? analyzeTicket(dezenas, concursoAnterior)
+    : combination;
+  const violations: string[] = [];
+
+  // 1. Pares e Ímpares
+  if (analysis.pares < activeFilterConfig.paresMin || analysis.pares > activeFilterConfig.paresMax) {
+    violations.push(
+      `Pares fora da faixa: ${analysis.pares}P (esperado: ${activeFilterConfig.paresMin}-${activeFilterConfig.paresMax}P)`
+    );
   }
 
-  // Filtro de Bolas Extremas (Bola 1 e Bola 15)
-  if (filters.extremidadesAtiva !== false) {
-    const b1 = ticket.bola1 ?? ticket.dezenas[0];
-    const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
-
-    if (filters.bola1Min !== undefined && filters.bola1Max !== undefined) {
-      if (b1 < filters.bola1Min || b1 > filters.bola1Max) return false;
-    }
-    if (filters.bola15Min !== undefined && filters.bola15Max !== undefined) {
-      if (b15 < filters.bola15Min || b15 > filters.bola15Max) return false;
-    }
+  // 2. Números Primos
+  if (analysis.primos < activeFilterConfig.primosMin || analysis.primos > activeFilterConfig.primosMax) {
+    violations.push(
+      `Primos fora da faixa: ${analysis.primos} (esperado: ${activeFilterConfig.primosMin}-${activeFilterConfig.primosMax})`
+    );
+  }
+  if (activeFilterConfig.apenasZonaDeOuroPrimos && (analysis.primos < 5 || analysis.primos > 6)) {
+    violations.push(
+      `Zona de Ouro de Primos violada: ${analysis.primos} (esperado estrito: 5-6)`
+    );
   }
 
-  // Refinamento Zona de Ouro de Primos: 5 a 6 primos estrito quando requisitado
-  if (filters.apenasZonaDeOuroPrimos) {
-    if (ticket.primos < 5 || ticket.primos > 6) return false;
+  // 3. Soma das Dezenas
+  if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
+    violations.push(
+      `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
+    );
   }
 
-  // Auditoria Anti-Colisão Histórica (evita apostar em combinações que já saíram com 15 pontos)
-  if (filters.antiColisaoHistoricaAtiva) {
-    if (isHistorical15Collision(ticket.dezenas)) return false;
+  // 4. Dezenas na Moldura
+  if (analysis.moldura < activeFilterConfig.molduraMin || analysis.moldura > activeFilterConfig.molduraMax) {
+    violations.push(
+      `Moldura fora da faixa: ${analysis.moldura} (esperado: ${activeFilterConfig.molduraMin}-${activeFilterConfig.molduraMax})`
+    );
   }
 
-  // Auditoria Anti-Padrão Viciado (evita linhas inteiras, colunas inteiras e PAs óbvias)
-  if (filters.antiPadraoViciadoAtivo) {
-    if (hasViciousVisualPattern(ticket.dezenas).isVicious) return false;
-  }
-
-  // Check required fixed numbers
-  const fixed = filters?.dezenasFixas || [];
-  if (fixed.length > 0) {
-    for (const fix of fixed) {
-      if (!ticket.dezenas.includes(fix)) return false;
-    }
-  }
-
-  // Check excluded numbers
-  const excluded = filters?.dezenasExcluidas || [];
-  if (excluded.length > 0) {
-    for (const exc of excluded) {
-      if (ticket.dezenas.includes(exc)) return false;
-    }
-  }
-
-  // Check Curva ABC (Classe A - 80% Frequência Histórica)
-  if (filters.curvaAbcAtiva && filters.minDezenasClasseA !== undefined) {
-    const countA = countClasseADezenas(ticket.dezenas);
-    if (countA < filters.minDezenasClasseA) return false;
-  }
-
-  // Check Combinações de Vazio (Conjuntos de dezenas com anti-afinidade / vazios históricos)
+  // 5. Fibonacci
   if (
-    filters.vaziosAtivos &&
-    filters.combinacoesVazioExcluidas &&
-    filters.combinacoesVazioExcluidas.length > 0
+    analysis.fibonacci < activeFilterConfig.fibonacciMin ||
+    analysis.fibonacci > activeFilterConfig.fibonacciMax
   ) {
-    for (const [a, b] of filters.combinacoesVazioExcluidas) {
-      if (ticket.dezenas.includes(a) && ticket.dezenas.includes(b)) {
-        return false;
+    violations.push(
+      `Fibonacci fora da faixa: ${analysis.fibonacci} (esperado: ${activeFilterConfig.fibonacciMin}-${activeFilterConfig.fibonacciMax})`
+    );
+  }
+
+  // 6. Repetidas do Concurso Anterior
+  if (
+    analysis.repetidas < activeFilterConfig.repetidasMin ||
+    analysis.repetidas > activeFilterConfig.repetidasMax
+  ) {
+    violations.push(
+      `Repetidas fora da faixa: ${analysis.repetidas} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
+    );
+  }
+
+  // 7. Sequência Consecutiva Máxima
+  if (analysis.maxConsecutivas > activeFilterConfig.maxConsecutivas) {
+    violations.push(
+      `Sequência consecutiva excessiva: ${analysis.maxConsecutivas} dezenas (máx permitido: ${activeFilterConfig.maxConsecutivas})`
+    );
+  }
+
+  // 8. Cruz da Lotofácil (Linha 3 e Coluna 3: 4 a 7 dezenas)
+  const cruzCount = analysis.cruz ?? dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+  if (activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== undefined) {
+    const cMin = activeFilterConfig.cruzMin;
+    const cMax = activeFilterConfig.cruzMax ?? 7;
+    if (cruzCount < cMin || cruzCount > cMax) {
+      violations.push(
+        `Cruz da Lotofácil fora da faixa: ${cruzCount} (esperado: ${cMin}-${cMax})`
+      );
+    }
+  }
+
+  // 9. Bolas Extremas (Bola 1 e Bola 15)
+  const b1 = analysis.bola1 ?? dezenas[0];
+  const b15 = analysis.bola15 ?? dezenas[dezenas.length - 1];
+  if (activeFilterConfig.extremidadesAtiva !== false) {
+    const b1Min = activeFilterConfig.bola1Min ?? 1;
+    const b1Max = activeFilterConfig.bola1Max ?? 4;
+    const b15Min = activeFilterConfig.bola15Min ?? 22;
+    const b15Max = activeFilterConfig.bola15Max ?? 25;
+    if (b1 < b1Min || b1 > b1Max) {
+      violations.push(
+        `Bola 1 fora do intervalo canônico: ${b1} (esperado: ${b1Min}-${b1Max})`
+      );
+    }
+    if (b15 < b15Min || b15 > b15Max) {
+      violations.push(
+        `Bola 15 fora do intervalo canônico: ${b15} (esperado: ${b15Min}-${b15Max})`
+      );
+    }
+  }
+
+  // 10. Dezenas Fixas Obrigatórias
+  const fixed = activeFilterConfig.dezenasFixas || [];
+  for (const fix of fixed) {
+    if (!dezenas.includes(fix)) {
+      violations.push(`Dezena fixa ausente: ${fix.toString().padStart(2, '0')}`);
+    }
+  }
+
+  // 11. Dezenas Excluídas
+  const excluded = activeFilterConfig.dezenasExcluidas || [];
+  for (const exc of excluded) {
+    if (dezenas.includes(exc)) {
+      violations.push(`Dezena excluída presente: ${exc.toString().padStart(2, '0')}`);
+    }
+  }
+
+  // 12. Curva ABC (Classe A - 80% Frequência Histórica)
+  if (activeFilterConfig.curvaAbcAtiva && activeFilterConfig.minDezenasClasseA !== undefined) {
+    const countA = countClasseADezenas(dezenas);
+    if (countA < activeFilterConfig.minDezenasClasseA) {
+      violations.push(
+        `Curva ABC Classe A insuficiente: ${countA} dezenas (esperado mín: ${activeFilterConfig.minDezenasClasseA})`
+      );
+    }
+  }
+
+  // 13. Combinações de Vazio (Anti-Afinidade)
+  if (
+    activeFilterConfig.vaziosAtivos &&
+    activeFilterConfig.combinacoesVazioExcluidas &&
+    activeFilterConfig.combinacoesVazioExcluidas.length > 0
+  ) {
+    for (const [v1, v2] of activeFilterConfig.combinacoesVazioExcluidas) {
+      if (dezenas.includes(v1) && dezenas.includes(v2)) {
+        violations.push(`Par de vazio/anti-afinidade excluído presente: [${v1}, ${v2}]`);
       }
     }
   }
 
-  // FILTRO DE ROBUSTEZ ESTATÍSTICA (BASE ÚLTIMAS 50 APURAÇÕES)
-  if (filters.robustezEstatisticaAtiva) {
-    const somaMin = filters.robustez50SomaMin ?? 180;
-    const somaMax = filters.robustez50SomaMax ?? 220;
-    const paresMin = filters.robustez50ParesMin ?? 6;
-    const paresMax = filters.robustez50ParesMax ?? 8;
-    const molduraMin = filters.robustez50MolduraMin ?? 9;
-    const molduraMax = filters.robustez50MolduraMax ?? 11;
-
-    if (ticket.soma < somaMin || ticket.soma > somaMax) return false;
-    if (ticket.pares < paresMin || ticket.pares > paresMax) return false;
-    if (ticket.moldura < molduraMin || ticket.moldura > molduraMax) return false;
+  // 14. Anti-Padrão Viciado (5 dezenas na mesma linha ou coluna inteira)
+  if (activeFilterConfig.antiPadraoViciadoAtivo) {
+    const viciousCheck = hasViciousVisualPattern(dezenas);
+    if (viciousCheck.isVicious) {
+      violations.push(`Padrão viciado detectado: ${viciousCheck.reason}`);
+    }
   }
 
-  return true;
+  // 15. Anti-Colisão Histórica (15 pontos já sorteados em apurações oficiais)
+  if (activeFilterConfig.antiColisaoHistoricaAtiva) {
+    if (isHistorical15Collision(dezenas)) {
+      violations.push('Colisão histórica detectada: combinação já sorteada com 15 pontos');
+    }
+  }
+
+  // 16. Filtro de Robustez Estatística 50 Apurações
+  if (activeFilterConfig.robustezEstatisticaAtiva) {
+    const rSomaMin = activeFilterConfig.robustez50SomaMin ?? 180;
+    const rSomaMax = activeFilterConfig.robustez50SomaMax ?? 220;
+    const rParesMin = activeFilterConfig.robustez50ParesMin ?? 6;
+    const rParesMax = activeFilterConfig.robustez50ParesMax ?? 8;
+    const rMolduraMin = activeFilterConfig.robustez50MolduraMin ?? 9;
+    const rMolduraMax = activeFilterConfig.robustez50MolduraMax ?? 11;
+
+    if (analysis.soma < rSomaMin || analysis.soma > rSomaMax) {
+      violations.push(`Robustez 50: Soma fora de [${rSomaMin}-${rSomaMax}]`);
+    }
+    if (analysis.pares < rParesMin || analysis.pares > rParesMax) {
+      violations.push(`Robustez 50: Pares fora de [${rParesMin}-${rParesMax}]`);
+    }
+    if (analysis.moldura < rMolduraMin || analysis.moldura > rMolduraMax) {
+      violations.push(`Robustez 50: Moldura fora de [${rMolduraMin}-${rMolduraMax}]`);
+    }
+  }
+
+  const isValid = violations.length === 0;
+
+  return {
+    isValid,
+    reason: violations.length > 0 ? violations.join('; ') : undefined,
+    violations,
+    metrics: {
+      soma: analysis.soma,
+      pares: analysis.pares,
+      impares: analysis.impares,
+      primos: analysis.primos,
+      moldura: analysis.moldura,
+      cruz: cruzCount,
+      fibonacci: analysis.fibonacci,
+      repetidas: analysis.repetidas,
+      maxConsecutivas: analysis.maxConsecutivas,
+      bola1: b1,
+      bola15: b15,
+    },
+  };
+}
+
+// Wrapper booleano canônico para compatibilidade direta
+export function ticketPassesFilters(
+  ticket: Omit<GameTicket, 'id' | 'index'> | number[],
+  filters: FilterCriteria,
+  concursoAnterior: number[] = CONCURSO_ATUAL.dezenas
+): boolean {
+  return validateFilters(ticket, filters, concursoAnterior).isValid;
 }
 
 /**
@@ -647,29 +782,21 @@ export function generateMinimumSetCoverFechamento({
     return true;
   };
 
-  // 4. Criação do pool de candidatos filtrados
-  let candidateCombos: number[][] = [];
+  // 4. Criação do pool de candidatos filtrados estritamente pelo activeFilterConfig
+  const candidateCombos: number[][] = [];
   for (const combo of universeSubsets) {
     if (isCandidateValid(combo)) {
       candidateCombos.push(combo);
     }
   }
 
-  // Se os filtros forem excessivamente restritivos e deixarem poucos candidatos,
-  // relaxamos progressivamente para manter viabilidade estatística
-  if (candidateCombos.length < Math.min(24, maxTickets)) {
-    for (const combo of universeSubsets) {
-      if (!candidateCombos.includes(combo)) {
-        const a = analyzeTicket(combo, concursoAnterior, aiScores);
-        if (!isCanonicalAnomaly(combo, a, concursoAnterior)) {
-          candidateCombos.push(combo);
-        }
-      }
-    }
-  }
-
+  // Tratamento de cenários de sobre-restrição:
+  // Se os filtros forem excessivamente rigorosos e impedirem qualquer combinação elegível,
+  // reporta erro claro de sobre-restrição em vez de retornar jogos inválidos ou array vazio
   if (candidateCombos.length === 0) {
-    candidateCombos = [...universeSubsets];
+    throw new Error(
+      'Nenhum jogo compatível com os filtros selecionados. Os filtros definidos em "Sugestões Estratégicas" ou "Filtros Canônicos" são excessivamente restritivos para o universo de dezenas selecionado. Tente flexibilizar os limites de Soma, Pares/Ímpares, Primos ou Moldura.'
+    );
   }
 
   const candMasks = candidateCombos.map(toMask);
@@ -959,50 +1086,13 @@ export function generateFechamentoCovering(
     collectAugmented(0, []);
   }
 
-  // Graceful relaxation fallback to prevent combinatorial deadlocks with strict simultaneous filters
-  if (validCandidates.length === 0 && filters) {
-    const relaxedFilters: FilterCriteria = {
-      ...filters,
-      somaMin: Math.max(165, filters.somaMin - 8),
-      somaMax: Math.min(235, filters.somaMax + 8),
-      paresMin: Math.max(5, filters.paresMin - 1),
-      paresMax: Math.min(10, filters.paresMax + 1),
-      primosMin: Math.max(3, filters.primosMin - 1),
-      primosMax: Math.min(8, filters.primosMax + 1),
-      molduraMin: Math.max(7, filters.molduraMin - 1),
-      molduraMax: Math.min(12, filters.molduraMax + 1),
-      repetidasMin: Math.max(6, filters.repetidasMin - 1),
-      repetidasMax: Math.min(12, filters.repetidasMax + 1),
-      maxConsecutivas: Math.min(6, filters.maxConsecutivas + 1),
-    };
-
-    const isRelaxedValid = (nums: number[]) => {
-      const a = analyzeTicket(nums, concursoAnterior, aiScores);
-      return ticketPassesFilters(a, relaxedFilters) && !isCanonicalAnomaly(nums, a, concursoAnterior);
-    };
-
-    let relCount = 0;
-    function collectRelaxed(start: number, current: number[]) {
-      if (validCandidates.length >= maxPoolCandidates || relCount++ > MAX_RECURSION_EVALS) return;
-      if (current.length === 15) {
-        if (isRelaxedValid(current)) {
-          validCandidates.push([...current]);
-        }
-        return;
-      }
-      const needed = 15 - current.length;
-      const available = sortedPool.length - start;
-      if (available < needed) return;
-
-      for (let i = start; i < sortedPool.length; i++) {
-        current.push(sortedPool[i]);
-        collectRelaxed(i + 1, current);
-        current.pop();
-        if (validCandidates.length >= maxPoolCandidates || relCount > MAX_RECURSION_EVALS) break;
-      }
-    }
-
-    collectRelaxed(0, []);
+  // Tratamento de cenários de sobre-restrição:
+  // Se os filtros forem excessivamente rigorosos e impedirem qualquer combinação elegível,
+  // reporta erro claro de sobre-restrição em vez de gerar arrays vazios ou travar o script
+  if (validCandidates.length === 0) {
+    throw new Error(
+      'Nenhum jogo compatível com os filtros selecionados. Os filtros definidos em "Sugestões Estratégicas" ou "Filtros Canônicos" são excessivamente restritivos para o universo de dezenas selecionado. Tente flexibilizar os limites de Soma, Pares/Ímpares, Primos ou Moldura.'
+    );
   }
 
   // Representative test subsets for covering guarantee

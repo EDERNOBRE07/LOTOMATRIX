@@ -23,6 +23,7 @@ import {
   buildFilterCompliantPool,
   generateFechamentoInteligentePonderado,
   VALOR_APOSTA_LOTOFACIL,
+  validateFilters,
 } from '../services/combinatorics';
 import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
@@ -624,6 +625,26 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // Atualização Automática da Matriz 5x5 quando qualquer filtro for alterado
   const handleFiltersChange = (newFilters: FilterCriteria, updateMatrix = true) => {
     setFilters(newFilters);
+
+    // Se já existirem bilhetes gerados na tela, valida e poda imediatamente bilhetes que violem os filtros ativos
+    if (generatedTickets.length > 0) {
+      const compliantTickets = generatedTickets.filter(
+        (t) => validateFilters(t, newFilters, latestDraw.dezenas).isValid
+      );
+      if (compliantTickets.length !== generatedTickets.length) {
+        setGeneratedTickets(compliantTickets);
+        if (compliantTickets.length === 0) {
+          setDocumentMessage(
+            '⚠️ Atenção: Os novos filtros sobre-restringiram os bilhetes previamente gerados. Processe a matriz para obter novas combinações elegíveis.'
+          );
+        } else {
+          setDocumentMessage(
+            `✓ Filtros aplicados: ${compliantTickets.length} de ${generatedTickets.length} bilhetes mantidos em conformidade total.`
+          );
+        }
+      }
+    }
+
     if (updateMatrix) {
       const calibrated = buildFilterCompliantPool({
         targetCount,
@@ -1064,11 +1085,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setTimeout(() => setDocumentMessage(null), 6000);
   };
 
-  // 5. Garantir Incorporação dos Filtros Canônicos
+  // 5. Garantir Incorporação dos Filtros Canônicos e Estratégicos
   const handleEnsureFilters = () => {
     setActiveStrategicBox('garantir_filtros');
     setAppliedSuggestionName('Garantir Filtros');
-    const updatedFilters: FilterCriteria = {
+    const activeFilterConfig: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 185,
       somaMax: 215,
@@ -1083,13 +1104,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       maxConsecutivas: 5,
       fibonacciMin: 3,
       fibonacciMax: 5,
+      cruzAtiva: true,
+      cruzMin: 4,
+      cruzMax: 7,
+      extremidadesAtiva: true,
+      bola1Min: 1,
+      bola1Max: 4,
+      bola15Min: 22,
+      bola15Max: 25,
+      antiColisaoHistoricaAtiva: true,
+      antiPadraoViciadoAtivo: true,
+      curvaAbcAtiva: filters.curvaAbcAtiva,
+      minDezenasClasseA: filters.minDezenasClasseA,
+      vaziosAtivos: filters.vaziosAtivos,
+      combinacoesVazioExcluidas: filters.combinacoesVazioExcluidas,
       dezenasFixas: fixedNumbers,
       dezenasExcluidas: excludedNumbers,
     };
-    handleFiltersChange(updatedFilters, true);
+    handleFiltersChange(activeFilterConfig, true);
     setStrategyName('Garantir Filtros');
     setActiveModel('Garantir Filtros');
-    setDocumentMessage('✓ Garantir Filtros calibrado na Zona de Ouro e incorporado no nome do Fechamento!');
+    setDocumentMessage(
+      '✓ Garantir Filtros: todos os parâmetros canônicos (Soma 185-215, 5-9P, 4-7 Primos, Moldura 8-11, Cruz 4-7 e Bolas Extremas) unificados e aplicados síncronamente na Matriz!'
+    );
     soundService.playGoldenZoneSuccessChime();
     setTimeout(() => setDocumentMessage(null), 5000);
   };
@@ -1503,6 +1540,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         targetCount,
         latestDraw
       );
+      if (err?.message && err.message.includes('Nenhum jogo compatível com os filtros selecionados')) {
+        diag.title = 'Nenhum jogo compatível com os filtros selecionados';
+        diag.summary =
+          'Os filtros estratégicos ativos geraram uma sobre-restrição no universo de dezenas selecionado, impedindo a formação de bilhetes que atendam a todos os critérios simultaneamente.';
+      }
       if (err?.message && !diag.reasons.includes(err.message)) {
         diag.reasons.unshift(err.message);
       }

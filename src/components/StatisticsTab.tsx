@@ -60,8 +60,9 @@ import { FiltroIntervaloTempoEstatisticas, TimeRangeInterval } from './FiltroInt
 import { GraficoCustoRetornoAcumulado } from './GraficoCustoRetornoAcumulado';
 import { DistribuicaoProbabilidadeCurvaNormal } from './DistribuicaoProbabilidadeCurvaNormal';
 import { CurvaDistribuicaoSomasD3 } from './CurvaDistribuicaoSomasD3';
+import { DesempenhoFiltrosUltimos10Recharts } from './DesempenhoFiltrosUltimos10Recharts';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
-import { GameTicket } from '../types/lotofacil';
+import { GameTicket, FilterCriteria } from '../types/lotofacil';
 import {
   BarChart,
   TrendingUp,
@@ -99,6 +100,7 @@ interface StatisticsTabProps {
   onApplyNumbers?: (numbers: number[]) => void;
   savedTickets?: GameTicket[];
   fechamentoNome?: string;
+  filters?: FilterCriteria;
 }
 
 export const StatisticsTab: React.FC<StatisticsTabProps> = ({
@@ -109,9 +111,11 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   onApplyNumbers,
   savedTickets = [],
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
+  filters,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'simulador_historico_d3'
+    | 'desempenho_cruz_extremidades'
     | 'custo_retorno_acumulado'
     | 'distribuicao_probabilidade'
     | 'curva_somas_d3'
@@ -198,6 +202,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Simulador Histórico D3.js</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               10 A 50 CONCURSOS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('desempenho_cruz_extremidades')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'desempenho_cruz_extremidades'
+                ? 'bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 text-slate-950 shadow-md shadow-sky-500/25 font-black ring-1 ring-sky-300'
+                : 'text-sky-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 text-sky-300" />
+            <span>Cruz & Bolas Extremas</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-mono">
+              RECHARTS 10 CONCURSOS
             </span>
           </button>
 
@@ -1678,6 +1697,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             tickets={savedTickets}
             historicalDraws={RECENT_DRAWS}
             fechamentoNome={fechamentoNome}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB DEDICADA: DESEMPENHO DOS ÚLTIMOS 10 CONCURSOS (CRUZ & BOLAS EXTREMAS COM RECHARTS) */}
+      {activeSubTab === 'desempenho_cruz_extremidades' && (
+        <div className="space-y-6">
+          <DesempenhoFiltrosUltimos10Recharts
+            latestDraw={latestDraw}
+            filters={filters}
           />
         </div>
       )}
