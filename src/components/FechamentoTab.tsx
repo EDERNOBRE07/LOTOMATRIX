@@ -521,13 +521,85 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     );
   }, [generatedTickets]);
 
-  // Bilhetes exibidos com suporte a filtro do monitoramento
+  // Métricas de Auditoria dos Bilhetes Gerados em Tempo Real
+  const auditMetrics = useMemo(() => {
+    const isCruzAtiva = filters.cruzAtiva !== false;
+    const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+    let auditados = 0;
+    let foraDoPadrao = 0;
+
+    for (const t of generatedTickets) {
+      const b1 = t.bola1 ?? t.dezenas[0];
+      const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
+      const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+      const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+      const extremidadesFalhou =
+        isExtremidadesAtiva &&
+        (b1 < (filters.bola1Min ?? 1) ||
+          b1 > (filters.bola1Max ?? 4) ||
+          b15 < (filters.bola15Min ?? 22) ||
+          b15 > (filters.bola15Max ?? 25));
+
+      if (cruzFalhou || extremidadesFalhou) {
+        foraDoPadrao++;
+      } else {
+        auditados++;
+      }
+    }
+
+    return { auditados, foraDoPadrao };
+  }, [
+    generatedTickets,
+    filters.cruzAtiva,
+    filters.extremidadesAtiva,
+    filters.cruzMin,
+    filters.cruzMax,
+    filters.bola1Min,
+    filters.bola1Max,
+    filters.bola15Min,
+    filters.bola15Max,
+  ]);
+
+  // Bilhetes exibidos com suporte a filtro do monitoramento e auditoria em tempo real
   const displayedTickets = useMemo(() => {
+    const isCruzAtiva = filters.cruzAtiva !== false;
+    const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+
     if (fechamentoFilter === 'improbable' && fechamentoMonitoringSummary) {
       const improbableIds = fechamentoMonitoringSummary.gamesWithAnomalies.map((g) => g.gameId);
       return generatedTickets.filter((t) =>
         improbableIds.includes(`Bilhete #${t.index.toString().padStart(2, '0')}`)
       );
+    }
+    if (fechamentoFilter === 'auditado') {
+      return generatedTickets.filter((t) => {
+        const b1 = t.bola1 ?? t.dezenas[0];
+        const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
+        const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+        const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+        const extremidadesFalhou =
+          isExtremidadesAtiva &&
+          (b1 < (filters.bola1Min ?? 1) ||
+            b1 > (filters.bola1Max ?? 4) ||
+            b15 < (filters.bola15Min ?? 22) ||
+            b15 > (filters.bola15Max ?? 25));
+        return !cruzFalhou && !extremidadesFalhou;
+      });
+    }
+    if (fechamentoFilter === 'fora_padrao') {
+      return generatedTickets.filter((t) => {
+        const b1 = t.bola1 ?? t.dezenas[0];
+        const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
+        const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+        const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+        const extremidadesFalhou =
+          isExtremidadesAtiva &&
+          (b1 < (filters.bola1Min ?? 1) ||
+            b1 > (filters.bola1Max ?? 4) ||
+            b15 < (filters.bola15Min ?? 22) ||
+            b15 > (filters.bola15Max ?? 25));
+        return cruzFalhou || extremidadesFalhou;
+      });
     }
     if (fechamentoFilter.startsWith('Bilhete #')) {
       return generatedTickets.filter(
@@ -535,7 +607,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       );
     }
     return generatedTickets;
-  }, [generatedTickets, fechamentoFilter, fechamentoMonitoringSummary]);
+  }, [
+    generatedTickets,
+    fechamentoFilter,
+    fechamentoMonitoringSummary,
+    filters.cruzAtiva,
+    filters.extremidadesAtiva,
+    filters.cruzMin,
+    filters.cruzMax,
+    filters.bola1Min,
+    filters.bola1Max,
+    filters.bola15Min,
+    filters.bola15Max,
+  ]);
 
   // Atualização Automática da Matriz 5x5 quando qualquer filtro for alterado
   const handleFiltersChange = (newFilters: FilterCriteria, updateMatrix = true) => {
@@ -2823,6 +2907,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         <BolaoOficialCaixaCalculator
           totalJogos={preset.jogosMaximos}
           isModo16Dezenas={mode === '16_14_15'}
+          concursoRef={latestDraw?.concurso}
+          dataConcurso={latestDraw?.data}
+          nomeFechamento={getFullPrognosticoFechamentoName()}
         />
       )}
 
@@ -3288,14 +3375,196 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             }
           />
 
+          {/* Seletor Visual de Auditoria em Tempo Real (Cruz da Lotofácil & Bolas Extremas) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-sm">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Auditoria de Jogos em Tempo Real</span>
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                      Cruz & Extremidades
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Ative ou desative os filtros geométricos e de extremidades para auditar instantaneamente cada bilhete com os selos <strong className="text-emerald-300">Auditado</strong> ou <strong className="text-rose-300">Fora do Padrão</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Contadores em tempo real & Filtros rápidos de visualização */}
+              <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
+                <button
+                  type="button"
+                  onClick={() => setFechamentoFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                    fechamentoFilter === 'all'
+                      ? 'bg-slate-800 text-white border-slate-600 shadow-sm'
+                      : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  Todos ({generatedTickets.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFechamentoFilter('auditado')}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                    fechamentoFilter === 'auditado'
+                      ? 'bg-emerald-500/30 text-emerald-200 border-emerald-500/60 shadow-sm'
+                      : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  {auditMetrics.auditados} Auditados
+                </button>
+                {auditMetrics.foraDoPadrao > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFechamentoFilter('fora_padrao')}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                      fechamentoFilter === 'fora_padrao'
+                        ? 'bg-rose-500/30 text-rose-200 border-rose-500/60 shadow-sm animate-pulse'
+                        : 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                    {auditMetrics.foraDoPadrao} Fora do Padrão
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Chaves seletoras (Toggles) interativas em tempo real */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Toggle Cruz da Lotofácil */}
+              <div
+                onClick={() => {
+                  const nextVal = !(filters.cruzAtiva !== false);
+                  setFilters((prev) => ({ ...prev, cruzAtiva: nextVal }));
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
+                  filters.cruzAtiva !== false
+                    ? 'bg-blue-950/25 border-blue-500/40 text-blue-100 shadow-sm hover:border-blue-400'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base transition ${
+                      filters.cruzAtiva !== false
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    ✝
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          filters.cruzAtiva !== false
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 font-bold'
+                            : 'bg-slate-800 text-slate-500 border-slate-700'
+                        }`}
+                      >
+                        4 a 7 dezenas (Ouro 5-6)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Linha 3 e Coluna 3: [03, 08, 11, 12, 13, 14, 15, 18, 23]
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch visual */}
+                <div
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out shrink-0 ${
+                    filters.cruzAtiva !== false ? 'bg-blue-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      filters.cruzAtiva !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Toggle Bolas Extremas */}
+              <div
+                onClick={() => {
+                  const nextVal = !(filters.extremidadesAtiva !== false);
+                  setFilters((prev) => ({ ...prev, extremidadesAtiva: nextVal }));
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
+                  filters.extremidadesAtiva !== false
+                    ? 'bg-emerald-950/25 border-emerald-500/40 text-emerald-100 shadow-sm hover:border-emerald-400'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base transition ${
+                      filters.extremidadesAtiva !== false
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    ⚡
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Bolas Extremas</span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          filters.extremidadesAtiva !== false
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+                            : 'bg-slate-800 text-slate-500 border-slate-700'
+                        }`}
+                      >
+                        B1 [01-04] • B15 [22-25]
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Audita menor dezena (Bola 1) e maior dezena (Bola 15)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch visual */}
+                <div
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out shrink-0 ${
+                    filters.extremidadesAtiva !== false ? 'bg-emerald-600' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      filters.extremidadesAtiva !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Feedback de Filtro Ativo do Monitoramento */}
           {fechamentoFilter !== 'all' && (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
               <span className="flex items-center gap-1.5 font-medium">
                 <Filter className="w-3.5 h-3.5 text-amber-400" />
                 <span>
-                  Filtro do Monitoramento: Exibindo {displayedTickets.length} de {generatedTickets.length} fechamentos
-                  {fechamentoFilter === 'improbable' ? ' com padrão improvável' : ` (${fechamentoFilter})`}
+                  Filtro Ativo: Exibindo {displayedTickets.length} de {generatedTickets.length} fechamentos
+                  {fechamentoFilter === 'improbable'
+                    ? ' com padrão improvável'
+                    : fechamentoFilter === 'auditado'
+                    ? ' (Apenas Jogos Auditados)'
+                    : fechamentoFilter === 'fora_padrao'
+                    ? ' (Apenas Fora do Padrão)'
+                    : ` (${fechamentoFilter})`}
                 </span>
               </span>
               <button
@@ -3310,83 +3579,153 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
           {/* Tickets List */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
-            {displayedTickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                className="bg-slate-950/70 rounded-xl border border-slate-800/90 p-3.5 hover:border-slate-700 transition"
-              >
-                {/* Header of Ticket */}
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded text-[11px]">
-                      Bilhete #{ticket.index.toString().padStart(2, '0')}
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-mono">
-                      IA Score: {ticket.scoreIA}%
-                    </span>
+            {displayedTickets.map((ticket) => {
+              const b1 = ticket.bola1 ?? ticket.dezenas[0];
+              const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
+              const cruzCount =
+                ticket.cruz ??
+                ticket.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+
+              const isCruzAtiva = filters.cruzAtiva !== false;
+              const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+
+              const cruzFalhou =
+                isCruzAtiva &&
+                (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+              const extremidadesFalhou =
+                isExtremidadesAtiva &&
+                (b1 < (filters.bola1Min ?? 1) ||
+                  b1 > (filters.bola1Max ?? 4) ||
+                  b15 < (filters.bola15Min ?? 22) ||
+                  b15 > (filters.bola15Max ?? 25));
+
+              const isForaDoPadrao = cruzFalhou || extremidadesFalhou;
+              const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
+
+              return (
+                <div
+                  key={ticket.id}
+                  className={`bg-slate-950/70 rounded-xl border p-3.5 hover:border-slate-700 transition ${
+                    isForaDoPadrao
+                      ? 'border-rose-500/50 bg-rose-950/15'
+                      : 'border-slate-800/90'
+                  }`}
+                >
+                  {/* Header of Ticket */}
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded text-[11px]">
+                        Bilhete #{ticket.index.toString().padStart(2, '0')}
+                      </span>
+
+                      {/* Selo Principal: Auditado vs Fora do Padrão */}
+                      {isForaDoPadrao ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/50 animate-pulse shadow-sm"
+                          title={`${cruzFalhou ? `Cruz: ${cruzCount} (fora da faixa 4-7). ` : ''}${
+                            extremidadesFalhou ? `Extremidades: B1=${b1}, B15=${b15}.` : ''
+                          }`}
+                        >
+                          <AlertTriangle className="w-3 h-3 text-rose-400" />
+                          <span>Fora do Padrão</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>Auditado</span>
+                        </span>
+                      )}
+
+                      {/* Destaque visual Zona de Ouro da Cruz */}
+                      {isZonaOuroCruz && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-blue-300" />
+                          <span>Cruz Ouro</span>
+                        </span>
+                      )}
+
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        IA: {ticket.scoreIA}%
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleCopyTicket(ticket)}
+                      className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer"
+                      title="Copiar dezenas deste jogo"
+                    >
+                      {copiedTicketId === ticket.id ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => handleCopyTicket(ticket)}
-                    className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer"
-                    title="Copiar dezenas deste jogo"
-                  >
-                    {copiedTicketId === ticket.id ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+                  {/* Number Balls */}
+                  <div className="flex flex-wrap gap-1.5 my-2.5">
+                    {ticket.dezenas.map((num) => {
+                      const isKey = num === 17 || num === 22;
+                      return (
+                        <span
+                          key={num}
+                          className={`inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-mono text-xs font-bold transition shadow-sm ${
+                            isKey
+                              ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 ring-1 ring-amber-300'
+                              : 'bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 border border-slate-700'
+                          }`}
+                        >
+                          {num.toString().padStart(2, '0')}
+                        </span>
+                      );
+                    })}
+                  </div>
 
-                {/* Number Balls */}
-                <div className="flex flex-wrap gap-1.5 my-2.5">
-                  {ticket.dezenas.map((num) => {
-                    const isKey = num === 17 || num === 22;
-                    return (
-                      <span
-                        key={num}
-                        className={`inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-mono text-xs font-bold transition shadow-sm ${
-                          isKey
-                            ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 ring-1 ring-amber-300'
-                            : 'bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 border border-slate-700'
-                        }`}
-                      >
-                        {num.toString().padStart(2, '0')}
-                      </span>
-                    );
-                  })}
+                  {/* Analytical Tags */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 pt-2 border-t border-slate-850">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                      {ticket.pares}P / {ticket.impares}I
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-950/40 text-purple-300 font-mono border border-purple-500/20">
+                      {ticket.primos} Primos
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-950/40 text-amber-300 font-mono border border-amber-500/20">
+                      {ticket.moldura} Moldura
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono border ${
+                        isZonaOuroCruz
+                          ? 'bg-blue-500/25 text-blue-200 border-blue-400/50 font-bold shadow-sm'
+                          : cruzFalhou
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-500/40'
+                          : 'bg-blue-950/40 text-blue-300 border-blue-500/20'
+                      }`}
+                    >
+                      {cruzCount} Cruz {isZonaOuroCruz ? '★ Zona de Ouro' : cruzFalhou ? '(Fora 4-7)' : ''}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 font-mono border border-cyan-500/20">
+                      {ticket.fibonacci} Fibo
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                      Soma: {ticket.soma}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                      {ticket.repetidas} Rep. #{latestDraw.concurso}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono border ${
+                        extremidadesFalhou
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-bold'
+                          : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/20'
+                      }`}
+                    >
+                      B1: {b1.toString().padStart(2, '0')} | B15: {b15.toString().padStart(2, '0')}
+                      {extremidadesFalhou && ' ⚠️ Fora do Padrão'}
+                    </span>
+                  </div>
                 </div>
-
-                {/* Analytical Tags */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 pt-2 border-t border-slate-850">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                    {ticket.pares}P / {ticket.impares}I
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-purple-950/40 text-purple-300 font-mono border border-purple-500/20">
-                    {ticket.primos} Primos
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-amber-950/40 text-amber-300 font-mono border border-amber-500/20">
-                    {ticket.moldura} Moldura
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-blue-950/40 text-blue-300 font-mono border border-blue-500/20">
-                    {ticket.cruz ?? 0} Cruz
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 font-mono border border-cyan-500/20">
-                    {ticket.fibonacci} Fibo
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                    Soma: {ticket.soma}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                    {ticket.repetidas} Rep. #{latestDraw.concurso}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 font-mono border border-emerald-500/20">
-                    B1: {(ticket.bola1 ?? ticket.dezenas[0]).toString().padStart(2, '0')} | B15: {(ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1]).toString().padStart(2, '0')}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Calculadora Oficial de Bolão Caixa Econômica Federal */}
@@ -3394,6 +3733,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             <BolaoOficialCaixaCalculator
               totalJogos={generatedTickets.length}
               isModo16Dezenas={mode === '16_14_15'}
+              concursoRef={latestDraw?.concurso}
+              dataConcurso={latestDraw?.data}
+              nomeFechamento={getFullPrognosticoFechamentoName()}
             />
           </div>
         </div>

@@ -643,77 +643,162 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             </div>
 
             {/* 2.5 FILTRO GEOMÉTRICO: CRUZ DA LOTOFÁCIL (9 DEZENAS CENTRAIS) */}
-            <div className="bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border border-blue-500/40 space-y-3">
+            <div className="bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-blue-500/40 space-y-3 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Square className="w-4 h-4 text-blue-400" />
                   <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
                 </div>
-                <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded border border-blue-400/40">
-                  {filters.cruzMin ?? 4}–{filters.cruzMax ?? 7} dezenas
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {(filters.cruzMin === 5 && filters.cruzMax === 6) && (
+                    <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded shadow-sm shadow-amber-500/20">
+                      ★ ZONA DE OURO
+                    </span>
+                  )}
+                  <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded border border-blue-400/40">
+                    {filters.cruzMin ?? 4}–{filters.cruzMax ?? 7} dezenas
+                  </span>
+                </div>
               </div>
+
               <p className="text-[11px] text-slate-400">
-                Linha 3 e Coluna 3: <span className="font-mono text-blue-300 font-semibold">{CRUZ_DEZENAS.map(n => n.toString().padStart(2, '0')).join(', ')}</span>.
+                Linha 3 e Coluna 3 (9 dezenas):{' '}
+                <span className="font-mono text-blue-300 font-bold">
+                  {CRUZ_DEZENAS.map((n) => n.toString().padStart(2, '0')).join(', ')}
+                </span>
               </p>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => update({ cruzMin: 5, cruzMax: 6 })}
-                    className={`px-2 py-1 text-[10px] rounded font-bold border transition cursor-pointer ${
-                      filters.cruzMin === 5 && filters.cruzMax === 6
-                        ? 'bg-blue-500 text-slate-950 border-blue-400'
-                        : 'bg-slate-800 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    5 a 6 (Zona Ouro)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => update({ cruzMin: 4, cruzMax: 7 })}
-                    className={`px-2 py-1 text-[10px] rounded font-bold border transition cursor-pointer ${
-                      filters.cruzMin === 4 && filters.cruzMax === 7
-                        ? 'bg-blue-500 text-slate-950 border-blue-400'
-                        : 'bg-slate-800 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    4 a 7 (Padrão)
-                  </button>
-                </div>
+              {/* Botões Pré-definidos com Destaque para Zona de Ouro (5 a 6) */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => update({ cruzMin: 5, cruzMax: 6 })}
+                  className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
+                    filters.cruzMin === 5 && filters.cruzMax === 6
+                      ? 'bg-gradient-to-r from-amber-500/30 to-blue-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md shadow-amber-500/20'
+                      : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 font-black text-amber-300">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>5 a 6 Dezenas</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                    Zona de Ouro (&gt;72% histórico)
+                  </span>
+                </button>
 
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Mín: {filters.cruzMin ?? 4}</span>
-                  <span>Máx: {filters.cruzMax ?? 7}</span>
+                <button
+                  type="button"
+                  onClick={() => update({ cruzMin: 4, cruzMax: 7 })}
+                  className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
+                    filters.cruzMin === 4 && filters.cruzMax === 7
+                      ? 'bg-blue-500/30 border-blue-400 text-blue-200 ring-1 ring-blue-400/60 shadow-md shadow-blue-500/20'
+                      : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  <span className="font-bold text-blue-300">4 a 7 Dezenas</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                    Padrão Amplo (&gt;92% histórico)
+                  </span>
+                </button>
+              </div>
+
+              {/* Sliders de Ajuste Fino Customizado (4 a 7) */}
+              <div className="space-y-2 pt-2 border-t border-slate-850">
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>Ajuste Manual do Filtro:</span>
+                  <span className="font-mono text-blue-300 font-bold">
+                    Mín: {filters.cruzMin ?? 4} | Máx: {filters.cruzMax ?? 7}
+                  </span>
                 </div>
-                <input
-                  type="range"
-                  min="3"
-                  max="8"
-                  value={filters.cruzMax ?? 7}
-                  onChange={(e) => update({ cruzMax: parseInt(e.target.value, 10) })}
-                  className="w-full accent-blue-400 cursor-pointer"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-slate-400 block mb-1">Mínimo na Cruz:</label>
+                    <input
+                      type="range"
+                      min="3"
+                      max="6"
+                      value={filters.cruzMin ?? 4}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        update({
+                          cruzMin: val,
+                          cruzMax: Math.max(val, filters.cruzMax ?? 7),
+                        });
+                      }}
+                      className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-slate-400 block mb-1">Máximo na Cruz:</label>
+                    <input
+                      type="range"
+                      min="5"
+                      max="8"
+                      value={filters.cruzMax ?? 7}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        update({
+                          cruzMax: val,
+                          cruzMin: Math.min(val, filters.cruzMin ?? 4),
+                        });
+                      }}
+                      className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* 2.6 FILTRO DE BOLAS EXTREMAS (BOLA 1 E BOLA 15) & REFINAMENTO PRIMOS */}
-            <div className="bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 p-4 rounded-2xl border border-emerald-500/40 space-y-3">
+            {/* 2.6 FILTRO DE EXTREMIDADES (BOLA 1 E BOLA 15) */}
+            <div className="bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-emerald-500/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-white">Extremidades (Bola 1 / 15)</span>
+                  <span className="text-xs font-bold text-white">Filtro de Extremidades</span>
                 </div>
-                <span className="font-mono text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                <span className="font-mono text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/40">
                   B1:[01-04] • B15:[22-25]
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Evita sequências viciadas e garante abertura em 01-04 e encerramento em 22-25.
+                Audita se a <strong className="text-slate-200">Bola 1</strong> (menor dezena) está em [01-04] e a <strong className="text-slate-200">Bola 15</strong> (maior dezena) em [22-25]. Jogos fora desta regra são sinalizados com badge de <strong className="text-rose-300">Fora do Padrão</strong>.
               </p>
 
-              <div className="space-y-2 pt-1 border-t border-slate-800">
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                  <div className="flex justify-between items-center text-[10px] text-slate-400">
+                    <span>Bola 1 (Máx):</span>
+                    <span className="font-mono text-emerald-400 font-bold">≤ 0{filters.bola1Max ?? 4}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    value={filters.bola1Max ?? 4}
+                    onChange={(e) => update({ bola1Max: parseInt(e.target.value, 10) })}
+                    className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-850 rounded mt-1.5"
+                  />
+                </div>
+
+                <div className="bg-slate-900/80 p-2 rounded-xl border border-slate-800">
+                  <div className="flex justify-between items-center text-[10px] text-slate-400">
+                    <span>Bola 15 (Mín):</span>
+                    <span className="font-mono text-emerald-400 font-bold">≥ {filters.bola15Min ?? 22}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="20"
+                    max="25"
+                    value={filters.bola15Min ?? 22}
+                    onChange={(e) => update({ bola15Min: parseInt(e.target.value, 10) })}
+                    className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-850 rounded mt-1.5"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 border-t border-slate-850 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-slate-300">Primos Zona de Ouro (5-6):</span>
                   <button

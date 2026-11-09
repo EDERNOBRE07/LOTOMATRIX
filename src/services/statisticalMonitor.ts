@@ -1,8 +1,8 @@
-import { PRIMOS, MOLDURA, MIOLO } from '../data/lotofacilData';
+import { PRIMOS, MOLDURA, MIOLO, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { getMaxConsecutiveSequence } from './combinatorics';
 
 export interface StatisticalAnomaly {
-  type: 'soma' | 'paridade' | 'primos' | 'moldura' | 'sequencia';
+  type: 'soma' | 'paridade' | 'primos' | 'moldura' | 'sequencia' | 'extremidades' | 'cruz';
   severity: 'critical' | 'warning';
   title: string;
   description: string;
@@ -21,9 +21,14 @@ export interface GameMonitoringResult {
   primos: number;
   moldura: number;
   miolo: number;
+  cruz: number;
+  bola1: number;
+  bola15: number;
   maxSequencia: number;
   isImprobable: boolean;
   hasCriticalAnomaly: boolean;
+  hasExtremidadesAnomaly: boolean;
+  isZonaDeOuroCruz: boolean;
   anomalies: StatisticalAnomaly[];
 }
 
@@ -37,6 +42,9 @@ export interface MonitoringSummary {
   primosAnomaliesCount: number;
   molduraAnomaliesCount: number;
   sequenciaAnomaliesCount: number;
+  extremidadesAnomaliesCount: number;
+  cruzAnomaliesCount: number;
+  cruzZonaOuroCount: number;
   gamesWithAnomalies: GameMonitoringResult[];
   allResults: GameMonitoringResult[];
 }
@@ -62,6 +70,9 @@ export function analyzeGameStatistics(
   const primos = sorted.filter((n) => PRIMOS.includes(n)).length;
   const moldura = sorted.filter((n) => MOLDURA.includes(n)).length;
   const miolo = sorted.filter((n) => MIOLO.includes(n)).length;
+  const cruz = sorted.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
   const maxSequencia = getMaxConsecutiveSequence(sorted);
 
   const anomalies: StatisticalAnomaly[] = [];
@@ -175,6 +186,55 @@ export function analyzeGameStatistics(
     });
   }
 
+  // 6. Filtro de Extremidades: Bola 1 [1-4] e Bola 15 [22-25]
+  const hasExtremidadesAnomaly = bola1 < 1 || bola1 > 4 || bola15 < 22 || bola15 > 25;
+  if (bola1 > 4) {
+    anomalies.push({
+      type: 'extremidades',
+      severity: 'warning',
+      title: `Bola 1 Fora do Padrão (${bola1.toString().padStart(2, '0')})`,
+      description: `A primeira dezena do bilhete é ${bola1.toString().padStart(2, '0')}. O padrão canônico da Lotofácil (mais de 98.5% dos concursos) tem a Bola 1 no range [01 a 04]. Jogos iniciados em 05 ou mais possuem chance atípica inferior a 1.5%.`,
+      value: `Bola 1: ${bola1.toString().padStart(2, '0')}`,
+      idealRange: '01 a 04',
+      historicalFrequency: '< 1.5% histórico',
+    });
+  }
+  if (bola15 < 22) {
+    anomalies.push({
+      type: 'extremidades',
+      severity: 'warning',
+      title: `Bola 15 Fora do Padrão (${bola15.toString().padStart(2, '0')})`,
+      description: `A última dezena do bilhete é ${bola15.toString().padStart(2, '0')}. O padrão canônico da Lotofácil (mais de 98.7% dos concursos) tem a Bola 15 no range [22 a 25]. Jogos encerrados em 21 ou menos ocorrem em menos de 1.3% dos sorteios.`,
+      value: `Bola 15: ${bola15.toString().padStart(2, '0')}`,
+      idealRange: '22 a 25',
+      historicalFrequency: '< 1.3% histórico',
+    });
+  }
+
+  // 7. Filtro Avançado: Cruz da Lotofácil (9 dezenas centrais: 3, 8, 11, 12, 13, 14, 15, 18, 23)
+  const isZonaDeOuroCruz = cruz >= 5 && cruz <= 6;
+  if (cruz < 4) {
+    anomalies.push({
+      type: 'cruz',
+      severity: 'warning',
+      title: `Pouca Cruz (${cruz} dezenas)`,
+      description: `Apenas ${cruz} dezenas na Cruz da Lotofácil. A faixa canônica de equilíbrio é de 4 a 7 dezenas, com destaque para a Zona de Ouro (5 a 6 dezenas presentes em >72% dos concursos).`,
+      value: `${cruz} na Cruz`,
+      idealRange: '4 a 7 dezenas (Zona de Ouro: 5 a 6)',
+      historicalFrequency: '< 6.5% histórico',
+    });
+  } else if (cruz > 7) {
+    anomalies.push({
+      type: 'cruz',
+      severity: 'warning',
+      title: `Excesso na Cruz (${cruz} dezenas)`,
+      description: `Foram marcadas ${cruz} dezenas na Cruz da Lotofácil. Mais de 7 dezenas na Cruz representa concentração excessiva que ocorre em menos de 3.2% dos sorteios.`,
+      value: `${cruz} na Cruz`,
+      idealRange: '4 a 7 dezenas (Zona de Ouro: 5 a 6)',
+      historicalFrequency: '< 3.2% histórico',
+    });
+  }
+
   const isImprobable = anomalies.length > 0;
   const hasCriticalAnomaly = anomalies.some((a) => a.severity === 'critical');
 
@@ -188,9 +248,14 @@ export function analyzeGameStatistics(
     primos,
     moldura,
     miolo,
+    cruz,
+    bola1,
+    bola15,
     maxSequencia,
     isImprobable,
     hasCriticalAnomaly,
+    hasExtremidadesAnomaly,
+    isZonaDeOuroCruz,
     anomalies,
   };
 }
@@ -216,6 +281,13 @@ export function analyzeGamesList(
   let primosAnomaliesCount = 0;
   let molduraAnomaliesCount = 0;
   let sequenciaAnomaliesCount = 0;
+  let extremidadesAnomaliesCount = 0;
+  let cruzAnomaliesCount = 0;
+  let cruzZonaOuroCount = 0;
+
+  allResults.forEach((game) => {
+    if (game.isZonaDeOuroCruz) cruzZonaOuroCount++;
+  });
 
   gamesWithAnomalies.forEach((game) => {
     game.anomalies.forEach((anom) => {
@@ -224,6 +296,8 @@ export function analyzeGamesList(
       if (anom.type === 'primos') primosAnomaliesCount++;
       if (anom.type === 'moldura') molduraAnomaliesCount++;
       if (anom.type === 'sequencia') sequenciaAnomaliesCount++;
+      if (anom.type === 'extremidades') extremidadesAnomaliesCount++;
+      if (anom.type === 'cruz') cruzAnomaliesCount++;
     });
   });
 
@@ -237,6 +311,9 @@ export function analyzeGamesList(
     primosAnomaliesCount,
     molduraAnomaliesCount,
     sequenciaAnomaliesCount,
+    extremidadesAnomaliesCount,
+    cruzAnomaliesCount,
+    cruzZonaOuroCount,
     gamesWithAnomalies,
     allResults,
   };

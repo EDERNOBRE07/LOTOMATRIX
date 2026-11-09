@@ -87,11 +87,16 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
     let sequenciaOk = 0;
     let fixasOk = 0;
     let excluidasOk = 0;
+    let cruzOk = 0;
+    let cruzZonaOuroCount = 0;
+    let extremidadesOk = 0;
     let allCompliantCount = 0;
 
     const dezenasFixas = activeFiltersConfig.dezenasFixas || [];
     const dezenasExcluidas = activeFiltersConfig.dezenasExcluidas || [];
     const maxConsecutivas = activeFiltersConfig.maxConsecutivas ?? 6;
+    const cruzMin = activeFiltersConfig.cruzMin ?? 4;
+    const cruzMax = activeFiltersConfig.cruzMax ?? 7;
 
     try {
       activeSummary.allResults.forEach((game) => {
@@ -125,6 +130,16 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
           dezenasExcluidas.length === 0 ||
           !dezenasExcluidas.some((n) => game.dezenas.includes(n));
 
+        const cruzCount =
+          game.cruz ??
+          game.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+        const crOk = cruzCount >= cruzMin && cruzCount <= cruzMax;
+        if (cruzCount >= 5 && cruzCount <= 6) cruzZonaOuroCount++;
+
+        const b1 = game.bola1 ?? game.dezenas[0];
+        const b15 = game.bola15 ?? game.dezenas[game.dezenas.length - 1];
+        const extOk = b1 >= 1 && b1 <= 4 && b15 >= 22 && b15 <= 25;
+
         if (pOk) paresOk++;
         if (sOk) somaOk++;
         if (prOk) primosOk++;
@@ -134,8 +149,10 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
         if (seqOk) sequenciaOk++;
         if (fixOk) fixasOk++;
         if (excOk) excluidasOk++;
+        if (crOk) cruzOk++;
+        if (extOk) extremidadesOk++;
 
-        if (pOk && sOk && prOk && mOk && fOk && rOk && seqOk && fixOk && excOk) {
+        if (pOk && sOk && prOk && mOk && fOk && rOk && seqOk && fixOk && excOk && crOk && extOk) {
           allCompliantCount++;
         }
       });
@@ -156,6 +173,9 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
       sequenciaPercent: total > 0 ? Math.round((sequenciaOk / total) * 100) : 100,
       fixasPercent: total > 0 ? Math.round((fixasOk / total) * 100) : 100,
       excluidasPercent: total > 0 ? Math.round((excluidasOk / total) * 100) : 100,
+      cruzPercent: total > 0 ? Math.round((cruzOk / total) * 100) : 100,
+      cruzZonaOuroCount,
+      extremidadesPercent: total > 0 ? Math.round((extremidadesOk / total) * 100) : 100,
     };
   }, [activeFiltersConfig, activeSummary.allResults]);
 
@@ -412,6 +432,24 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
                 </span>
               </span>
             )}
+
+            {activeSummary.extremidadesAnomaliesCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold text-[11px]">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                <span>
+                  {activeSummary.extremidadesAnomaliesCount} jogo(s) com Extremidades Fora do Padrão [1-4 / 22-25]
+                </span>
+              </span>
+            )}
+
+            {activeSummary.cruzAnomaliesCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/15 text-blue-300 border border-blue-500/30 font-semibold text-[11px]">
+                <AlertTriangle className="w-3.5 h-3.5 text-blue-400" />
+                <span>
+                  {activeSummary.cruzAnomaliesCount} jogo(s) com Cruz fora da faixa (4-7)
+                </span>
+              </span>
+            )}
           </div>
         )}
 
@@ -426,11 +464,22 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
                 onClick={() => {
                   if (onSelectGame) onSelectGame(game.gameId);
                 }}
-                className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-amber-500/20 text-slate-200 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1"
+                className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-amber-500/20 text-slate-200 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5"
                 title={game.anomalies.map((a) => a.title).join(' • ')}
               >
                 <span>{game.gameId}</span>
-                <span className="text-amber-400">⚠</span>
+                {game.hasExtremidadesAnomaly ? (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                    Fora do Padrão
+                  </span>
+                ) : (
+                  <span className="text-amber-400">⚠</span>
+                )}
+                {game.isZonaDeOuroCruz && (
+                  <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
+                    Cruz Ouro
+                  </span>
+                )}
                 <span className="text-[10px] text-slate-400 font-normal">
                   (Soma {game.soma} • {game.pares}P/{game.impares}I)
                 </span>
@@ -461,12 +510,12 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
             </div>
 
             {/* Grid of Verified Filters */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-xs">
               {/* Pares/Impares */}
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Pares / Ímpares</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.paresPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.paresMin} a {activeFiltersConfig?.paresMax} Pares
@@ -477,7 +526,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Soma Canônica</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.somaPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.somaMin} a {activeFiltersConfig?.somaMax}
@@ -488,7 +537,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Primos</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.primosPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.primosMin} a {activeFiltersConfig?.primosMax} Primos
@@ -499,7 +548,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Moldura</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.molduraPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.molduraMin} a {activeFiltersConfig?.molduraMax} Moldura
@@ -510,7 +559,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Fibonacci</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.fiboPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.fibonacciMin} a {activeFiltersConfig?.fibonacciMax} Fibo
@@ -521,10 +570,38 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
               <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>Repetidas</span>
-                  <span className="text-emerald-400 font-bold font-mono">100% ✓</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.repetidasPercent}% ✓</span>
                 </div>
                 <div className="font-bold text-white text-[11px] mt-0.5 font-mono">
                   {activeFiltersConfig?.repetidasMin} a {activeFiltersConfig?.repetidasMax} Repet.
+                </div>
+              </div>
+
+              {/* Cruz da Lotofácil (Filtro Avançado com Destaque Zona de Ouro) */}
+              <div className="bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 p-2.5 rounded-xl border border-blue-500/40">
+                <div className="flex items-center justify-between text-[10px] text-blue-300">
+                  <span>Cruz Lotofácil</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.cruzPercent}% ✓</span>
+                </div>
+                <div className="font-bold text-white text-[11px] mt-0.5 font-mono flex items-center gap-1">
+                  <span>{activeFiltersConfig?.cruzMin ?? 4}–{activeFiltersConfig?.cruzMax ?? 7} Cruz</span>
+                </div>
+                <div className="text-[9px] text-amber-300 font-bold font-mono mt-0.5">
+                  ★ Ouro: 5 a 6
+                </div>
+              </div>
+
+              {/* Filtro de Extremidades: Bola 1 [1-4] e Bola 15 [22-25] */}
+              <div className="bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 p-2.5 rounded-xl border border-emerald-500/40">
+                <div className="flex items-center justify-between text-[10px] text-emerald-300">
+                  <span>Extremidades</span>
+                  <span className="text-emerald-400 font-bold font-mono">{filterAudit.extremidadesPercent}% ✓</span>
+                </div>
+                <div className="font-bold text-white text-[10px] mt-0.5 font-mono">
+                  B1:[1-4] B15:[22-25]
+                </div>
+                <div className="text-[9px] text-emerald-400 font-semibold font-mono mt-0.5">
+                  Canônico CEF
                 </div>
               </div>
             </div>

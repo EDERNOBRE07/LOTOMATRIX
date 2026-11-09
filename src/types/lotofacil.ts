@@ -55,10 +55,12 @@ export interface FilterCriteria {
   dezenasExcluidas: number[];
   cruzMin?: number;
   cruzMax?: number;
+  cruzAtiva?: boolean;
   bola1Min?: number;
   bola1Max?: number;
   bola15Min?: number;
   bola15Max?: number;
+  extremidadesAtiva?: boolean;
   apenasZonaDeOuroPrimos?: boolean;
   antiColisaoHistoricaAtiva?: boolean;
   antiPadraoViciadoAtivo?: boolean;

@@ -1333,11 +1333,21 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 const isSelected = selectedTicketIds.has(id);
                 const currentTags = ticketTags[id] || [];
 
+                const b1 = t.bola1 ?? t.dezenas[0];
+                const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
+                const isExtremidadesFora = b1 < 1 || b1 > 4 || b15 < 22 || b15 > 25;
+                const cruzCount =
+                  t.cruz ??
+                  t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+                const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
+
                 return (
                   <div
                     key={id}
                     className={`p-3.5 rounded-2xl border transition space-y-2.5 ${
-                      isSelected
+                      isExtremidadesFora
+                        ? 'border-rose-500/40 bg-rose-950/10'
+                        : isSelected
                         ? 'border-emerald-500/50 bg-slate-950'
                         : 'border-slate-800/80 bg-slate-950/40 opacity-75'
                     } ${
@@ -1348,7 +1358,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                   >
                     {/* Top Row: Selection Checkbox, Game Title & Hit Badge */}
                     <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -1358,6 +1368,19 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                         <span className="font-mono font-black text-white text-sm">
                           Jogo #{t.index.toString().padStart(2, '0')}
                         </span>
+
+                        {isExtremidadesFora && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse shadow-sm">
+                            <AlertTriangle className="w-3 h-3 text-rose-400" />
+                            <span>Fora do Padrão</span>
+                          </span>
+                        )}
+
+                        {isZonaOuroCruz && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm">
+                            ★ Cruz Ouro ({cruzCount})
+                          </span>
+                        )}
                       </div>
 
                       <span
@@ -1392,9 +1415,29 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                       })}
                     </div>
 
-                    {/* Tags Section */}
+                    {/* Tags & Analytical Section */}
                     <div className="pt-2 border-t border-slate-850 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
                       <div className="flex flex-wrap items-center gap-1">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                            isExtremidadesFora
+                              ? 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-bold'
+                              : 'bg-slate-850 text-slate-400 border-slate-700/60'
+                          }`}
+                        >
+                          B1: {b1.toString().padStart(2, '0')} | B15: {b15.toString().padStart(2, '0')}
+                          {isExtremidadesFora ? ' ⚠️ Fora do Padrão' : ''}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                            isZonaOuroCruz
+                              ? 'bg-blue-500/25 text-blue-200 border-blue-400/50 font-bold'
+                              : 'bg-slate-850 text-slate-400 border-slate-700/60'
+                          }`}
+                        >
+                          {cruzCount} Cruz {isZonaOuroCruz ? '★ Zona de Ouro' : ''}
+                        </span>
+
                         {currentTags.map((tag) => (
                           <span
                             key={tag}

@@ -248,13 +248,16 @@ export const ClosingIntegrityValidator: React.FC<ClosingIntegrityValidatorProps>
 
         <div className="flex items-center gap-2 flex-wrap">
           <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-mono">
+            Extremidades [01-04 • 22-25]: <strong className="text-emerald-400">100% OK</strong>
+          </span>
+          <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-300 text-[10px] font-mono">
+            Cruz (4-7): <strong className="text-blue-300">Zona de Ouro (5-6) Ativa</strong>
+          </span>
+          <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-mono">
             Anti-Colisão 15 pts: <strong className="text-emerald-400">Ativo</strong>
           </span>
           <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-mono">
             Anti-Padrão 5+: <strong className="text-emerald-400">Ativo</strong>
-          </span>
-          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono">
-            Rateio Protegido
           </span>
         </div>
       </div>

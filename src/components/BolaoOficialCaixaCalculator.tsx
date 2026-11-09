@@ -11,6 +11,11 @@ import {
   ChevronRight,
   Layers,
   Award,
+  FileText,
+  Download,
+  Printer,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 
@@ -19,6 +24,9 @@ interface BolaoOficialCaixaCalculatorProps {
   custoTotal?: number;
   isModo16Dezenas?: boolean;
   dezenasPorJogo?: number;
+  concursoRef?: number;
+  dataConcurso?: string;
+  nomeFechamento?: string;
 }
 
 // Tabela Oficial de Premiação Múltipla da Caixa Econômica Federal ao acertar 14 pontos
@@ -45,7 +53,12 @@ export const BolaoOficialCaixaCalculator: React.FC<BolaoOficialCaixaCalculatorPr
   custoTotal: propCustoTotal,
   isModo16Dezenas = false,
   dezenasPorJogo: initialDezenas = 15,
+  concursoRef,
+  dataConcurso,
+  nomeFechamento,
 }) => {
+  const [copiedTxt, setCopiedTxt] = useState(false);
+
   // Modalidade de aposta no bolão (15 a 20 dezenas)
   const [selectedDezenasTipo, setSelectedDezenasTipo] = useState<number>(() => {
     if (isModo16Dezenas) return 16;
@@ -365,6 +378,133 @@ export const BolaoOficialCaixaCalculator: React.FC<BolaoOficialCaixaCalculatorPr
         <span className="text-[11px] font-mono text-slate-400 shrink-0">
           Resgate Bruto: R$ {retornoBrutoPorCota.toFixed(2)} / cota
         </span>
+      </div>
+
+      {/* Barra de Ações: Exportação TXT para Impressão e Compartilhamento */}
+      <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <FileText className="w-4 h-4 text-emerald-400" />
+          <span>
+            Resumo oficial do bolão pronto para impressão e lista de participantes com cotas.
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              const dataHoraStr = new Date().toLocaleString('pt-BR');
+              const linhas = [
+                '================================================================================',
+                '      LOTOSNIPER PRO • RESUMO TÉCNICO OFICIAL DE BOLÃO DA LOTOFÁCIL',
+                '         Auditoria Matemática, Normas Caixa e Divisão por Cotas',
+                '================================================================================',
+                `Data de Emissão: ${dataHoraStr}`,
+                `Concurso de Referência: #${concursoRef || 3822}${dataConcurso ? ` (${dataConcurso})` : ''}`,
+                `Estratégia / Fechamento: ${nomeFechamento || 'Fechamento Canônico LotoSniper'}`,
+                '--------------------------------------------------------------------------------',
+                '',
+                '[1. DADOS OFICIAIS DO RATEIO DO BOLÃO]',
+                `• Total de Jogos / Volantes: ${totalJogos} jogos`,
+                `• Modalidade de Aposta: ${selectedDezenasTipo} Dezenas por Volante (${multiplaConfig.descricao})`,
+                `• Valor Total do Bolão: R$ ${custoTotalCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                `• Quantidade de Cotas Oficiais: ${safeCotas} cotas`,
+                `• CUSTO INDIVIDUAL POR PARTICIPANTE: R$ ${valorPorCota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                `• Volume de Apostas por Participante: ${(totalJogos / safeCotas).toFixed(1)} jogos por cota`,
+                `• Regras CEF: Piso de R$ 12,00 por bolão | Mínimo de R$ 4,00 por cota (2 a 100 cotas)`,
+                `• Validação CEF: ${valorPorCota >= 4.0 ? 'APROVADO (Atende todas as normas da Caixa)' : 'ALERTA (Abaixo de R$ 4,00 por cota)'}`,
+                '',
+                '[2. PROJEÇÃO DE RETORNO PARA PRÊMIOS DE 14 PONTOS (APOSTAS MÚLTIPLAS)]',
+                `• Premiação Base Caixa (Estimativa Média): R$ 2.150,40 (14 pts) | R$ 35,00 (13 pts)`,
+                `• Multiplicador Caixa (${selectedDezenasTipo} Dezenas): ${multiplaConfig.premios14}x prêmio de 14 pts${multiplaConfig.premios13 > 0 ? ` + ${multiplaConfig.premios13}x prêmio de 13 pts` : ''}`,
+                `• Prêmio Bruto Total Estimado: R$ ${premio14EstimadoBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                `• Retorno Bruto por Cota: R$ ${retornoBrutoPorCota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                `• LUCRO LÍQUIDO ESTIMADO POR COTA: R$ ${lucroLiquidoPorCota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (+${roiCota.toFixed(0)}% ROI)`,
+                '',
+                '================================================================================',
+                '      LISTA DE CONTROLE E ASSINATURA DOS PARTICIPANTES (FOLHA DE IMPRESSÃO)',
+                '================================================================================',
+                'Nº  | NOME DO PARTICIPANTE          | COTAS | VALOR PAGO   | ASSINATURA / RECIBO',
+                '----+-------------------------------+-------+--------------+--------------------',
+              ];
+
+              for (let i = 1; i <= Math.min(safeCotas, 50); i++) {
+                linhas.push(
+                  `${i.toString().padStart(2, '0')}  | _____________________________ | _____ | R$ _________ | ___________________`
+                );
+              }
+
+              linhas.push(
+                '================================================================================',
+                'Instruções para o Administrador do Bolão:',
+                '1. Registre os volantes na lotérica credenciada da Caixa Econômica Federal.',
+                '2. Solicite a emissão do recibo de cota oficial individual para cada participante.',
+                '3. Cada cota oficial Caixa é um título ao portador com direito direto ao prêmio.',
+                '================================================================================',
+                'Gerado automaticamente por LotoSniper Pro • https://lotosniper.app'
+              );
+
+              const txtContent = linhas.join('\r\n');
+              const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `resumo_bolao_lotosniper_${safeCotas}cotas.txt`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20"
+            title="Baixar resumo do rateio formatado em arquivo de texto para impressão"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-950" />
+            <span>Exportar Resumo (.TXT)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const dataHoraStr = new Date().toLocaleString('pt-BR');
+              const resumo = [
+                `LOTOSNIPER PRO • RESUMO DO BOLÃO (${safeCotas} Cotas)`,
+                `Concurso: #${concursoRef || 3822}`,
+                `Total de Jogos: ${totalJogos} | Modalidade: ${selectedDezenasTipo} Dezenas`,
+                `Valor Total do Bolão: R$ ${custoTotalCalculado.toFixed(2)}`,
+                `Valor por Cota: R$ ${valorPorCota.toFixed(2)} / participante`,
+                `Prêmio 14 pts Estimado: R$ ${premio14EstimadoBruto.toFixed(2)}`,
+                `Lucro Líquido por Cota: R$ ${lucroLiquidoPorCota.toFixed(2)} (+${roiCota.toFixed(0)}% ROI)`,
+              ].join('\n');
+              navigator.clipboard.writeText(resumo);
+              setCopiedTxt(true);
+              setTimeout(() => setCopiedTxt(false), 3000);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+            title="Copiar resumo do rateio para a área de transferência"
+          >
+            {copiedTxt ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-300">Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-400" />
+                <span>Copiar Resumo</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+            title="Imprimir folha de controle e cotas do bolão"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-400" />
+            <span>Imprimir</span>
+          </button>
+        </div>
       </div>
     </div>
   );

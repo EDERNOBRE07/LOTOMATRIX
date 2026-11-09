@@ -394,19 +394,21 @@ export function ticketPassesFilters(
   if (ticket.maxConsecutivas > filters.maxConsecutivas) return false;
 
   // Filtro Geométrico: Cruz da Lotofácil (Padrão 4 a 7; Zona de Ouro: 5 a 6)
-  if (filters.cruzMin !== undefined && ticket.cruz !== undefined) {
+  if (filters.cruzAtiva !== false && filters.cruzMin !== undefined && ticket.cruz !== undefined) {
     if (ticket.cruz < filters.cruzMin || ticket.cruz > (filters.cruzMax ?? 7)) return false;
   }
 
   // Filtro de Bolas Extremas (Bola 1 e Bola 15)
-  const b1 = ticket.bola1 ?? ticket.dezenas[0];
-  const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
+  if (filters.extremidadesAtiva !== false) {
+    const b1 = ticket.bola1 ?? ticket.dezenas[0];
+    const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
 
-  if (filters.bola1Min !== undefined && filters.bola1Max !== undefined) {
-    if (b1 < filters.bola1Min || b1 > filters.bola1Max) return false;
-  }
-  if (filters.bola15Min !== undefined && filters.bola15Max !== undefined) {
-    if (b15 < filters.bola15Min || b15 > filters.bola15Max) return false;
+    if (filters.bola1Min !== undefined && filters.bola1Max !== undefined) {
+      if (b1 < filters.bola1Min || b1 > filters.bola1Max) return false;
+    }
+    if (filters.bola15Min !== undefined && filters.bola15Max !== undefined) {
+      if (b15 < filters.bola15Min || b15 > filters.bola15Max) return false;
+    }
   }
 
   // Refinamento Zona de Ouro de Primos: 5 a 6 primos estrito quando requisitado
@@ -1480,10 +1482,12 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   maxConsecutivas: 6, // Permite sequências de até 6 números consecutivos (ex: blocos 01-04, 16-18, 14-19)
   cruzMin: 4, // Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
   cruzMax: 7,
+  cruzAtiva: true,
   bola1Min: 1, // Bola 1 deve ser 1, 2, 3 ou 4 (idealmente 1 ou 2)
   bola1Max: 4,
   bola15Min: 22, // Bola 15 deve ser 22, 23, 24 ou 25 (idealmente 24 ou 25)
   bola15Max: 25,
+  extremidadesAtiva: true,
   apenasZonaDeOuroPrimos: false, // Quando ativo restringe estritamente para 5 ou 6 primos (>70% histórico)
   antiColisaoHistoricaAtiva: true, // Bloqueia combinações 100% idênticas a concursos anteriores da Caixa
   antiPadraoViciadoAtivo: true, // Veta linhas/colunas cheias e sequências em PA óbvias
