@@ -1,0 +1,748 @@
+Refatore o core do gerador de fechamentos em 'src/services/combinatorics.ts' para implementar a validação síncrona do 'activeFilterConfig'. Garanta que o algoritmo de redução de matriz realize uma poda antecipada de combinações violadoras e integre a lógica de feedback 'Nenhum jogo compatível com os filtros selecionados' para evitar sobre-restrição silenciosa.
+Crie um hook personalizado ou estado unificado no 'App.tsx' para persistir 'activeFilterConfig'. Adicione a lógica para capturar todos os parâmetros (pares/ímpares, primos, moldura, repetidas, soma, linhas/colunas, sequências) quando o botão 'Aplicar Filtros Estratégicos' for acionado e injete essa configuração no pipeline de geração de matriz.
+function validarIntegridadeFechamento(jogos, dezenasFixas = [], filtros = {}) {
+  console.time("Tempo de Auditoria");
+  const erros = [];
+  const hashes = new Set();
+
+  jogos.forEach((jogo, idx) => {
+    // 1. Tamanho do cartão
+    if (jogo.length !== 15) {
+      erros.push(`Cartão #${idx + 1}: Tamanho inválido (${jogo.length} dezenas).`);
+    }
+
+    // 2. Intervalo das dezenas (1 a 25)
+    const foraFaixa = jogo.filter(d => d < 1 || d > 25);
+    if (foraFaixa.length > 0) {
+      erros.push(`Cartão #${idx + 1}: Dezenas fora do limite 1-25: [${foraFaixa.join(', ')}].`);
+    }
+
+    // 3. Dezenas duplicadas dentro do mesmo volante
+    const unicos = new Set(jogo);
+    if (unicos.size !== jogo.length) {
+      erros.push(`Cartão #${idx + 1}: Dezenas duplicadas no mesmo cartão.`);
+    }
+
+    // 4. Cartões duplicados na matriz
+    const hash = [...jogo].sort((a, b) => a - b).join('-');
+    if (hashes.has(hash)) {
+      erros.push(`Cartão #${idx + 1}: Jogo duplicado encontrado na matriz.`);
+    } else {
+      hashes.add(hash);
+    }
+
+    // 5. Presença de dezenas fixas
+    if (dezenasFixas.length > 0) {
+      const fixasFaltantes = dezenasFixas.filter(f => !jogo.includes(f));
+      if (fixasFaltantes.length > 0) {
+        erros.push(`Cartão #${idx + 1}: Faltam fixas obrigatórias: [${fixasFaltantes.join(', ')}].`);
+      }
+    }
+
+    // 6. Validação de Filtros Específicos (ex: Soma)
+    if (filtros.somaMin && filtros.somaMax) {
+      const soma = jogo.reduce((acc, val) => acc + val, 0);
+      if (soma < filtros.somaMin || soma > filtros.somaMax) {
+        erros.push(`Cartão #${idx + 1}: Soma ${soma} fora da faixa [${filtros.somaMin}, ${filtros.somaMax}].`);
+      }
+    }
+  });
+
+  console.timeEnd("Tempo de Auditoria");
+  
+  if (erros.length === 0) {
+    console.log(`%c✔ Sucesso: ${jogos.length} cartões validados sem inconsistências.`, "color: green; font-weight: bold;");
+  } else {
+    console.error(`❌ Falhas encontradas (${erros.length}):`, erros.slice(0, 10)); // Exibe primeiras 10 falhas
+  }
+}
+
+// fechamento.worker.js
+
+// Tabela de apoio para regras estáticas da Lotofácil (1 a 25)
+const MOLDURA = new Set([1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]);
+const PRIMOS = new Set([2, 3, 5, 7, 11, 13, 17, 19, 23]);
+
+// Validador de filtros executado individualmente em cada combinação pronta
+function validarJogo(combinacao, filtros) {
+  let soma = 0;
+  let pares = 0;
+  let moldura = 0;
+  let primos = 0;
+
+  for (let i = 0; i < combinacao.length; i++) {
+    const d = combinacao[i];
+    soma += d;
+    if (d % 2 === 0) pares++;
+    if (MOLDURA.has(d)) moldura++;
+    if (PRIMOS.has(d)) primos++;
+  }
+
+  if (filtros.somaMin !== undefined && soma < filtros.somaMin) return false;
+  if (filtros.somaMax !== undefined && soma > filtros.somaMax) return false;
+  if (filtros.paresMin !== undefined && pares < filtros.paresMin) return false;
+  if (filtros.paresMax !== undefined && pares > filtros.paresMax) return false;
+  if (filtros.molduraMin !== undefined && moldura < filtros.molduraMin) return false;
+  if (filtros.molduraMax !== undefined && moldura > filtros.molduraMax) return false;
+  if (filtros.primosMin !== undefined && primos < filtros.primosMin) return false;
+  if (filtros.primosMax !== undefined && primos > filtros.primosMax) return false;
+
+  return true;
+}
+
+self.onmessage = function (e) {
+  const { dezenasSelecionadas, tamanhoAposta, fixas = [], filtros = {} } = e.data;
+
+  // Separa as dezenas variáveis das fixas
+  const fixasSet = new Set(fixas);
+  const variaveis = dezenasSelecionadas.filter(d => !fixasSet.has(d));
+  const vagasVariaveis = tamanhoAposta - fixas.length;
+
+  if (vagasVariaveis < 0 || variaveis.length < vagasVariaveis) {
+    self.postMessage({ type: 'ERROR', message: 'Configuração de fixas/dezenas inválida.' });
+    return;
+  }
+
+  const jogosValidos = [];
+  let totalProcessado = 0;
+  const CHUNK_UPDATE = 5000; // Notifica a UI a cada 5.000 iterações
+
+  // Gerador combinatório com fixas embutidas
+  function combinar(inicio, profundidade, temp) {
+    if (profundidade === vagasVariaveis) {
+      totalProcessado++;
+      const cartaoCompleto = [...fixas, ...temp].sort((a, b) => a - b);
+
+      if (validarJogo(cartaoComple
+
+// Função auxiliar para criar máscara a partir de um array de dezenas (1 a 25)
+function criarMascara(dezenas) {
+  return dezenas.reduce((mask, d) => mask | (1 << (d - 1)), 0);
+}
+
+// 1. Dezenas Pares (2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24)
+const MASK_PARES = criarMascara([2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]); 
+// Valor binário: 0b0101010101010101010101010 = 11184810
+
+// 2. Moldura (bordas do volante 5x5: 1..5, 6, 10, 11, 15, 16, 20, 21..25)
+const MASK_MOLDURA = criarMascara([1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]);
+// Valor: 32537503
+
+// 3. Primos (2, 3, 5, 7, 11, 13, 17, 19, 23)
+const MASK_PRIMOS = criarMascara([2, 3, 5, 7, 11, 13, 17, 19, 23]);
+// Valor: 4596394
+
+// 4. Fibonacci da Lotofácil (1, 2, 3, 5, 8, 13, 21)
+const MASK_FIBONACCI = criarMascara([1, 2, 3, 5, 8, 13, 21]);
+// Valor: 1052823
+
+// Inserido dentro do fechamento.worker.js
+// variaveisBits: Array com as potências de 2 das dezenas selecionadas
+// variaveisValores: Array com os valores numéricos reais [d1, d2, ...] ordenados
+
+function combinarComPodaDinamica(
+  idx,
+  profundidade,
+  maskAtual,
+  somaAtual,
+  paresAtual,
+  vagasRestantes,
+  variaveisValores,
+  variaveisBits,
+  filtros,
+  fixasMask,
+  callbackValido
+) {
+  // Caso base: completou as dezenas variáveis necessárias
+  if (vagasRestantes === 0) {
+    const jogoCompletoMask = maskAtual | fixasMask;
+    callbackValido(jogoCompletoMask);
+    return;
+  }
+
+  const n = variaveisValores.length;
+
+  for (let i = idx; i <= n - vagasRestantes; i++) {
+    const val = variaveisValores[i];
+    const bit = variaveisBits[i];
+    const novaSoma = somaAtual + val;
+    const novosPares = paresAtual + (val % 2 === 0 ? 1 : 0);
+    const novasVagas = vagasRestantes - 1;
+
+    // --- PODA DE SOMA ---
+    // Soma mínima possível adicionando os menores elementos subsequentes
+    let minSomaPossivel = novaSoma;
+    for (let k = 1; k <= novasVagas; k++) {
+      minSomaPossivel += variaveisValores[i + k];
+    }
+    if (filtros.somaMax !== undefined && minSomaPossivel > filtros.somaMax) {
+      // Se a menor soma possível já estourou o teto, interrompe o loop (vetor ordenado)
+      break;
+    }
+
+    // Soma máxima possível adicionando os maiores elementos disponíveis no final
+    let maxSomaPossivel = novaSoma;
+    for (let k = 0; k < novasVagas; k++) {
+      maxSomaPossivel += variaveisValores[n - 1 - k];
+    }
+    if (filtros.somaMin !== undefined && maxSomaPossivel < filtros.somaMin) {
+      // Mesmo escolhendo os maiores valores, não atinge a soma mínima
+      continue;
+    }
+
+    // --- PODA DE PARES ---
+    if (filtros.paresMax !== undefined && novosPares > filtros.paresMax) {
+      continue;
+    }
+    const maxParesPossiveis = novosPares + novasVagas;
+    if (filtros.paresMin !== undefined && maxParesPossiveis < filtros.paresMin) {
+      continue;
+    }
+
+    // Ramo viável: desce na recursão
+    combinarComPodaDinamica(
+      i + 1,
+      profundidade + 1,
+      maskAtual | bit,
+      novaSoma,
+      novosPares,
+      novasVagas,
+      variaveisValores,
+      variaveisBits,
+      filtros,
+      fixasMask,
+      callbackValido
+    );
+  }
+}
+// wheelingCover.js
+// popcount: contagem de bits 1 (Hamming weight)
+
+function reduzirFechamentoGuloso(candidatosMasks, dezenasTotalMask, garantiaAcertos, dezenasAcertadas) {
+  // 1. Gera todos os cenários possíveis de acerto (ex: C(Total, 15))
+  // Para fins operacionais, candidatosMasks são os volantes que podem ser jogados.
+  const numCandidatos = candidatosMasks.length;
+  const cobertos = new Uint8Array(numCandidatos); // 0 = não coberto, 1 = coberto
+  const selecionados = [];
+
+  let restantes = numCandidatos;
+
+  while (restantes > 0) {
+    let melhorCandidatoIdx = -1;
+    let maxCoberturaNova = -1;
+
+    // Avalia qual cartão cobre mais combinações restantes com a garantia exigida
+    for (let i = 0; i < numCandidatos; i++) {
+      const c1 = candidatosMasks[i];
+      let coberturaDeste = 0;
+
+      for (let j = 0; j < numCandidatos; j++) {
+        if (cobertos[j] === 0) {
+          // Interseção bitwise: número de dezenas coincidentes
+          const acertos = popcount(c1 & candidatosMasks[j]);
+          if (acertos >= garantiaAcertos) {
+            coberturaDeste++;
+          }
+        }
+      }
+
+      if (coberturaDeste > maxCoberturaNova) {
+        maxCoberturaNova = coberturaDeste;
+        melhorCandidatoIdx = i;
+      }
+    }
+
+    if (melhorCandidatoIdx === -1 || maxCoberturaNova === 0) {
+      break;
+    }
+
+    // Salva o melhor volante encontrado
+    const melhorMask = candidatosMasks[melhorCandidatoIdx];
+    selecionados.push(melhorMask);
+
+    // Marca todos os cartões contemplados por este novo volante
+    for (let j = 0; j < numCandidatos; j++) {
+      if (cobertos[j] === 0) {
+        if (popcount(melhorMask & candidatosMasks[j]) >= garantiaAcertos) {
+          cobertos[j] = 1;
+          restantes--;
+        }
+      }
+    }
+  }
+
+  return selecionados; // Retorna array de máscaras otimizadas
+}
+// conferencia.js
+
+function conferirCartoesBitwise(cartoesMasks, resultadoOficialArray) {
+  console.time("Conferência Bitwise");
+
+  // Transforma o resultado oficial em máscara de bits
+  const maskSorteio = resultadoOficialArray.reduce((acc, d) => acc | (1 << (d - 1)), 0);
+
+  const total = cartoesMasks.length;
+  const relatorio = {
+    acertos15: 0,
+    acertos14: 0,
+    acertos13: 0,
+    acertos12: 0,
+    acertos11: 0,
+    abaixo11: 0,
+    totalJogos: total
+  };
+
+  for (let i = 0; i < total; i++) {
+    // Interseção entre o volante e o sorteio oficial
+    const pontos = popcount(cartoesMasks[i] & maskSorteio);
+
+    switch (pointsToCategory(pontos)) {
+      case 15: relatorio.acertos15++; break;
+      case 14: relatorio.acertos14++; break;
+      case 13: relatorio.acertos13++; break;
+      case 12: relatorio.acertos12++; break;
+      case 11: relatorio.acertos11++; break;
+      default: relatorio.abaixo11++; break;
+    }
+  }
+
+  console.timeEnd("Conferência Bitwise");
+  return relatorio;
+}
+
+function pointsToCategory(pontos) {
+  return pontos >= 11 ? pontos : 0;
+}
+<!-- Estrutura HTML -->
+<div id="virtualContainer" style="height: 480px; overflow-y: auto; position: relative; border: 1px solid #ccc;">
+  <div id="virtualPhantom" style="width: 100%; position: absolute; left: 0; top: 0;"></div>
+  <div id="virtualContent" style="width: 100%; position: absolute; left: 0; top: 0;"></div>
+</div>
+// virtualScroll.js
+
+class VirtualScroll {
+  constructor({ container, phantom, content, itemHeight, items, renderItem }) {
+    this.container = container;
+    this.phantom = phantom;
+    this.content = content;
+    this.itemHeight = itemHeight;
+    this.items = items;
+    this.renderItem = renderItem;
+
+    // Define a altura total virtual para habilitar a barra de rolagem nativa
+    this.phantom.style.height = `${this.items.length * this.itemHeight}px`;
+
+    this.container.addEventListener('scroll', () => this.onScroll());
+    this.onScroll();
+  }
+
+  onScroll() {
+    const scrollTop = this.container.scrollTop;
+    const viewportHeight = this.container.clientHeight;
+
+    // Índices visíveis com margem de segurança (buffer)
+    const buffer = 4;
+    const startIndex = Math.max(0, Math.floor(scrollTop / this.itemHeight) - buffer);
+    const endIndex = Math.min(
+      this.items.length,
+      Math.ceil((scrollTop + viewportHeight) / this.itemHeight) + buffer
+    );
+
+    // Desloca a camada de conteúdo para acompanhar o scroll
+    this.content.style.transform = `translateY(${startIndex * this.itemHeight}px)`;
+
+    // Renderiza apenas os itens da fatia visível
+    let html = '';
+    for (let i = startIndex; i < endIndex; i++) {
+      html += this.renderItem(this.items[i], i);
+    }
+    this.content.innerHTML = html;
+  }
+}
+
+// Inicialização:
+const virtualList = new VirtualScroll({
+  container: document.getElementById('virtualContainer'),
+  phantom: document.getElementById('virtualPhantom'),
+  content: document.getElementById('virtualContent'),
+  itemHeight: 44, // Altura exata em pixels de cada linha de jogo
+  items: listaDeJogos, // Array de arrays ou máscaras
+  renderItem: (jogo, index) => `
+    <div style="height: 44px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #eee;">
+      <span style="font-weight: bold; width: 60px;">#${index + 1}</span>
+      <span>${jogo.map(d => String(d).padStart(2, '0')).join(' - ')}</span>
+    </div>
+  `
+});
+// exportador.js
+
+function exportarFechamento(jogos, formato = 'txt', nomeArquivo = 'fechamento_lotosniper') {
+  const delimitador = formato === 'csv' ? ';' : ' ';
+  const quebraLinha = '\r\n';
+  
+  // Utiliza array de strings por linha para evitar alocação de uma única string gigante
+  const linhas = [];
+
+  if (formato === 'csv') {
+    linhas.push(['Jogo', 'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10', 'D11', 'D12', 'D13', 'D14', 'D15'].join(delimitador));
+  }
+
+  for (let i = 0; i < jogos.length; i++) {
+    const jogoFormatado = jogos[i].map(d => String(d).padStart(2, '0'));
+    
+    if (formato === 'csv') {
+      linhas.push([`Cartão ${i + 1}`, ...jogoFormatado].join(delimitador));
+    } else {
+      // Padrão Caixa / Loterias (apenas dezenas separadas por espaço)
+      linhas.push(jogoFormatado.join(delimitador));
+    }
+  }
+
+  // Gera o arquivo diretamente em formato binário UTF-8
+  const conteudo = linhas.join(quebraLinha);
+  const mimeType = formato === 'csv' ? 'text/csv;charset=utf-8;' : 'text/plain;charset=utf-8;';
+  const blob = new Blob([conteudo], { type: mimeType });
+
+  // Disparo programático de download sem criar elementos fixos no DOM
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = `${nomeArquivo}.${formato}`;
+  document.body.appendChild(link);
+  link.click();
+
+  // Limpeza de memória
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+// tabelasCoberturaLJCR.js
+// Exemplo: C(v=18, k=15, t=14) -> 18 dezenas, jogos de 15, garantia de 14 se acertar 15
+// Matriz ótima provada: 24 jogos
+export const MATRIZES_COBERTURA = {
+  // Chave: `${totalDezenas}_${tamanhoJogo}_${garantia}`
+  "18_15_14": {
+    totalDezenas: 18,
+    tamanhoJogo: 15,
+    garantia: 14,
+    totalJogos: 24,
+    // Cada array interno representa as posições relativas (índices 0 a 17)
+    linhas: [
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17],
+      [0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 17, 8],
+      // ... (as 24 combinações canônicas de cobertura do repositório LJCR)
+    ]
+  },
+
+  // C(17, 15, 14) -> Apenas 8 jogos
+  "17_15_14": {
+    totalDezenas: 17,
+    tamanhoJogo: 15,
+    garantia: 14,
+    totalJogos: 8,
+    linhas: [
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16],
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 10],
+      [0, 1, 2, 3, 4, 5, 11, 12, 13, 14, 15, 16, 6, 7, 8],
+      [0, 1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 3],
+      [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    ]
+  }
+};
+// geradorInstantaneo.js
+import { MATRIZES_COBERTURA } from './tabelasCoberturaLJCR.js';
+
+export function gerarFechamentoLJCR(dezenasEscolhidas, garantia, tamanhoJogo = 15) {
+  const v = dezenasEscolhidas.length;
+  const chave = `${v}_${tamanhoJogo}_${garantia}`;
+  const matriz = MATRIZES_COBERTURA[chave];
+
+  if (!matriz) {
+    throw new Error(`Matriz canônica C(${v}, ${tamanhoJogo}, ${garantia}) não encontrada no catálogo pré-computado.`);
+  }
+
+  // Ordena as dezenas selecionadas pelo apostador
+  const dezenasOrdenadas = [...dezenasEscolhidas].sort((a, b) => a - b);
+  const cartoesFinais = new Array(matriz.linhas.length);
+
+  // Substituição direta em memória: complexidade O(N de jogos)
+  for (let i = 0; i < matriz.linhas.length; i++) {
+    const template = matriz.linhas[i];
+    const jogo = new Array(tamanhoJogo);
+
+    for (let k = 0; k < tamanhoJogo; k++) {
+      jogo[k] = dezenasOrdenadas[template[k]];
+    }
+
+    cartoesFinais[i] = jogo.sort((a, b) => a - b);
+  }
+
+  return cartoesFinais;
+}
+// Exemplo: 20 dezenas totais com 3 fixas para garantir 14 pontos (jogos de 15)
+// V_variaveis = 17
+// K_vagas = 15 - 3 = 12
+// Garantia_variavel = 14 - 3 = 11
+// Matriz canônica consultada: C(17, 12, 11)
+export function gerarComFixas(dezenasVariaveis, dezenasFixas, garantiaTotal, tamanhoJogo = 15) {
+  const vagas = tamanhoJogo - dezenasFixas.length;
+  const garantiaVariavel = garantiaTotal - dezenasFixas.length;
+  const v = dezenasVariaveis.length;
+
+  const chave = `${v}_${vagas}_${garantiaVariavel}`;
+  const matriz = MATRIZES_COBERTURA[chave];
+
+  if (!matriz) {
+    throw new Error(`Matriz reduzida C(${v}, ${vagas}, ${garantiaVariavel}) indisponível.`);
+  }
+
+  const varsOrdenadas = [...dezenasVariaveis].sort((a, b) => a - b);
+  const fixasOrdenadas = [...dezenasFixas].sort((a, b) => a - b);
+
+  return matriz.linhas.map(linha => {
+    const subJogo = linha.map(pos => varsOrdenadas[pos]);
+    return [...fixasOrdenadas, ...subJogo].sort((a, b) => a - b);
+  });
+}
+// Avaliação rápida da cobertura restante após aplicação dos filtros
+function calcularCoberturaRestante(jogosFiltradosMasks, todosCenariosAcertoMasks, garantiaAcertos) {
+  let cenariosCobertos = 0;
+  const totalCenarios = todosCenariosAcertoMasks.length;
+
+  for (let i = 0; i < totalCenarios; i++) {
+    const cenario = todosCenariosAcertoMasks[i];
+    let coberto = false;
+
+    for (let j = 0; j < jogosFiltradosMasks.length; j++) {
+      if (popcount(cenario & jogosFiltradosMasks[j]) >= garantiaAcertos) {
+        coberto = true;
+        break; // Cenário atendido por ao menos um cartão
+      }
+    }
+
+    if (coberto) cenariosCobertos++;
+  }
+
+  // Retorna porcentagem real de garantia
+  return (cenariosCobertos / totalCenarios) * 100;
+}
+<!-- Componente de Cobertura Matemática da Matriz -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg max-w-md w-full">
+  <div class="flex items-center justify-between mb-2">
+    <div class="flex items-center gap-2">
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="statusDot"></span>
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Garantia Efetiva do Fechamento</h3>
+    </div>
+    <span id="labelGarantiaAlvo" class="text-xs font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+      14 se 15
+    </span>
+  </div>
+
+  <div class="flex items-baseline justify-between mb-2">
+    <div class="flex items-baseline gap-1">
+      <span id="valorPorcentagem" class="text-3xl font-black tracking-tight text-emerald-400 transition-colors duration-300">
+        100.0%
+      </span>
+      <span class="text-xs text-slate-500 font-medium">de probabilidade</span>
+    </div>
+    <div class="text-right text-xs">
+      <span id="jogosInfo" class="text-slate-300 font-semibold">24</span>
+      <span class="text-slate-500">/ 24 jogos</span>
+    </div>
+  </div>
+
+  <!-- Barra de Progresso com Transição Suave -->
+  <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden p-0.5">
+    <div
+      id="barraProgresso"
+      class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500 ease-out"
+      style="width: 100%;"
+    ></div>
+  </div>
+
+  <!-- Métricas Rápidas de Impacto -->
+  <div class="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-xs">
+    <div>
+      <span class="text-slate-500 block">Investimento:</span>
+      <span id="custoTotal" class="text-slate-200 font-semibold">R$ 72,00</span>
+    </div>
+    <div class="text-right">
+      <span class="text-slate-500 block">Economia gerada:</span>
+      <span id="economiaFiltros" class="text-emerald-400 font-semibold">R$ 0,00 (0%)</span>
+    </div>
+  </div>
+</div>
+// uiGarantia.js - Controlador do Indicador Visual
+export function atualizarIndicadorGarantia({
+  porcentagem,
+  jogosFiltrados,
+  jogosOriginais,
+  custoPorJogo = 3.00,
+  garantiaAlvo = "14 se 15"
+}) {
+  const elemPorcentagem = document.getElementById('valorPorcentagem');
+  const elemBarra = document.getElementById('barraProgresso');
+  const elemDot = document.getElementById('statusDot');
+  const elemJogos = document.getElementById('jogosInfo');
+  const elemCusto = document.getElementById('custoTotal');
+  const elemEconomia = document.getElementById('economiaFiltros');
+  const elemGarantiaAlvo = document.getElementById('labelGarantiaAlvo');
+
+  const p = Math.min(100, Math.max(0, porcentagem));
+  elemPorcentagem.textContent = `${p.toFixed(1)}%`;
+  elemBarra.style.width = `${p}%`;
+  elemGarantiaAlvo.textContent = garantiaAlvo;
+  elemJogos.textContent = jogosFiltrados;
+
+  const custoAtual = jogosFiltrados * custoPorJogo;
+  const custoBase = jogosOriginais * custoPorJogo;
+  const economia = Math.max(0, custoBase - custoAtual);
+  const economiaPerc = custoBase > 0 ? (economia / custoBase) * 100 : 0;
+
+  elemCusto.textContent = `R$ ${custoAtual.toFixed(2).replace('.', ',')}`;
+  elemEconomia.textContent = `R$ ${economia.toFixed(2).replace('.', ',')} (${economiaPerc.toFixed(0)}%)`;
+
+  // Estilização condicional baseada na faixa de perda matemática
+  elemBarra.className = "h-1.5 rounded-full transition-all duration-500 ease-out";
+  elemPorcentagem.className = "text-3xl font-black tracking-tight transition-colors duration-300";
+  elemDot.className = "inline-block w-2.5 h-2.5 rounded-full";
+
+  if (p >= 95.0) {
+    elemBarra.classList.add("bg-emerald-500");
+    elemPorcentagem.classList.add("text-emerald-400");
+    elemDot.classList.add("bg-emerald-400");
+  } else if (p >= 80.0) {
+    elemBarra.classList.add("bg-amber-400");
+    elemPorcentagem.classList.add("text-amber-400");
+    elemDot.classList.add("bg-amber-400");
+  } else {
+    elemBarra.classList.add("bg-rose-500");
+    elemPorcentagem.classList.add("text-rose-400");
+    elemDot.classList.add("bg-rose-500");
+  }
+}
+
+// cenariosGarantia.js
+import { popcount } from './bitwiseUtils.js';
+
+/**
+ * Calcula o número exato de combinações C(n, k).
+ */
+function combinacoes(n, k) {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  let c = 1;
+  for (let i = 1; i <= k; i++) {
+    c = (c * (n - (k - i))) / i;
+  }
+  return Math.round(c);
+}
+
+/**
+ * Gera todos os cenários C(V, 15) como um vetor tipado Int32Array contendo máscaras binárias.
+ * @param {number[]} dezenasSelecionadas - Array ordenado com as dezenas escolhidas (ex: 18 dezenas)
+ * @returns {Int32Array}
+ */
+export function gerarTodosCenariosAcerto(dezenasSelecionadas) {
+  const n = dezenasSelecionadas.length;
+  const k = 15;
+  const totalCenarios = combinacoes(n, k);
+  const cenarios = new Int32Array(totalCenarios);
+
+  // Mapeia cada dezena para sua máscara posicional 1 << (d - 1)
+  const bits = dezenasSelecionadas.map(d => 1 << (d - 1));
+  let cursor = 0;
+
+  function recursao(inicio, profundidade, maskAcumulada) {
+    if (profundidade === k) {
+      cenarios[cursor++] = maskAcumulada;
+      return;
+    }
+    const limite = n - (k - profundidade);
+    for (let i = inicio; i <= limite; i++) {
+      recursao(i + 1, profundidade + 1, maskAcumulada | bits[i]);
+    }
+  }
+
+  recursao(0, 0, 0);
+  return cenarios;
+}
+
+/**
+ * Audita a cobertura efetiva dos cartões filtrados contra os cenários teóricos.
+ * @param {number[]} cartoesFiltradosMasks - Array de máscaras dos cartões remanescentes
+ * @param {Int32Array} cenariosAcertoMasks - Buffer com todas as combinações C(V, 15)
+ * @param {number} garantiaPontos - Mínimo de acertos exigido (ex: 14)
+ * @returns {number} Taxa de cobertura entre 0.0 e 100.0
+ */
+export function auditarGarantiaEfetiva(cartoesFiltradosMasks, cenariosAcertoMasks, garantiaPontos = 14) {
+  const totalCenarios = cenariosAcertoMasks.length;
+  if (totalCenarios === 0 || cartoesFiltradosMasks.length === 0) return 0.0;
+
+  let cobertos = 0;
+  const totalCartoes = cartoesFiltradosMasks.length;
+
+  for (let i = 0; i < totalCenarios; i++) {
+    const cenario = cenariosAcertoMasks[i];
+    let atendido = false;
+
+    for (let j = 0; j < totalCartoes; j++) {
+      // popcount da interseção binária conta as dezenas coincidentes
+      if (popcount(cenario & cartoesFiltradosMasks[j]) >= garantiaPontos) {
+        atendido = true;
+        break; // Cenário garantido, passa para o próximo
+      }
+    }
+
+    if (atendido) {
+      cobertos++;
+    }
+  }
+
+  return (cobertos / totalCenarios) * 100;
+}
+
+### CONTEXTO & OBJETIVO ARQUITETURAL
+Você é o engenheiro sênior de algoritmos responsável pelo motor combinatório da plataforma LotoSniper.
+O objetivo é implementar a lógica de conciliação híbrida entre as matrizes de cobertura canônicas do La Jolla Covering Repository (LJCR) e o módulo "Sugestões Estratégicas" (filtros probabilísticos de soma, pares, moldura e primos).
+
+---
+
+### ESPECIFICAÇÃO TÉCNICA OBRIGATÓRIA
+
+1. Separação de Camadas (Geração vs. Filtragem):
+   - A geração estrutural da matriz deve continuar utilizando os esquemas canônicos mínimos do LJCR (base indexada C(V, 15, Garantia)), garantindo instantaneidade $O(1)$ no mapeamento das dezenas.
+   - Os filtros configurados em "Sugestões Estratégicas" devem atuar como uma camada de pós-poda sobre os cartões canônicos gerados.
+
+2. Auditoria e Recálculo Dinâmico de Cobertura:
+   - Ao acionar "Garantir Filtros" ou modificar qualquer regra estatística, nunca declare falsamente que o fechamento mantém 100% de garantia se cartões forem excluídos da matriz base.
+   - Implemente a rotina de auditoria que testa os cartões filtrados (via máscaras binárias Int32Array e operações bitwise popcount(cenario & cartao)) contra todos os cenários teóricos possíveis de acerto C(V_selecionadas, 15).
+   - Calcule a taxa real de cobertura restante: 
+     taxaEfetiva = (cenariosAtendidos / totalCenarios) * 100
+
+3. Comunicação Reativa e Sincronização de Estado:
+   - Mantenha o estado da matriz atualizado com o seguinte payload:
+     {
+       matrizOriginalQtd: number,
+       matrizFiltradaQtd: number,
+       garantiaTeorica: 100.0,
+       garantiaEfetiva: number, // ex: 92.4
+       custoOriginal: number,
+       custoOtimizado: number
+     }
+   - Atualize os elementos visuais do indicador de garantia na UI sem acionar re-renderizações completas do DOM.
+   - Se a garantia efetiva cair abaixo de 75%, dispare uma notificação inline na interface alertando sobre a sobre-restrição de filtros.
+
+---
+
+### ENTREGÁVEIS ESPERADOS
+- Código completo em JavaScript/TypeScript da esteira de pós-filtragem com cálculo bitwise de garantia efetiva.
+- Implementação da notificação reativa de métricas enviadas para a interface.
+- Testes unitários com console.assert validando:
+  a) Matriz sem filtros = 100% de garantia auditada.
+  b) Matriz com remoção arbitrária de cartões = garantia efetiva proporcionalmente recalculada e < 100%.

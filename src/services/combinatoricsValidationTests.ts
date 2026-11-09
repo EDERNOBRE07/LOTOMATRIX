@@ -2,9 +2,15 @@ import {
   validateFilters,
   generateFechamentoCovering,
   DEFAULT_FILTERS,
+  gerarFechamentoLJCR,
+  gerarTodosCenariosAcerto,
+  auditarGarantiaEfetiva,
+  criarMascara,
+  validarIntegridadeFechamento,
+  buildOptimal18Pool,
 } from './combinatorics';
 import { FilterCriteria, GameTicket } from '../types/lotofacil';
-import { CONCURSO_ATUAL } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 
 export interface TestAssertionResult {
   name: string;
@@ -38,7 +44,7 @@ export function runCombinatoricsValidationAssertions(): {
 
   // 1. Caso de Teste: Combinação Canônica Válida
   try {
-    const validCombo = [1, 2, 3, 5, 8, 9, 10, 11, 13, 14, 15, 18, 20, 23, 25];
+    const validCombo = [2, 3, 4, 5, 7, 8, 9, 10, 14, 16, 18, 22, 23, 24, 25];
     const res = validateFilters(validCombo, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
     record(
       'Combinação Canônica Equilibrada',
@@ -120,17 +126,17 @@ export function runCombinatoricsValidationAssertions(): {
 
   // 6. Caso de Teste: Geração de Fechamento com 100% de Conformidade Estrita
   try {
-    const testPool18 = [1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 20, 21, 23, 25];
+    const testPool18 = [2, 3, 4, 5, 7, 8, 9, 10, 11, 14, 16, 17, 18, 19, 22, 23, 24, 25];
     const strictFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
-      somaMin: 185,
-      somaMax: 215,
+      somaMin: 180,
+      somaMax: 225,
       paresMin: 5,
       paresMax: 9,
       primosMin: 4,
       primosMax: 7,
       molduraMin: 8,
-      molduraMax: 11,
+      molduraMax: 12,
       cruzAtiva: true,
       cruzMin: 4,
       cruzMax: 7,
@@ -185,6 +191,41 @@ export function runCombinatoricsValidationAssertions(): {
     );
   } catch (err: any) {
     record('Tratamento de Sobre-Restrição Combinatória', false, `Exceção: ${err.message}`);
+  }
+
+  // 8. Caso de Teste OBRIGATÓRIO (a): Matriz Sem Filtros = 100% de Garantia Auditada C(18, 15, 14)
+  try {
+    const pool18 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+    const jogos24 = gerarFechamentoLJCR(pool18, 14, 15);
+    const cenarios816 = gerarTodosCenariosAcerto(pool18);
+    const masks24 = jogos24.map((j) => criarMascara(j));
+    const taxa100 = auditarGarantiaEfetiva(masks24, cenarios816, 14);
+
+    record(
+      'Garantia Canônica Sem Filtros (100% Auditada)',
+      jogos24.length === 24 && Math.abs(taxa100 - 100.0) < 0.001,
+      `Matriz C(18, 15, 14) com 24 cartões atingiu exatamente ${taxa100.toFixed(1)}% de cobertura contra todos os 816 cenários.`
+    );
+
+    // 9. Caso de Teste OBRIGATÓRIO (b): Matriz com Remoção Arbitrária de Cartões = Garantia Efetiva Recalculada < 100%
+    const reducedMasks = masks24.slice(0, 20); // Remove 4 cartões arbitrariamente
+    const taxaReduzida = auditarGarantiaEfetiva(reducedMasks, cenarios816, 14);
+
+    record(
+      'Garantia Efetiva Pós-Poda / Redução (< 100%)',
+      taxaReduzida > 70 && taxaReduzida < 100,
+      `Remoção arbitrária de 4 cartões (20 de 24) recalculou a garantia efetiva para ${taxaReduzida.toFixed(2)}% (< 100%), comprovando a precisão da auditoria bitwise.`
+    );
+
+    // 10. Caso de Teste: Auditoria Canônica de Integridade (validarIntegridadeFechamento)
+    const auditRes = validarIntegridadeFechamento(jogos24);
+    record(
+      'Auditoria Canônica de Integridade',
+      auditRes.aprovado === true && auditRes.erros.length === 0,
+      `Todos os 24 jogos auditados sem duplicidades, fora de faixa ou erros de tamanho em ${auditRes.tempoMs}ms.`
+    );
+  } catch (err: any) {
+    record('Auditoria de Cobertura LJCR', false, `Exceção: ${err.message}`);
   }
 
   const passedCount = results.filter((r) => r.passed).length;

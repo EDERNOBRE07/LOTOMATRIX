@@ -24,7 +24,13 @@ import {
   generateFechamentoInteligentePonderado,
   VALOR_APOSTA_LOTOFACIL,
   validateFilters,
+  validarIntegridadeFechamento,
+  gerarTodosCenariosAcerto,
+  auditarGarantiaEfetiva,
+  criarMascara,
+  IndicadorGarantiaPayload,
 } from '../services/combinatorics';
+import { IndicadorGarantiaLJCR } from './IndicadorGarantiaLJCR';
 import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
@@ -110,6 +116,8 @@ interface FechamentoTabProps {
   onGoToSimulator: (tickets: GameTicket[]) => void;
   onGoToGamesManager?: (tickets?: GameTicket[], meta?: FechamentoExportMeta) => void;
   isAILoading: boolean;
+  activeFilterConfig?: FilterCriteria;
+  onFiltersConfigChange?: (filters: FilterCriteria) => void;
 }
 
 export const FechamentoTab: React.FC<FechamentoTabProps> = ({
@@ -123,6 +131,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   onGoToSimulator,
   onGoToGamesManager,
   isAILoading,
+  activeFilterConfig,
+  onFiltersConfigChange,
 }) => {
   const [mode, setMode] = useState<FechamentoMode>('18_14_15');
   const preset = FECHAMENTO_PRESETS[mode];
@@ -168,12 +178,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const voidConfig = getVoidExclusionConfig();
     return {
       ...DEFAULT_FILTERS,
+      ...(activeFilterConfig || {}),
       curvaAbcAtiva: curvaAbcConfig.ativo,
       minDezenasClasseA: curvaAbcConfig.minClasseA,
       vaziosAtivos: voidConfig.ativo,
       combinacoesVazioExcluidas: voidConfig.paresExcluidos,
     };
   });
+
+  // Estado da Garantia Efetiva Auditada (LJCR & Set Cover)
+  const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
   const [fechamentoFilter, setFechamentoFilter] = useState<'all' | 'improbable' | string>('all');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -625,6 +639,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // Atualização Automática da Matriz 5x5 quando qualquer filtro for alterado
   const handleFiltersChange = (newFilters: FilterCriteria, updateMatrix = true) => {
     setFilters(newFilters);
+    onFiltersConfigChange?.(newFilters);
 
     // Se já existirem bilhetes gerados na tela, valida e poda imediatamente bilhetes que violem os filtros ativos
     if (generatedTickets.length > 0) {
@@ -642,6 +657,35 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             `✓ Filtros aplicados: ${compliantTickets.length} de ${generatedTickets.length} bilhetes mantidos em conformidade total.`
           );
         }
+      }
+
+      // Recálculo dinâmico da garantia efetiva restante após pós-poda dos filtros
+      if (compliantTickets.length > 0 && selectedNumbers.length >= 15) {
+        try {
+          const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
+          const masks = compliantTickets.map((t) => criarMascara(t.dezenas));
+          const targetHits = mode.includes('13') ? 13 : 14;
+          const taxa = auditarGarantiaEfetiva(masks, cenarios, targetHits);
+          const originalQtd = preset.jogosMaximos;
+          const custoOrig = originalQtd * VALOR_APOSTA_LOTOFACIL;
+          const custoOtim = compliantTickets.length * VALOR_APOSTA_LOTOFACIL;
+          const econ = Math.max(0, custoOrig - custoOtim);
+          setIndicadorGarantia({
+            matrizOriginalQtd: originalQtd,
+            matrizFiltradaQtd: compliantTickets.length,
+            garantiaTeorica: 100.0,
+            garantiaEfetiva: taxa,
+            custoOriginal: custoOrig,
+            custoOtimizado: custoOtim,
+            economia: econ,
+            economiaPercentual: custoOrig > 0 ? (econ / custoOrig) * 100 : 0,
+            garantiaAlvo: `${targetHits} se 15`,
+          });
+        } catch (e) {
+          console.warn('Erro ao recalcular garantia em handleFiltersChange:', e);
+        }
+      } else if (compliantTickets.length === 0) {
+        setIndicadorGarantia(null);
       }
     }
 
@@ -1498,6 +1542,40 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       } catch {}
 
       setGeneratedTickets(tickets);
+
+      // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR)
+      validarIntegridadeFechamento(
+        tickets.map((t) => t.dezenas),
+        fixedNumbers,
+        fullFilters
+      );
+
+      if (selectedNumbers.length >= 15) {
+        try {
+          const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
+          const masks = tickets.map((t) => criarMascara(t.dezenas));
+          const targetHits = mode.includes('13') ? 13 : 14;
+          const taxa = auditarGarantiaEfetiva(masks, cenarios, targetHits);
+          const originalQtd = preset.jogosMaximos;
+          const custoOrig = originalQtd * VALOR_APOSTA_LOTOFACIL;
+          const custoOtim = tickets.length * VALOR_APOSTA_LOTOFACIL;
+          const econ = Math.max(0, custoOrig - custoOtim);
+          setIndicadorGarantia({
+            matrizOriginalQtd: originalQtd,
+            matrizFiltradaQtd: tickets.length,
+            garantiaTeorica: 100.0,
+            garantiaEfetiva: taxa,
+            custoOriginal: custoOrig,
+            custoOtimizado: custoOtim,
+            economia: econ,
+            economiaPercentual: custoOrig > 0 ? (econ / custoOrig) * 100 : 0,
+            garantiaAlvo: `${targetHits} se 15`,
+          });
+        } catch (e) {
+          console.warn('Erro ao auditar garantia efetiva:', e);
+        }
+      }
+
       onSaveTickets(tickets, exportMeta);
       autoSaveFechamentoPrognostico(tickets, finalPrognosticoName, exportMeta, selectedNumbers);
       setGenerationType('matriz');
@@ -3416,6 +3494,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 : undefined
             }
           />
+
+          {/* Indicador de Cobertura Matemática e Garantia Efetiva (LJCR & Pós-Filtros) */}
+          {indicadorGarantia && (
+            <IndicadorGarantiaLJCR
+              indicador={indicadorGarantia}
+              onRelaxFilters={handleEnsureFilters}
+              className="my-3"
+            />
+          )}
 
           {/* Seletor Visual de Auditoria em Tempo Real (Cruz da Lotofácil & Bolas Extremas) */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3.5">

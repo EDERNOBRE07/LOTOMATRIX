@@ -45,6 +45,29 @@ export type {
   FechamentoPonderadoResult,
 } from './fechamentoPonderadoService';
 
+export {
+  MATRIZES_COBERTURA,
+  gerarFechamentoLJCR,
+  gerarComFixas,
+  criarMascara,
+  mascaraParaDezenas,
+  popcount,
+  MASK_PARES,
+  MASK_MOLDURA,
+  MASK_PRIMOS,
+  MASK_FIBONACCI,
+  MASK_CRUZ,
+  combinarComPodaDinamica,
+  combinacoes,
+  gerarTodosCenariosAcerto,
+  auditarGarantiaEfetiva,
+  validarIntegridadeFechamento,
+} from './tabelasCoberturaLJCR';
+export type {
+  MatrixCoberturaEntry,
+  IndicadorGarantiaPayload,
+} from './tabelasCoberturaLJCR';
+
 // Helper: Check if number is prime
 export function isPrimo(n: number): boolean {
   return PRIMOS.includes(n);
@@ -1037,6 +1060,43 @@ export function generateFechamentoCovering(
     const needed = 15 - current.length;
     const available = sortedPool.length - start;
     if (available < needed) return;
+
+    // Poda Dinâmica de Ramo por Soma e Paridade
+    if (current.length > 0) {
+      let currentSum = 0;
+      let currentPares = 0;
+      for (let k = 0; k < current.length; k++) {
+        const val = current[k];
+        currentSum += val;
+        if (val % 2 === 0) currentPares++;
+      }
+
+      // Se a menor soma possível já ultrapassa o teto, interrompe o ramo
+      if (filters?.somaMax !== undefined) {
+        let minSomaPossivel = currentSum;
+        for (let k = 0; k < needed; k++) {
+          minSomaPossivel += sortedPool[start + k];
+        }
+        if (minSomaPossivel > filters.somaMax) return;
+      }
+
+      // Se a maior soma possível não atinge o piso mínimo, descarta o ramo
+      if (filters?.somaMin !== undefined) {
+        let maxSomaPossivel = currentSum;
+        for (let k = 0; k < needed; k++) {
+          maxSomaPossivel += sortedPool[sortedPool.length - 1 - k];
+        }
+        if (maxSomaPossivel < filters.somaMin) return;
+      }
+
+      // Poda por excesso ou déficit intransponível de pares
+      if (filters?.paresMax !== undefined && currentPares > filters.paresMax) {
+        return;
+      }
+      if (filters?.paresMin !== undefined && currentPares + needed < filters.paresMin) {
+        return;
+      }
+    }
 
     for (let i = start; i < sortedPool.length; i++) {
       current.push(sortedPool[i]);

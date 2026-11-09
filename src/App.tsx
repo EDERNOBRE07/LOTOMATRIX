@@ -21,6 +21,7 @@ import {
   isAutoDownloadOnSaveEnabled,
   triggerForcedJSONDownload,
 } from './services/backupManagerService';
+import { useActiveFilterConfig } from './hooks/useActiveFilterConfig';
 import {
   sendNativeJackpotNotification,
   sendNativeTop5TrendNotification,
@@ -68,6 +69,13 @@ export type TabType =
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('fechamento');
+
+  // Estado unificado e persistente do activeFilterConfig (Pipeline Combinatório)
+  const {
+    activeFilterConfig,
+    setActiveFilterConfig,
+    applyStrategicFilters,
+  } = useActiveFilterConfig();
 
   // Guided Tour modal state (opens on first load or on demand)
   const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
@@ -853,6 +861,8 @@ export default function App() {
                 setActiveTab('jogos');
               }}
               isAILoading={isAILoading}
+              activeFilterConfig={activeFilterConfig}
+              onFiltersConfigChange={setActiveFilterConfig}
             />
           )}
 
