@@ -668,6 +668,58 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 </span>
               </p>
 
+              {/* Modo Validação Estrita da Cruz (5 a 6 Dezenas) */}
+              <div
+                onClick={() => {
+                  const nextVal = !filters.validacaoEstritaCruz;
+                  update({
+                    validacaoEstritaCruz: nextVal,
+                    ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
+                  });
+                }}
+                className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition select-none ${
+                  filters.validacaoEstritaCruz
+                    ? 'bg-amber-500/15 border-amber-400/70 text-amber-100 shadow-sm'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs ${
+                      filters.validacaoEstritaCruz
+                        ? 'bg-amber-400 text-slate-950 font-black'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    ★
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Modo Validação Estrita da Cruz</span>
+                      {filters.validacaoEstritaCruz && (
+                        <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded">
+                          ESTRITO (5-6)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      Poda rigorosa: descarta e bloqueia qualquer jogo fora da faixa de 5 a 6 na Cruz.
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 shrink-0 ${
+                    filters.validacaoEstritaCruz ? 'bg-amber-500' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform duration-200 ${
+                      filters.validacaoEstritaCruz ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+              </div>
+
               {/* Botões Pré-definidos com Destaque para Zona de Ouro (5 a 6) */}
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button

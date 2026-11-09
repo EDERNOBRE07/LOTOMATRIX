@@ -432,6 +432,108 @@ export function validarIntegridadeFechamento(
   };
 }
 
+export interface HistogramaAcertos {
+  15: number;
+  14: number;
+  13: number;
+  12: number;
+  11: number;
+  abaixo11: number;
+}
+
+export interface AuditoriaCompletaResultado {
+  taxaGarantiaEfetiva: number;
+  taxaGarantia: number;
+  totalCenarios: number;
+  cobertosGarantia: number;
+  histograma: HistogramaAcertos;
+  percentuais: {
+    15: number;
+    14: number;
+    13: number;
+    12: number;
+    11: number;
+    abaixo11: number;
+  };
+}
+
+/**
+ * Auditoria Completa e Histograma de Distribuição Teórica de Acertos Máximos
+ * Para cada cenário teórico do universo C(V, 15), identifica o acerto máximo obtido pelos cartões filtrados.
+ */
+export function auditarMatrizCompleta(
+  cartoesFiltradosMasks: number[],
+  cenariosAcertoMasks: Int32Array,
+  garantiaAlvo: number = 14
+): AuditoriaCompletaResultado {
+  const totalCenarios = cenariosAcertoMasks.length;
+  const histograma: HistogramaAcertos = {
+    15: 0,
+    14: 0,
+    13: 0,
+    12: 0,
+    11: 0,
+    abaixo11: 0,
+  };
+
+  if (totalCenarios === 0 || cartoesFiltradosMasks.length === 0) {
+    return {
+      taxaGarantiaEfetiva: 0.0,
+      taxaGarantia: 0.0,
+      totalCenarios,
+      cobertosGarantia: 0,
+      histograma,
+      percentuais: { 15: 0, 14: 0, 13: 0, 12: 0, 11: 0, abaixo11: 0 },
+    };
+  }
+
+  let cobertosGarantia = 0;
+  const totalCartoes = cartoesFiltradosMasks.length;
+
+  for (let i = 0; i < totalCenarios; i++) {
+    const cenario = cenariosAcertoMasks[i];
+    let maxAcertosCenario = 0;
+
+    for (let j = 0; j < totalCartoes; j++) {
+      const acertos = popcount(cenario & cartoesFiltradosMasks[j]);
+      if (acertos > maxAcertosCenario) {
+        maxAcertosCenario = acertos;
+        if (maxAcertosCenario === 15) break; // Teto absoluto alcançado
+      }
+    }
+
+    if (maxAcertosCenario >= garantiaAlvo) {
+      cobertosGarantia++;
+    }
+
+    if (maxAcertosCenario === 15) histograma[15]++;
+    else if (maxAcertosCenario === 14) histograma[14]++;
+    else if (maxAcertosCenario === 13) histograma[13]++;
+    else if (maxAcertosCenario === 12) histograma[12]++;
+    else if (maxAcertosCenario === 11) histograma[11]++;
+    else histograma.abaixo11++;
+  }
+
+  const taxaGarantiaEfetiva = (cobertosGarantia / totalCenarios) * 100;
+  const calcPerc = (val: number) => (totalCenarios > 0 ? (val / totalCenarios) * 100 : 0);
+
+  return {
+    taxaGarantiaEfetiva,
+    taxaGarantia: taxaGarantiaEfetiva,
+    totalCenarios,
+    cobertosGarantia,
+    histograma,
+    percentuais: {
+      15: Math.round(calcPerc(histograma[15]) * 100) / 100,
+      14: Math.round(calcPerc(histograma[14]) * 100) / 100,
+      13: Math.round(calcPerc(histograma[13]) * 100) / 100,
+      12: Math.round(calcPerc(histograma[12]) * 100) / 100,
+      11: Math.round(calcPerc(histograma[11]) * 100) / 100,
+      abaixo11: Math.round(calcPerc(histograma.abaixo11) * 100) / 100,
+    },
+  };
+}
+
 /**
  * Payload Unificado de Sincronização do Indicador de Cobertura
  */
@@ -445,4 +547,6 @@ export interface IndicadorGarantiaPayload {
   economia: number;
   economiaPercentual: number;
   garantiaAlvo?: string; // ex: "14 se 15"
+  histograma?: HistogramaAcertos;
+  totalCenarios?: number;
 }

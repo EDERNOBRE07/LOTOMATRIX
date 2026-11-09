@@ -61,11 +61,14 @@ export {
   combinacoes,
   gerarTodosCenariosAcerto,
   auditarGarantiaEfetiva,
+  auditarMatrizCompleta,
   validarIntegridadeFechamento,
 } from './tabelasCoberturaLJCR';
 export type {
   MatrixCoberturaEntry,
   IndicadorGarantiaPayload,
+  HistogramaAcertos,
+  AuditoriaCompletaResultado,
 } from './tabelasCoberturaLJCR';
 
 // Helper: Check if number is prime
@@ -499,14 +502,17 @@ export function validateFilters(
     );
   }
 
-  // 8. Cruz da Lotofácil (Linha 3 e Coluna 3: 4 a 7 dezenas)
+  // 8. Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
   const cruzCount = analysis.cruz ?? dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
   if (activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== undefined) {
-    const cMin = activeFilterConfig.cruzMin;
-    const cMax = activeFilterConfig.cruzMax ?? 7;
+    const isEstrita = activeFilterConfig.validacaoEstritaCruz === true;
+    const cMin = isEstrita ? 5 : activeFilterConfig.cruzMin;
+    const cMax = isEstrita ? 6 : (activeFilterConfig.cruzMax ?? 7);
     if (cruzCount < cMin || cruzCount > cMax) {
       violations.push(
-        `Cruz da Lotofácil fora da faixa: ${cruzCount} (esperado: ${cMin}-${cMax})`
+        isEstrita
+          ? `Validação Estrita da Cruz violada: ${cruzCount} (esperado estritamente 5 ou 6 dezenas na Cruz)`
+          : `Cruz da Lotofácil fora da faixa: ${cruzCount} (esperado: ${cMin}-${cMax})`
       );
     }
   }
@@ -1655,6 +1661,8 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   robustez50MolduraMin: 8,
   robustez50MolduraMax: 12, // Limite superior expandido para 12 dezenas na moldura
   fechamentoPonderadoAtivo: false,
+  validacaoEstritaCruz: false,
+  presetEstatistico: 'balanceado',
 };
 
 /**

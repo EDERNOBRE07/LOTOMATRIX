@@ -27,10 +27,14 @@ import {
   validarIntegridadeFechamento,
   gerarTodosCenariosAcerto,
   auditarGarantiaEfetiva,
+  auditarMatrizCompleta,
   criarMascara,
   IndicadorGarantiaPayload,
 } from '../services/combinatorics';
 import { IndicadorGarantiaLJCR } from './IndicadorGarantiaLJCR';
+import { HistogramaDistribuicaoAcertos } from './HistogramaDistribuicaoAcertos';
+import { SeletorPresetsEstatisticos, StatisticalPresetOption } from './SeletorPresetsEstatisticos';
+import { gerarRelatorioAuditoriaPDF } from '../services/relatorioAuditoriaPdf';
 import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
@@ -212,6 +216,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   >(null);
 
   const [workerProgress, setWorkerProgress] = useState<CombinatoricsProgress | null>(null);
+  const [goldenGlowTrigger, setGoldenGlowTrigger] = useState<number>(0);
 
   // Auditoria de pré-voo: Verifica se a aba anterior colapsou em tela preta e restaura dossiê
   useEffect(() => {
@@ -636,6 +641,37 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     filters.bola15Max,
   ]);
 
+  // Seleção e aplicação instantânea de Presets Estatísticos (Conservador, Balanceado, Agressivo)
+  const handleSelectStatisticalPreset = (presetOption: StatisticalPresetOption) => {
+    const updated: FilterCriteria = {
+      ...filters,
+      ...presetOption.filtros,
+      presetEstatistico: presetOption.id,
+    };
+    handleFiltersChange(updated, true);
+    setGoldenGlowTrigger(Date.now());
+    soundService.playFilterValidationGlow();
+  };
+
+  // Exportação do Relatório Executivo e Dossiê de Auditoria LJCR em PDF
+  const handleExportAuditPdf = () => {
+    if (!indicadorGarantia) return;
+    try {
+      gerarRelatorioAuditoriaPDF({
+        indicador: indicadorGarantia,
+        fechamentoNome: preset.nome,
+        ticketsCount: generatedTickets.length,
+        selectedNumbers,
+        filters,
+        tickets: generatedTickets,
+      });
+      setDocumentMessage('✓ Dossiê de Auditoria e Histograma Teórico exportado com sucesso em PDF profissional!');
+    } catch (err) {
+      console.error('Erro ao gerar relatório em PDF:', err);
+      setDocumentMessage('❌ Falha ao compilar relatório PDF de auditoria.');
+    }
+  };
+
   // Atualização Automática da Matriz 5x5 quando qualquer filtro for alterado
   const handleFiltersChange = (newFilters: FilterCriteria, updateMatrix = true) => {
     setFilters(newFilters);
@@ -643,6 +679,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
     // Se já existirem bilhetes gerados na tela, valida e poda imediatamente bilhetes que violem os filtros ativos
     if (generatedTickets.length > 0) {
+      setGoldenGlowTrigger(Date.now());
       const compliantTickets = generatedTickets.filter(
         (t) => validateFilters(t, newFilters, latestDraw.dezenas).isValid
       );
@@ -665,7 +702,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
           const masks = compliantTickets.map((t) => criarMascara(t.dezenas));
           const targetHits = mode.includes('13') ? 13 : 14;
-          const taxa = auditarGarantiaEfetiva(masks, cenarios, targetHits);
+          const auditoria = auditarMatrizCompleta(masks, cenarios, targetHits);
           const originalQtd = preset.jogosMaximos;
           const custoOrig = originalQtd * VALOR_APOSTA_LOTOFACIL;
           const custoOtim = compliantTickets.length * VALOR_APOSTA_LOTOFACIL;
@@ -674,12 +711,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             matrizOriginalQtd: originalQtd,
             matrizFiltradaQtd: compliantTickets.length,
             garantiaTeorica: 100.0,
-            garantiaEfetiva: taxa,
+            garantiaEfetiva: auditoria.taxaGarantia,
             custoOriginal: custoOrig,
             custoOtimizado: custoOtim,
             economia: econ,
             economiaPercentual: custoOrig > 0 ? (econ / custoOrig) * 100 : 0,
             garantiaAlvo: `${targetHits} se 15`,
+            histograma: auditoria.histograma,
+            totalCenarios: auditoria.totalCenarios,
           });
         } catch (e) {
           console.warn('Erro ao recalcular garantia em handleFiltersChange:', e);
@@ -1555,7 +1594,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
           const masks = tickets.map((t) => criarMascara(t.dezenas));
           const targetHits = mode.includes('13') ? 13 : 14;
-          const taxa = auditarGarantiaEfetiva(masks, cenarios, targetHits);
+          const auditoria = auditarMatrizCompleta(masks, cenarios, targetHits);
           const originalQtd = preset.jogosMaximos;
           const custoOrig = originalQtd * VALOR_APOSTA_LOTOFACIL;
           const custoOtim = tickets.length * VALOR_APOSTA_LOTOFACIL;
@@ -1564,12 +1603,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             matrizOriginalQtd: originalQtd,
             matrizFiltradaQtd: tickets.length,
             garantiaTeorica: 100.0,
-            garantiaEfetiva: taxa,
+            garantiaEfetiva: auditoria.taxaGarantia,
             custoOriginal: custoOrig,
             custoOtimizado: custoOtim,
             economia: econ,
             economiaPercentual: custoOrig > 0 ? (econ / custoOrig) * 100 : 0,
             garantiaAlvo: `${targetHits} se 15`,
+            histograma: auditoria.histograma,
+            totalCenarios: auditoria.totalCenarios,
           });
         } catch (e) {
           console.warn('Erro ao auditar garantia efetiva:', e);
@@ -2686,6 +2727,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         targetCount={targetCount}
       />
 
+      {/* SELETOR DE PRESETS ESTATÍSTICOS (CONSERVADOR, BALANCEADO, AGRESSIVO) */}
+      <SeletorPresetsEstatisticos
+        activePresetId={filters.presetEstatistico || 'balanceado'}
+        onSelectPreset={handleSelectStatisticalPreset}
+        className="my-3"
+      />
+
       {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}
       <EquilibrioEstruturalSelector
         filters={filters}
@@ -3504,6 +3552,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             />
           )}
 
+          {/* Histograma de Distribuição Teórica de Acertos C(V, 15) */}
+          {indicadorGarantia && indicadorGarantia.histograma && (
+            <HistogramaDistribuicaoAcertos
+              histograma={indicadorGarantia.histograma}
+              totalCenarios={indicadorGarantia.totalCenarios ?? 0}
+              garantiaAlvo={indicadorGarantia.garantiaAlvo}
+              onExportPdf={handleExportAuditPdf}
+              className="my-3"
+            />
+          )}
+
           {/* Seletor Visual de Auditoria em Tempo Real (Cruz da Lotofácil & Bolas Extremas) */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">
@@ -3567,7 +3626,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
 
             {/* Chaves seletoras (Toggles) interativas em tempo real */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Toggle Cruz da Lotofácil */}
               <div
                 onClick={() => {
@@ -3600,7 +3659,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                             : 'bg-slate-800 text-slate-500 border-slate-700'
                         }`}
                       >
-                        4 a 7 dezenas (Ouro 5-6)
+                        4 a 7 (Ouro 5-6)
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400">
@@ -3677,6 +3736,68 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Toggle Modo Validação Estrita Cruz (5-6) */}
+              <div
+                onClick={() => {
+                  const nextVal = !filters.validacaoEstritaCruz;
+                  const updated: FilterCriteria = {
+                    ...filters,
+                    validacaoEstritaCruz: nextVal,
+                    ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
+                  };
+                  handleFiltersChange(updated, true);
+                  setGoldenGlowTrigger(Date.now());
+                  soundService.playFilterValidationGlow();
+                }}
+                className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
+                  filters.validacaoEstritaCruz
+                    ? 'bg-amber-950/25 border-amber-500/40 text-amber-100 shadow-sm hover:border-amber-400'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-base transition ${
+                      filters.validacaoEstritaCruz
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    ★
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Cruz Estrita (5-6)</span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                          filters.validacaoEstritaCruz
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+                            : 'bg-slate-800 text-slate-500 border-slate-700'
+                        }`}
+                      >
+                        {filters.validacaoEstritaCruz ? 'Estrito Ativo' : 'Desativado'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Poda rigorosa: descarta bilhetes fora da faixa de 5 a 6
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch visual */}
+                <div
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out shrink-0 ${
+                    filters.validacaoEstritaCruz ? 'bg-amber-500' : 'bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      filters.validacaoEstritaCruz ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3717,10 +3838,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
               const isCruzAtiva = filters.cruzAtiva !== false;
               const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+              const isEstritaCruz = filters.validacaoEstritaCruz === true;
 
               const cruzFalhou =
                 isCruzAtiva &&
-                (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+                (isEstritaCruz
+                  ? cruzCount < 5 || cruzCount > 6
+                  : cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
               const extremidadesFalhou =
                 isExtremidadesAtiva &&
                 (b1 < (filters.bola1Min ?? 1) ||
@@ -3733,12 +3857,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
               return (
                 <div
-                  key={ticket.id}
+                  key={`${ticket.id}-${goldenGlowTrigger}`}
                   className={`bg-slate-950/70 rounded-xl border p-3.5 hover:border-slate-700 transition ${
                     isForaDoPadrao
                       ? 'border-rose-500/50 bg-rose-950/15'
                       : 'border-slate-800/90'
-                  }`}
+                  } ${goldenGlowTrigger > 0 ? 'animate-golden-glow' : ''}`}
                 >
                   {/* Header of Ticket */}
                   <div className="flex items-center justify-between text-xs mb-2">

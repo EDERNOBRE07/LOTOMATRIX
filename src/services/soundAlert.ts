@@ -382,6 +382,18 @@ class SoundService {
   playChime() {
     this.playGoldenZoneSuccessChime();
   }
+
+  // Tactile haptic feedback and golden-glow audio cue on filter/preset validation
+  playFilterValidationGlow() {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate([15, 30, 20]);
+      }
+    } catch {
+      // Ignore vibration on non-supported environments
+    }
+    this.playGoldenZoneSuccessChime();
+  }
 }
 
 export type Alert13PlusSoundType = 'padrao' | 'sino_ouro' | 'silencioso';
