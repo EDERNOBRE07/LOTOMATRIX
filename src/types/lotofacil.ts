@@ -77,6 +77,7 @@ export interface FilterCriteria {
   robustez50MolduraMax?: number;
   fechamentoPonderadoAtivo?: boolean;
   validacaoEstritaCruz?: boolean; // Modo Validação Estrita: restringe estritamente para 5-6 dezenas na Cruz da Lotofácil
+  strictValidation?: boolean; // Trava booleana de Validação Estrita: descarta jogos fora de 5 a 6 dezenas na Cruz
   presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'custom';
 }
 

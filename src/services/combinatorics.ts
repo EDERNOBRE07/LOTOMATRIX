@@ -504,9 +504,9 @@ export function validateFilters(
 
   // 8. Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
   const cruzCount = analysis.cruz ?? dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
-  if (activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== undefined) {
-    const isEstrita = activeFilterConfig.validacaoEstritaCruz === true;
-    const cMin = isEstrita ? 5 : activeFilterConfig.cruzMin;
+  const isEstrita = activeFilterConfig.strictValidation === true || activeFilterConfig.validacaoEstritaCruz === true;
+  if (isEstrita || (activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== undefined)) {
+    const cMin = isEstrita ? 5 : (activeFilterConfig.cruzMin ?? 4);
     const cMax = isEstrita ? 6 : (activeFilterConfig.cruzMax ?? 7);
     if (cruzCount < cMin || cruzCount > cMax) {
       violations.push(
@@ -1662,6 +1662,7 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   robustez50MolduraMax: 12, // Limite superior expandido para 12 dezenas na moldura
   fechamentoPonderadoAtivo: false,
   validacaoEstritaCruz: false,
+  strictValidation: false,
   presetEstatistico: 'balanceado',
 };
 

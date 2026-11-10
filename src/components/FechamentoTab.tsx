@@ -54,6 +54,8 @@ import { logFechamentoError, getFechamentoErrorLogs } from '../services/fechamen
 import { fechamentoWorkerClient, CombinatoricsProgress } from '../services/fechamentoWorkerClient';
 import { exportFechamentoToPdf, exportFechamentoToCsv } from '../services/fechamentoExportService';
 import { exportCartoesJogosToPdf } from '../services/cartoesJogosPdfGenerator';
+import { VolantesImpressaoModal } from './VolantesImpressaoModal';
+import { exportarParaCologaLGodoi } from '../services/exportadorCologaLGodoi';
 import { checkAndAuditUnresolvedCrash } from '../services/fechamentoPreflightSnapshot';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
 import { TurboGeneratorModal } from './TurboGeneratorModal';
@@ -217,6 +219,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const [workerProgress, setWorkerProgress] = useState<CombinatoricsProgress | null>(null);
   const [goldenGlowTrigger, setGoldenGlowTrigger] = useState<number>(0);
+  const [isPrintVolantesModalOpen, setIsPrintVolantesModalOpen] = useState(false);
 
   // Auditoria de pré-voo: Verifica se a aba anterior colapsou em tela preta e restaura dossiê
   useEffect(() => {
@@ -1879,6 +1882,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   };
 
+  const handleExportCologa = () => {
+    if (generatedTickets.length === 0) return;
+    try {
+      const gameArrays = generatedTickets.map((t) => t.dezenas);
+      exportarParaCologaLGodoi(gameArrays, preset.nome);
+      setDocumentMessage('✓ Matriz exportada com sucesso no formato Cologa / L-Godoi (.txt)!');
+      setTimeout(() => setDocumentMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[Export Cologa] Erro:', err);
+      setDocumentMessage('⚠️ Falha ao exportar para Cologa/L-Godoi: ' + (err?.message || 'Erro desconhecido'));
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
+
   const handleApplyTurbo = (tickets: GameTicket[], turboRes: TurboResult) => {
     if (!tickets || tickets.length === 0) {
       logFechamentoError({
@@ -3461,6 +3478,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <span>Exportar CSV</span>
               </button>
               <button
+                type="button"
+                onClick={() => setIsPrintVolantesModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer shadow-md shadow-indigo-600/20"
+                title="Imprimir volantes em folha A4 (3 volantes com marcas de corte) ou Cédula Oficial Caixa (81mm x 170mm)"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span>Imprimir Volantes / Cédula Caixa</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCologa}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition cursor-pointer shadow-md shadow-amber-600/20"
+                title="Exportar jogos no formato Cologa e L-Godoi (.txt com 2 dígitos separados por espaço)"
+              >
+                <FileText className="w-3.5 h-3.5 text-white" />
+                <span>Exportar Cologa (.txt)</span>
+              </button>
+              <button
                 onClick={() => onGoToSimulator(generatedTickets)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition cursor-pointer"
               >
@@ -4103,6 +4138,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           setDocumentMessage('Filtros padrão restaurados! Tente processar a matriz novamente.');
           setTimeout(() => setDocumentMessage(null), 5000);
         }}
+      />
+
+      {/* MODAL DE IMPRESSÃO DE VOLANTES (A4 E CÉDULA CAIXA) E EXPORTAÇÃO COLOGA */}
+      <VolantesImpressaoModal
+        isOpen={isPrintVolantesModalOpen}
+        onClose={() => setIsPrintVolantesModalOpen(false)}
+        tickets={generatedTickets}
+        fechamentoNome={preset.nome}
       />
     </div>
   );

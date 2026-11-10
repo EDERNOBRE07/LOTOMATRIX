@@ -77,6 +77,18 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
             strategicParams.antiColisaoHistoricaAtiva ?? prev.antiColisaoHistoricaAtiva ?? true,
           antiPadraoViciadoAtivo:
             strategicParams.antiPadraoViciadoAtivo ?? prev.antiPadraoViciadoAtivo ?? true,
+          strictValidation:
+            strategicParams.strictValidation ??
+            strategicParams.validacaoEstritaCruz ??
+            prev.strictValidation ??
+            prev.validacaoEstritaCruz ??
+            false,
+          validacaoEstritaCruz:
+            strategicParams.strictValidation ??
+            strategicParams.validacaoEstritaCruz ??
+            prev.strictValidation ??
+            prev.validacaoEstritaCruz ??
+            false,
           dezenasFixas: strategicParams.dezenasFixas ?? prev.dezenasFixas ?? [],
           dezenasExcluidas: strategicParams.dezenasExcluidas ?? prev.dezenasExcluidas ?? [],
         };
@@ -85,6 +97,34 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
     },
     [setActiveFilterConfig]
   );
+
+  /**
+   * Trava booleana de Validação Estrita da Cruz da Lotofácil (5 a 6 dezenas).
+   * Se ativado, o motor descarta automaticamente qualquer combinação fora da Zona de Ouro (5 a 6).
+   */
+  const setStrictValidation = useCallback(
+    (enabled: boolean) => {
+      setActiveFilterConfig((prev) => ({
+        ...prev,
+        strictValidation: enabled,
+        validacaoEstritaCruz: enabled,
+        ...(enabled ? { cruzMin: 5, cruzMax: 6 } : {}),
+      }));
+    },
+    [setActiveFilterConfig]
+  );
+
+  const toggleStrictValidation = useCallback(() => {
+    setActiveFilterConfig((prev) => {
+      const nextVal = !(prev.strictValidation ?? prev.validacaoEstritaCruz ?? false);
+      return {
+        ...prev,
+        strictValidation: nextVal,
+        validacaoEstritaCruz: nextVal,
+        ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
+      };
+    });
+  }, [setActiveFilterConfig]);
 
   /**
    * Restaura os filtros para a calibração canônica oficial padrão do LotoSniper
@@ -112,5 +152,7 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
     setActiveFilterConfig,
     applyStrategicFilters,
     resetToCanonicalFilters,
+    setStrictValidation,
+    toggleStrictValidation,
   };
 }

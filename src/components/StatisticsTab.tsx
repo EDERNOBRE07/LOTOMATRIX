@@ -61,6 +61,9 @@ import { GraficoCustoRetornoAcumulado } from './GraficoCustoRetornoAcumulado';
 import { DistribuicaoProbabilidadeCurvaNormal } from './DistribuicaoProbabilidadeCurvaNormal';
 import { CurvaDistribuicaoSomasD3 } from './CurvaDistribuicaoSomasD3';
 import { DesempenhoFiltrosUltimos10Recharts } from './DesempenhoFiltrosUltimos10Recharts';
+import { ResumoFinanceiro } from './ResumoFinanceiro';
+import { FrequenciaDezenasD3 } from './FrequenciaDezenasD3';
+import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket, FilterCriteria } from '../types/lotofacil';
 import {
@@ -114,6 +117,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   filters,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'resumo_financeiro'
+    | 'frequencia_50_d3'
     | 'simulador_historico_d3'
     | 'desempenho_cruz_extremidades'
     | 'custo_retorno_acumulado'
@@ -190,6 +195,36 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('resumo_financeiro')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'resumo_financeiro'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 text-emerald-300" />
+            <span>Resumo Financeiro & ROI</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              RETORNO REAL
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('frequencia_50_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'frequencia_50_d3'
+                ? 'bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 text-slate-950 shadow-md shadow-sky-500/25 font-black ring-1 ring-sky-300'
+                : 'text-sky-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <BarChart className="w-4 h-4 text-sky-300" />
+            <span>Frequência 50 D3.js</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-mono">
+              BARRAS & TENDÊNCIA
+            </span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('simulador_historico_d3')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -2267,6 +2302,24 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             latestDraw={latestDraw}
             onApplyBiasRecommendation={onApplyNumbers}
           />
+        </div>
+      )}
+
+      {/* SUBTAB: RESUMO FINANCEIRO & ROI */}
+      {activeSubTab === 'resumo_financeiro' && (
+        <div className="space-y-6">
+          <ResumoFinanceiro
+            savedTickets={savedTickets}
+            draws={RECENT_DRAWS}
+            unitBetCost={VALOR_APOSTA_LOTOFACIL}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: FREQUÊNCIA D3.JS (50 CONCURSOS - BARRAS & LINHA DE TENDÊNCIA) */}
+      {activeSubTab === 'frequencia_50_d3' && (
+        <div className="space-y-6">
+          <FrequenciaDezenasD3 draws={RECENT_DRAWS} />
         </div>
       )}
 

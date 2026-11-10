@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão de Volantes - LotoSniper</title>
+  <style>
+    /* Reset Geral de Tela */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      background-color: #1e293b;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .painel-acoes {
+      margin-bottom: 20px;
+    }
+
+    .btn-imprimir {
+      background-color: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* Estrutura da Página A4 */
+    .pagina-a4 {
+      width: 210mm;
+      height: 297mm;
+      background: white;
+      padding: 10mm 15mm;
+      display: flex;
+      justify-content: space-between;
+      page-break-after: always;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Cada Volante Individual na Folha (Largura padrão Caixa: ~56mm útil, 81mm total) */
+    .volante-container {
+      width: 56mm;
+      height: 270mm;
+      border: 0.2mm dashed #94a3b8; /* Linha de corte */
+      padding: 25mm 2mm 5mm 2mm; /* 25mm superior reserva espaço para cabeçalho da Caixa */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .volante-header {
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 6mm;
+      color: #334155;
+    }
+
+    /* Grid da Lotofácil (5 Colunas x 5 Linhas) */
+    .grid-lotofacil {
+      display: grid;
+      grid-template-columns: repeat(5, 9mm);
+      grid-template-rows: repeat(5, 7.5mm);
+      column-gap: 1.5mm;
+      row-gap: 1.8mm;
+      justify-content: center;
+    }
+
+    .celula-dezena {
+      width: 9mm;
+      height: 7.5mm;
+      border: 0.15mm solid #cbd5e1;
+      border-radius: 1mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7.5pt;
+      font-weight: bold;
+      color: #64748b;
+      position: relative;
+    }
+
+    /* A Marcação Óptica: Retângulo Preto Sólido */
+    .celula-dezena.marcada {
+      background-color: #000 !important;
+      color: #000 !important; /* Esconde o número preenchendo de preto */
+      border: 0.2mm solid #000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Linhas de Alinhamento para Corte */
+    .marcador-corte-topo, .marcador-corte-base {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      font-size: 6pt;
+      color: #94a3b8;
+    }
+    .marcador-corte-topo { top: 2mm; }
+    .marcador-corte-base { bottom: 2mm; }
+
+    /* ==============================================
+       REGRAS ESTRITAS DE IMPRESSÃO
+       ============================================== */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0; /* Anula margens automáticas da impressora */
+      }
+
+      body {
+        background: transparent;
+        padding: 0;
+      }
+
+      .painel-acoes {
+        display: none !important;
+      }
+
+      .pagina-a4 {
+        box-shadow: none;
+        page-break-after: always;
+        width: 210mm;
+        height: 297mm;
+        padding: 10mm 15mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="painel-acoes">
+    <button class="btn-imprimir" onclick="window.print()">Imprimir Volantes (A4)</button>
+  </div>
+
+  <div id="conteudoImpressao">
+    <!-- As páginas A4 e os volantes serão inseridos dinamicamente aqui -->
+  </div>
+
+  <script src="geradorVolantes.js"></script>
+</body>
+</html>
+// geradorVolantes.js
+
+/**
+ * Renderiza os volantes organizados em folhas A4 (3 volantes por folha).
+ * @param {Array<Array<number>>} listaJogos - Matriz de jogos (ex: [[1, 2, ..., 15], ...])
+ */
+function renderizarFolhasImpressao(listaJogos) {
+  const container = document.getElementById('conteudoImpressao');
+  container.innerHTML = '';
+
+  const JOGOS_POR_FOLHA = 3;
+  const totalFolhas = Math.ceil(listaJogos.length / JOGOS_POR_FOLHA);
+
+  for (let f = 0; f < totalFolhas; f++) {
+    // 1. Cria a página A4 física
+    const pagina = document.createElement('div');
+    pagina.className = 'pagina-a4';
+
+    // 2. Extrai os 3 jogos desta folha
+    const fatiaJogos = listaJogos.slice(f * JOGOS_POR_FOLHA, (f + 1) * JOGOS_POR_FOLHA);
+
+    fatiaJogos.forEach((jogo, indexRelativo) => {
+      const indexReal = f * JOGOS_POR_FOLHA + indexRelativo + 1;
+      const volante = criarElementoVolante(jogo, indexReal);
+      pagina.appendChild(volante);
+    });
+
+    container.appendChild(pagina);
+  }
+}
+
+/**
+ * Cria a estrutura DOM de um volante individual da Lotofácil (1 a 25)
+ */
+function criarElementoVolante(dezenasJogo, numeroJogo) {
+  const dezenasSet = new Set(dezenasJogo);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'volante-container';
+
+  wrapper.innerHTML = `
+    <div class="marcador-corte-topo">✄ - - - - - - - CORTE AQUI - - - - - - - ✄</div>
+    <div class="volante-header">LotoSniper • Jogo #${numeroJogo}</div>
+    <div class="grid-lotofacil"></div>
+    <div class="marcador-corte-base">✄ - - - - - - - - - - - - - - - - - - - ✄</div>
+  `;
+
+  const grid = wrapper.querySelector('.grid-lotofacil');
+
+  // Constrói as 25 posições da Lotofácil
+  for (let d = 1; d <= 25; d++) {
+    const celula = document.createElement('div');
+    celula.className = 'celula-dezena';
+    celula.textContent = String(d).padStart(2, '0');
+
+    // Se o número faz parte do jogo, ativa a marca óptica
+    if (dezenasSet.has(d)) {
+      celula.classList.add('marcada');
+    }
+
+    grid.appendChild(celula);
+  }
+
+  return wrapper;
+}
+
+// Inicialização com dados de exemplo (ex: 6 jogos gerados)
+const jogosExemplo = [
+  [1, 2, 3, 5, 8, 9, 10, 11, 13, 15, 17, 19, 21, 22, 25],
+  [1, 3, 4, 6, 7, 10, 11, 12, 14, 16, 18, 20, 22, 23, 24],
+  [2, 4, 5, 7, 8, 9, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  [1, 2, 4, 6, 7, 8, 10, 13, 14, 15, 16, 19, 21, 23, 25]
+];
+
+renderizarFolhasImpressao(jogosExemplo);
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão Cédula Oficial Lotofácil</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Página configurada exatamente no tamanho da cédula avulsa */
+    @page {
+      size: 81mm 170mm;
+      margin: 0;
+    }
+
+    body {
+      background: #334155;
+      padding: 20px;
+    }
+
+    .cedula-avulsa {
+      width: 81mm;
+      height: 170mm;
+      position: relative;
+      background: transparent;
+      page-break-after: always;
+      overflow: hidden;
+    }
+
+    /* Durante a prévia em tela, exibe contorno de referência */
+    @media screen {
+      .cedula-avulsa {
+        background: white;
+        margin: 0 auto 20px auto;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      }
+    }
+
+    /* Grid com coordenadas absolutas sincronizadas com o volante oficial */
+    .grid-jogo-oficial {
+      position: absolute;
+      top: 33.5mm;
+      left: 10.5mm;
+      width: 45mm;
+      height: 36mm;
+      display: grid;
+      grid-template-columns: repeat(5, 9.0mm);
+      grid-template-rows: repeat(5, 7.2mm);
+    }
+
+    .slot-dezena {
+      width: 9.0mm;
+      height: 7.2mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Apenas as dezenas escolhidas recebem a tinta */
+    .slot-dezena.ativa::after {
+      content: "";
+      width: 4.2mm;
+      height: 2.0mm;
+      background-color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    @media print {
+      body {
+        background: transparent;
+        padding: 0;
+      }
+      .nao-imprimir {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nao-imprimir" style="text-align: center; margin-bottom: 16px;">
+    <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer;">
+      Imprimir nas Cédulas da Caixa
+    </button>
+  </div>
+
+  <div id="containerCedulas"></div>
+
+  <script>
+    function renderizarCedulasAvulsas(jogos) {
+      const container = document.getElementById('containerCedulas');
+      container.innerHTML = '';
+
+      jogos.forEach(jogo => {
+        const jogoSet = new Set(jogo);
+        const cedula = document.createElement('div');
+        cedula.className = 'cedula-avulsa';
+
+        const grid = document.createElement('div');
+        grid.className = 'grid-jogo-oficial';
+
+        for (let d = 1; d <= 25; d++) {
+          const slot = document.createElement('div');
+          slot.className = 'slot-dezena' + (jogoSet.has(d) ? ' ativa' : '');
+          grid.appendChild(slot);
+        }
+
+        cedula.appendChild(grid);
+        container.appendChild(cedula);
+      });
+    }
+
+    // Exemplo: 2 bilhetes
+    renderizarCedulasAvulsas([
+      [1, 2, 3, 5, 8, 9, 10, 11, 13, 15, 17, 19, 21, 22, 25],
+      [1, 3, 4, 6, 7, 10, 11, 12, 14, 16, 18, 20, 22, 23, 24]
+    ]);
+  </script>
+</body>
+</html>
+
+<!-- Bloco de Rodapé para Cédula ou Folha A4 -->
+<style>
+  /* Seção de Teimosinha: Y = ~123mm do topo */
+  .secao-teimosinha {
+    position: absolute;
+    top: 123mm;
+    left: 10.5mm;
+    width: 60mm;
+    display: flex;
+    gap: 4.5mm;
+  }
+
+  /* Seção do Bolão (Cotas): Y = ~138mm do topo */
+  .secao-bolao {
+    position: absolute;
+    top: 138mm;
+    left: 10.5mm;
+    width: 60mm;
+    display: flex;
+    gap: 3.5mm;
+  }
+
+  .opcao-optica {
+    width: 6.5mm;
+    height: 4.5mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .opcao-optica.marcada::after {
+    content: "";
+    width: 4.2mm;
+    height: 2.0mm;
+    background: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+</style>
+
+<!-- Injetado dinamicamente dentro de cada .cedula-avulsa -->
+<div class="secao-teimosinha">
+  <!-- Valores padrão Caixa Lotofácil: 3, 6, 12, 18 ou 24 concursos -->
+  <div class="opcao-optica" data-teimosinha="3"></div>
+  <div class="opcao-optica" data-teimosinha="6"></div>
+  <div class="opcao-optica marcada" data-teimosinha="12"></div>
+  <div class="opcao-optica" data-teimosinha="18"></div>
+  <div class="opcao-optica" data-teimosinha="24"></div>
+</div>
+
+<div class="secao-bolao">
+  <!-- Dezenas de cotas (ex: 2 a 100 cotas) -->
+  <div class="opcao-optica" data-cota="2"></div>
+  <div class="opcao-optica marcada" data-cota="10"></div>
+  <div class="opcao-optica" data-cota="20"></div>
+</div>
+// exportadorCologaLGodoi.js
+
+/**
+ * Exporta os cartões em formato TXT posicional estrito aceito por Cologa e L-Godoi.
+ * @param {Array<Array<number>>} jogos - Lista de jogos com dezenas numéricas
+ * @param {string} prefixoArquivo - Nome base para download
+ */
+export function exportarParaCologaLGodoi(jogos, prefixoArquivo = 'matriz_lotosniper') {
+  const CRLF = '\r\n';
+  
+  // Mapeia cada jogo para uma linha com dezenas de 2 dígitos separadas por espaço
+  const linhas = jogos.map(jogo => {
+    // Garante ordenação ascendente e formatação com zero à esquerda
+    return [...jogo]
+      .sort((a, b) => a - b)
+      .map(d => String(d).padStart(2, '0'))
+      .join(' ');
+  });
+
+  // Monta o arquivo em texto puro
+  const conteudoTexto = linhas.join(CRLF) + CRLF;
+
+  // Blob com charset ANSI / UTF-8 compatível com Windows antigo
+  const blob = new Blob([conteudoTexto], { type: 'text/plain;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${prefixoArquivo}_cologa.txt`;
+  document.body.appendChild(link);
+  link.click();
+
+  // Limpeza de recursos
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+
+// Exemplo de saída gerada no arquivo:
+// 01 02 03 05 08 09 10 11 13 15 17 19 21 22 25
+// 01 03 04 06 07 10 11 12 14 16 18 20 22 23 24
+
+// workerPool.js
+
+export class CombinatorialWorkerPool {
+  constructor(workerScriptUrl, poolSize = navigator.hardwareConcurrency || 4) {
+    this.poolSize = poolSize;
+    this.workers = [];
+    this.workerScriptUrl = workerScriptUrl;
+  }
+
+  inicializar() {
+    for (let i = 0; i < this.poolSize; i++) {
+      const worker = new Worker(this.workerScriptUrl, { type: 'module' });
+      this.workers.push(worker);
+    }
+  }
+
+  /**
+   * Divide as dezenas variáveis entre os workers pelo índice raiz da recursão.
+   */
+  async executarFechamentoParalelo(payload) {
+    const { dezenasSelecionadas, tamanhoAposta, fixas = [], filtros = {} } = payload;
+    const fixasSet = new Set(fixas);
+    const variaveis = dezenasSelecionadas.filter(d => !fixasSet.has(d));
+    const vagas = tamanhoAposta - fixas.length;
+
+    // Particiona os índices iniciais da recursão entre os workers
+    const numParticoes = variaveis.length - vagas + 1;
+    const fatiasPorWorker = Array.from({ length: this.poolSize }, () => []);
+
+    for (let i = 0; i < numParticoes; i++) {
+      fatiasPorWorker[i % this.poolSize].push(i);
+    }
+
+    const promises = this.workers.map((worker, idx) => {
+      const indicesIniciais = fatiasPorWorker[idx];
+      if (indicesIniciais.length === 0) return Promise.resolve(new Int32Array(0));
+
+      return new Promise((resolve, reject) => {
+        const handler = (e) => {
+          if (e.data.type === 'CHUNK_COMPLETE') {
+            worker.removeEventListener('message', handler);
+            resolve(e.data.jogosValidos);
+          } else if (e.data.type === 'ERROR') {
+            worker.removeEventListener('message', handler);
+            reject(new Error(e.data.message));
+          }
+        };
+
+        worker.addEventListener('message', handler);
+        worker.postMessage({
+          indicesIniciais,
+          variaveis,
+          vagas,
+          fixas,
+          filtros
+        });
+      });
+    });
+
+    const resultados = await Promise.all(promises);
+
+    // Concatena os TypedArrays em um único buffer contínuo sem estouro de pilha
+    const totalJogos = resultados.reduce((acc, arr) => acc + arr.length, 0);
+    const bufferFinal = new Int32Array(totalJogos);
+    let offset = 0;
+
+    for (const arr of resultados) {
+      bufferFinal.set(arr, offset);
+      offset += arr.length;
+    }
+
+    return bufferFinal;
+  }
+
+  destruir() {
+    this.workers.forEach(w => w.terminate());
+    this.workers = [];
+  }
+}
+
+// workerCombinatorioChunk.js
+import { popcount, validarJogoBitwise } from './bitwiseUtils.js';
+
+self.onmessage = function (e) {
+  const { indicesIniciais, variaveis, vagas, fixas, filtros } = e.data;
+
+  const fixasMask = fixas.reduce((acc, d) => acc | (1 << (d - 1)), 0);
+  const variaveisBits = variaveis.map(d => 1 << (d - 1));
+  const n = variaveisBits.length;
+
+  const bufferLocal = new Int32Array(50000);
+  let encontrados = 0;
+
+  function combinarFatia(inicio, profundidade, maskAtual) {
+    if (profundidade === vagas) {
+      const jogoMask = maskAtual | fixasMask;
+      if (validarJogoBitwise(jogoMask, filtros)) {
+        if (encontrados < bufferLocal.length) {
+          bufferLocal[encontrados++] = jogoMask;
+        }
+      }
+      return;
+    }
+
+    const limite = n - (vagas - profundidade);
+    for (let i = inicio; i <= limite; i++) {
+      combinarFatia(i + 1, profundidade + 1, maskAtual | variaveisBits[i]);
+    }
+  }
+
+  // Executa apenas as raízes atribuídas a este worker
+  for (const rootIdx of indicesIniciais) {
+    combinarFatia(rootIdx + 1, 1, variaveisBits[rootIdx]);
+  }
+
+  // Devolve a fatia calculada
+  const resultado = bufferLocal.slice(0, encontrados);
+  self.postMessage({ type: 'CHUNK_COMPLETE', jogosValidos: resultado }, [resultado.buffer]);
+};
+
+// backtestingEngine.js
+import { popcount } from './bitwiseUtils.js';
+
+export function rodarBacktesting({
+  cartoesMasks, // Int32Array com os jogos do fechamento
+  historicoConcursos, // Array: [{ concurso: 3000, mask: 0b101..., premiacao: {...} }, ...]
+  precoPorJogo = 3.00,
+  premiosPadrao = {
+    11: 6.00,
+    12: 12.00,
+    13: 30.00,
+    14: 1500.00,
+    15: 1800000.00
+  }
+}) {
+  console.time('Tempo Backtesting');
+
+  const totalCartoes = cartoesMasks.length;
+  const custoPorConcurso = totalCartoes * precoPorJogo;
+  const numConcursos = historicoConcursos.length;
+  const custoTotalHistorico = custoPorConcurso * numConcursos;
+
+  let arrecadacaoTotal = 0;
+  const saldoPorConcurso = [];
+  const contagemGeralAcertos = { 15: 0, 14: 0, 13: 0, 12: 0, 11: 0, abaixo11: 0 };
+
+  for (let c = 0; c < numConcursos; c++) {
+    const sorteio = historicoConcursos[c];
+    const maskSorteio = sorteio.mask;
+    let retornoNesteConcurso = 0;
+
+    for (let j = 0; j < totalCartoes; j++) {
+      const pontos = popcount(cartoesMasks[j] & maskSorteio);
+
+      if (pontos >= 11) {
+        contagemGeralAcertos[pontos]++;
+        const premioItem = (sorteio.valoresReais && sorteio.valoresReais[pontos]) 
+          ? sorteio.valoresReais[pontos] 
+          : premiosPadrao[pontos];
+        retornoNesteConcurso += premioItem;
+      } else {
+        contagemGeralAcertos.abaixo11++;
+      }
+    }
+
+    arrecadacaoTotal += retornoNesteConcurso;
+    saldoPorConcurso.push({
+      concurso: sorteio.concurso,
+      custo: custoPorConcurso,
+      retorno: retornoNesteConcurso,
+      lucroLiquido: retornoNesteConcurso - custoPorConcurso
+    });
+  }
+
+  const saldoLiquidoFinal = arrecadacaoTotal - custoTotalHistorico;
+  const roi = custoTotalHistorico > 0 ? (saldoLiquidoFinal / custoTotalHistorico) * 100 : 0;
+
+  console.timeEnd('Tempo Backtesting');
+
+  return {
+    numConcursosAvaliados: numConcursos,
+    totalCartoesPorConcurso: totalCartoes,
+    custoTotalGasto: custoTotalHistorico,
+    arrecadacaoBruta: arrecadacaoTotal,
+    saldoLiquidoFinal,
+    roiPercentual: roi,
+    contagemGeralAcertos,
+    curvaPatrimonial: saldoPorConcurso
+  };
+}
+
+// simulatedAnnealingCover.js
+import { popcount } from './bitwiseUtils.js';
+
+/**
+ * Reduz uma matriz de cartões minimizando o total de volantes para manter cobertura alvo.
+ * @param {Int32Array} poolCandidatosMasks - Banco de cartões viáveis
+ * @param {Int32Array} cenariosAcertoMasks - Espaço C(V, 15) que precisa ser coberto
+ * @param {number} garantiaAlvo - Acertos exigidos (ex: 14)
+ * @param {number} taxaCoberturaMinima - Cobertura pretendida (ex: 100 ou 90 para soft-cover)
+ */
+export function simulatedAnnealingReducao({
+  poolCandidatosMasks,
+  cenariosAcertoMasks,
+  garantiaAlvo = 14,
+  taxaCoberturaMinima = 100.0,
+  temperaturaInicial = 100.0,
+  fatorResfriamento = 0.96,
+  iteracoesPorTemp = 50,
+  tempMinima = 0.05
+}) {
+  const totalCenarios = cenariosAcertoMasks.length;
+  const poolLen = poolCandidatosMasks.length;
+
+  // 1. Solução Inicial: subconjunto aleatório de cartões
+  let solucaoAtualIndices = new Set();
+  const tamanhoInicial = Math.min(poolLen, Math.ceil(poolLen * 0.4));
+  while (solucaoAtualIndices.size < tamanhoInicial) {
+    solucaoAtualIndices.add(Math.floor(Math.random() * poolLen));
+  }
+
+  // Avaliador de Cobertura
+  function avaliarSolucao(indicesSet) {
+    const indicesArr = Array.from(indicesSet);
+    let cobertos = 0;
+
+    for (let c = 0; c < totalCenarios; c++) {
+      const cenario = cenariosAcertoMasks[c];
+      for (let i = 0; i < indicesArr.length; i++) {
+        if (popcount(cenario & poolCandidatosMasks[indicesArr[i]]) >= garantiaAlvo) {
+          cobertos++;
+          break;
+        }
+      }
+    }
+
+    const cobertura = (cobertos / totalCenarios) * 100;
+    // Função de Custo / Energia: Menos cartões é melhor; penalidade severa se não atingir a cobertura mínima
+    const penalidade = cobertura < taxaCoberturaMinima ? (taxaCoberturaMinima - cobertura) * 500 : 0;
+    const custo = indicesSet.size + penalidade;
+
+    return { custo, cobertura, valido: cobertura >= taxaCoberturaMinima };
+  }
+
+  let estadoAtual = avaliarSolucao(solucaoAtualIndices);
+  let melhorSolucaoIndices = new Set(solucaoAtualIndices);
+  let melhorEstado = { ...estadoAtual };
+
+  let T = temperaturaInicial;
+
+  while (T > tempMinima) {
+    for (let iter = 0; iter < iteracoesPorTemp; iter++) {
+      // Perturbação (Mutação): Adicionar, Remover ou Trocar um cartão
+      const proximoIndices = new Set(solucaoAtualIndices);
+      const rand = Math.random();
+
+      if (rand < 0.4 && proximoIndices.size > 1) {
+        // Ação: Remover cartão aleatório
+        const itemRemover = Array.from(proximoIndices)[Math.floor(Math.random() * proximoIndices.size)];
+        proximoIndices.delete(itemRemover);
+      } else if (rand < 0.8) {
+        // Ação: Inserir novo cartão aleatório do pool
+        const itemAdicionar = Math.floor(Math.random() * poolLen);
+        proximoIndices.add(itemAdicionar);
+      } else {
+        // Ação: Substituir (Swap)
+        const itemRemover = Array.from(proximoIndices)[Math.floor(Math.random() * proximoIndices.size)];
+        proximoIndices.delete(itemRemover);
+        const itemAdicionar = Math.floor(Math.random() * poolLen);
+        proximoIndices.add(itemAdicionar);
+      }
+
+      const proximoEstado = avaliarSolucao(proximoIndices);
+      const deltaEnergia = proximoEstado.custo - estadoAtual.custo;
+
+      // Critério de Metrópolis: Aceita se for melhor ou com probabilidade decrescente se for pior
+      if (deltaEnergia < 0 || Math.random() < Math.exp(-deltaEnergia / T)) {
+        solucaoAtualIndices = proximoIndices;
+        estadoAtual = proximoEstado;
+
+        if (estadoAtual.valido && estadoAtual.custo < melhorEstado.custo) {
+          melhorSolucaoIndices = new Set(solucaoAtualIndices);
+          melhorEstado = { ...estadoAtual };
+        }
+      }
+    }
+
+    T *= fatorResfriamento; // Resfriamento gradativo
+  }
+
+  // Mapeia os índices de volta para as máscaras binárias
+  const resultadoFinal = Array.from(melhorSolucaoIndices).map(idx => poolCandidatosMasks[idx]);
+
+  return {
+    totalCartoes: resultadoFinal.length,
+    coberturaAlcancada: melhorEstado.cobertura,
+    cartoesReduzidosMasks: new Int32Array(resultadoFinal)
+  };
+}
+
+Atualize o hook useActiveFilterConfig e o motor de fechamento para incluir uma chave 'strictValidation' no objeto activeFilterConfig. Quando ativada, o motor deve filtrar e descartar automaticamente qualquer combinação que possua fora de 5 a 6 dezenas dentro do range da Cruz da Lotofácil, impedindo o processamento e exibição de jogos que não cumpram esse critério exato.
+
+Adicione a classe CSS 'animate-golden-glow' e um efeito de fade-in aos componentes de cartão de jogo na aba Fechamento. O efeito deve ser disparado via uma classe de estado no React toda vez que um novo conjunto de jogos é validado e renderizado, aplicando feedback tátil e visual para confirmar que o jogo passou pelos filtros ativos.
+1. Gráfico Interativo da Curva de Capital do Backtesting
+Este componente visualiza a evolução patrimonial acumulada concurso a concurso a partir do array curvaPatrimonial retornado pelo motor de backtesting. Ele plota o saldo líquido acumulado em relação à linha d'água de equilíbrio (R$ 0,00).
+
+ 
+use wasm_bindgen::prelude::*;
+
+// Instrução x86/ARM popcnt de 1 ciclo de clock
+#[inline(always)]
+fn popcount(v: u32) -> u32 {
+    v.count_ones()
+}
+
+#[wasm_bindgen]
+pub struct AnnealingResult {
+    total_cartoes: usize,
+    cobertura_alcancada: f32,
+    indices_selecionados: Vec<usize>,
+}
+
+#[wasm_bindgen]
+impl AnnealingResult {
+    #[wasm_bindgen(getter)]
+    pub fn total_cartoes(&self) -> usize {
+        self.total_cartoes
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn cobertura_alcancada(&self) -> f32 {
+        self.cobertura_alcancada
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn indices(&self) -> Vec<usize> {
+        self.indices_selecionados.clone()
+    }
+}
+
+#[inline(always)]
+fn avaliar_solucao(
+    indices: &[usize],
+    pool: &[u32],
+    cenarios: &[u32],
+    garantia_alvo: u32,
+    taxa_minima: f32,
+) -> (f32, f32, bool) {
+    let total_cenarios = cenarios.len();
+    let mut cobertos = 0;
+
+    for &cenario in cenarios {
+        for &idx in indices {
+            if popcount(cenario & pool[idx]) >= garantia_alvo {
+                cobertos += 1;
+                break;
+            }
+        }
+    }
+
+    let cobertura = (cobertos as f32 / total_cenarios as f32) * 100.0;
+    let penalidade = if cobertura < taxa_minima {
+        (taxa_minima - cobertura) * 800.0
+    } else {
+        0.0
+    };
+    let custo = indices.len() as f32 + penalidade;
+    let valido = cobertura >= taxa_minima;
+
+    (custo, cobertura, valido)
+}
+
+#[wasm_bindgen]
+pub fn simulated_annealing_wasm(
+    pool_candidatos: &[u32],
+    cenarios_acerto: &[u32],
+    garantia_alvo: u32,
+    taxa_minima: f32,
+    mut temp_inicial: f32,
+    fator_resfriamento: f32,
+    iter_por_temp: usize,
+    temp_min: f32,
+    seed: u32,
+) -> AnnealingResult {
+    let pool_len = pool_candidatos.len();
+    let mut rng_state = seed;
+
+    // Gerador linear congruencial rápido (LCG) sem overhead de biblioteca externa
+    let mut rand_f32 = || -> f32 {
+        rng_state = rng_state.wrapping_mul(1664525).wrapping_add(1013904223);
+        (rng_state as f32) / (u32::MAX as f32)
+    };
+
+    // Subconjunto inicial (30% do pool)
+    let init_len = (pool_len as f32 * 0.3).ceil() as usize;
+    let mut solucao_atual: Vec<usize> = (0..init_len.min(pool_len)).collect();
+
+    let (mut custo_atual, mut cob_atual, _) =
+        avaliar_solucao(&solucao_atual, pool_candidatos, cenarios_acerto, garantia_alvo, taxa_minima);
+
+    let mut melhor_solucao = solucao_atual.clone();
+    let mut melhor_custo = custo_atual;
+    let mut melhor_cobertura = cob_atual;
+
+    while temp_inicial > temp_min {
+        for _ in 0..iter_por_temp {
+            let mut vizinho = solucao_atual.clone();
+            let acao = rand_f32();
+
+            if acao < 0.4 && vizinho.len() > 1 {
+                // Remover
+                let pos = (rand_f32() * vizinho.len() as f32) as usize;
+                vizinho.swap_remove(pos.min(vizinho.len() - 1));
+            } else if acao < 0.8 {
+                // Inserir
+                let item = (rand_f32() * pool_len as f32) as usize;
+                if !vizinho.contains(&item) {
+                    vizinho.push(item);
+                }
+            } else {
+                // Swap
+                let pos = (rand_f32() * vizinho.len() as f32) as usize;
+                vizinho.swap_remove(pos.min(vizinho.len() - 1));
+                let item = (rand_f32() * pool_len as f32) as usize;
+                if !vizinho.contains(&item) {
+                    vizinho.push(item);
+                }
+            }
+
+            let (custo_vizinho, cob_vizinho, valido) =
+                avaliar_solucao(&vizinho, pool_candidatos, cenarios_acerto, garantia_alvo, taxa_minima);
+
+            let delta = custo_vizinho - custo_atual;
+
+            if delta < 0.0 || rand_f32() < (-delta / temp_inicial).exp() {
+                solucao_atual = vizinho;
+                custo_atual = custo_vizinho;
+                cob_atual = cob_vizinho;
+
+                if valido && custo_atual < melhor_custo {
+                    melhor_solucao = solucao_atual.clone();
+                    melhor_custo = custo_atual;
+                    melhor_cobertura = cob_atual;
+                }
+            }
+        }
+
+        temp_inicial *= fatorResfriamento(fator_resfriamento);
+    }
+
+    AnnealingResult {
+        total_cartoes: melhor_solucao.len(),
+        cobertura_alcancada: melhor_cobertura,
+        indices_selecionados: melhor_solucao,
+    }
+}
+
+#[inline(always)]
+fn fatorResfriamento(f: f32) -> f32 {
+    if f <= 0.0 || f >= 1.0 { 0.95 } else { f }
+}
+wasm-pack build --target web –release
+
+// saWasmLoader.js
+import init, { simulated_annealing_wasm } from './pkg/lotosniper_wasm.js';
+
+export async function executarAnnealingWasm({
+  poolCandidatosMasks,
+  cenariosAcertoMasks,
+  garantiaAlvo = 14,
+  taxaMinima = 100.0
+}) {
+  await init();
+
+  const seed = (Math.random() * 0xFFFFFFFF) >>> 0;
+  
+  // Passa diretamente como Uint32Array (zero-copy memory mapping no WebAssembly)
+  const pool = new Uint32Array(poolCandidatosMasks);
+  const cenarios = new Uint32Array(cenariosAcertoMasks);
+
+  console.time('Simulated Annealing WASM');
+  const resultado = simulated_annealing_wasm(
+    pool,
+    cenarios,
+    garantiaAlvo,
+    taxaMinima,
+    120.0, // Temp Inicial
+    0.95,  // Fator Resfriamento
+    80,    // Iterações por patamar térmico
+    0.05,  // Temp Mínima
+    seed
+  );
+  console.timeEnd('Simulated Annealing WASM');
+
+  return {
+    totalCartoes: resultado.total_cartoes,
+    coberturaAlcancada: resultado.cobertura_alcancada,
+    cartoesReduzidosMasks: resultado.indices.map(idx => pool[idx])
+  };
+}
+
+// database.js
+
+const DB_NAME = 'LotoSniperDB';
+const CURRENT_VERSION = 2; // Incrementar ao adicionar novas stores ou índices
+
+export class LotoSniperDatabase {
+  constructor() {
+    this.db = null;
+  }
+
+  /**
+   * Abre o banco de dados aplicando migrações sequenciais conforme a versão instalada.
+   */
+  async conectar() {
+    if (this.db) return this.db;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, CURRENT_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        const oldVersion = event.oldVersion;
+
+        console.log(`[DB] Migrando banco de dados da versão ${oldVersion} para ${CURRENT_VERSION}`);
+
+        // Migração Versão 1: Estrutura Base de Concursos e Fechamentos
+        if (oldVersion < 1) {
+          const storeConcursos = db.createObjectStore('concursos', { keyPath: 'numero' });
+          storeConcursos.createIndex('idx_data', 'dataApuracao', { unique: false });
+          storeConcursos.createIndex('idx_mask', 'mask', { unique: false });
+
+          const storeFechamentos = db.createObjectStore('fechamentosSalvos', {
+            keyPath: 'id',
+            autoIncrement: true
+          });
+          storeFechamentos.createIndex('idx_criadoEm', 'criadoEm', { unique: false });
+        }
+
+        // Migração Versão 2: Armazenamento de Parâmetros de Backtesting e Índices de Auditoria
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains('historicoBacktest')) {
+            const storeBacktest = db.createObjectStore('historicoBacktest', {
+              keyPath: 'id',
+              autoIncrement: true
+            });
+            storeBacktest.createIndex('idx_fechamentoId', 'fechamentoId', { unique: false });
+            storeBacktest.createIndex('idx_roi', 'roiPercentual', { unique: false });
+          }
+        }
+      };
+
+      request.onsuccess = (event) => {
+        this.db = event.target.result;
+        resolve(this.db);
+      };
+
+      request.onerror = (event) => {
+        reject(new Error(`Erro ao abrir IndexedDB: ${event.target.error}`));
+      };
+    });
+  }
+
+  /**
+   * Salva uma lista completa de concursos em uma única transação de alto desempenho.
+   * @param {Array<Object>} concursos - Lista [{ numero, dataApuracao, dezenas, mask, premiacao }, ...]
+   */
+  async importarConcursosLote(concursos) {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readwrite');
+      const store = tx.objectStore('concursos');
+
+      concursos.forEach(c => {
+        // Normaliza máscara binária para consulta rápida
+        const mask = c.mask || c.dezenas.reduce((acc, d) => acc | (1 << (d - 1)), 0);
+        store.put({
+          numero: c.numero,
+          dataApuracao: c.dataApuracao,
+          dezenas: c.dezenas,
+          mask: mask,
+          valoresReais: c.valoresReais || null
+        });
+      });
+
+      tx.oncomplete = () => resolve(concursos.length);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  /**
+   * Obtém os últimos N concursos ordenados de forma decrescente para o Backtesting.
+   */
+  async obterUltimosConcursos(limite = 100) {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readonly');
+      const store = tx.objectStore('concursos');
+      const request = store.openCursor(null, 'prev'); // Ordenação decrescente por chave primária
+      const resultados = [];
+
+      request.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && resultados.length < limite) {
+          resultados.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(resultados);
+        }
+      };
+
+      request.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  /**
+   * Retorna o número do concurso mais recente persistido no IndexedDB.
+   */
+  async obterMaiorConcursoArmazenado() {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readonly');
+      const store = tx.objectStore('concursos');
+      const request = store.openCursor(null, 'prev');
+
+      request.onsuccess = (e) => {
+        const cursor = e.target.result;
+        resolve(cursor ? cursor.key : 0);
+      };
+
+      request.onerror = (e) => reject(e.target.error);
+    });
+  }
+}
+
+export const dbService = new LotoSniperDatabase();
+
+// syncManager.js
+import { dbService } from './database.js';
+import { obterDadosLotofacil } from './caixaService.js';
+
+export async function sincronizarBaseHistoricaIncremental() {
+  const maiorLocal = await dbService.obterMaiorConcursoArmazenado();
+  const ultimoCaixa = await obterDadosLotofacil(); // Busca o mais recente da API
+
+  if (maiorLocal >= ultimoCaixa.concurso) {
+    console.log(`[LotoSniper] Base histórica sincronizada até o concurso #${maiorLocal}.`);
+    return;
+  }
+
+  console.log(`[LotoSniper] Atualizando base do concurso #${maiorLocal + 1} até #${ultimoCaixa.concurso}...`);
+
+  const pendentes = [];
+  for (let num = maiorLocal + 1; num <= ultimoCaixa.concurso; num++) {
+    try {
+      const dados = await obterDadosLotofacil(num);
+      pendentes.push({
+        numero: dados.concurso,
+        dataApuracao: dados.dataApuracao,
+        dezenas: dados.dezenas,
+        mask: dados.maskConcurso,
+        valoresReais: null
+      });
+    } catch (err) {
+      console.warn(`Falha ao buscar concurso #${num}:`, err);
+    }
+  }
+
+  if (pendentes.length > 0) {
+    await dbService.importarConcursosLote(pendentes);
+    console.log(`[LotoSniper] ${pendentes.length} novos concursos persistidos com sucesso.`);
+  }
+}

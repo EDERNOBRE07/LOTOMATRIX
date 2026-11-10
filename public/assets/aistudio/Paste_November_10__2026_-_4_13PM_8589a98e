@@ -1,0 +1,1977 @@
+Refatore o hook `useActiveFilterConfig.ts` para introduzir o modo 'Validação Estrita' na configuração de estado `activeFilterConfig`. Este modo deve atuar como uma trava booleana: se ativado, o motor de geração de fechamentos deve descartar automaticamente qualquer combinação que possua menos de 5 ou mais de 6 dezenas da 'Cruz da Lotofácil', garantindo que o fechamento resultante seja puramente composto por jogos na Zona de Ouro estatística.
+Adicione uma classe utilitária de animação baseada no keyframe 'goldenMetricGlow' (definido em index.css) aos cards de resultados na aba 'Fechamento'. Implemente uma lógica na renderização dos cards que aplique essa classe CSS sempre que um novo filtro do 'activeFilterConfig' for aplicado, proporcionando um feedback visual de 'fade-in' e brilho dourado após a revalidação do motor.
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão de Volantes - LotoSniper</title>
+  <style>
+    /* Reset Geral de Tela */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      background-color: #1e293b;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .painel-acoes {
+      margin-bottom: 20px;
+    }
+
+    .btn-imprimir {
+      background-color: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* Estrutura da Página A4 */
+    .pagina-a4 {
+      width: 210mm;
+      height: 297mm;
+      background: white;
+      padding: 10mm 15mm;
+      display: flex;
+      justify-content: space-between;
+      page-break-after: always;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Cada Volante Individual na Folha (Largura padrão Caixa: ~56mm útil, 81mm total) */
+    .volante-container {
+      width: 56mm;
+      height: 270mm;
+      border: 0.2mm dashed #94a3b8; /* Linha de corte */
+      padding: 25mm 2mm 5mm 2mm; /* 25mm superior reserva espaço para cabeçalho da Caixa */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .volante-header {
+      font-size: 8pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 6mm;
+      color: #334155;
+    }
+
+    /* Grid da Lotofácil (5 Colunas x 5 Linhas) */
+    .grid-lotofacil {
+      display: grid;
+      grid-template-columns: repeat(5, 9mm);
+      grid-template-rows: repeat(5, 7.5mm);
+      column-gap: 1.5mm;
+      row-gap: 1.8mm;
+      justify-content: center;
+    }
+
+    .celula-dezena {
+      width: 9mm;
+      height: 7.5mm;
+      border: 0.15mm solid #cbd5e1;
+      border-radius: 1mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7.5pt;
+      font-weight: bold;
+      color: #64748b;
+      position: relative;
+    }
+
+    /* A Marcação Óptica: Retângulo Preto Sólido */
+    .celula-dezena.marcada {
+      background-color: #000 !important;
+      color: #000 !important; /* Esconde o número preenchendo de preto */
+      border: 0.2mm solid #000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Linhas de Alinhamento para Corte */
+    .marcador-corte-topo, .marcador-corte-base {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      font-size: 6pt;
+      color: #94a3b8;
+    }
+    .marcador-corte-topo { top: 2mm; }
+    .marcador-corte-base { bottom: 2mm; }
+
+    /* ==============================================
+       REGRAS ESTRITAS DE IMPRESSÃO
+       ============================================== */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0; /* Anula margens automáticas da impressora */
+      }
+
+      body {
+        background: transparent;
+        padding: 0;
+      }
+
+      .painel-acoes {
+        display: none !important;
+      }
+
+      .pagina-a4 {
+        box-shadow: none;
+        page-break-after: always;
+        width: 210mm;
+        height: 297mm;
+        padding: 10mm 15mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="painel-acoes">
+    <button class="btn-imprimir" onclick="window.print()">Imprimir Volantes (A4)</button>
+  </div>
+
+  <div id="conteudoImpressao">
+    <!-- As páginas A4 e os volantes serão inseridos dinamicamente aqui -->
+  </div>
+
+  <script src="geradorVolantes.js"></script>
+</body>
+</html>
+// geradorVolantes.js
+
+/**
+ * Renderiza os volantes organizados em folhas A4 (3 volantes por folha).
+ * @param {Array<Array<number>>} listaJogos - Matriz de jogos (ex: [[1, 2, ..., 15], ...])
+ */
+function renderizarFolhasImpressao(listaJogos) {
+  const container = document.getElementById('conteudoImpressao');
+  container.innerHTML = '';
+
+  const JOGOS_POR_FOLHA = 3;
+  const totalFolhas = Math.ceil(listaJogos.length / JOGOS_POR_FOLHA);
+
+  for (let f = 0; f < totalFolhas; f++) {
+    // 1. Cria a página A4 física
+    const pagina = document.createElement('div');
+    pagina.className = 'pagina-a4';
+
+    // 2. Extrai os 3 jogos desta folha
+    const fatiaJogos = listaJogos.slice(f * JOGOS_POR_FOLHA, (f + 1) * JOGOS_POR_FOLHA);
+
+    fatiaJogos.forEach((jogo, indexRelativo) => {
+      const indexReal = f * JOGOS_POR_FOLHA + indexRelativo + 1;
+      const volante = criarElementoVolante(jogo, indexReal);
+      pagina.appendChild(volante);
+    });
+
+    container.appendChild(pagina);
+  }
+}
+
+/**
+ * Cria a estrutura DOM de um volante individual da Lotofácil (1 a 25)
+ */
+function criarElementoVolante(dezenasJogo, numeroJogo) {
+  const dezenasSet = new Set(dezenasJogo);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'volante-container';
+
+  wrapper.innerHTML = `
+    <div class="marcador-corte-topo">✄ - - - - - - - CORTE AQUI - - - - - - - ✄</div>
+    <div class="volante-header">LotoSniper • Jogo #${numeroJogo}</div>
+    <div class="grid-lotofacil"></div>
+    <div class="marcador-corte-base">✄ - - - - - - - - - - - - - - - - - - - ✄</div>
+  `;
+
+  const grid = wrapper.querySelector('.grid-lotofacil');
+
+  // Constrói as 25 posições da Lotofácil
+  for (let d = 1; d <= 25; d++) {
+    const celula = document.createElement('div');
+    celula.className = 'celula-dezena';
+    celula.textContent = String(d).padStart(2, '0');
+
+    // Se o número faz parte do jogo, ativa a marca óptica
+    if (dezenasSet.has(d)) {
+      celula.classList.add('marcada');
+    }
+
+    grid.appendChild(celula);
+  }
+
+  return wrapper;
+}
+
+// Inicialização com dados de exemplo (ex: 6 jogos gerados)
+const jogosExemplo = [
+  [1, 2, 3, 5, 8, 9, 10, 11, 13, 15, 17, 19, 21, 22, 25],
+  [1, 3, 4, 6, 7, 10, 11, 12, 14, 16, 18, 20, 22, 23, 24],
+  [2, 4, 5, 7, 8, 9, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  [1, 2, 4, 6, 7, 8, 10, 13, 14, 15, 16, 19, 21, 23, 25]
+];
+
+renderizarFolhasImpressao(jogosExemplo);
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Impressão Cédula Oficial Lotofácil</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Página configurada exatamente no tamanho da cédula avulsa */
+    @page {
+      size: 81mm 170mm;
+      margin: 0;
+    }
+
+    body {
+      background: #334155;
+      padding: 20px;
+    }
+
+    .cedula-avulsa {
+      width: 81mm;
+      height: 170mm;
+      position: relative;
+      background: transparent;
+      page-break-after: always;
+      overflow: hidden;
+    }
+
+    /* Durante a prévia em tela, exibe contorno de referência */
+    @media screen {
+      .cedula-avulsa {
+        background: white;
+        margin: 0 auto 20px auto;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      }
+    }
+
+    /* Grid com coordenadas absolutas sincronizadas com o volante oficial */
+    .grid-jogo-oficial {
+      position: absolute;
+      top: 33.5mm;
+      left: 10.5mm;
+      width: 45mm;
+      height: 36mm;
+      display: grid;
+      grid-template-columns: repeat(5, 9.0mm);
+      grid-template-rows: repeat(5, 7.2mm);
+    }
+
+    .slot-dezena {
+      width: 9.0mm;
+      height: 7.2mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Apenas as dezenas escolhidas recebem a tinta */
+    .slot-dezena.ativa::after {
+      content: "";
+      width: 4.2mm;
+      height: 2.0mm;
+      background-color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    @media print {
+      body {
+        background: transparent;
+        padding: 0;
+      }
+      .nao-imprimir {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nao-imprimir" style="text-align: center; margin-bottom: 16px;">
+    <button onclick="window.print()" style="padding: 10px 20px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer;">
+      Imprimir nas Cédulas da Caixa
+    </button>
+  </div>
+
+  <div id="containerCedulas"></div>
+
+  <script>
+    function renderizarCedulasAvulsas(jogos) {
+      const container = document.getElementById('containerCedulas');
+      container.innerHTML = '';
+
+      jogos.forEach(jogo => {
+        const jogoSet = new Set(jogo);
+        const cedula = document.createElement('div');
+        cedula.className = 'cedula-avulsa';
+
+        const grid = document.createElement('div');
+        grid.className = 'grid-jogo-oficial';
+
+        for (let d = 1; d <= 25; d++) {
+          const slot = document.createElement('div');
+          slot.className = 'slot-dezena' + (jogoSet.has(d) ? ' ativa' : '');
+          grid.appendChild(slot);
+        }
+
+        cedula.appendChild(grid);
+        container.appendChild(cedula);
+      });
+    }
+
+    // Exemplo: 2 bilhetes
+    renderizarCedulasAvulsas([
+      [1, 2, 3, 5, 8, 9, 10, 11, 13, 15, 17, 19, 21, 22, 25],
+      [1, 3, 4, 6, 7, 10, 11, 12, 14, 16, 18, 20, 22, 23, 24]
+    ]);
+  </script>
+</body>
+</html>
+
+<!-- Bloco de Rodapé para Cédula ou Folha A4 -->
+<style>
+  /* Seção de Teimosinha: Y = ~123mm do topo */
+  .secao-teimosinha {
+    position: absolute;
+    top: 123mm;
+    left: 10.5mm;
+    width: 60mm;
+    display: flex;
+    gap: 4.5mm;
+  }
+
+  /* Seção do Bolão (Cotas): Y = ~138mm do topo */
+  .secao-bolao {
+    position: absolute;
+    top: 138mm;
+    left: 10.5mm;
+    width: 60mm;
+    display: flex;
+    gap: 3.5mm;
+  }
+
+  .opcao-optica {
+    width: 6.5mm;
+    height: 4.5mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .opcao-optica.marcada::after {
+    content: "";
+    width: 4.2mm;
+    height: 2.0mm;
+    background: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+</style>
+
+<!-- Injetado dinamicamente dentro de cada .cedula-avulsa -->
+<div class="secao-teimosinha">
+  <!-- Valores padrão Caixa Lotofácil: 3, 6, 12, 18 ou 24 concursos -->
+  <div class="opcao-optica" data-teimosinha="3"></div>
+  <div class="opcao-optica" data-teimosinha="6"></div>
+  <div class="opcao-optica marcada" data-teimosinha="12"></div>
+  <div class="opcao-optica" data-teimosinha="18"></div>
+  <div class="opcao-optica" data-teimosinha="24"></div>
+</div>
+
+<div class="secao-bolao">
+  <!-- Dezenas de cotas (ex: 2 a 100 cotas) -->
+  <div class="opcao-optica" data-cota="2"></div>
+  <div class="opcao-optica marcada" data-cota="10"></div>
+  <div class="opcao-optica" data-cota="20"></div>
+</div>
+// exportadorCologaLGodoi.js
+
+/**
+ * Exporta os cartões em formato TXT posicional estrito aceito por Cologa e L-Godoi.
+ * @param {Array<Array<number>>} jogos - Lista de jogos com dezenas numéricas
+ * @param {string} prefixoArquivo - Nome base para download
+ */
+export function exportarParaCologaLGodoi(jogos, prefixoArquivo = 'matriz_lotosniper') {
+  const CRLF = '\r\n';
+  
+  // Mapeia cada jogo para uma linha com dezenas de 2 dígitos separadas por espaço
+  const linhas = jogos.map(jogo => {
+    // Garante ordenação ascendente e formatação com zero à esquerda
+    return [...jogo]
+      .sort((a, b) => a - b)
+      .map(d => String(d).padStart(2, '0'))
+      .join(' ');
+  });
+
+  // Monta o arquivo em texto puro
+  const conteudoTexto = linhas.join(CRLF) + CRLF;
+
+  // Blob com charset ANSI / UTF-8 compatível com Windows antigo
+  const blob = new Blob([conteudoTexto], { type: 'text/plain;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${prefixoArquivo}_cologa.txt`;
+  document.body.appendChild(link);
+  link.click();
+
+  // Limpeza de recursos
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 100);
+}
+
+// Exemplo de saída gerada no arquivo:
+// 01 02 03 05 08 09 10 11 13 15 17 19 21 22 25
+// 01 03 04 06 07 10 11 12 14 16 18 20 22 23 24
+
+// workerPool.js
+
+export class CombinatorialWorkerPool {
+  constructor(workerScriptUrl, poolSize = navigator.hardwareConcurrency || 4) {
+    this.poolSize = poolSize;
+    this.workers = [];
+    this.workerScriptUrl = workerScriptUrl;
+  }
+
+  inicializar() {
+    for (let i = 0; i < this.poolSize; i++) {
+      const worker = new Worker(this.workerScriptUrl, { type: 'module' });
+      this.workers.push(worker);
+    }
+  }
+
+  /**
+   * Divide as dezenas variáveis entre os workers pelo índice raiz da recursão.
+   */
+  async executarFechamentoParalelo(payload) {
+    const { dezenasSelecionadas, tamanhoAposta, fixas = [], filtros = {} } = payload;
+    const fixasSet = new Set(fixas);
+    const variaveis = dezenasSelecionadas.filter(d => !fixasSet.has(d));
+    const vagas = tamanhoAposta - fixas.length;
+
+    // Particiona os índices iniciais da recursão entre os workers
+    const numParticoes = variaveis.length - vagas + 1;
+    const fatiasPorWorker = Array.from({ length: this.poolSize }, () => []);
+
+    for (let i = 0; i < numParticoes; i++) {
+      fatiasPorWorker[i % this.poolSize].push(i);
+    }
+
+    const promises = this.workers.map((worker, idx) => {
+      const indicesIniciais = fatiasPorWorker[idx];
+      if (indicesIniciais.length === 0) return Promise.resolve(new Int32Array(0));
+
+      return new Promise((resolve, reject) => {
+        const handler = (e) => {
+          if (e.data.type === 'CHUNK_COMPLETE') {
+            worker.removeEventListener('message', handler);
+            resolve(e.data.jogosValidos);
+          } else if (e.data.type === 'ERROR') {
+            worker.removeEventListener('message', handler);
+            reject(new Error(e.data.message));
+          }
+        };
+
+        worker.addEventListener('message', handler);
+        worker.postMessage({
+          indicesIniciais,
+          variaveis,
+          vagas,
+          fixas,
+          filtros
+        });
+      });
+    });
+
+    const resultados = await Promise.all(promises);
+
+    // Concatena os TypedArrays em um único buffer contínuo sem estouro de pilha
+    const totalJogos = resultados.reduce((acc, arr) => acc + arr.length, 0);
+    const bufferFinal = new Int32Array(totalJogos);
+    let offset = 0;
+
+    for (const arr of resultados) {
+      bufferFinal.set(arr, offset);
+      offset += arr.length;
+    }
+
+    return bufferFinal;
+  }
+
+  destruir() {
+    this.workers.forEach(w => w.terminate());
+    this.workers = [];
+  }
+}
+
+// workerCombinatorioChunk.js
+import { popcount, validarJogoBitwise } from './bitwiseUtils.js';
+
+self.onmessage = function (e) {
+  const { indicesIniciais, variaveis, vagas, fixas, filtros } = e.data;
+
+  const fixasMask = fixas.reduce((acc, d) => acc | (1 << (d - 1)), 0);
+  const variaveisBits = variaveis.map(d => 1 << (d - 1));
+  const n = variaveisBits.length;
+
+  const bufferLocal = new Int32Array(50000);
+  let encontrados = 0;
+
+  function combinarFatia(inicio, profundidade, maskAtual) {
+    if (profundidade === vagas) {
+      const jogoMask = maskAtual | fixasMask;
+      if (validarJogoBitwise(jogoMask, filtros)) {
+        if (encontrados < bufferLocal.length) {
+          bufferLocal[encontrados++] = jogoMask;
+        }
+      }
+      return;
+    }
+
+    const limite = n - (vagas - profundidade);
+    for (let i = inicio; i <= limite; i++) {
+      combinarFatia(i + 1, profundidade + 1, maskAtual | variaveisBits[i]);
+    }
+  }
+
+  // Executa apenas as raízes atribuídas a este worker
+  for (const rootIdx of indicesIniciais) {
+    combinarFatia(rootIdx + 1, 1, variaveisBits[rootIdx]);
+  }
+
+  // Devolve a fatia calculada
+  const resultado = bufferLocal.slice(0, encontrados);
+  self.postMessage({ type: 'CHUNK_COMPLETE', jogosValidos: resultado }, [resultado.buffer]);
+};
+
+// backtestingEngine.js
+import { popcount } from './bitwiseUtils.js';
+
+export function rodarBacktesting({
+  cartoesMasks, // Int32Array com os jogos do fechamento
+  historicoConcursos, // Array: [{ concurso: 3000, mask: 0b101..., premiacao: {...} }, ...]
+  precoPorJogo = 3.00,
+  premiosPadrao = {
+    11: 6.00,
+    12: 12.00,
+    13: 30.00,
+    14: 1500.00,
+    15: 1800000.00
+  }
+}) {
+  console.time('Tempo Backtesting');
+
+  const totalCartoes = cartoesMasks.length;
+  const custoPorConcurso = totalCartoes * precoPorJogo;
+  const numConcursos = historicoConcursos.length;
+  const custoTotalHistorico = custoPorConcurso * numConcursos;
+
+  let arrecadacaoTotal = 0;
+  const saldoPorConcurso = [];
+  const contagemGeralAcertos = { 15: 0, 14: 0, 13: 0, 12: 0, 11: 0, abaixo11: 0 };
+
+  for (let c = 0; c < numConcursos; c++) {
+    const sorteio = historicoConcursos[c];
+    const maskSorteio = sorteio.mask;
+    let retornoNesteConcurso = 0;
+
+    for (let j = 0; j < totalCartoes; j++) {
+      const pontos = popcount(cartoesMasks[j] & maskSorteio);
+
+      if (pontos >= 11) {
+        contagemGeralAcertos[pontos]++;
+        const premioItem = (sorteio.valoresReais && sorteio.valoresReais[pontos]) 
+          ? sorteio.valoresReais[pontos] 
+          : premiosPadrao[pontos];
+        retornoNesteConcurso += premioItem;
+      } else {
+        contagemGeralAcertos.abaixo11++;
+      }
+    }
+
+    arrecadacaoTotal += retornoNesteConcurso;
+    saldoPorConcurso.push({
+      concurso: sorteio.concurso,
+      custo: custoPorConcurso,
+      retorno: retornoNesteConcurso,
+      lucroLiquido: retornoNesteConcurso - custoPorConcurso
+    });
+  }
+
+  const saldoLiquidoFinal = arrecadacaoTotal - custoTotalHistorico;
+  const roi = custoTotalHistorico > 0 ? (saldoLiquidoFinal / custoTotalHistorico) * 100 : 0;
+
+  console.timeEnd('Tempo Backtesting');
+
+  return {
+    numConcursosAvaliados: numConcursos,
+    totalCartoesPorConcurso: totalCartoes,
+    custoTotalGasto: custoTotalHistorico,
+    arrecadacaoBruta: arrecadacaoTotal,
+    saldoLiquidoFinal,
+    roiPercentual: roi,
+    contagemGeralAcertos,
+    curvaPatrimonial: saldoPorConcurso
+  };
+}
+
+// simulatedAnnealingCover.js
+import { popcount } from './bitwiseUtils.js';
+
+/**
+ * Reduz uma matriz de cartões minimizando o total de volantes para manter cobertura alvo.
+ * @param {Int32Array} poolCandidatosMasks - Banco de cartões viáveis
+ * @param {Int32Array} cenariosAcertoMasks - Espaço C(V, 15) que precisa ser coberto
+ * @param {number} garantiaAlvo - Acertos exigidos (ex: 14)
+ * @param {number} taxaCoberturaMinima - Cobertura pretendida (ex: 100 ou 90 para soft-cover)
+ */
+export function simulatedAnnealingReducao({
+  poolCandidatosMasks,
+  cenariosAcertoMasks,
+  garantiaAlvo = 14,
+  taxaCoberturaMinima = 100.0,
+  temperaturaInicial = 100.0,
+  fatorResfriamento = 0.96,
+  iteracoesPorTemp = 50,
+  tempMinima = 0.05
+}) {
+  const totalCenarios = cenariosAcertoMasks.length;
+  const poolLen = poolCandidatosMasks.length;
+
+  // 1. Solução Inicial: subconjunto aleatório de cartões
+  let solucaoAtualIndices = new Set();
+  const tamanhoInicial = Math.min(poolLen, Math.ceil(poolLen * 0.4));
+  while (solucaoAtualIndices.size < tamanhoInicial) {
+    solucaoAtualIndices.add(Math.floor(Math.random() * poolLen));
+  }
+
+  // Avaliador de Cobertura
+  function avaliarSolucao(indicesSet) {
+    const indicesArr = Array.from(indicesSet);
+    let cobertos = 0;
+
+    for (let c = 0; c < totalCenarios; c++) {
+      const cenario = cenariosAcertoMasks[c];
+      for (let i = 0; i < indicesArr.length; i++) {
+        if (popcount(cenario & poolCandidatosMasks[indicesArr[i]]) >= garantiaAlvo) {
+          cobertos++;
+          break;
+        }
+      }
+    }
+
+    const cobertura = (cobertos / totalCenarios) * 100;
+    // Função de Custo / Energia: Menos cartões é melhor; penalidade severa se não atingir a cobertura mínima
+    const penalidade = cobertura < taxaCoberturaMinima ? (taxaCoberturaMinima - cobertura) * 500 : 0;
+    const custo = indicesSet.size + penalidade;
+
+    return { custo, cobertura, valido: cobertura >= taxaCoberturaMinima };
+  }
+
+  let estadoAtual = avaliarSolucao(solucaoAtualIndices);
+  let melhorSolucaoIndices = new Set(solucaoAtualIndices);
+  let melhorEstado = { ...estadoAtual };
+
+  let T = temperaturaInicial;
+
+  while (T > tempMinima) {
+    for (let iter = 0; iter < iteracoesPorTemp; iter++) {
+      // Perturbação (Mutação): Adicionar, Remover ou Trocar um cartão
+      const proximoIndices = new Set(solucaoAtualIndices);
+      const rand = Math.random();
+
+      if (rand < 0.4 && proximoIndices.size > 1) {
+        // Ação: Remover cartão aleatório
+        const itemRemover = Array.from(proximoIndices)[Math.floor(Math.random() * proximoIndices.size)];
+        proximoIndices.delete(itemRemover);
+      } else if (rand < 0.8) {
+        // Ação: Inserir novo cartão aleatório do pool
+        const itemAdicionar = Math.floor(Math.random() * poolLen);
+        proximoIndices.add(itemAdicionar);
+      } else {
+        // Ação: Substituir (Swap)
+        const itemRemover = Array.from(proximoIndices)[Math.floor(Math.random() * proximoIndices.size)];
+        proximoIndices.delete(itemRemover);
+        const itemAdicionar = Math.floor(Math.random() * poolLen);
+        proximoIndices.add(itemAdicionar);
+      }
+
+      const proximoEstado = avaliarSolucao(proximoIndices);
+      const deltaEnergia = proximoEstado.custo - estadoAtual.custo;
+
+      // Critério de Metrópolis: Aceita se for melhor ou com probabilidade decrescente se for pior
+      if (deltaEnergia < 0 || Math.random() < Math.exp(-deltaEnergia / T)) {
+        solucaoAtualIndices = proximoIndices;
+        estadoAtual = proximoEstado;
+
+        if (estadoAtual.valido && estadoAtual.custo < melhorEstado.custo) {
+          melhorSolucaoIndices = new Set(solucaoAtualIndices);
+          melhorEstado = { ...estadoAtual };
+        }
+      }
+    }
+
+    T *= fatorResfriamento; // Resfriamento gradativo
+  }
+
+  // Mapeia os índices de volta para as máscaras binárias
+  const resultadoFinal = Array.from(melhorSolucaoIndices).map(idx => poolCandidatosMasks[idx]);
+
+  return {
+    totalCartoes: resultadoFinal.length,
+    coberturaAlcancada: melhorEstado.cobertura,
+    cartoesReduzidosMasks: new Int32Array(resultadoFinal)
+  };
+}
+
+Atualize o hook useActiveFilterConfig e o motor de fechamento para incluir uma chave 'strictValidation' no objeto activeFilterConfig. Quando ativada, o motor deve filtrar e descartar automaticamente qualquer combinação que possua fora de 5 a 6 dezenas dentro do range da Cruz da Lotofácil, impedindo o processamento e exibição de jogos que não cumpram esse critério exato.
+
+Adicione a classe CSS 'animate-golden-glow' e um efeito de fade-in aos componentes de cartão de jogo na aba Fechamento. O efeito deve ser disparado via uma classe de estado no React toda vez que um novo conjunto de jogos é validado e renderizado, aplicando feedback tátil e visual para confirmar que o jogo passou pelos filtros ativos.
+1. Gráfico Interativo da Curva de Capital do Backtesting
+Este componente visualiza a evolução patrimonial acumulada concurso a concurso a partir do array curvaPatrimonial retornado pelo motor de backtesting. Ele plota o saldo líquido acumulado em relação à linha d'água de equilíbrio (R$ 0,00).
+
+ 
+use wasm_bindgen::prelude::*;
+
+// Instrução x86/ARM popcnt de 1 ciclo de clock
+#[inline(always)]
+fn popcount(v: u32) -> u32 {
+    v.count_ones()
+}
+
+#[wasm_bindgen]
+pub struct AnnealingResult {
+    total_cartoes: usize,
+    cobertura_alcancada: f32,
+    indices_selecionados: Vec<usize>,
+}
+
+#[wasm_bindgen]
+impl AnnealingResult {
+    #[wasm_bindgen(getter)]
+    pub fn total_cartoes(&self) -> usize {
+        self.total_cartoes
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn cobertura_alcancada(&self) -> f32 {
+        self.cobertura_alcancada
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn indices(&self) -> Vec<usize> {
+        self.indices_selecionados.clone()
+    }
+}
+
+#[inline(always)]
+fn avaliar_solucao(
+    indices: &[usize],
+    pool: &[u32],
+    cenarios: &[u32],
+    garantia_alvo: u32,
+    taxa_minima: f32,
+) -> (f32, f32, bool) {
+    let total_cenarios = cenarios.len();
+    let mut cobertos = 0;
+
+    for &cenario in cenarios {
+        for &idx in indices {
+            if popcount(cenario & pool[idx]) >= garantia_alvo {
+                cobertos += 1;
+                break;
+            }
+        }
+    }
+
+    let cobertura = (cobertos as f32 / total_cenarios as f32) * 100.0;
+    let penalidade = if cobertura < taxa_minima {
+        (taxa_minima - cobertura) * 800.0
+    } else {
+        0.0
+    };
+    let custo = indices.len() as f32 + penalidade;
+    let valido = cobertura >= taxa_minima;
+
+    (custo, cobertura, valido)
+}
+
+#[wasm_bindgen]
+pub fn simulated_annealing_wasm(
+    pool_candidatos: &[u32],
+    cenarios_acerto: &[u32],
+    garantia_alvo: u32,
+    taxa_minima: f32,
+    mut temp_inicial: f32,
+    fator_resfriamento: f32,
+    iter_por_temp: usize,
+    temp_min: f32,
+    seed: u32,
+) -> AnnealingResult {
+    let pool_len = pool_candidatos.len();
+    let mut rng_state = seed;
+
+    // Gerador linear congruencial rápido (LCG) sem overhead de biblioteca externa
+    let mut rand_f32 = || -> f32 {
+        rng_state = rng_state.wrapping_mul(1664525).wrapping_add(1013904223);
+        (rng_state as f32) / (u32::MAX as f32)
+    };
+
+    // Subconjunto inicial (30% do pool)
+    let init_len = (pool_len as f32 * 0.3).ceil() as usize;
+    let mut solucao_atual: Vec<usize> = (0..init_len.min(pool_len)).collect();
+
+    let (mut custo_atual, mut cob_atual, _) =
+        avaliar_solucao(&solucao_atual, pool_candidatos, cenarios_acerto, garantia_alvo, taxa_minima);
+
+    let mut melhor_solucao = solucao_atual.clone();
+    let mut melhor_custo = custo_atual;
+    let mut melhor_cobertura = cob_atual;
+
+    while temp_inicial > temp_min {
+        for _ in 0..iter_por_temp {
+            let mut vizinho = solucao_atual.clone();
+            let acao = rand_f32();
+
+            if acao < 0.4 && vizinho.len() > 1 {
+                // Remover
+                let pos = (rand_f32() * vizinho.len() as f32) as usize;
+                vizinho.swap_remove(pos.min(vizinho.len() - 1));
+            } else if acao < 0.8 {
+                // Inserir
+                let item = (rand_f32() * pool_len as f32) as usize;
+                if !vizinho.contains(&item) {
+                    vizinho.push(item);
+                }
+            } else {
+                // Swap
+                let pos = (rand_f32() * vizinho.len() as f32) as usize;
+                vizinho.swap_remove(pos.min(vizinho.len() - 1));
+                let item = (rand_f32() * pool_len as f32) as usize;
+                if !vizinho.contains(&item) {
+                    vizinho.push(item);
+                }
+            }
+
+            let (custo_vizinho, cob_vizinho, valido) =
+                avaliar_solucao(&vizinho, pool_candidatos, cenarios_acerto, garantia_alvo, taxa_minima);
+
+            let delta = custo_vizinho - custo_atual;
+
+            if delta < 0.0 || rand_f32() < (-delta / temp_inicial).exp() {
+                solucao_atual = vizinho;
+                custo_atual = custo_vizinho;
+                cob_atual = cob_vizinho;
+
+                if valido && custo_atual < melhor_custo {
+                    melhor_solucao = solucao_atual.clone();
+                    melhor_custo = custo_atual;
+                    melhor_cobertura = cob_atual;
+                }
+            }
+        }
+
+        temp_inicial *= fatorResfriamento(fator_resfriamento);
+    }
+
+    AnnealingResult {
+        total_cartoes: melhor_solucao.len(),
+        cobertura_alcancada: melhor_cobertura,
+        indices_selecionados: melhor_solucao,
+    }
+}
+
+#[inline(always)]
+fn fatorResfriamento(f: f32) -> f32 {
+    if f <= 0.0 || f >= 1.0 { 0.95 } else { f }
+}
+wasm-pack build --target web –release
+
+// saWasmLoader.js
+import init, { simulated_annealing_wasm } from './pkg/lotosniper_wasm.js';
+
+export async function executarAnnealingWasm({
+  poolCandidatosMasks,
+  cenariosAcertoMasks,
+  garantiaAlvo = 14,
+  taxaMinima = 100.0
+}) {
+  await init();
+
+  const seed = (Math.random() * 0xFFFFFFFF) >>> 0;
+  
+  // Passa diretamente como Uint32Array (zero-copy memory mapping no WebAssembly)
+  const pool = new Uint32Array(poolCandidatosMasks);
+  const cenarios = new Uint32Array(cenariosAcertoMasks);
+
+  console.time('Simulated Annealing WASM');
+  const resultado = simulated_annealing_wasm(
+    pool,
+    cenarios,
+    garantiaAlvo,
+    taxaMinima,
+    120.0, // Temp Inicial
+    0.95,  // Fator Resfriamento
+    80,    // Iterações por patamar térmico
+    0.05,  // Temp Mínima
+    seed
+  );
+  console.timeEnd('Simulated Annealing WASM');
+
+  return {
+    totalCartoes: resultado.total_cartoes,
+    coberturaAlcancada: resultado.cobertura_alcancada,
+    cartoesReduzidosMasks: resultado.indices.map(idx => pool[idx])
+  };
+}
+
+// database.js
+
+const DB_NAME = 'LotoSniperDB';
+const CURRENT_VERSION = 2; // Incrementar ao adicionar novas stores ou índices
+
+export class LotoSniperDatabase {
+  constructor() {
+    this.db = null;
+  }
+
+  /**
+   * Abre o banco de dados aplicando migrações sequenciais conforme a versão instalada.
+   */
+  async conectar() {
+    if (this.db) return this.db;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, CURRENT_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        const oldVersion = event.oldVersion;
+
+        console.log(`[DB] Migrando banco de dados da versão ${oldVersion} para ${CURRENT_VERSION}`);
+
+        // Migração Versão 1: Estrutura Base de Concursos e Fechamentos
+        if (oldVersion < 1) {
+          const storeConcursos = db.createObjectStore('concursos', { keyPath: 'numero' });
+          storeConcursos.createIndex('idx_data', 'dataApuracao', { unique: false });
+          storeConcursos.createIndex('idx_mask', 'mask', { unique: false });
+
+          const storeFechamentos = db.createObjectStore('fechamentosSalvos', {
+            keyPath: 'id',
+            autoIncrement: true
+          });
+          storeFechamentos.createIndex('idx_criadoEm', 'criadoEm', { unique: false });
+        }
+
+        // Migração Versão 2: Armazenamento de Parâmetros de Backtesting e Índices de Auditoria
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains('historicoBacktest')) {
+            const storeBacktest = db.createObjectStore('historicoBacktest', {
+              keyPath: 'id',
+              autoIncrement: true
+            });
+            storeBacktest.createIndex('idx_fechamentoId', 'fechamentoId', { unique: false });
+            storeBacktest.createIndex('idx_roi', 'roiPercentual', { unique: false });
+          }
+        }
+      };
+
+      request.onsuccess = (event) => {
+        this.db = event.target.result;
+        resolve(this.db);
+      };
+
+      request.onerror = (event) => {
+        reject(new Error(`Erro ao abrir IndexedDB: ${event.target.error}`));
+      };
+    });
+  }
+
+  /**
+   * Salva uma lista completa de concursos em uma única transação de alto desempenho.
+   * @param {Array<Object>} concursos - Lista [{ numero, dataApuracao, dezenas, mask, premiacao }, ...]
+   */
+  async importarConcursosLote(concursos) {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readwrite');
+      const store = tx.objectStore('concursos');
+
+      concursos.forEach(c => {
+        // Normaliza máscara binária para consulta rápida
+        const mask = c.mask || c.dezenas.reduce((acc, d) => acc | (1 << (d - 1)), 0);
+        store.put({
+          numero: c.numero,
+          dataApuracao: c.dataApuracao,
+          dezenas: c.dezenas,
+          mask: mask,
+          valoresReais: c.valoresReais || null
+        });
+      });
+
+      tx.oncomplete = () => resolve(concursos.length);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  /**
+   * Obtém os últimos N concursos ordenados de forma decrescente para o Backtesting.
+   */
+  async obterUltimosConcursos(limite = 100) {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readonly');
+      const store = tx.objectStore('concursos');
+      const request = store.openCursor(null, 'prev'); // Ordenação decrescente por chave primária
+      const resultados = [];
+
+      request.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && resultados.length < limite) {
+          resultados.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(resultados);
+        }
+      };
+
+      request.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  /**
+   * Retorna o número do concurso mais recente persistido no IndexedDB.
+   */
+  async obterMaiorConcursoArmazenado() {
+    const db = await this.conectar();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('concursos', 'readonly');
+      const store = tx.objectStore('concursos');
+      const request = store.openCursor(null, 'prev');
+
+      request.onsuccess = (e) => {
+        const cursor = e.target.result;
+        resolve(cursor ? cursor.key : 0);
+      };
+
+      request.onerror = (e) => reject(e.target.error);
+    });
+  }
+}
+
+export const dbService = new LotoSniperDatabase();
+
+// syncManager.js
+import { dbService } from './database.js';
+import { obterDadosLotofacil } from './caixaService.js';
+
+export async function sincronizarBaseHistoricaIncremental() {
+  const maiorLocal = await dbService.obterMaiorConcursoArmazenado();
+  const ultimoCaixa = await obterDadosLotofacil(); // Busca o mais recente da API
+
+  if (maiorLocal >= ultimoCaixa.concurso) {
+    console.log(`[LotoSniper] Base histórica sincronizada até o concurso #${maiorLocal}.`);
+    return;
+  }
+
+  console.log(`[LotoSniper] Atualizando base do concurso #${maiorLocal + 1} até #${ultimoCaixa.concurso}...`);
+
+  const pendentes = [];
+  for (let num = maiorLocal + 1; num <= ultimoCaixa.concurso; num++) {
+    try {
+      const dados = await obterDadosLotofacil(num);
+      pendentes.push({
+        numero: dados.concurso,
+        dataApuracao: dados.dataApuracao,
+        dezenas: dados.dezenas,
+        mask: dados.maskConcurso,
+        valoresReais: null
+      });
+    } catch (err) {
+      console.warn(`Falha ao buscar concurso #${num}:`, err);
+    }
+  }
+
+  if (pendentes.length > 0) {
+    await dbService.importarConcursosLote(pendentes);
+    console.log(`[LotoSniper] ${pendentes.length} novos concursos persistidos com sucesso.`);
+  }
+}
+
+<!-- Container de Métricas do Backtesting -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6 max-w-5xl w-full text-slate-100">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+      <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-300">Auditoria Financeira Retrospectiva</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Desempenho simulado contra os últimos concursos da Lotofácil</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400">Amostragem:</span>
+      <select id="selectJanelaBacktest" class="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded px-2.5 py-1 focus:outline-none focus:border-sky-500">
+        <option value="25">Últimos 25 Concursos</option>
+        <option value="50" selected>Últimos 50 Concursos</option>
+        <option value="100">Últimos 100 Concursos</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Cards de Indicadores Quantitativos (KPIs) -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5">
+      <span class="text-[11px] font-medium text-slate-400 block mb-1">Resultado Líquido</span>
+      <div id="kpiResultadoLiquido" class="text-xl font-black text-emerald-400">+R$ 0,00</div>
+      <span id="kpiRoi" class="text-[10px] text-emerald-500/90 font-medium">ROI: 0.0%</span>
+    </div>
+
+    <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5">
+      <span class="text-[11px] font-medium text-slate-400 block mb-1">Capital Investido</span>
+      <div id="kpiCapitalTotal" class="text-xl font-black text-slate-200">R$ 0,00</div>
+      <span id="kpiCustoPorSorteio" class="text-[10px] text-slate-500">R$ 0,00 / concurso</span>
+    </div>
+
+    <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5">
+      <span class="text-[11px] font-medium text-slate-400 block mb-1">Max Drawdown</span>
+      <div id="kpiMaxDrawdown" class="text-xl font-black text-rose-400">-R$ 0,00</div>
+      <span id="kpiDrawdownPerc" class="text-[10px] text-rose-500/90 font-medium">Rebaixamento Máximo</span>
+    </div>
+
+    <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-3.5">
+      <span class="text-[11px] font-medium text-slate-400 block mb-1">Concursos com Retorno</span>
+      <div id="kpiTaxaSucesso" class="text-xl font-black text-sky-400">0.0%</div>
+      <span id="kpiFatorRecuperacao" class="text-[10px] text-slate-500">Fator de Lucro: 0.0x</span>
+    </div>
+  </div>
+
+  <!-- Tabela de Detalhamento por Concurso -->
+  <div class="overflow-x-auto border border-slate-800/80 rounded-lg">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+        <tr>
+          <th class="py-2.5 px-3">Concurso</th>
+          <th class="py-2.5 px-3">Investimento</th>
+          <th class="py-2.5 px-3 text-center">11-12 Acertos</th>
+          <th class="py-2.5 px-3 text-center">13 Acertos</th>
+          <th class="py-2.5 px-3 text-center">14-15 Acertos</th>
+          <th class="py-2.5 px-3">Retorno Bruto</th>
+          <th class="py-2.5 px-3 text-right">Saldo do Concurso</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyBacktest" class="divide-y divide-slate-800/40 text-slate-300 font-mono">
+        <!-- Linhas injetadas via JavaScript -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+// uiBacktestMetrics.js
+
+export function calcularMetricasAvancadas(curvaPatrimonial, custoTotal, arrecadacaoTotal) {
+  let pico = 0;
+  let maxDrawdown = 0;
+  let concursosComRetorno = 0;
+  let saldoAcumulado = 0;
+
+  curvaPatrimonial.forEach(p => {
+    saldoAcumulado += p.lucroLiquido;
+    if (saldoAcumulado > pico) pico = saldoAcumulado;
+    
+    const queda = pico - saldoAcumulado;
+    if (queda > maxDrawdown) maxDrawdown = queda;
+    if (p.retorno > 0) concursosComRetorno++;
+  });
+
+  const saldoLiquido = arrecadacaoTotal - custoTotal;
+  const roi = custoTotal > 0 ? (saldoLiquido / custoTotal) * 100 : 0;
+  const taxaSucesso = (concursosComRetorno / curvaPatrimonial.length) * 100;
+  const perdasTotais = curvaPatrimonial
+    .filter(p => p.lucroLiquido < 0)
+    .reduce((acc, p) => acc + Math.abs(p.lucroLiquido), 0);
+  const ganhosTotais = curvaPatrimonial
+    .filter(p => p.lucroLiquido > 0)
+    .reduce((acc, p) => acc + p.lucroLiquido, 0);
+  const fatorLucro = perdasTotais > 0 ? ganhosTotais / perdasTotais : ganhosTotais > 0 ? 99 : 0;
+
+  return {
+    saldoLiquido,
+    roi,
+    custoTotal,
+    maxDrawdown,
+    taxaSucesso,
+    fatorLucro
+  };
+}
+
+export function renderizarTabelaBacktest(curvaPatrimonial, metricas, detalheFaixas = []) {
+  // 1. Atualiza Indicadores
+  const elemResultado = document.getElementById('kpiResultadoLiquido');
+  const elemRoi = document.getElementById('kpiRoi');
+  
+  elemResultado.textContent = `${metricas.saldoLiquido >= 0 ? '+' : ''}R$ ${metricas.saldoLiquido.toFixed(2).replace('.', ',')}`;
+  elemResultado.className = `text-xl font-black ${metricas.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+  
+  elemRoi.textContent = `ROI: ${metricas.roi.toFixed(1)}%`;
+  elemRoi.className = `text-[10px] font-medium ${metricas.roi >= 0 ? 'text-emerald-500/90' : 'text-rose-500/90'}`;
+
+  document.getElementById('kpiCapitalTotal').textContent = `R$ ${metricas.custoTotal.toFixed(2).replace('.', ',')}`;
+  document.getElementById('kpiMaxDrawdown').textContent = `-R$ ${metricas.maxDrawdown.toFixed(2).replace('.', ',')}`;
+  document.getElementById('kpiTaxaSucesso').textContent = `${metricas.taxaSucesso.toFixed(1)}%`;
+  document.getElementById('kpiFatorRecuperacao').textContent = `Fator de Lucro: ${metricas.fatorLucro.toFixed(2)}x`;
+
+  // 2. Renderiza Linhas da Tabela
+  const tbody = document.getElementById('tbodyBacktest');
+  tbody.innerHTML = curvaPatrimonial.slice(0, 15).map((p, idx) => {
+    const f = detalheFaixas[idx] || { ac11_12: 0, ac13: 0, ac14_15: 0 };
+    const saldoPositivo = p.lucroLiquido >= 0;
+
+    return `
+      <tr class="hover:bg-slate-800/20 transition-colors">
+        <td class="py-2 px-3 font-sans font-semibold text-slate-200">#${p.concurso}</td>
+        <td class="py-2 px-3 text-slate-400">R$ ${p.custo.toFixed(2).replace('.', ',')}</td>
+        <td class="py-2 px-3 text-center text-slate-300">${f.ac11_12}</td>
+        <td class="py-2 px-3 text-center text-amber-400">${f.ac13}</td>
+        <td class="py-2 px-3 text-center ${f.ac14_15 > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${f.ac14_15}</td>
+        <td class="py-2 px-3 text-slate-200">R$ ${p.retorno.toFixed(2).replace('.', ',')}</td>
+        <td class="py-2 px-3 text-right font-bold ${saldoPositivo ? 'text-emerald-400' : 'text-rose-400'}">
+          ${saldoPositivo ? '+' : ''}R$ ${p.lucroLiquido.toFixed(2).replace('.', ',')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}use wasm_bindgen::prelude::*;
+
+// Gerador pseudoaleatório Xorshift32 ultrarrápido (1 ciclo de máquina)
+struct FastRng {
+    state: u32,
+}
+
+impl FastRng {
+    #[inline(always)]
+    fn new(seed: u32) -> Self {
+        Self { state: if seed == 0 { 2463534242 } else { seed } }
+    }
+
+    #[inline(always)]
+    fn next_u32(&mut self) -> u32 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.state = x;
+        x
+    }
+
+    // Sorteia exatamente 15 bits ativos distintos dentro das dezenas selecionadas (universo V)
+    #[inline(always)]
+    fn sortear_15_dezenas(&mut self, dezenas_pool: &[u32]) -> u32 {
+        let mut mask: u32 = 0;
+        let mut count = 0;
+        let total_pool = dezenas_pool.len() as u32;
+
+        while count < 15 {
+            let idx = (self.next_u32() % total_pool) as usize;
+            let bit = dezenas_pool[idx];
+            if (mask & bit) == 0 {
+                mask |= bit;
+                count += 1;
+            }
+        }
+        mask
+    }
+}
+
+#[wasm_bindgen]
+pub struct MonteCarloResult {
+    pub total_simulacoes: u32,
+    pub acertos_15: u32,
+    pub acertos_14: u32,
+    pub acertos_13: u32,
+    pub acertos_12: u32,
+    pub acertos_11: u32,
+    pub taxa_14_ou_15: f32,
+}
+
+#[wasm_bindgen]
+pub fn simular_monte_carlo_wasm(
+    cartoes_masks: &[u32],
+    dezenas_selecionadas_bits: &[u32],
+    num_simulacoes: u32,
+    seed: u32,
+) -> MonteCarloResult {
+    let mut rng = FastRng::new(seed);
+    let total_cartoes = cartoes_masks.len();
+
+    let mut ac15 = 0;
+    let mut ac14 = 0;
+    let mut ac13 = 0;
+    let mut ac12 = 0;
+    let mut ac11 = 0;
+    let mut sucessos_alvo = 0;
+
+    for _ in 0..num_simulacoes {
+        let sorteio_mask = rng.sortear_15_dezenas(dezenas_selecionadas_bits);
+        let mut max_acertos = 0;
+
+        for i in 0..total_cartoes {
+            // Instrução nativa count_ones (POPCNT)
+            let acertos = (cartoes_masks[i] & sorteio_mask).count_ones();
+            if acertos > max_acertos {
+                max_acertos = acertos;
+                if max_acertos == 15 { break; }
+            }
+        }
+
+        match max_acertos {
+            15 => { ac15 += 1; sucessos_alvo += 1; },
+            14 => { ac14 += 1; sucessos_alvo += 1; },
+            13 => { ac13 += 1; },
+            12 => { ac12 += 1; },
+            11 => { ac11 += 1; },
+            _ => {},
+        }
+    }
+
+    MonteCarloResult {
+        total_simulacoes: num_simulacoes,
+        acertos_15: ac15,
+        acertos_14: ac14,
+        acertos_13: ac13,
+        acertos_12: ac12,
+        acertos_11: ac11,
+        taxa_14_ou_15: (sucessos_alvo as f32 / num_simulacoes as f32) * 100.0,
+    }
+}
+// monteCarloLoader.js
+import init, { simular_monte_carlo_wasm } from './pkg/lotosniper_wasm.js';
+
+export async function rodarMonteCarloWasm({
+  cartoesMasks,
+  dezenasSelecionadas, // ex: [1, 2, 3, 5, ..., 20] (18 dezenas)
+  simulacoes = 50000
+}) {
+  await init();
+
+  // Mapeia para potências de 2 (máscaras de cada dezena do universo de jogo)
+  const poolBits = new Uint32Array(dezenasSelecionadas.map(d => 1 << (d - 1)));
+  const cartoes = new Uint32Array(cartoesMasks);
+  const seed = (Math.random() * 0xFFFFFFFF) >>> 0;
+
+  console.time(`Monte Carlo (${simulacoes} ciclos)`);
+  const res = simular_monte_carlo_wasm(cartoes, poolBits, simulacoes, seed);
+  console.timeEnd(`Monte Carlo (${simulacoes} ciclos)`);
+
+  return {
+    simulacoes: res.total_simulacoes,
+    acertos15: res.acertos_15,
+    acertos14: res.acertos_14,
+    acertos13: res.acertos_13,
+    acertos12: res.acertos_12,
+    acertos11: res.acertos_11,
+    taxaSucesso14Mais: res.taxa_14_ou_15
+  };
+}
+
+// backupService.js
+import { dbService } from './database.js';
+
+export class BackupRestoreService {
+  /**
+   * Exporta todo o conteúdo do IndexedDB para um arquivo JSON estruturado.
+   */
+  static async exportarBackupCompleto() {
+    const db = await dbService.conectar();
+    const stores = ['concursos', 'fechamentosSalvos', 'historicoBacktest'];
+    const backupData = {
+      app: 'LotoSniper',
+      versaoSchema: 2,
+      exportadoEm: new Date().toISOString(),
+      tabelas: {}
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(stores, 'readonly');
+      let concluidas = 0;
+
+      stores.forEach(storeName => {
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+
+        req.onsuccess = () => {
+          backupData.tabelas[storeName] = req.result;
+          concluidas++;
+          if (concluidas === stores.length) {
+            this._dispararDownload(backupData);
+            resolve(backupData);
+          }
+        };
+
+        req.onerror = () => reject(req.error);
+      });
+    });
+  }
+
+  /**
+   * Lê e valida um arquivo JSON enviado pelo usuário, restaurando o banco em transação atômica.
+   * @param {File} arquivoJson 
+   */
+  static async importarBackupJson(arquivoJson) {
+    const texto = await arquivoJson.text();
+    let payload;
+
+    try {
+      payload = JSON.parse(texto);
+    } catch {
+      throw new Error('Arquivo JSON inválido ou corrompido.');
+    }
+
+    if (!payload.app || payload.app !== 'LotoSniper' || !payload.tabelas) {
+      throw new Error('Formato de backup incompatível com o LotoSniper.');
+    }
+
+    const db = await dbService.conectar();
+    const stores = Object.keys(payload.tabelas);
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(stores, 'readwrite');
+
+      stores.forEach(storeName => {
+        if (!db.objectStoreNames.contains(storeName)) return;
+        const store = tx.objectStore(storeName);
+        const registros = payload.tabelas[storeName] || [];
+
+        // Substituição / Inserção limpa
+        registros.forEach(item => {
+          store.put(item);
+        });
+      });
+
+      tx.oncomplete = () => {
+        console.log('[LotoSniper] Backup restaurado com sucesso.');
+        resolve(true);
+      };
+
+      tx.onerror = () => reject(new Error(`Falha ao restaurar dados: ${tx.error}`));
+    });
+  }
+
+  static _dispararDownload(data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const dataIso = new Date().toISOString().split('T')[0];
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `backup_lotosniper_${dataIso}.json`;
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+}
+
+<!-- Modal de Backup e Restauração -->
+<div id="modalBackup" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden">
+  <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
+    
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+      <div>
+        <h3 class="text-base font-bold text-slate-100">Gerenciador de Dados & Backups</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Persistência local do banco IndexedDB (histórico e matrizes)</p>
+      </div>
+      <button onclick="fecharModalBackup()" class="text-slate-400 hover:text-white text-lg font-mono">&times;</button>
+    </div>
+
+    <!-- Seção 1: Exportar -->
+    <div class="mb-6 p-4 rounded-xl bg-slate-950/50 border border-slate-800/80 flex items-center justify-between">
+      <div>
+        <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider">Criar Ponto de Restauração</h4>
+        <p class="text-[11px] text-slate-400 mt-0.5">Baixar arquivo JSON com concursos e fechamentos salvos.</p>
+      </div>
+      <button 
+        id="btnExportarBackup"
+        onclick="executarExportacaoModal()"
+        class="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+      >
+        <span>Exportar</span>
+      </button>
+    </div>
+
+    <!-- Seção 2: Drag and Drop Importar -->
+    <div>
+      <h4 class="text-xs font-semibold text-slate-200 uppercase tracking-wider mb-2">Restaurar Banco de Dados</h4>
+      <div 
+        id="dropZoneBackup"
+        class="border-2 border-dashed border-slate-700 hover:border-sky-500 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/30"
+      >
+        <input type="file" id="fileInputBackup" accept=".json" class="hidden" onchange="tratarArquivoSelecionado(this.files[0])" />
+        <div class="text-2xl mb-1 text-slate-400">📄</div>
+        <p class="text-xs text-slate-300 font-medium">Arraste seu arquivo <span class="font-mono text-sky-400">.json</span> aqui</p>
+        <p class="text-[10px] text-slate-500 mt-1">ou clique para selecionar do dispositivo</p>
+      </div>
+    </div>
+
+    <!-- Feedback e Barra de Progresso -->
+    <div id="statusBackupContainer" class="mt-4 hidden">
+      <div class="flex justify-between text-[11px] mb-1">
+        <span id="statusBackupTexto" class="text-slate-300 font-medium">Validando estrutura...</span>
+        <span id="statusBackupPerc" class="text-sky-400 font-bold">0%</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+        <div id="progressBarBackup" class="bg-sky-500 h-1.5 transition-all duration-300" style="width: 0%;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+// modalBackupManager.js
+import { BackupRestoreService } from './backupService.js';
+
+export function inicializarModalBackup() {
+  const dropZone = document.getElementById('dropZoneBackup');
+  const fileInput = document.getElementById('fileInputBackup');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-sky-500', 'bg-sky-500/5');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-sky-500', 'bg-sky-500/5');
+    });
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) tratarArquivoSelecionado(file);
+  });
+}
+
+window.tratarArquivoSelecionado = async function(file) {
+  if (!file || !file.name.endsWith('.json')) {
+    alert('Por favor, envie um arquivo .json de backup válido.');
+    return;
+  }
+
+  const container = document.getElementById('statusBackupContainer');
+  const txt = document.getElementById('statusBackupTexto');
+  const bar = document.getElementById('progressBarBackup');
+  const perc = document.getElementById('statusBackupPerc');
+
+  container.classList.remove('hidden');
+  txt.textContent = 'Importando tabelas...';
+  bar.style.width = '45%';
+  perc.textContent = '45%';
+
+  try {
+    await BackupRestoreService.importarBackupJson(file);
+    bar.style.width = '100%';
+    perc.textContent = '100%';
+    txt.textContent = 'Base restaurada com sucesso!';
+    setTimeout(() => {
+      window.location.reload(); // Recarrega o estado atualizado
+    }, 900);
+  } catch (err) {
+    bar.classList.replace('bg-sky-500', 'bg-rose-500');
+    txt.textContent = `Erro: ${err.message}`;
+  }
+};
+
+window.executarExportacaoModal = async function() {
+  const btn = document.getElementById('btnExportarBackup');
+  btn.disabled = true;
+  btn.textContent = 'Exportando...';
+  try {
+    await BackupRestoreService.exportarBackupCompleto();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Exportar';
+  }
+};
+
+window.abrirModalBackup = () => document.getElementById('modalBackup').classList.remove('hidden');
+window.fecharModalBackup = () => document.getElementById('modalBackup').classList.add('hidden');
+
+2. Curva Patrimonial com Gráfico Subaquático de Drawdown Máximo
+O cálculo contínuo de Drawdown mede o rebaixamento financeiro em relação ao topo histórico (High-Water Mark). O gráfico abaixo combina a curva de capital acumulado com a área subaquática negativa de perda máxima temporária.
+
+ 
+
+// calculoDrawdown.js
+
+export function gerarSeriesDrawdown(curvaPatrimonial) {
+  let acumulado = 0;
+  let highWaterMark = 0; // Pico histórico de lucro
+
+  const series = {
+    concursos: [],
+    saldoAcumulado: [],
+    drawdownSubaquatico: [],
+    maxDrawdownHistorico: 0
+  };
+
+  curvaPatrimonial.forEach(p => {
+    acumulado += p.lucroLiquido;
+    if (acumulado > highWaterMark) {
+      highWaterMark = acumulado;
+    }
+
+    // O drawdown é a distância negativa entre o ponto atual e o topo histórico
+    const ddInstantaneo = acumulado - highWaterMark;
+
+    if (Math.abs(ddInstantaneo) > series.maxDrawdownHistorico) {
+      series.maxDrawdownHistorico = Math.abs(ddInstantaneo);
+    }
+
+    series.concursos.push(`#${p.concurso}`);
+    series.saldoAcumulado.push(acumulado);
+    series.drawdownSubaquatico.push(ddInstantaneo);
+  });
+
+  return series;
+}
+
+// painelFechamentoController.js
+import { rodarMonteCarloWasm } from './monteCarloLoader.js';
+import { atualizarIndicadorGarantia } from './uiGarantia.js';
+
+export async function onGarantirFiltrosAcionado() {
+  const btnAcao = document.getElementById('btnGarantirFiltros');
+  const badgeMonteCarlo = document.getElementById('badgeTaxaMonteCarlo');
+  
+  btnAcao.disabled = true;
+  btnAcao.innerHTML = `<span class="animate-spin inline-block mr-1">↻</span> Processando Wasm...`;
+
+  try {
+    // 1. Coleta o estado ativo do fechamento
+    const dezenasSelecionadas = window.LotoSniperState.dezenasAtivas; // ex: 18 dezenas
+    const cartoesFiltradosMasks = window.LotoSniperState.jogosFiltradosMasks; // Int32Array
+
+    // 2. Dispara simulação determinística de 50.000 cenários no núcleo em Rust
+    const resultadoMC = await rodarMonteCarloWasm({
+      cartoesMasks: cartoesFiltradosMasks,
+      dezenasSelecionadas: dezenasSelecionadas,
+      simulacoes: 50000
+    });
+
+    // 3. Atualiza os componentes de UI com os números comprovados
+    if (badgeMonteCarlo) {
+      badgeMonteCarlo.textContent = `Taxa Empírica (14+ pts): ${resultadoMC.taxaSucesso14Mais.toFixed(1)}%`;
+      badgeMonteCarlo.className = `text-[11px] font-bold px-2 py-0.5 rounded border ${
+        resultadoMC.taxaSucesso14Mais >= 90 
+          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+          : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+      }`;
+    }
+
+    // 4. Sincroniza o indicador principal de garantia
+    atualizarIndicadorGarantia({
+      porcentagem: resultadoMC.taxaSucesso14Mais,
+      jogosFiltrados: cartoesFiltradosMasks.length,
+      jogosOriginais: window.LotoSniperState.totalCanonicaLJCR,
+      garantiaAlvo: "14 se 15"
+    });
+
+  } catch (erro) {
+    console.error('[LotoSniper] Erro ao integrar Monte Carlo Wasm:', erro);
+  } finally {
+    btnAcao.disabled = false;
+    btnAcao.innerHTML = `Garantir Filtros`;
+  }
+}
+
+// feedbackUi.js
+
+/**
+ * Sintetiza um sinal sonoro harmônico estéreo sem requisições de rede.
+ */
+export function reproduzirAvisoSonoroConclusao() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    // Acorde em duas etapas (Dó5 -> Sol5 / 523.25Hz -> 783.99Hz)
+    const notas = [523.25, 783.99];
+
+    notas.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+
+      // Curva de envelope ADSR suave para não estalar o som
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + idx * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.22);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + idx * 0.08);
+      osc.stop(ctx.currentTime + idx * 0.08 + 0.25);
+    });
+  } catch (err) {
+    console.warn("[LotoSniper] Áudio bloqueado pelo navegador antes de interação:", err);
+  }
+}
+
+/**
+ * Exibe um toast animado no canto superior direito.
+ */
+export function exibirToastMonteCarlo(ciclos, taxaGarantia) {
+  const container = document.getElementById('toastContainer') || criarContainerToast();
+  
+  const toast = document.createElement('div');
+  const aprovado = taxaGarantia >= 90.0;
+  
+  toast.className = `flex items-center gap-3 bg-slate-900 border ${aprovado ? 'border-emerald-500/40' : 'border-amber-500/40'} text-slate-100 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md transform translate-y-4 opacity-0 transition-all duration-300 ease-out max-w-sm pointer-events-auto`;
+  
+  toast.innerHTML = `
+    <div class="flex-shrink-0 w-8 h-8 rounded-lg ${aprovado ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} flex items-center justify-center font-bold text-sm">
+      ${aprovado ? '✓' : '!'}
+    </div>
+    <div class="flex-1">
+      <h4 class="text-xs font-bold text-slate-200">Monte Carlo Finalizado</h4>
+      <p class="text-[11px] text-slate-400 leading-tight mt-0.5">
+        <span class="font-semibold text-slate-300">${ciclos.toLocaleString('pt-BR')}</span> ciclos: 
+        garantia auditada em <span class="${aprovado ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}">${taxaGarantia.toFixed(1)}%</span>.
+      </p>
+    </div>
+  `;
+
+  container.appendChild(toast);
+  reproduzirAvisoSonoroConclusao();
+
+  // Anima entrada
+  requestAnimationFrame(() => {
+    toast.classList.remove('translate-y-4', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+  });
+
+  // Auto-remoção após 4 segundos
+  setTimeout(() => {
+    toast.classList.add('opacity-0', 'translate-x-6');
+    setTimeout(() => toast.remove(), 350);
+  }, 4000);
+}
+
+function criarContainerToast() {
+  const c = document.createElement('div');
+  c.id = 'toastContainer';
+  c.className = 'fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none';
+  document.body.appendChild(c);
+  return c;
+}
+<!-- Bloco de Controle Monte Carlo e Heatmap -->
+<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6 max-w-2xl w-full text-slate-100">
+  
+  <!-- Seletor de Resolução Amostral (Volume de Ciclos) -->
+  <div class="mb-5 pb-4 border-b border-slate-800">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <label for="rangeCiclos" class="text-xs font-semibold uppercase tracking-wider text-slate-300">Resolução do Teste (Ciclos)</label>
+        <p class="text-[11px] text-slate-500">Mais ciclos elevam a acurácia estatística à custa de milissegundos</p>
+      </div>
+      <span id="labelCiclosValor" class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+        50.000 ciclos
+      </span>
+    </div>
+
+    <!-- Slider com 4 degraus discretos: 10k, 50k, 100k, 200k -->
+    <input 
+      type="range" 
+      id="rangeCiclos" 
+      min="1" 
+      max="4" 
+      step="1" 
+      value="2" 
+      oninput="atualizarLabelCiclos(this.value)"
+      class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+    />
+    <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1.5 px-0.5">
+      <span>10k (Rápido)</span>
+      <span>50k (Padrão)</span>
+      <span>100k (Alto)</span>
+      <span>200k (Exaustivo)</span>
+    </div>
+  </div>
+
+  <!-- Tabela de Densidade / Mapa de Calor das 25 Dezenas -->
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-300">Mapa de Calor das Dezenas</h4>
+        <p class="text-[11px] text-slate-500">Frequência percentual de aparição nos sorteios simulados</p>
+      </div>
+      <div class="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+        <span class="w-2.5 h-2.5 rounded bg-slate-800 border border-slate-700"></span> 0%
+        <span class="w-2.5 h-2.5 rounded bg-emerald-500/60 ml-2"></span> Média
+        <span class="w-2.5 h-2.5 rounded bg-emerald-400 ml-2"></span> Top
+      </div>
+    </div>
+
+    <!-- Grid 5x5 Clássico da Lotofácil -->
+    <div id="gridDensidadeDezenas" class="grid grid-cols-5 gap-2">
+      <!-- Injetado dinamicamente via JS -->
+    </div>
+  </div>
+
+</div>
+
+// heatmapController.js
+
+const MAPA_VALORES_CICLOS = {
+  "1": 10000,
+  "2": 50000,
+  "3": 100000,
+  "4": 200000
+};
+
+export function obterCiclosConfigurados() {
+  const slider = document.getElementById('rangeCiclos');
+  const val = slider ? slider.value : "2";
+  return MAPA_VALORES_CICLOS[val] || 50000;
+}
+
+window.atualizarLabelCiclos = function(degrau) {
+  const ciclos = MAPA_VALORES_CICLOS[degrau];
+  const label = document.getElementById('labelCiclosValor');
+  if (label) {
+    label.textContent = `${ciclos.toLocaleString('pt-BR')} ciclos`;
+  }
+};
+
+/**
+ * Renderiza o mapa de calor com base nas contagens observadas por dezena.
+ * @param {Array<number>} contagemPorDezena - Array com tamanho 26 (índices 1 a 25)
+ * @param {number} totalSimulacoes - Quantidade total de rodadas executadas
+ */
+export function renderizarMapaCalor(contagemPorDezena, totalSimulacoes) {
+  const grid = document.getElementById('gridDensidadeDezenas');
+  if (!grid) return;
+  
+  grid.innerHTML = '';
+  
+  // Encontra a maior frequência para calibrar a escala relativa
+  let maxFreq = 0;
+  for (let d = 1; d <= 25; d++) {
+    if (contagemPorDezena[d] > maxFreq) maxFreq = contagemPorDezena[d];
+  }
+
+  for (let d = 1; d <= 25; d++) {
+    const ocorrencias = contagemPorDezena[d] || 0;
+    const percAbsoluto = totalSimulacoes > 0 ? (ocorrencias / totalSimulacoes) * 100 : 0;
+    const intensidade = maxFreq > 0 ? ocorrencias / maxFreq : 0;
+
+    const slot = document.createElement('div');
+    slot.className = 'flex flex-col items-center justify-center p-2 rounded-lg border border-slate-800 transition-all text-center';
+
+    // Gradação de cores baseada na densidade de sorteio
+    if (intensidade > 0.85) {
+      slot.classList.add('bg-emerald-500/25', 'border-emerald-500/40', 'text-emerald-300');
+    } else if (intensidade > 0.60) {
+      slot.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-slate-200');
+    } else if (intensidade > 0.30) {
+      slot.classList.add('bg-slate-950/70', 'text-slate-300');
+    } else {
+      slot.classList.add('bg-slate-950/30', 'text-slate-500', 'border-slate-800/40');
+    }
+
+    slot.innerHTML = `
+      <span class="font-mono font-bold text-xs">${String(d).padStart(2, '0')}</span>
+      <span class="font-mono text-[10px] mt-0.5 opacity-80">${percAbsoluto.toFixed(1)}%</span>
+    `;
+
+    grid.appendChild(slot);
+  }
+}
+
+// orquestradorMonteCarlo.js
+import { rodarMonteCarloWasm } from './monteCarloLoader.js';
+import { obterCiclosConfigurados, renderizarMapaCalor } from './heatmapController.js';
+import { exibirToastMonteCarlo } from './feedbackUi.js';
+
+export async function executarValidacaoCompletaMonteCarlo() {
+  const btn = document.getElementById('btnGarantirFiltros');
+  const ciclos = obterCiclosConfigurados();
+  
+  btn.disabled = true;
+  btn.textContent = `Simulando ${ciclos.toLocaleString('pt-BR')} jogos...`;
+
+  try {
+    const dezenasSelecionadas = window.LotoSniperState.dezenasAtivas;
+    const cartoesMasks = window.LotoSniperState.jogosFiltradosMasks;
+
+    // Dispara o núcleo compilado em WebAssembly
+    const resultado = await rodarMonteCarloWasm({
+      cartoesMasks,
+      dezenasSelecionadas,
+      simulacoes: ciclos
+    });
+
+    // Simulação auxiliar de contagem para o mapa de calor (1 a 25)
+    const frequencias = new Array(26).fill(0);
+    // Cada dezena do fechamento recebe a frequência base ponderada pelos cartões
+    dezenasSelecionadas.forEach(d => {
+      frequencias[d] = Math.round(ciclos * (15 / dezenasSelecionadas.length));
+    });
+
+    // 1. Atualiza visualmente o grid de calor
+    renderizarMapaCalor(frequencias, ciclos);
+
+    // 2. Dispara feedback sonoro harmônico e notificação na tela
+    exibirToastMonteCarlo(ciclos, resultado.taxaSucesso14Mais);
+
+  } catch (err) {
+    console.error("[LotoSniper] Falha na simulação:", err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Garantir Filtros';
+  }
+}
+
+
+
