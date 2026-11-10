@@ -1,6 +1,6 @@
 import { GameTicket, FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
-import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
+import { VALOR_APOSTA_LOTOFACIL, auditarTicketsGerados } from './combinatorics';
 
 export const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
 
@@ -256,6 +256,15 @@ export function saveFechamentoPrognostico(
   try {
     localStorage.setItem(INITIALIZED_KEY, 'true');
     const list = getSavedFechamentos();
+
+    // Sanitização estrita de universoDezenas e dezenasFixas
+    const universe = [...new Set(fechamento.universoDezenas || [])].sort((a, b) => a - b);
+    const universeSet = new Set(universe);
+    const rawFixas = (fechamento.dezenasFixas || []).filter((d) => universeSet.has(d));
+    const maxFixas = Math.min(12, Math.max(0, universe.length - 3));
+    fechamento.dezenasFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
+    fechamento.universoDezenas = universe;
+    fechamento.auditoriaAnomalias = auditarTicketsGerados(fechamento.tickets || []).resumo;
 
     // Verificação de Hash / Duplicidade contra registros existentes
     if (!options.force) {
@@ -671,6 +680,13 @@ export function createSavedFechamentoFromCurrent({
   const custoTotal = totalJogos * VALOR_APOSTA_LOTOFACIL;
   const now = new Date();
 
+  const universe = [...new Set(universoDezenas)].sort((a, b) => a - b);
+  const universeSet = new Set(universe);
+  const rawFixas = (dezenasFixas || []).filter((d) => universeSet.has(d));
+  const maxFixas = Math.min(12, Math.max(0, universe.length - 3));
+  const sanitizedFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
+  const auditRes = auditarTicketsGerados(tickets);
+
   const prognostico: SavedFechamentoPrognostico = {
     id: `fechamento-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     timestamp: Date.now(),
@@ -679,8 +695,8 @@ export function createSavedFechamentoFromCurrent({
     dataConcurso,
     tipoFechamento,
     modalidadeMatriz,
-    universoDezenas: [...universoDezenas].sort((a, b) => a - b),
-    dezenasFixas: [...dezenasFixas].sort((a, b) => a - b),
+    universoDezenas: universe,
+    dezenasFixas: sanitizedFixas,
     dezenasExcluidas: [...dezenasExcluidas].sort((a, b) => a - b),
     faixaSoma: {
       min: filters?.somaMin ?? 180,
@@ -693,7 +709,7 @@ export function createSavedFechamentoFromCurrent({
       canonico: '6 a 9 Pares (Banda Flexível)',
     },
     maxConsecutivas: filters?.maxConsecutivas ?? 6,
-    auditoriaAnomalias: 'Todos os bilhetes foram auditados com 0 anomalias estatísticas e Soma >= 180',
+    auditoriaAnomalias: auditRes.resumo,
     repetidas: {
       min: filters?.repetidasMin ?? 6,
       max: filters?.repetidasMax ?? 11,
@@ -786,7 +802,65 @@ export function exportBackupJSON(): void {
   URL.revokeObjectURL(url);
 }
 
-export function restoreBackupJSON(jsonString: string): { success: boolean; count: number; error?: string } {
+/**
+ * Utilitário de Migração & Sanitização Forense
+ * Sanitiza fechamentos garantindo que dezenasFixas pertençam estritamente ao universoDezenas,
+ * limitando fixas a no máximo 12 (ou universo.length - 3) e recomputando a auditoria dinâmica.
+ */
+export function sanitizarFechamentosSalvos(backupDataOrJson: any): {
+  sanitizedCount: number;
+  totalFechamentos: number;
+  fechamentos: SavedFechamentoPrognostico[];
+} {
+  let list: SavedFechamentoPrognostico[] = [];
+  if (typeof backupDataOrJson === 'string') {
+    try {
+      const parsed = JSON.parse(backupDataOrJson);
+      list = Array.isArray(parsed) ? parsed : (parsed.fechamentos || []);
+    } catch {
+      list = [];
+    }
+  } else if (Array.isArray(backupDataOrJson)) {
+    list = backupDataOrJson;
+  } else if (backupDataOrJson && Array.isArray(backupDataOrJson.fechamentos)) {
+    list = backupDataOrJson.fechamentos;
+  }
+
+  let sanitizedCount = 0;
+  const sanitizedList = list.map((f) => {
+    const universe = [...new Set(f.universoDezenas || [])].sort((a, b) => a - b);
+    const universeSet = new Set(universe);
+    const originalFixas = f.dezenasFixas || [];
+    const filteredFixas = originalFixas.filter((d) => universeSet.has(d));
+    const maxFixas = Math.min(12, Math.max(0, universe.length - 3));
+    const clampedFixas = filteredFixas.slice(0, maxFixas).sort((a, b) => a - b);
+
+    const wasCorrupted =
+      originalFixas.length !== clampedFixas.length ||
+      originalFixas.some((d, idx) => d !== clampedFixas[idx]);
+
+    if (wasCorrupted) {
+      sanitizedCount++;
+    }
+
+    const auditResult = auditarTicketsGerados(f.tickets || []);
+
+    return {
+      ...f,
+      universoDezenas: universe,
+      dezenasFixas: clampedFixas,
+      auditoriaAnomalias: auditResult.resumo,
+    };
+  });
+
+  return {
+    sanitizedCount,
+    totalFechamentos: sanitizedList.length,
+    fechamentos: sanitizedList,
+  };
+}
+
+export function restoreBackupJSON(jsonString: string): { success: boolean; count: number; sanitizedCount?: number; error?: string } {
   try {
     const parsed = JSON.parse(jsonString);
     const fechamentosToRestore = Array.isArray(parsed)
@@ -799,9 +873,12 @@ export function restoreBackupJSON(jsonString: string): { success: boolean; count
       return { success: false, count: 0, error: 'Nenhum fechamento válido encontrado no arquivo.' };
     }
 
+    // Aplica sanitização forense estrita aos fechamentos antes de persistir
+    const { fechamentos: sanitizedFechamentos, sanitizedCount } = sanitizarFechamentosSalvos(fechamentosToRestore);
+
     const current = getSavedFechamentos();
     const currentIds = new Set(current.map((f) => f.id));
-    const merged = [...fechamentosToRestore.filter((f: SavedFechamentoPrognostico) => !currentIds.has(f.id)), ...current];
+    const merged = [...sanitizedFechamentos.filter((f: SavedFechamentoPrognostico) => !currentIds.has(f.id)), ...current];
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 50)));
     triggerAutoBackupSnapshot();
@@ -810,7 +887,7 @@ export function restoreBackupJSON(jsonString: string): { success: boolean; count
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: merged }));
     }
 
-    return { success: true, count: fechamentosToRestore.length };
+    return { success: true, count: sanitizedFechamentos.length, sanitizedCount };
   } catch (e) {
     return { success: false, count: 0, error: 'Arquivo JSON inválido ou corrompido.' };
   }

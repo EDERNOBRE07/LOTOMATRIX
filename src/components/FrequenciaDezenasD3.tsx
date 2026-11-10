@@ -32,6 +32,7 @@ export const FrequenciaDezenasD3: React.FC<FrequenciaDezenasD3Props> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'barras' | 'linha'>('barras');
   const [hoveredDezena, setHoveredDezena] = useState<DezenaFreqData | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -214,8 +215,23 @@ export const FrequenciaDezenasD3: React.FC<FrequenciaDezenasD3Props> = ({
         })
         .attr('stroke-width', 0.8)
         .style('cursor', 'pointer')
-        .on('mouseenter', (_, d) => setHoveredDezena(d))
-        .on('mouseleave', () => setHoveredDezena(null))
+        .on('mouseenter', (event: MouseEvent, d: DezenaFreqData) => {
+          setHoveredDezena(d);
+          if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setTooltipPos({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+          }
+        })
+        .on('mousemove', (event: MouseEvent) => {
+          if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setTooltipPos({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+          }
+        })
+        .on('mouseleave', () => {
+          setHoveredDezena(null);
+          setTooltipPos(null);
+        })
         .transition()
         .duration(650)
         .delay((_, i) => i * 18)
@@ -303,8 +319,23 @@ export const FrequenciaDezenasD3: React.FC<FrequenciaDezenasD3Props> = ({
         .attr('stroke', '#0f172a')
         .attr('stroke-width', 2)
         .style('cursor', 'pointer')
-        .on('mouseenter', (_, d) => setHoveredDezena(d))
-        .on('mouseleave', () => setHoveredDezena(null));
+        .on('mouseenter', (event: MouseEvent, d: DezenaFreqData) => {
+          setHoveredDezena(d);
+          if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setTooltipPos({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+          }
+        })
+        .on('mousemove', (event: MouseEvent) => {
+          if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setTooltipPos({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+          }
+        })
+        .on('mouseleave', () => {
+          setHoveredDezena(null);
+          setTooltipPos(null);
+        });
 
       // Rótulos de Frequência sobre os Pontos
       g.selectAll('.dot-label')
@@ -360,7 +391,7 @@ export const FrequenciaDezenasD3: React.FC<FrequenciaDezenasD3Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 ${className}`}
+      className={`relative bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 ${className}`}
     >
       {/* Header do Gráfico & Seletor de Modo */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
@@ -502,6 +533,49 @@ export const FrequenciaDezenasD3: React.FC<FrequenciaDezenasD3Props> = ({
           className="w-full h-auto min-w-[720px] max-h-[380px]"
         />
       </div>
+
+      {/* Tooltip Flutuante Interativo D3 */}
+      {hoveredDezena && tooltipPos && (
+        <div
+          className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full mb-3 bg-slate-950/95 border border-sky-500/50 rounded-xl px-3.5 py-2 shadow-2xl backdrop-blur-md transition-all duration-75 text-xs font-mono"
+          style={{
+            left: `${tooltipPos.x}px`,
+            top: `${tooltipPos.y - 12}px`,
+          }}
+        >
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-1 mb-1.5">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            <span className="font-bold text-white text-[13px]">Dezena {hoveredDezena.label}</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                hoveredDezena.count >= mediaEsperada + 3
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : hoveredDezena.count <= mediaEsperada - 3
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+              }`}
+            >
+              {hoveredDezena.count >= mediaEsperada + 3 ? 'Quente' : hoveredDezena.count <= mediaEsperada - 3 ? 'Fria' : 'Neutra'}
+            </span>
+          </div>
+          <div className="space-y-0.5 text-[11px] text-slate-300">
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Frequência:</span>
+              <strong className="text-white">{hoveredDezena.count} saídas / 50</strong>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Taxa de Saída:</span>
+              <span className="text-sky-300 font-bold">{hoveredDezena.percent}%</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-400">Desvio vs Média:</span>
+              <span className={hoveredDezena.desvio >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                {hoveredDezena.desvio >= 0 ? `+${hoveredDezena.desvio}` : hoveredDezena.desvio} saídas
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Legenda Inferior */}
       <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 mt-4 pt-3 border-t border-slate-800/60">

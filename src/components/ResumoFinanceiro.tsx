@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -15,6 +17,8 @@ import {
   CheckCircle2,
   Sparkles,
   FileSpreadsheet,
+  Download,
+  FileText,
 } from 'lucide-react';
 
 interface ResumoFinanceiroProps {
@@ -185,10 +189,130 @@ export const ResumoFinanceiro: React.FC<ResumoFinanceiroProps> = ({
 
   const isPositivo = auditResults.saldoLiquidoFinal >= 0;
 
+  const exportarRelatorioFinanceiroPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    // Dark Header Banner
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 210, 38, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    doc.text('LOTOSNIPER AI PRO • AUDITORIA FINANCEIRA & ROI', 14, 16);
+
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `Relatório Executivo de Backtesting • Amostragem: ${auditResults.numConcursos} Concursos • Data: ${new Date().toLocaleDateString('pt-BR')}`,
+      14,
+      24
+    );
+    doc.text(
+      `Carteira Auditada: ${auditResults.totalCartoes} Volantes • Custo Unitário: R$ ${unitBetCost.toFixed(2).replace('.', ',')}`,
+      14,
+      30
+    );
+
+    // 1. Resumo Executivo
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text('1. RESUMO EXECUTIVO DE CAPITAL & RETORNO', 14, 46);
+
+    const metricsData = [
+      ['Custo Total Investido', `R$ ${auditResults.custoTotalGasto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Retorno Bruto Arrecadado', `R$ ${auditResults.arrecadacaoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Saldo Líquido Final', `${isPositivo ? '+' : ''}R$ ${auditResults.saldoLiquidoFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Retorno sobre Investimento (ROI)', `${isPositivo ? '+' : ''}${auditResults.roiPercentual.toFixed(1)}%`],
+      ['Taxa de Concursos com Retorno', `${auditResults.taxaSucesso.toFixed(1)}%`],
+      ['Drawdown Máximo de Capital', `R$ ${auditResults.maxDrawdown.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['Fator de Lucro (Profit Factor)', auditResults.fatorLucro.toFixed(2)],
+    ];
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Métrica de Performance', 'Valor Consolidado']],
+      body: metricsData,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 8.5, cellPadding: 2.2 },
+      columnStyles: { 1: { fontStyle: 'bold', halign: 'right' } },
+    });
+
+    // 2. Distribuição das Faixas de Premiação
+    const currentY = (doc as any).lastAutoTable.finalY + 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text('2. DISTRIBUIÇÃO DAS FAIXAS DE PREMIAÇÃO', 14, currentY);
+
+    const faixasData = [
+      ['15 Acertos (Prêmio Máximo)', String(auditResults.contagemAcertos[15]), `R$ ${(auditResults.contagemAcertos[15] * 2000000).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['14 Acertos (Zona de Elite)', String(auditResults.contagemAcertos[14]), `R$ ${(auditResults.contagemAcertos[14] * 1890.5).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['13 Acertos', String(auditResults.contagemAcertos[13]), `R$ ${(auditResults.contagemAcertos[13] * 35).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['12 Acertos', String(auditResults.contagemAcertos[12]), `R$ ${(auditResults.contagemAcertos[12] * 14).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+      ['11 Acertos', String(auditResults.contagemAcertos[11]), `R$ ${(auditResults.contagemAcertos[11] * 7).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`],
+    ];
+
+    autoTable(doc, {
+      startY: currentY + 4,
+      head: [['Faixa de Acertos', 'Bilhetes Premiados', 'Subtotal Estimado']],
+      body: faixasData,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 8.5, cellPadding: 2.2 },
+      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' } },
+    });
+
+    // 3. Detalhamento dos Concursos Recentes
+    const nextY = (doc as any).lastAutoTable.finalY + 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(30, 41, 59);
+    doc.text('3. DETALHAMENTO DOS CONCURSOS RECENTES', 14, nextY);
+
+    const concursosRows = auditResults.detalhesPorConcurso.slice(0, 18).map((c) => [
+      `#${c.concurso} (${c.data})`,
+      `R$ ${c.custo.toFixed(2).replace('.', ',')}`,
+      String(c.faixas.ac11 + c.faixas.ac12),
+      String(c.faixas.ac13),
+      String(c.faixas.ac14 + c.faixas.ac15),
+      `R$ ${c.retorno.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `${c.lucroLiquido >= 0 ? '+' : ''}R$ ${c.lucroLiquido.toFixed(2).replace('.', ',')}`,
+      `R$ ${c.saldoAcumulado.toFixed(2).replace('.', ',')}`,
+    ]);
+
+    autoTable(doc, {
+      startY: nextY + 4,
+      head: [['Concurso', 'Custo', '11-12p', '13p', '14-15p', 'Retorno', 'Líquido', 'Saldo Acum.']],
+      body: concursosRows,
+      theme: 'striped',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8 },
+      styles: { fontSize: 7.5, cellPadding: 1.8 },
+      columnStyles: {
+        1: { halign: 'right' },
+        2: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'center' },
+        5: { halign: 'right' },
+        6: { halign: 'right' },
+        7: { halign: 'right', fontStyle: 'bold' },
+      },
+    });
+
+    doc.save(`lotosniper_relatorio_financeiro_roi_${auditResults.numConcursos}concursos_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div className={`bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl text-slate-100 ${className}`}>
       {/* Top Header & Controles */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -209,25 +333,37 @@ export const ResumoFinanceiro: React.FC<ResumoFinanceiroProps> = ({
           </div>
         </div>
 
-        {/* Seletor de Janela Amostral */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-slate-400 font-medium">Amostragem:</span>
-          <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-mono">
-            {(['10', '25', '50', 'all'] as const).map((win) => (
-              <button
-                key={win}
-                type="button"
-                onClick={() => setSampleWindow(win)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  sampleWindow === win
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {win === 'all' ? 'Todos' : `${win} Concursos`}
-              </button>
-            ))}
+        {/* Controles de Amostragem & Botão de Exportação PDF */}
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 font-medium">Amostragem:</span>
+            <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-mono">
+              {(['10', '25', '50', 'all'] as const).map((win) => (
+                <button
+                  key={win}
+                  type="button"
+                  onClick={() => setSampleWindow(win)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    sampleWindow === win
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {win === 'all' ? 'Todos' : `${win} Concursos`}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={exportarRelatorioFinanceiroPDF}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition cursor-pointer"
+            title="Exportar Relatório Financeiro Executivo Consolidado em PDF"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Exportar Relatório PDF</span>
+          </button>
         </div>
       </div>
 

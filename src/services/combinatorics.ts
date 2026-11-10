@@ -71,6 +71,71 @@ export type {
   AuditoriaCompletaResultado,
 } from './tabelasCoberturaLJCR';
 
+export interface AuditoriaTicketsResultado {
+  total: number;
+  estritosCount: number;
+  protecaoBordaCount: number;
+  foraPadraoCount: number;
+  resumo: string;
+}
+
+/**
+ * Validador Dinâmico de Conformidade dos Tickets Gerados
+ * Audita se cada bilhete está 100% dentro dos filtros canônicos estritos
+ * ou alocado na cota de proteção de borda (Anti-Cisne Negro).
+ */
+export function auditarTicketsGerados(
+  tickets: GameTicket[],
+  configFechamento?: {
+    filters?: FilterCriteria;
+    universoDezenas?: number[];
+    dezenasFixas?: number[];
+  }
+): AuditoriaTicketsResultado {
+  if (!tickets || tickets.length === 0) {
+    return {
+      total: 0,
+      estritosCount: 0,
+      protecaoBordaCount: 0,
+      foraPadraoCount: 0,
+      resumo: '0/0 bilhetes auditados',
+    };
+  }
+
+  let estritosCount = 0;
+  let protecaoBordaCount = 0;
+  let foraPadraoCount = 0;
+
+  tickets.forEach((t) => {
+    const dezenas = t.dezenas || (t as any).numbers || [];
+    const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
+    const maxSeq = t.maxConsecutivas ?? getMaxConsecutiveSequence(dezenas);
+
+    // Cota de proteção de cauda / borda (Soma 155-179 ou 216-230, ou até 8 consecutivas como no Concurso 3825)
+    const isBorda =
+      (soma >= 155 && soma < 180) ||
+      (soma > 215 && soma <= 230) ||
+      (maxSeq > 6 && maxSeq <= 8);
+
+    if (isBorda) {
+      protecaoBordaCount++;
+    } else if (!isCanonicalAnomaly(dezenas)) {
+      estritosCount++;
+    } else {
+      foraPadraoCount++;
+    }
+  });
+
+  const resumo = `${estritosCount}/${tickets.length} bilhetes 100% dentro dos filtros estritos | ${protecaoBordaCount} bilhetes em cota de proteção de borda`;
+  return {
+    total: tickets.length,
+    estritosCount,
+    protecaoBordaCount,
+    foraPadraoCount,
+    resumo,
+  };
+}
+
 // Helper: Check if number is prime
 export function isPrimo(n: number): boolean {
   return PRIMOS.includes(n);
@@ -775,14 +840,21 @@ export function generateMinimumSetCoverFechamento({
   concursoAnterior?: number[];
   aiScores?: number[];
 }): GameTicket[] {
-  const sortedPool = [...selectedNumbers].sort((a, b) => a - b);
+  const sortedPool = [...new Set(selectedNumbers)].sort((a, b) => a - b);
   const n = sortedPool.length;
 
   if (n < 15) {
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
 
-  // 1. Bitmask helpers
+  // 1. Sanitização estrita de dezenas fixas contra o universo real
+  const rawFixas = filters?.dezenasFixas || [];
+  const sanitizedFixas = rawFixas.filter((d) => sortedPool.includes(d));
+  const maxFixasAllowed = Math.min(12, Math.max(0, n - 3));
+  const effectiveFixas = sanitizedFixas.slice(0, maxFixasAllowed);
+  const effectiveFixedSet = new Set(effectiveFixas);
+
+  // Bitmask helpers
   const toMask = (nums: number[]): number => {
     let mask = 0;
     for (let i = 0; i < nums.length; i++) {
@@ -803,25 +875,80 @@ export function generateMinimumSetCoverFechamento({
   const universeMasks = universeSubsets.map(toMask);
   const totalUniverse = universeMasks.length;
 
-  // 3. Validador de filtros canônicos
+  // 3. Validador de filtros canônicos estritos
   const isCandidateValid = (nums: number[]): boolean => {
+    if (effectiveFixas.length > 0 && !effectiveFixas.every((f) => nums.includes(f))) return false;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior)) return false;
     if (filters && !ticketPassesFilters(a, filters)) return false;
     return true;
   };
 
-  // 4. Criação do pool de candidatos filtrados estritamente pelo activeFilterConfig
-  const candidateCombos: number[][] = [];
+  // Candidatos de cota de borda (Anti-Cisne Negro) para fechamentos com >= 20 jogos
+  const enableStratification = maxTickets >= 20;
+  const isLowerTailCandidate = (nums: number[]): boolean => {
+    if (effectiveFixas.length > 0 && !effectiveFixas.every((f) => nums.includes(f))) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    // Proteção de cauda inferior: soma 155-179, até 8 consecutivas (ex: 03 a 10 como no Concurso #3825), bola1 <= 4, bola15 >= 20
+    if (soma < 155 || soma > 179) return false;
+    if (maxSeq > 8) return false;
+    if (bola1 > 4 || bola15 < 20) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+
+  const isUpperTailCandidate = (nums: number[]): boolean => {
+    if (effectiveFixas.length > 0 && !effectiveFixas.every((f) => nums.includes(f))) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    // Proteção de cauda superior: soma 216-230
+    if (soma < 216 || soma > 230) return false;
+    if (maxSeq > 6) return false;
+    if (bola1 > 4 || bola15 < 22) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+
+  // 4. Criação dos pools de candidatos
+  const coreCombos: number[][] = [];
+  const lowerTailCombos: number[][] = [];
+  const upperTailCombos: number[][] = [];
+
   for (const combo of universeSubsets) {
     if (isCandidateValid(combo)) {
-      candidateCombos.push(combo);
+      coreCombos.push(combo);
+    } else if (enableStratification) {
+      if (isLowerTailCandidate(combo)) {
+        lowerTailCombos.push(combo);
+      } else if (isUpperTailCandidate(combo)) {
+        upperTailCombos.push(combo);
+      }
     }
   }
 
-  // Tratamento de cenários de sobre-restrição:
-  // Se os filtros forem excessivamente rigorosos e impedirem qualquer combinação elegível,
-  // reporta erro claro de sobre-restrição em vez de retornar jogos inválidos ou array vazio
+  // Quotas de estratificação anti-cisne negro
+  const lowerTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
+  const upperTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
+  const coreQuota = Math.max(1, maxTickets - lowerTailQuota - upperTailQuota);
+
+  // Combina todos os candidatos válidos (core + cotas de proteção)
+  const candidateCombos: number[][] = [...coreCombos, ...lowerTailCombos, ...upperTailCombos];
+
   if (candidateCombos.length === 0) {
     throw new Error(
       'Nenhum jogo compatível com os filtros selecionados. Os filtros definidos em "Sugestões Estratégicas" ou "Filtros Canônicos" são excessivamente restritivos para o universo de dezenas selecionado. Tente flexibilizar os limites de Soma, Pares/Ímpares, Primos ou Moldura.'
@@ -832,7 +959,6 @@ export function generateMinimumSetCoverFechamento({
   const candCount = candidateCombos.length;
 
   // 5. Pré-computação das listas de cobertura (quais subconjuntos cada candidato cobre com >= 14 acertos)
-  // Em 18 dezenas, cada bilhete cobre 46 subconjuntos; em 19 dezenas, 61 subconjuntos.
   const candCoverLists: number[][] = new Array(candCount);
   for (let i = 0; i < candCount; i++) {
     const cMask = candMasks[i];
@@ -850,13 +976,21 @@ export function generateMinimumSetCoverFechamento({
     (c) => analyzeTicket(c, concursoAnterior, aiScores).scoreIA
   );
 
-  // 6. Algoritmo Guloso de Cobertura de Conjuntos (Greedy Set Cover)
+  // 6. Algoritmo Guloso de Cobertura de Conjuntos (Greedy Set Cover com Frequency Cap e Estratificação)
   const coveredCounts = new Uint16Array(totalUniverse);
   let uncoveredRemaining = totalUniverse;
   const chosenIndices: number[] = [];
   const chosenSet = new Set<number>();
   let greedyStep = 0;
-  const maxGreedySteps = Math.min(maxTickets * 2, 200);
+  const maxGreedySteps = Math.min(maxTickets * 2, 250);
+
+  // Desenviesamento de Coocorrência (Frequency Cap de Dezenas Variáveis)
+  const numberFreq: Record<number, number> = {};
+  const maxFreq = Math.ceil(maxTickets * (15 / n) * 1.15);
+
+  let lowerTailChosen = 0;
+  let upperTailChosen = 0;
+  let coreChosen = 0;
 
   // Consulta histórico de fechamentos salvos para evitar tickets redundantes entre gerações
   const savedTicketsSet = getAllSavedTicketsSet();
@@ -869,6 +1003,23 @@ export function generateMinimumSetCoverFechamento({
     for (let i = 0; i < candCount; i++) {
       if (chosenSet.has(i)) continue;
 
+      const cand = candidateCombos[i];
+      const isLower = i >= coreCombos.length && i < coreCombos.length + lowerTailCombos.length;
+      const isUpper = i >= coreCombos.length + lowerTailCombos.length;
+
+      // Respeita quotas de estratificação
+      if (isLower && lowerTailChosen >= lowerTailQuota) continue;
+      if (isUpper && upperTailChosen >= upperTailQuota) continue;
+      if (!isLower && !isUpper && coreChosen >= coreQuota) {
+        // Se ainda faltam cotas de borda e temos candidatos disponíveis nelas, prioriza-as
+        const lowerNeeded = lowerTailQuota - lowerTailChosen;
+        const upperNeeded = upperTailQuota - upperTailChosen;
+        const remainingSlots = maxTickets - chosenIndices.length;
+        if (remainingSlots <= lowerNeeded + upperNeeded && (lowerTailCombos.length > 0 || upperTailCombos.length > 0)) {
+          continue;
+        }
+      }
+
       const covers = candCoverLists[i];
       let newCovers = 0;
       for (let k = 0; k < covers.length; k++) {
@@ -877,22 +1028,41 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      if (newCovers <= 0) continue;
+      if (newCovers <= 0 && uncoveredRemaining > 0) continue;
+
+      // Desenviesamento de Coocorrência: penaliza candidatos com dezenas variáveis saturadas
+      let freqCapPenalty = 0;
+      for (const d of cand) {
+        if (!effectiveFixedSet.has(d)) {
+          const curF = numberFreq[d] || 0;
+          if (curF >= maxFreq) {
+            freqCapPenalty += 75;
+          } else if (curF >= maxFreq - 1) {
+            freqCapPenalty += 15;
+          }
+        }
+      }
 
       // Penaliza tickets que já foram salvos em fechamentos anteriores do usuário
-      const candKey = candidateCombos[i].join('-');
+      const candKey = cand.join('-');
       const isAlreadySaved = savedTicketsSet.has(candKey);
       const savedPenalty = isAlreadySaved ? 50 : 0;
 
       // Injeta bônus para combinações alinhadas com os Fechamentos Vencedores do Concurso #3822
       let winningBonus = 0;
       const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
-      const nucleoHits = candidateCombos[i].filter((n) => nucleoVencedor.includes(n)).length;
+      const nucleoHits = cand.filter((num) => nucleoVencedor.includes(num)).length;
       if (nucleoHits >= 8) winningBonus += 0.8;
 
       // Injeta variância estocástica leve para desempate entre coberturas equivalentes
       const jitter = Math.random() * 0.25;
-      const combinedGain = (newCovers * 10) + (candScores[i] / 100) + winningBonus + jitter - savedPenalty;
+      const combinedGain =
+        (newCovers * 10) +
+        (candScores[i] / 100) +
+        winningBonus +
+        jitter -
+        savedPenalty -
+        freqCapPenalty;
 
       if (combinedGain > bestCombinedGain) {
         bestCombinedGain = combinedGain;
@@ -901,13 +1071,26 @@ export function generateMinimumSetCoverFechamento({
       }
     }
 
-    if (bestCandIdx === -1 || bestNewCovers <= 0) {
+    if (bestCandIdx === -1) {
       break;
     }
 
-
     chosenSet.add(bestCandIdx);
     chosenIndices.push(bestCandIdx);
+
+    const chosenCand = candidateCombos[bestCandIdx];
+    const isLower = bestCandIdx >= coreCombos.length && bestCandIdx < coreCombos.length + lowerTailCombos.length;
+    const isUpper = bestCandIdx >= coreCombos.length + lowerTailCombos.length;
+    if (isLower) lowerTailChosen++;
+    else if (isUpper) upperTailChosen++;
+    else coreChosen++;
+
+    // Atualiza contadores de frequência das dezenas variáveis
+    for (const d of chosenCand) {
+      if (!effectiveFixedSet.has(d)) {
+        numberFreq[d] = (numberFreq[d] || 0) + 1;
+      }
+    }
 
     const covers = candCoverLists[bestCandIdx];
     for (let k = 0; k < covers.length; k++) {
@@ -920,8 +1103,6 @@ export function generateMinimumSetCoverFechamento({
   }
 
   // 7. Varredura 2-opt de Eliminação de Redundâncias (Set Cover Post-Optimization)
-  // Elimina qualquer bilhete cujos subconjuntos já estejam cobertos por outros bilhetes escolhidos,
-  // garantindo a menor quantidade estrita de jogos.
   let improved = true;
   let prunePass = 0;
   while (improved && prunePass++ < 30) {
@@ -939,15 +1120,14 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      if (canBePruned) {
-        // Remove bilhete redundante
+      if (canBePruned && chosenIndices.length > (maxTickets <= 24 ? 20 : maxTickets * 0.8)) {
         chosenIndices.splice(p, 1);
         chosenSet.delete(candIdx);
         for (let k = 0; k < covers.length; k++) {
           coveredCounts[covers[k]]--;
         }
         improved = true;
-        break; // Recomeça varredura
+        break;
       }
     }
   }
@@ -959,6 +1139,13 @@ export function generateMinimumSetCoverFechamento({
     const sB = analyzeTicket(b, concursoAnterior, aiScores).scoreIA;
     return sB - sA;
   });
+
+  // Asserção estrita de integridade: 100% das dezenas de todo ticket pertencem a sortedPool
+  const universeSet = new Set(sortedPool);
+  const isValidUniverse = finalTickets.every((t) => t.every((d) => universeSet.has(d)));
+  if (!isValidUniverse) {
+    throw new Error('Falha de integridade: bilhetes gerados contêm dezenas fora do universoDezenas selecionado.');
+  }
 
   return finalTickets.map((ticket, idx) => {
     const analysis = analyzeTicket(ticket, concursoAnterior, aiScores);
@@ -983,12 +1170,19 @@ export function generateFechamentoCovering(
   concursoAnterior: number[] = CONCURSO_ATUAL.dezenas,
   aiScores?: number[]
 ): GameTicket[] {
-  const sortedPool = [...selectedNumbers].sort((a, b) => a - b);
+  const sortedPool = [...new Set(selectedNumbers)].sort((a, b) => a - b);
   const n = sortedPool.length;
 
   if (n < 15) {
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
+
+  // Sanitização estrita de dezenas fixas
+  const rawFixas = filters?.dezenasFixas || [];
+  const sanitizedFixas = rawFixas.filter((d) => sortedPool.includes(d));
+  const maxFixasAllowed = Math.min(12, Math.max(0, n - 3));
+  const effectiveFixas = sanitizedFixas.slice(0, maxFixasAllowed);
+  const effectiveFixedSet = new Set(effectiveFixas);
 
   // Redução por Cobertura Mínima (Set Cover Problem) com garantia estrita de 14 pontos
   // Otimização matemática dedicada para matrizes de 18 e 19 dezenas
@@ -997,7 +1191,7 @@ export function generateFechamentoCovering(
       selectedNumbers: sortedPool,
       targetHits: 14,
       maxTickets,
-      filters,
+      filters: filters ? { ...filters, dezenasFixas: effectiveFixas } : undefined,
       concursoAnterior,
       aiScores,
     });
@@ -1005,6 +1199,7 @@ export function generateFechamentoCovering(
 
   // Helper to test full compliance: user filters + canonical zero-anomaly constraints
   const isCandidateValid = (nums: number[]): boolean => {
+    if (effectiveFixas.length > 0 && !effectiveFixas.every((f) => nums.includes(f))) return false;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior)) return false;
     if (filters && !ticketPassesFilters(a, filters)) return false;
@@ -1016,13 +1211,12 @@ export function generateFechamentoCovering(
     let final15 = [...sortedPool];
     if (!isCandidateValid(final15)) {
       // Find optimal replacement from full pool respecting user fixed/excluded numbers
-      const fixed = filters?.dezenasFixas ?? [];
+      const fixed = effectiveFixas;
       const excluded = filters?.dezenasExcluidas ?? [];
       const pool25 = Array.from({ length: 25 }, (_, i) => i + 1).filter((num) => !excluded.includes(num));
       
       // Try combinatorial adjustment to guarantee 100% filter compliance
       let foundValid = false;
-      const candidatesToTry: number[][] = [];
       const nonFixed = final15.filter((x) => !fixed.includes(x));
       const availableSubstitutes = pool25.filter((x) => !final15.includes(x));
 
@@ -1113,44 +1307,6 @@ export function generateFechamentoCovering(
   }
 
   collectCanonical(0, []);
-
-  // Safe fallback if the selected pool was too narrow to produce enough candidates under the filters:
-  // Augment candidates while STRICTLY requiring isCandidateValid(current) === true
-  if (validCandidates.length < Math.min(3, maxTickets)) {
-    const fixed = filters?.dezenasFixas ?? [];
-    const excluded = filters?.dezenasExcluidas ?? [];
-    const backupPool = Array.from(
-      new Set([
-        ...sortedPool,
-        ...buildOptimal18Pool(CONCURSO_ATUAL, DEZENAS_STATS, [], 9, 9).dezenas18,
-      ])
-    ).filter((num) => !excluded.includes(num));
-
-    let augCount = 0;
-    function collectAugmented(start: number, current: number[]) {
-      if (validCandidates.length >= maxPoolCandidates || augCount++ > MAX_RECURSION_EVALS) return;
-      if (current.length === 15) {
-        if (isCandidateValid(current)) {
-          if (!validCandidates.some((c) => countMatches(c, current) === 15)) {
-            validCandidates.push([...current]);
-          }
-        }
-        return;
-      }
-      const needed = 15 - current.length;
-      const available = backupPool.length - start;
-      if (available < needed) return;
-
-      for (let i = start; i < backupPool.length; i++) {
-        current.push(backupPool[i]);
-        collectAugmented(i + 1, current);
-        current.pop();
-        if (validCandidates.length >= maxPoolCandidates || augCount > MAX_RECURSION_EVALS) break;
-      }
-    }
-
-    collectAugmented(0, []);
-  }
 
   // Tratamento de cenários de sobre-restrição:
   // Se os filtros forem excessivamente rigorosos e impedirem qualquer combinação elegível,
@@ -1260,6 +1416,13 @@ export function generateFechamentoCovering(
   }
 
   const finalChosen = Array.from(uniqueCandidateMap.values());
+
+  // Asserção estrita de integridade: 100% das dezenas de todo ticket pertencem a sortedPool
+  const universeSet = new Set(sortedPool);
+  const isValidUniverse = finalChosen.every((t) => t.every((d) => universeSet.has(d)));
+  if (!isValidUniverse) {
+    throw new Error('Falha de integridade: bilhetes gerados contêm dezenas fora do universoDezenas selecionado.');
+  }
 
   return finalChosen.map((ticket, index) => {
     const analysis = analyzeTicket(ticket, concursoAnterior, aiScores);
@@ -2167,6 +2330,79 @@ export function buildFilterCompliantPool({
       if (toRemove !== undefined) {
         chosen.delete(toRemove);
         chosen.add(fria);
+      }
+    }
+  }
+
+  // =========================================================================
+  // EQUILÍBRIO DE QUADRANTE E MIOLO (17 e 18 DEZENAS)
+  // Exige >= 4 dezenas no Miolo [7, 8, 9, 12, 13, 14, 17, 18, 19],
+  // e pelo menos 3 por linha e 3 por coluna no volante 5x5
+  // =========================================================================
+  if (targetCount >= 17) {
+    // 1. Balanceamento de Miolo (mínimo 4 dezenas)
+    const MIOLO_DEZENAS = [7, 8, 9, 12, 13, 14, 17, 18, 19];
+    let mioloCount = Array.from(chosen).filter((n) => MIOLO_DEZENAS.includes(n)).length;
+    if (mioloCount < 4) {
+      const candidatesMiolo = MIOLO_DEZENAS.filter((n) => !chosen.has(n) && !allExcluded.has(n));
+      const nonFixedChosen = Array.from(chosen).filter((n) => !allFixed.includes(n) && !MIOLO_DEZENAS.includes(n));
+      while (mioloCount < 4 && candidatesMiolo.length > 0 && nonFixedChosen.length > 0) {
+        const bestMiolo = candidatesMiolo.sort((a, b) => {
+          const sA = dynamicStats.find((s) => s.numero === a)?.vezes || 0;
+          const sB = dynamicStats.find((s) => s.numero === b)?.vezes || 0;
+          return sB - sA;
+        })[0];
+        candidatesMiolo.splice(candidatesMiolo.indexOf(bestMiolo), 1);
+        const toReplace = nonFixedChosen.pop();
+        if (toReplace !== undefined) {
+          chosen.delete(toReplace);
+          chosen.add(bestMiolo);
+          mioloCount++;
+        }
+      }
+    }
+
+    // 2. Balanceamento de Linhas (mínimo 3 dezenas por linha no volante 5x5)
+    for (let row = 0; row < 5; row++) {
+      const rowNumbers = [row * 5 + 1, row * 5 + 2, row * 5 + 3, row * 5 + 4, row * 5 + 5];
+      let rowHits = Array.from(chosen).filter((n) => rowNumbers.includes(n)).length;
+      if (rowHits < 3) {
+        const rowCandidates = rowNumbers.filter((n) => !chosen.has(n) && !allExcluded.has(n));
+        const nonFixedChosen = Array.from(chosen).filter((n) => {
+          if (allFixed.includes(n)) return false;
+          const nRow = Math.floor((n - 1) / 5);
+          const nRowHits = Array.from(chosen).filter((x) => Math.floor((x - 1) / 5) === nRow).length;
+          return nRowHits > 3;
+        });
+        while (rowHits < 3 && rowCandidates.length > 0 && nonFixedChosen.length > 0) {
+          const addNum = rowCandidates.shift()!;
+          const remNum = nonFixedChosen.pop()!;
+          chosen.delete(remNum);
+          chosen.add(addNum);
+          rowHits++;
+        }
+      }
+    }
+
+    // 3. Balanceamento de Colunas (mínimo 3 dezenas por coluna no volante 5x5)
+    for (let col = 1; col <= 5; col++) {
+      const colNumbers = [col, col + 5, col + 10, col + 15, col + 20];
+      let colHits = Array.from(chosen).filter((n) => colNumbers.includes(n)).length;
+      if (colHits < 3) {
+        const colCandidates = colNumbers.filter((n) => !chosen.has(n) && !allExcluded.has(n));
+        const nonFixedChosen = Array.from(chosen).filter((n) => {
+          if (allFixed.includes(n)) return false;
+          const nCol = ((n - 1) % 5) + 1;
+          const nColHits = Array.from(chosen).filter((x) => ((x - 1) % 5) + 1 === nCol).length;
+          return nColHits > 3;
+        });
+        while (colHits < 3 && colCandidates.length > 0 && nonFixedChosen.length > 0) {
+          const addNum = colCandidates.shift()!;
+          const remNum = nonFixedChosen.pop()!;
+          chosen.delete(remNum);
+          chosen.add(addNum);
+          colHits++;
+        }
       }
     }
   }

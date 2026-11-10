@@ -1400,7 +1400,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         tipoFechamento: getCanonicalFechamentoTypeName(),
         modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} (${(activePool.length > 0 ? activePool : selectedNumbers).length} Dezenas • ${ticketsToSave.length} Jogos • Garantia ${preset?.garantia || '14 Pontos (com 35% de chance de 15)'}) [Filtros: Soma ${f.somaMin}-${f.somaMax} | Pares ${f.paresMin}-${f.paresMax} | Moldura ${f.molduraMin}-${f.molduraMax} | Primos ${f.primosMin}-${f.primosMax} | Fib ${f.fibonacciMin}-${f.fibonacciMax} | Rep ${f.repetidasMin}-${f.repetidasMax}]`,
         universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
-        dezenasFixas: metaData.fixedNumbers || fixedNumbers || [],
+        dezenasFixas: (metaData.fixedNumbers || fixedNumbers || []).filter((d) => (activePool.length > 0 ? activePool : selectedNumbers).includes(d)).slice(0, Math.min(12, Math.max(0, (activePool.length > 0 ? activePool : selectedNumbers).length - 3))),
         dezenasExcluidas: metaData.excludedNumbers || excludedNumbers || [],
         faixaSoma: {
           min: f.somaMin,
@@ -1413,7 +1413,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           canonico: '7P/8I ou 8P/7I',
         },
         maxConsecutivas: f.maxConsecutivas || 5,
-        auditoriaAnomalias: 'Todos os bilhetes foram auditados com 0 anomalias estatísticas',
+        auditoriaAnomalias: 'Auditado dinamicamente com filtros canônicos e proteção de borda',
         repetidas: {
           min: f.repetidasMin,
           max: f.repetidasMax,
