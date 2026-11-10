@@ -16,6 +16,7 @@ import {
   getDuplicateFechamentosReport,
   removeDuplicateFechamentos,
   DuplicateFechamentosReport,
+  sanitizarFechamentosSalvos,
 } from '../services/savedFechamentosStorage';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
@@ -50,6 +51,7 @@ import {
   AlertTriangle,
   TrendingUp,
   ShieldCheck,
+  ShieldAlert,
   SlidersHorizontal,
   ChevronDown,
   Settings2,
@@ -115,6 +117,25 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     } catch {}
     setDuplicateActionFeedback(`✓ ${res.details}`);
     setTimeout(() => setDuplicateActionFeedback(null), 5000);
+  };
+
+  const [sanitizacaoFeedback, setSanitizacaoFeedback] = useState<string | null>(null);
+
+  const handleSanitizarBase = () => {
+    const res = sanitizarFechamentosSalvos();
+    try {
+      soundService.playGoldenZoneSuccessChime();
+    } catch {}
+    if (res.sanitizedCount > 0 || res.ticketsCorrigidosCount > 0) {
+      setSanitizacaoFeedback(
+        `✓ Sanitização concluída com sucesso: ${res.sanitizedCount} fechamento(s) corrigido(s) e ${res.ticketsCorrigidosCount} bilhete(s) reparado(s) com 100% de integridade no universo de dezenas!`
+      );
+    } else {
+      setSanitizacaoFeedback(
+        `✓ Base 100% íntegra: todos os ${res.totalFechamentos} fechamentos e bilhetes estão em perfeita conformidade (dezenasFixas ≤ 12 e pertencentes ao universo).`
+      );
+    }
+    setTimeout(() => setSanitizacaoFeedback(null), 6000);
   };
 
   // Sistema de Tags Personalizadas ('Ciclo Ativo', 'Aposta Agressiva', 'Matriz Ouro')
@@ -746,6 +767,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
           <button
             type="button"
+            onClick={handleSanitizarBase}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+            title="Auditar e sanitizar dezenas fixas (máx 12) e integridade de dezenas em todos os fechamentos salvos no LocalStorage"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Sanitizar Base</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
             className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
           >
@@ -754,6 +785,21 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </button>
         </div>
       </div>
+
+      {sanitizacaoFeedback && (
+        <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>{sanitizacaoFeedback}</span>
+          </div>
+          <button
+            onClick={() => setSanitizacaoFeedback(null)}
+            className="text-slate-400 hover:text-white text-xs font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {duplicateActionFeedback && (
         <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-in fade-in">

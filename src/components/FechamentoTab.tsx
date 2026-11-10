@@ -22,6 +22,7 @@ import {
   buildOptimal18Pool,
   buildFilterCompliantPool,
   generateFechamentoInteligentePonderado,
+  gerarMatrizEstratificada,
   VALOR_APOSTA_LOTOFACIL,
   validateFilters,
   validarIntegridadeFechamento,
@@ -2055,6 +2056,115 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }, 150);
   };
 
+  // Gerador de Matriz Estratificada Anti-Cisne Negro
+  // Distribuição: 75% Zona de Ouro (soma 180-215), 15% Cauda Baixa (soma 155-179, até 9 consecutivas), 10% Cauda Alta (soma 216-230)
+  const handleGenerateEstratificada = async () => {
+    setIsGenerating(true);
+    setWorkerProgress({ percent: 20, message: 'Calculando Matriz Estratificada Anti-Cisne Negro...' });
+    setGenerationError(null);
+    const start = performance.now();
+
+    try {
+      const fullFilters: FilterCriteria = {
+        ...filters,
+        dezenasFixas: fixedNumbers,
+        dezenasExcluidas: excludedNumbers,
+      };
+      setFilters(fullFilters);
+
+      const tickets = gerarMatrizEstratificada(selectedNumbers, preset.jogosMaximos, {
+        dezenasFixas: fixedNumbers,
+        concursoAnterior: latestDraw.dezenas,
+        aiScores: aiPrediction?.scores,
+        filters: fullFilters,
+      });
+
+      if (!tickets || tickets.length === 0) {
+        throw new Error('Não foi possível gerar combinações estratificadas com as dezenas e filtros selecionados.');
+      }
+
+      setGenerationError(null);
+      const stratName = `🛡️ Matriz Estratificada Anti-Cisne Negro (75% Ouro • 15% Cauda Baixa • 10% Cauda Alta)`;
+      const exportMeta: FechamentoExportMeta = {
+        strategyName: stratName,
+        modeName: `${preset.nome} - Estratificado (${tickets.length} Jogos - Quotas 75/15/10)`,
+        garantia: preset.garantia,
+        targetCount: targetCount,
+        selectedNumbers: selectedNumbers,
+        fixedNumbers: fixedNumbers,
+        excludedNumbers: excludedNumbers,
+        filters: fullFilters,
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        timestamp: Date.now(),
+      };
+
+      try {
+        localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
+      } catch {}
+
+      setGeneratedTickets(tickets);
+
+      if (selectedNumbers.length >= 15) {
+        try {
+          const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
+          const masks = tickets.map((t) => criarMascara(t.dezenas));
+          const targetHits = mode.includes('13') ? 13 : 14;
+          const auditoria = auditarMatrizCompleta(masks, cenarios, targetHits);
+          const originalQtd = preset.jogosMaximos;
+          const custoOrig = originalQtd * VALOR_APOSTA_LOTOFACIL;
+          const custoOtim = tickets.length * VALOR_APOSTA_LOTOFACIL;
+          const econ = Math.max(0, custoOrig - custoOtim);
+          setIndicadorGarantia({
+            matrizOriginalQtd: originalQtd,
+            matrizFiltradaQtd: tickets.length,
+            garantiaTeorica: 100.0,
+            garantiaEfetiva: auditoria.taxaGarantia,
+            custoOriginal: custoOrig,
+            custoOtimizado: custoOtim,
+            economia: econ,
+            economiaPercentual: custoOrig > 0 ? (econ / custoOrig) * 100 : 0,
+            garantiaAlvo: `${targetHits} se 15`,
+            histograma: auditoria.histograma,
+            totalCenarios: auditoria.totalCenarios,
+          });
+        } catch (e) {
+          console.warn('Erro ao auditar garantia efetiva:', e);
+        }
+      }
+
+      onSaveTickets(tickets, exportMeta);
+      autoSaveFechamentoPrognostico(tickets, stratName, exportMeta, selectedNumbers);
+      setGenerationType('matriz');
+      saveToAutoSave(tickets, mode, selectedNumbers, fullFilters, 'matriz');
+
+      if (soundAlertEnabled) {
+        try {
+          soundService.playGoldenZoneSuccessChime();
+        } catch {}
+      }
+
+      setDocumentMessage(
+        `✓ Matriz Estratificada gerada com sucesso! ${tickets.length} bilhetes distribuídos em 75% Zona de Ouro (Soma 180–215), 15% Proteção Cauda Baixa (Soma 155–179) e 10% Cauda Alta (Soma 216–230).`
+      );
+      setTimeout(() => setDocumentMessage(null), 6000);
+
+      const end = performance.now();
+      setGenerationTimeMs(Math.round(end - start));
+    } catch (err: any) {
+      console.error(err);
+      setGenerationError({
+        title: 'Incompatibilidade na Matriz Estratificada',
+        summary: 'Não foi possível gerar combinações balanceadas nos três estratos com as dezenas e restrições atuais.',
+        reasons: [err?.message || 'Erro na geração da Matriz Estratificada.'],
+        suggestions: ['Tente reduzir o número de dezenas fixas ou selecione dezenas mais distribuídas no volante.'],
+      });
+    } finally {
+      setIsGenerating(false);
+      setWorkerProgress(null);
+    }
+  };
+
   // Copy all tickets in standard text format
   const handleCopyAll = () => {
     if (generatedTickets.length === 0) return;
@@ -3015,6 +3125,30 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </div>
                   <span className="text-[10px] text-slate-900 font-semibold block">
                     Frequência × Atraso • 50 Apurações
+                  </span>
+                </div>
+              </button>
+
+              {/* Botão Matriz Estratificada Anti-Cisne Negro */}
+              <button
+                type="button"
+                onClick={handleGenerateEstratificada}
+                disabled={selectedNumbers.length < targetCount || isGenerating}
+                className={`flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-600 hover:from-indigo-400 hover:to-purple-400 text-white shadow-lg shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer border border-indigo-400/50 font-black whitespace-nowrap ${
+                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                title="Distribui os jogos em 75% Zona de Ouro (soma 180-215), 15% Proteção de Cauda Baixa (soma 155-179, permitindo >7 consecutivas como no Concurso 3825) e 10% Cauda Alta (soma 216-230)"
+              >
+                <ShieldCheck className="w-4 h-4 text-cyan-300 shrink-0" />
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm">
+                    <span>ANTI-CISNE NEGRO</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 font-bold border border-indigo-400/40">
+                      75 / 15 / 10%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-indigo-200 font-semibold block">
+                    Matriz Estratificada 3 Níveis
                   </span>
                 </div>
               </button>

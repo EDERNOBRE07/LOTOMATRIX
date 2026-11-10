@@ -1434,6 +1434,207 @@ export function generateFechamentoCovering(
   });
 }
 
+export interface GerarMatrizEstratificadaOptions {
+  dezenasFixas?: number[];
+  concursoAnterior?: number[];
+  aiScores?: number[];
+  targetHits?: number;
+  filters?: FilterCriteria;
+}
+
+/**
+ * Matriz Estratificada Anti-Cisne Negro (Lotofácil Pro)
+ * Distribui determinística e equilibradamente os bilhetes gerados nas 3 zonas estatísticas:
+ * - 75% na Zona de Ouro (Soma 180-215, regras canônicas padrão)
+ * - 15% em Proteção de Cauda Baixa (Soma 155-179, permitindo sequências consecutivas > 7 números, ex: 03-10 no Concurso #3825)
+ * - 10% em Proteção de Cauda Alta (Soma 216-230, extremos superiores de cauda)
+ *
+ * Aplica Frequency Cap dinâmico em dezenas variáveis para impedir saturação de números não-sorteados.
+ */
+export function gerarMatrizEstratificada(
+  universoDezenas: number[],
+  totalJogos: number = 24,
+  options: GerarMatrizEstratificadaOptions = {}
+): GameTicket[] {
+  const sortedPool = [...new Set(universoDezenas)].sort((a, b) => a - b);
+  const n = sortedPool.length;
+
+  if (n < 15) {
+    throw new Error('É necessário fornecer pelo menos 15 dezenas no universoDezenas.');
+  }
+
+  // 1. Sanitização estrita de dezenas fixas (apenas números do universo e no máximo 12)
+  const rawFixas = options.dezenasFixas || options.filters?.dezenasFixas || [];
+  const sanitizedFixas = rawFixas.filter((d) => sortedPool.includes(d));
+  const maxFixas = Math.min(12, Math.max(0, n - 3));
+  const effectiveFixas = sanitizedFixas.slice(0, maxFixas).sort((a, b) => a - b);
+  const effectiveFixedSet = new Set(effectiveFixas);
+
+  const concursoAnterior = options.concursoAnterior || CONCURSO_ATUAL.dezenas;
+  const aiScores = options.aiScores;
+
+  // 2. Cálculo das cotas estratificadas
+  // Ex: 24 jogos -> 18 na Zona de Ouro (75%), 4 em Cauda Baixa (15%), 2 em Cauda Alta (10%)
+  const qtdOuro = Math.max(1, Math.round(totalJogos * 0.75));
+  const qtdCaudaBaixa = Math.max(1, Math.round(totalJogos * 0.15));
+  const qtdCaudaAlta = Math.max(0, totalJogos - qtdOuro - qtdCaudaBaixa);
+
+  // 3. Geração de combinações candidatas com early pruning
+  const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
+  const neededFromNonFixed = 15 - effectiveFixas.length;
+
+  const rawCombos = getCombinations(nonFixedPool, neededFromNonFixed).map((tail) =>
+    [...effectiveFixas, ...tail].sort((a, b) => a - b)
+  );
+
+  // 4. Classificação dos candidatos por estrato estatístico
+  const candidatosOuro: number[][] = [];
+  const candidatosCaudaBaixa: number[][] = [];
+  const candidatosCaudaAlta: number[][] = [];
+
+  for (const combo of rawCombos) {
+    const soma = combo.reduce((a, b) => a + b, 0);
+    const maxSeq = getMaxConsecutiveSequence(combo);
+    const pares = combo.filter((d) => d % 2 === 0).length;
+    const primos = combo.filter((d) => PRIMOS.includes(d)).length;
+    const moldura = combo.filter((d) => MOLDURA.includes(d)).length;
+    const cruz = combo.filter((d) => CRUZ_DEZENAS.includes(d)).length;
+    const bola1 = combo[0];
+    const bola15 = combo[combo.length - 1];
+
+    if (isHistorical15Collision(combo)) continue;
+
+    // Estrato 1: Zona de Ouro (Soma 180-215, padrões canônicos equilibrados)
+    if (
+      soma >= 180 &&
+      soma <= 215 &&
+      maxSeq <= 6 &&
+      pares >= 5 &&
+      pares <= 10 &&
+      primos >= 3 &&
+      primos <= 8 &&
+      moldura >= 7 &&
+      moldura <= 12 &&
+      cruz >= 3 &&
+      cruz <= 8 &&
+      bola1 <= 4 &&
+      bola15 >= 22
+    ) {
+      candidatosOuro.push(combo);
+    }
+    // Estrato 2: Proteção de Cauda Baixa (Soma 155-179, autorizando > 7 consecutivas como 03-10 no #3825)
+    else if (
+      soma >= 155 &&
+      soma <= 179 &&
+      maxSeq <= 9 && // Permite sequências consecutivas longas (> 7 consecutivas)
+      pares >= 4 &&
+      pares <= 11 &&
+      primos >= 3 &&
+      primos <= 8 &&
+      bola1 <= 4 &&
+      bola15 >= 20
+    ) {
+      candidatosCaudaBaixa.push(combo);
+    }
+    // Estrato 3: Proteção de Cauda Alta (Soma 216-230)
+    else if (
+      soma >= 216 &&
+      soma <= 230 &&
+      maxSeq <= 6 &&
+      pares >= 4 &&
+      pares <= 11 &&
+      primos >= 3 &&
+      primos <= 8 &&
+      bola1 <= 4 &&
+      bola15 >= 22
+    ) {
+      candidatosCaudaAlta.push(combo);
+    }
+  }
+
+  // Ordenação de desempate por Score IA
+  const sortByScore = (combos: number[][]) => {
+    return combos.sort((a, b) => {
+      const sA = analyzeTicket(a, concursoAnterior, aiScores).scoreIA;
+      const sB = analyzeTicket(b, concursoAnterior, aiScores).scoreIA;
+      return sB - sA;
+    });
+  };
+
+  sortByScore(candidatosOuro);
+  sortByScore(candidatosCaudaBaixa);
+  sortByScore(candidatosCaudaAlta);
+
+  // 5. Seleção equilibrada com Desenviesamento de Coocorrência (Frequency Cap)
+  const maxFreq = Math.ceil(totalJogos * (15 / n) * 1.15);
+  const numberFreq: Record<number, number> = {};
+  const selectedTickets: number[][] = [];
+  const selectedKeys = new Set<string>();
+
+  const pickFromPool = (pool: number[][], quota: number) => {
+    let picked = 0;
+    // Pass 1: candidatos que respeitam o teto de frequência de variáveis
+    for (const cand of pool) {
+      if (picked >= quota || selectedTickets.length >= totalJogos) break;
+      const key = cand.join('-');
+      if (selectedKeys.has(key)) continue;
+
+      const hasSaturated = cand.some((d) => !effectiveFixedSet.has(d) && (numberFreq[d] || 0) >= maxFreq);
+      if (!hasSaturated) {
+        selectedTickets.push(cand);
+        selectedKeys.add(key);
+        picked++;
+        for (const d of cand) {
+          if (!effectiveFixedSet.has(d)) numberFreq[d] = (numberFreq[d] || 0) + 1;
+        }
+      }
+    }
+    // Pass 2: preenchimento residual se a cota do estrato ainda não foi atingida
+    for (const cand of pool) {
+      if (picked >= quota || selectedTickets.length >= totalJogos) break;
+      const key = cand.join('-');
+      if (!selectedKeys.has(key)) {
+        selectedTickets.push(cand);
+        selectedKeys.add(key);
+        picked++;
+        for (const d of cand) {
+          if (!effectiveFixedSet.has(d)) numberFreq[d] = (numberFreq[d] || 0) + 1;
+        }
+      }
+    }
+  };
+
+  // Preenche proporcionalmente os 3 estratos
+  pickFromPool(candidatosOuro, qtdOuro);
+  pickFromPool(candidatosCaudaBaixa, qtdCaudaBaixa);
+  pickFromPool(candidatosCaudaAlta, qtdCaudaAlta);
+
+  // Fallback caso algum estrato não tenha candidatos suficientes no universo selecionado
+  if (selectedTickets.length < totalJogos) {
+    const remainingNeeded = totalJogos - selectedTickets.length;
+    pickFromPool(candidatosOuro, remainingNeeded);
+    if (selectedTickets.length < totalJogos) {
+      pickFromPool(rawCombos, totalJogos - selectedTickets.length);
+    }
+  }
+
+  // Asserção estrita de integridade: 100% das dezenas de cada bilhete pertencem ao universo selecionado
+  const universeSet = new Set(sortedPool);
+  const isValid = selectedTickets.every((t) => t.every((d) => universeSet.has(d)));
+  if (!isValid) {
+    throw new Error('Falha de integridade em gerarMatrizEstratificada: bilhete contém dezena fora do universo.');
+  }
+
+  return selectedTickets.map((nums, idx) => {
+    const analysis = analyzeTicket(nums, concursoAnterior, aiScores);
+    return {
+      id: `ticket-estratificado-${idx + 1}`,
+      index: idx + 1,
+      ...analysis,
+    };
+  });
+}
+
 /**
  * Desdobramento Total 25 Dezenas (Blocos Cruzados 5x3 + 5x2)
  *
