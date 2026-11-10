@@ -1452,6 +1452,7 @@ export interface GerarMatrizEstratificadaConfig {
 }
 
 export type GerarMatrizEstratificadaOptions = GerarMatrizEstratificadaConfig;
+export { sanitizarFechamentosSalvos } from './sanitizer';
 
 /**
  * Matriz Estratificada Anti-Cisne Negro (Lotofácil Pro)

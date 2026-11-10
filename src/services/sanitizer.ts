@@ -219,3 +219,5 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
 
   return result as SanitizerReport;
 }
+
+export default sanitizarFechamentosSalvos;
