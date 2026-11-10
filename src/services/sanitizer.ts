@@ -1,13 +1,13 @@
 import { GameTicket } from '../types/lotofacil';
 import { analyzeTicket, auditarTicketsGerados } from './combinatorics';
 
-export interface SanitizerReport {
+export type SanitizerReport = any[] & {
   sanitizedCount: number;
   totalFechamentos: number;
   ticketsCorrigidosCount: number;
   data: any[];
   fechamentos: any[];
-}
+};
 
 /**
  * sanitizarFechamentosSalvos
@@ -36,7 +36,7 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
     } else {
       rawData = customStorageOrData;
     }
-  } else if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  } else if (typeof localStorage !== 'undefined') {
     isLocalStorage = true;
     try {
       const storedTickets = localStorage.getItem(STORAGE_KEY);
@@ -191,25 +191,28 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
     return updatedItem;
   });
 
-  // Persiste de volta no localStorage se estiver em ambiente de navegador
-  if (isLocalStorage && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+  // Persiste de volta no localStorage se estiver em ambiente de navegador ou teste com localStorage
+  if (isLocalStorage && typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedItems));
       // Mantém 'lotosniper_saved_prognosticos' e 'lotosniper_saved_fechamentos' sincronizados
       localStorage.setItem(PROGNOSTICOS_KEY, JSON.stringify(sanitizedItems.slice(0, 50)));
       localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(sanitizedItems.slice(0, 50)));
-      window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: sanitizedItems }));
-      window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: sanitizedItems }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: sanitizedItems }));
+        window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: sanitizedItems }));
+      }
     } catch (e) {
       console.warn('Erro ao persistir itens sanitizados no localStorage:', e);
     }
   }
 
-  return {
-    sanitizedCount,
-    totalFechamentos: sanitizedItems.length,
-    ticketsCorrigidosCount,
-    data: sanitizedItems,
-    fechamentos: sanitizedItems,
-  };
+  const result: any = sanitizedItems;
+  result.sanitizedCount = sanitizedCount;
+  result.totalFechamentos = sanitizedItems.length;
+  result.ticketsCorrigidosCount = ticketsCorrigidosCount;
+  result.data = sanitizedItems;
+  result.fechamentos = sanitizedItems;
+
+  return result as SanitizerReport;
 }
