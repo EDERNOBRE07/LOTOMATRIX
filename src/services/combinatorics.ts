@@ -1515,11 +1515,22 @@ export function gerarMatrizEstratificada(
   const concursoAnterior = options.concursoAnterior || CONCURSO_ATUAL.dezenas;
   const aiScores = options.aiScores;
 
-  // 2. Cálculo das cotas estratificadas obrigatórias
-  // Ex: 24 jogos -> 18 na Zona de Ouro (75%), 4 em Cauda Baixa (15%), 2 em Cauda Alta (10%)
-  const qtdOuro = Math.max(1, Math.round(totalJogos * 0.75));
-  const qtdCaudaBaixa = Math.max(1, Math.round(totalJogos * 0.15));
-  const qtdCaudaAlta = Math.max(0, totalJogos - qtdOuro - qtdCaudaBaixa);
+  // 2. Cálculo das cotas estratificadas obrigatórias (75% Ouro, 15% Cauda Baixa, 10% Cauda Alta)
+  let qtdOuro = Math.round(totalJogos * 0.75);
+  let qtdCaudaBaixa = Math.round(totalJogos * 0.15);
+  let qtdCaudaAlta = totalJogos - qtdOuro - qtdCaudaBaixa;
+
+  if (totalJogos >= 10) {
+    if (qtdCaudaAlta < 1) {
+      qtdCaudaAlta = 1;
+      if (qtdOuro > qtdCaudaBaixa) qtdOuro--;
+      else qtdCaudaBaixa--;
+    }
+    if (qtdCaudaBaixa < 1) {
+      qtdCaudaBaixa = 1;
+      qtdOuro--;
+    }
+  }
 
   // 3. Geração de combinações candidatas com early pruning
   const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
