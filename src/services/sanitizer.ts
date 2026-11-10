@@ -150,14 +150,17 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
     // Caso o próprio item seja um ticket individual com dezenas
     let singleTicketNumbers: number[] | undefined = undefined;
     if (Array.isArray(item.dezenas) && !item.tickets) {
-      const filtered = item.dezenas.filter((d: number) => universeSet.has(d));
-      if (filtered.length !== item.dezenas.length) {
+      let filtered = item.dezenas.filter((d: number) => universeSet.has(d));
+      if (filtered.length !== item.dezenas.length || filtered.length !== 15) {
         itemTicketsChanged++;
         ticketsCorrigidosCount++;
         const pool = uniqueUniverse.filter((d) => !filtered.includes(d));
         for (const num of pool) {
           if (filtered.length >= 15) break;
           filtered.push(num);
+        }
+        if (filtered.length > 15) {
+          filtered = filtered.slice(0, 15);
         }
         filtered.sort((a: number, b: number) => a - b);
         singleTicketNumbers = filtered;
@@ -192,7 +195,7 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
   });
 
   // Persiste de volta no localStorage se estiver em ambiente de navegador ou teste com localStorage
-  if (isLocalStorage && typeof localStorage !== 'undefined') {
+  if (typeof localStorage !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedItems));
       // Mantém 'lotosniper_saved_prognosticos' e 'lotosniper_saved_fechamentos' sincronizados
