@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { sanitizarFechamentosSalvos } from '../src/services/savedFechamentosStorage';
+import { sanitizarFechamentosSalvos } from '../src/services/sanitizer';
 
 /**
  * Script Executável: Sanitização e Auditoria Forense de Fechamentos Salvos
@@ -30,19 +30,19 @@ function main() {
 
   // Verifica asserções estritas
   let totalViolacoes = 0;
-  result.fechamentos.forEach((f, idx) => {
+  result.fechamentos.forEach((f: any, idx: number) => {
     const universe = f.universoDezenas;
     const universeSet = new Set(universe);
 
     // Valida fixas
-    const fixasInvalidas = f.dezenasFixas.filter((d) => !universeSet.has(d));
-    if (fixasInvalidas.length > 0 || f.dezenasFixas.length > 12) {
+    const fixasInvalidas = (f.dezenasFixas || []).filter((d: number) => !universeSet.has(d));
+    if (fixasInvalidas.length > 0 || (f.dezenasFixas || []).length > 12) {
       console.error(`[ERRO] Fechamento #${idx + 1} (${f.id}): fixas inválidas:`, fixasInvalidas);
       totalViolacoes++;
     }
 
     // Valida tickets
-    (f.tickets || []).forEach((t, tIdx) => {
+    (f.tickets || []).forEach((t: any, tIdx: number) => {
       const dezenas = t.dezenas || (t as any).numbers || [];
       const dezenasFora = dezenas.filter((d: number) => !universeSet.has(d));
       if (dezenasFora.length > 0) {

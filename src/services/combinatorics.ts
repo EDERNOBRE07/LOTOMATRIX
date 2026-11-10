@@ -1434,13 +1434,24 @@ export function generateFechamentoCovering(
   });
 }
 
-export interface GerarMatrizEstratificadaOptions {
+export interface GerarMatrizEstratificadaConfig {
+  universoDezenas?: number[];
+  universo?: number[];
+  dezenas?: number[];
+  selectedNumbers?: number[];
+  totalJogos?: number;
+  totalGames?: number;
+  jogos?: number;
   dezenasFixas?: number[];
+  fixedNumbers?: number[];
   concursoAnterior?: number[];
   aiScores?: number[];
   targetHits?: number;
   filters?: FilterCriteria;
+  [key: string]: any;
 }
+
+export type GerarMatrizEstratificadaOptions = GerarMatrizEstratificadaConfig;
 
 /**
  * Matriz Estratificada Anti-Cisne Negro (Lotofácil Pro)
@@ -1452,11 +1463,42 @@ export interface GerarMatrizEstratificadaOptions {
  * Aplica Frequency Cap dinâmico em dezenas variáveis para impedir saturação de números não-sorteados.
  */
 export function gerarMatrizEstratificada(
-  universoDezenas: number[],
-  totalJogos: number = 24,
-  options: GerarMatrizEstratificadaOptions = {}
+  configOrUniverso: GerarMatrizEstratificadaConfig | number[],
+  totalJogosParam: number = 24,
+  optionsParam: GerarMatrizEstratificadaOptions = {}
 ): GameTicket[] {
-  const sortedPool = [...new Set(universoDezenas)].sort((a, b) => a - b);
+  let rawUniverso: number[] = [];
+  let totalJogos = 24;
+  let options: GerarMatrizEstratificadaOptions = {};
+
+  if (Array.isArray(configOrUniverso)) {
+    rawUniverso = configOrUniverso;
+    totalJogos = totalJogosParam ?? 24;
+    options = optionsParam ?? {};
+  } else if (configOrUniverso && typeof configOrUniverso === 'object') {
+    rawUniverso =
+      configOrUniverso.universoDezenas ||
+      configOrUniverso.universo ||
+      configOrUniverso.dezenas ||
+      configOrUniverso.selectedNumbers ||
+      [];
+    totalJogos =
+      configOrUniverso.totalJogos ||
+      configOrUniverso.totalGames ||
+      configOrUniverso.jogos ||
+      totalJogosParam ||
+      24;
+    options = {
+      dezenasFixas: configOrUniverso.dezenasFixas || configOrUniverso.fixedNumbers,
+      concursoAnterior: configOrUniverso.concursoAnterior,
+      aiScores: configOrUniverso.aiScores,
+      targetHits: configOrUniverso.targetHits,
+      filters: configOrUniverso.filters,
+      ...optionsParam,
+    };
+  }
+
+  const sortedPool = [...new Set(rawUniverso)].sort((a, b) => a - b);
   const n = sortedPool.length;
 
   if (n < 15) {
@@ -1473,7 +1515,7 @@ export function gerarMatrizEstratificada(
   const concursoAnterior = options.concursoAnterior || CONCURSO_ATUAL.dezenas;
   const aiScores = options.aiScores;
 
-  // 2. Cálculo das cotas estratificadas
+  // 2. Cálculo das cotas estratificadas obrigatórias
   // Ex: 24 jogos -> 18 na Zona de Ouro (75%), 4 em Cauda Baixa (15%), 2 em Cauda Alta (10%)
   const qtdOuro = Math.max(1, Math.round(totalJogos * 0.75));
   const qtdCaudaBaixa = Math.max(1, Math.round(totalJogos * 0.15));
@@ -1494,60 +1536,19 @@ export function gerarMatrizEstratificada(
 
   for (const combo of rawCombos) {
     const soma = combo.reduce((a, b) => a + b, 0);
-    const maxSeq = getMaxConsecutiveSequence(combo);
-    const pares = combo.filter((d) => d % 2 === 0).length;
-    const primos = combo.filter((d) => PRIMOS.includes(d)).length;
-    const moldura = combo.filter((d) => MOLDURA.includes(d)).length;
-    const cruz = combo.filter((d) => CRUZ_DEZENAS.includes(d)).length;
-    const bola1 = combo[0];
-    const bola15 = combo[combo.length - 1];
 
     if (isHistorical15Collision(combo)) continue;
 
-    // Estrato 1: Zona de Ouro (Soma 180-215, padrões canônicos equilibrados)
-    if (
-      soma >= 180 &&
-      soma <= 215 &&
-      maxSeq <= 6 &&
-      pares >= 5 &&
-      pares <= 10 &&
-      primos >= 3 &&
-      primos <= 8 &&
-      moldura >= 7 &&
-      moldura <= 12 &&
-      cruz >= 3 &&
-      cruz <= 8 &&
-      bola1 <= 4 &&
-      bola15 >= 22
-    ) {
+    // Estrato 1: Zona de Ouro (Soma 180-215, regras canônicas padrão)
+    if (soma >= 180 && soma <= 215) {
       candidatosOuro.push(combo);
     }
     // Estrato 2: Proteção de Cauda Baixa (Soma 155-179, autorizando > 7 consecutivas como 03-10 no #3825)
-    else if (
-      soma >= 155 &&
-      soma <= 179 &&
-      maxSeq <= 9 && // Permite sequências consecutivas longas (> 7 consecutivas)
-      pares >= 4 &&
-      pares <= 11 &&
-      primos >= 3 &&
-      primos <= 8 &&
-      bola1 <= 4 &&
-      bola15 >= 20
-    ) {
+    else if (soma >= 155 && soma <= 179) {
       candidatosCaudaBaixa.push(combo);
     }
-    // Estrato 3: Proteção de Cauda Alta (Soma 216-230)
-    else if (
-      soma >= 216 &&
-      soma <= 230 &&
-      maxSeq <= 6 &&
-      pares >= 4 &&
-      pares <= 11 &&
-      primos >= 3 &&
-      primos <= 8 &&
-      bola1 <= 4 &&
-      bola15 >= 22
-    ) {
+    // Estrato 3: Proteção de Cauda Alta (Soma 216-230, extremos superiores de cauda)
+    else if (soma >= 216 && soma <= 230) {
       candidatosCaudaAlta.push(combo);
     }
   }
