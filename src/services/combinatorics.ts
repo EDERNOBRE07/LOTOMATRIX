@@ -71,22 +71,39 @@ export type {
   AuditoriaCompletaResultado,
 } from './tabelasCoberturaLJCR';
 
+export interface DetalheAuditoriaTicket {
+  index: number;
+  soma: number;
+  pares: number;
+  primos: number;
+  moldura: number;
+  maxConsecutivas: number;
+  status: 'conforme' | 'protecao_cauda' | 'fora_faixa';
+  mensagem: string;
+}
+
 export interface AuditoriaTicketsResultado {
   total: number;
+  somaDentroCount: number;
   estritosCount: number;
   protecaoBordaCount: number;
   foraPadraoCount: number;
+  taxaConformidadeSoma: number;
+  percentualConformidade: number;
   resumo: string;
+  detalhesPorTicket?: DetalheAuditoriaTicket[];
 }
 
 /**
  * Validador Dinâmico de Conformidade dos Tickets Gerados
  * Audita se cada bilhete está 100% dentro dos filtros canônicos estritos
  * ou alocado na cota de proteção de borda (Anti-Cisne Negro).
+ * Grava o resumo dos resultados (ex: '20/20 bilhetes dentro da faixa')
+ * na propriedade 'auditoriaAnomalias' de cada objeto de ticket.
  */
 export function auditarTicketsGerados(
   tickets: GameTicket[],
-  configFechamento?: {
+  configOrFilters?: FilterCriteria | {
     filters?: FilterCriteria;
     universoDezenas?: number[];
     dezenasFixas?: number[];
@@ -95,14 +112,23 @@ export function auditarTicketsGerados(
   if (!tickets || tickets.length === 0) {
     return {
       total: 0,
+      somaDentroCount: 0,
       estritosCount: 0,
       protecaoBordaCount: 0,
       foraPadraoCount: 0,
-      resumo: '0/0 bilhetes auditados',
+      taxaConformidadeSoma: 0,
+      percentualConformidade: 0,
+      resumo: '0/0 bilhetes dentro da faixa',
+      detalhesPorTicket: [],
     };
   }
 
-  const f = configFechamento?.filters;
+  // Suporta tanto o objeto de filtros diretamente quanto embrulhado em configFechamento
+  const f: FilterCriteria | undefined =
+    configOrFilters && 'somaMin' in configOrFilters
+      ? (configOrFilters as FilterCriteria)
+      : (configOrFilters as any)?.filters;
+
   const minSoma = f?.minSoma ?? f?.somaMin ?? 180;
   const maxSoma = f?.maxSoma ?? f?.somaMax ?? 215;
   const minPares = f?.minPares ?? f?.paresMin ?? 6;
@@ -128,10 +154,11 @@ export function auditarTicketsGerados(
     }
   });
 
-  const resumoSoma = `${somaDentroCount}/${total} bilhetes dentro dos parâmetros de soma`;
+  const resumoFaixa = `${somaDentroCount}/${total} bilhetes dentro da faixa`;
+  const detalhes: DetalheAuditoriaTicket[] = [];
 
-  // Segundo passo: audita cada ticket individualmente e grava o resumo real no campo auditoriaAnomalias
-  tickets.forEach((t) => {
+  // Segundo passo: audita cada ticket individualmente e grava o resumo real na propriedade auditoriaAnomalias
+  tickets.forEach((t, idx) => {
     const dezenas = t.dezenas || (t as any).numbers || [];
     const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
     const maxSeq = t.maxConsecutivas ?? getMaxConsecutiveSequence(dezenas);
@@ -153,23 +180,63 @@ export function auditarTicketsGerados(
 
     if (somaOk && paresOk && primosOk && molduraOk && seqOk) {
       estritosCount++;
-      t.auditoriaAnomalias = `${resumoSoma} • Padrão Ouro (Soma: ${soma}, ${pares}P/${15 - pares}I, ${primos} Primos)`;
+      const msg = `${resumoFaixa} • Padrão Ouro (Soma: ${soma}, ${pares}P/${15 - pares}I, ${primos} Primos)`;
+      t.auditoriaAnomalias = msg;
+      detalhes.push({
+        index: t.index ?? idx + 1,
+        soma,
+        pares,
+        primos,
+        moldura,
+        maxConsecutivas: maxSeq,
+        status: 'conforme',
+        mensagem: msg,
+      });
     } else if (isBorda) {
       protecaoBordaCount++;
-      t.auditoriaAnomalias = `${resumoSoma} • Proteção de Cauda Anti-Cisne Negro (Soma: ${soma}, Seq: ${maxSeq})`;
+      const msg = `${resumoFaixa} • Proteção de Cauda Anti-Cisne Negro (Soma: ${soma}, Seq: ${maxSeq})`;
+      t.auditoriaAnomalias = msg;
+      detalhes.push({
+        index: t.index ?? idx + 1,
+        soma,
+        pares,
+        primos,
+        moldura,
+        maxConsecutivas: maxSeq,
+        status: 'protecao_cauda',
+        mensagem: msg,
+      });
     } else {
       foraPadraoCount++;
-      t.auditoriaAnomalias = `${resumoSoma} • Fora do Padrão Estrito (Soma: ${soma}, ${pares}P, ${primos} Primos)`;
+      const msg = `${resumoFaixa} • Fora da Faixa Estrita (Soma: ${soma}, ${pares}P, ${primos} Primos)`;
+      t.auditoriaAnomalias = msg;
+      detalhes.push({
+        index: t.index ?? idx + 1,
+        soma,
+        pares,
+        primos,
+        moldura,
+        maxConsecutivas: maxSeq,
+        status: 'fora_faixa',
+        mensagem: msg,
+      });
     }
   });
 
-  const resumo = `${resumoSoma} • ${estritosCount}/${total} conformidade estrita`;
+  const percentualConformidade = total > 0 ? Math.round(((estritosCount + protecaoBordaCount) / total) * 100) : 0;
+  const taxaConformidadeSoma = total > 0 ? Math.round((somaDentroCount / total) * 100) : 0;
+  const resumo = `${resumoFaixa} (${taxaConformidadeSoma}%) • ${estritosCount}/${total} em Padrão Ouro`;
+
   return {
     total,
+    somaDentroCount,
     estritosCount,
     protecaoBordaCount,
     foraPadraoCount,
+    taxaConformidadeSoma,
+    percentualConformidade,
     resumo,
+    detalhesPorTicket: detalhes,
   };
 }
 

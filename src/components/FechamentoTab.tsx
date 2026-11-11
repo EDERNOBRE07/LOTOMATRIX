@@ -34,6 +34,7 @@ import {
   IndicadorGarantiaPayload,
 } from '../services/combinatorics';
 import { CentralUnificadaFechamento } from './CentralUnificadaFechamento';
+import { BentoGridFechamento } from './BentoGridFechamento';
 import { IndicadorGarantiaLJCR } from './IndicadorGarantiaLJCR';
 import { HistogramaDistribuicaoAcertos } from './HistogramaDistribuicaoAcertos';
 import { SeletorPresetsEstatisticos, StatisticalPresetOption } from './SeletorPresetsEstatisticos';
@@ -3139,186 +3140,54 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           />
 
           {/* ========================================================================= */}
-          {/* BARRA DE MOTORES DE GERAÇÃO RÁPIDA (BENTO GRID RESPONSIVO 4 COLUNAS)      */}
+          {/* BENTO GRID RESPONSIVO: MOTORES, MATRIZ ESTRATIFICADA, FILTROS & EXPORTAÇÃO */}
           {/* ========================================================================= */}
-          <div className="space-y-3 pt-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
-              <div className="flex items-center gap-2 text-xs text-slate-300 font-bold">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Barra de Motores de Geração Rápida • Filtros Canônicos e Proteção Estatística</span>
-              </div>
-              <span className="text-[11px] text-slate-400 hidden sm:inline">
-                Todos os 4 motores calibrados com garantia matemática de cobertura
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Card 1: GERADOR TURBO */}
-              <button
-                type="button"
-                onClick={() => setIsTurboModalOpen(true)}
-                className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/30 hover:border-emerald-400 hover:from-slate-850 hover:to-emerald-950/50 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all text-left group cursor-pointer"
-                title="Gera fechamento com garantia matemática de 14 pontos em menos de 2 segundos utilizando força bruta paralela em Web Worker"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
-                      &lt; 2s • WEB WORKER
-                    </span>
-                    <Zap className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform fill-current" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-emerald-300 transition-colors">
-                    Gerador Turbo
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-semibold">
-                    Força Bruta 14 Pts • 100% Auditado
-                  </p>
-                </div>
-                <div className="pt-3 mt-2 border-t border-emerald-500/20 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
-                  <span>Executar Background</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 2: SEQUÊNCIAS OTIMIZADAS */}
-              <button
-                type="button"
-                onClick={handleGenerateFibonacci}
-                disabled={isGenerating}
-                className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-sky-500/40 bg-gradient-to-b from-slate-900 to-sky-950/30 hover:border-sky-400 hover:from-slate-850 hover:to-sky-950/50 shadow-lg shadow-sky-500/10 hover:shadow-sky-500/25 transition-all text-left group cursor-pointer disabled:opacity-60"
-                title="Cria automaticamente 5 jogos baseados em distribuições de Fibonacci, garantindo que pelo menos 3 jogos sigam a Regra de Ouro de soma (190-210)"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-sky-400 text-slate-950 shadow-sm">
-                      5 JOGOS
-                    </span>
-                    <Sparkles className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-sky-300 transition-colors">
-                    Padrões Fibonacci
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-semibold">
-                    ≥ 3 Fibo • Regra de Ouro (190–210)
-                  </p>
-                </div>
-                <div className="pt-3 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
-                  <span>5 Sequências Otimizadas</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 3: FECHAMENTO PONDERADO */}
-              <button
-                type="button"
-                onClick={handleGeneratePonderado}
-                disabled={selectedNumbers.length < targetCount || isGenerating}
-                className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-purple-500/40 bg-gradient-to-b from-slate-900 to-purple-950/30 hover:border-purple-400 hover:from-slate-850 hover:to-purple-950/50 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/25 transition-all text-left group cursor-pointer ${
-                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
-                title="Gera combinações priorizando dezenas com alto Índice de Performance (relação frequência x atraso) e descartando combinações fora do intervalo provável das 50 apurações"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-purple-400 text-slate-950 shadow-sm">
-                      IP &amp; ROBUSTEZ
-                    </span>
-                    <Flame className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform fill-current" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-purple-300 transition-colors">
-                    Fechamento Ponderado
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-semibold">
-                    Frequência × Atraso • 50 Apurações
-                  </p>
-                </div>
-                <div className="pt-3 mt-2 border-t border-purple-500/20 flex items-center justify-between text-[10px] text-purple-400 font-bold">
-                  <span>Ponderação Probabilística</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 4: ANTI-CISNE NEGRO */}
-              <button
-                type="button"
-                onClick={handleGenerateEstratificada}
-                disabled={selectedNumbers.length < targetCount || isGenerating}
-                className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-amber-500/50 bg-gradient-to-b from-slate-900 to-amber-950/30 hover:border-amber-400 hover:from-slate-850 hover:to-amber-950/50 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/25 transition-all text-left group cursor-pointer ${
-                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
-                title="Distribui os jogos em 75% Zona de Ouro (soma 180-215), 15% Proteção de Cauda Baixa (soma 155-179, permitindo >7 consecutivas como no Concurso 3825) e 10% Cauda Alta (soma 216-230)"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
-                      75 / 15 / 10% • PRO
-                    </span>
-                    <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
-                    Anti-Cisne Negro
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-semibold">
-                    Matriz Estratificada 3 Níveis
-                  </p>
-                </div>
-                <div className="pt-3 mt-2 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-amber-300 font-bold">
-                  <span>Blindagem Concurso #3825</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-            </div>
-
-            {/* Barra de Resumo e Botão Principal de Processamento */}
-            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 shadow-lg">
-              <div className="flex flex-wrap items-center gap-3 text-xs">
-                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                  Universo: <strong className="text-white font-mono">{selectedNumbers.length}/{targetCount}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                  Fixas: <strong className="text-cyan-300 font-mono">{fixedNumbers.length}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                  Jogos: <strong className="text-emerald-400 font-mono">{preset.jogosMaximos}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                  Investimento: <strong className="text-amber-300 font-mono">R$ {(preset.jogosMaximos * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
-                  Garantia: <strong className="text-emerald-300">{preset.garantia}</strong>
-                </span>
-              </div>
-
-              {/* Botão Principal de Processar Matriz do Volante */}
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={selectedNumbers.length < targetCount || isGenerating}
-                className={`flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl font-black text-xs sm:text-sm tracking-wide transition-all shadow-xl cursor-pointer whitespace-nowrap ${
-                  selectedNumbers.length === targetCount && !isGenerating
-                    ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] active:scale-[0.98]'
-                    : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
-                }`}
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                    <span>PROCESSANDO...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4 fill-current" />
-                    <span>
-                      {selectedNumbers.length === targetCount
-                        ? `PROCESSAR & GERAR ${preset.jogosMaximos} JOGOS`
-                        : `SELECIONE MAIS ${targetCount - selectedNumbers.length} DEZENA(S)`}
-                    </span>
-                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+          <BentoGridFechamento
+            targetCount={targetCount}
+            selectedNumbers={selectedNumbers}
+            fixedNumbers={fixedNumbers}
+            preset={preset}
+            filters={filters}
+            isGenerating={isGenerating}
+            onOpenTurboModal={() => setIsTurboModalOpen(true)}
+            onGenerateEstratificada={handleGenerateEstratificada}
+            activePreset={
+              filters.presetEstatistico === 'conservador'
+                ? 'conservador'
+                : filters.presetEstatistico === 'agressivo'
+                ? 'agressivo'
+                : (filters.somaMin === 155 && filters.somaMax === 230)
+                ? 'anti_cisne_negro'
+                : 'balanceado'
+            }
+            onSelectPreset={(p) => {
+              if (p === 'anti_cisne_negro') {
+                setFilters((prev) => ({
+                  ...prev,
+                  somaMin: 155,
+                  somaMax: 230,
+                  maxConsecutivas: 8,
+                  presetEstatistico: 'custom',
+                }));
+                soundService.playFilterClick();
+              } else {
+                handleSelectStatisticalPreset(PRESETS_LOTOFACIL[p]);
+              }
+            }}
+            onGeneratePonderado={handleGeneratePonderado}
+            onGenerateFibonacci={handleGenerateFibonacci}
+            onGeneratePrimary={handleGenerate}
+            hasGeneratedTickets={generatedTickets.length > 0}
+            generatedTicketsCount={generatedTickets.length}
+            onExportPDF={handleExportPDF}
+            onExportCartoesPDF={handleExportCartoesPDF}
+            onExportCSV={handleExportCSV}
+            onDownloadTXT={handleDownloadTXT}
+            onExportCologa={handleExportCologa}
+            onOpenPrintVolantesModal={() => setIsPrintVolantesModalOpen(true)}
+            onGoToSimulator={() => onGoToSimulator(generatedTickets)}
+            onCopyTXT={handleCopyAll}
+          />
         </div>
       </div>
 
