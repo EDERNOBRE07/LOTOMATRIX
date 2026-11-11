@@ -447,7 +447,7 @@ export const BentoGridFechamento: React.FC<BentoGridFechamentoProps> = ({
           type="button"
           onClick={onGeneratePrimary}
           disabled={!isProntoParaGerar}
-          className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-black text-xs sm:text-sm tracking-wide transition-all shadow-xl cursor-pointer whitespace-nowrap shrink-0 ${
+          className={`w-full lg:w-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-black text-xs sm:text-sm tracking-wide transition-all shadow-xl cursor-pointer whitespace-nowrap shrink-0 ${
             isProntoParaGerar
               ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-[1.02] active:scale-[0.98]'
               : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
