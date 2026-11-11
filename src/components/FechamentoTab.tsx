@@ -1759,6 +1759,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         return;
       }
 
+      // Auditoria de conformidade preenchendo auditoriaAnomalias
+      auditarTicketsGerados(result.tickets, fullFilters);
+
       setDiscardedByRobustezCount(result.discardedByRobustezCount);
       setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
       setGeneratedTickets(result.tickets);
@@ -1952,6 +1955,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
     setFilters(fullFilters);
 
+    // Auditoria de conformidade preenchendo auditoriaAnomalias
+    auditarTicketsGerados(tickets, fullFilters);
+
     const exportMeta: FechamentoExportMeta = {
       strategyName: `⚡ Gerador Turbo Força Bruta (${turboRes.elapsedMs}ms)`,
       modeName: `Turbo 14 Pontos (${tickets.length} Jogos - Garantia 100% de 14)`,
@@ -2055,6 +2061,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(fiboMeta));
         } catch {}
 
+        // Auditoria de conformidade preenchendo auditoriaAnomalias
+        auditarTicketsGerados(tickets, filters);
+
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, fiboMeta);
         autoSaveFechamentoPrognostico(tickets, fiboMeta.strategyName || 'Distribuição de Fibonacci Otimizada (Zona de Ouro)', fiboMeta, latestDraw.dezenas);
@@ -2123,6 +2132,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       try {
         localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
       } catch {}
+
+      // Auditoria de conformidade preenchendo auditoriaAnomalias
+      auditarTicketsGerados(tickets, fullFilters);
 
       setGeneratedTickets(tickets);
 

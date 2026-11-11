@@ -321,7 +321,7 @@ export const BentoGridFechamento: React.FC<BentoGridFechamentoProps> = ({
                 </span>
                 <div>
                   <h4 className="text-xs font-black text-white uppercase tracking-tight">
-                    Central de Exportação
+                    Opções de Exportação
                   </h4>
                   <span className="text-[10px] text-slate-400 block font-medium">
                     Dossiês Oficiais da Caixa

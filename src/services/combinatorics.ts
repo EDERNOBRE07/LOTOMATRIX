@@ -103,7 +103,7 @@ export interface AuditoriaTicketsResultado {
  */
 export function auditarTicketsGerados(
   tickets: GameTicket[],
-  configOrFilters?: FilterCriteria | {
+  filtrosAtivos?: FilterCriteria | {
     filters?: FilterCriteria;
     universoDezenas?: number[];
     dezenasFixas?: number[];
@@ -125,9 +125,9 @@ export function auditarTicketsGerados(
 
   // Suporta tanto o objeto de filtros diretamente quanto embrulhado em configFechamento
   const f: FilterCriteria | undefined =
-    configOrFilters && 'somaMin' in configOrFilters
-      ? (configOrFilters as FilterCriteria)
-      : (configOrFilters as any)?.filters;
+    filtrosAtivos && 'somaMin' in filtrosAtivos
+      ? (filtrosAtivos as FilterCriteria)
+      : (filtrosAtivos as any)?.filters;
 
   const minSoma = f?.minSoma ?? f?.somaMin ?? 180;
   const maxSoma = f?.maxSoma ?? f?.somaMax ?? 215;
