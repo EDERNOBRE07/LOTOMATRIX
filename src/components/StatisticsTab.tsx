@@ -120,6 +120,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
+    | 'dispersao_estratificada'
     | 'frequencia_50_d3'
     | 'simulador_historico_d3'
     | 'desempenho_cruz_extremidades'
@@ -209,6 +210,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Resumo Financeiro & ROI</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               RETORNO REAL
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('dispersao_estratificada')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'dispersao_estratificada'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Target className="w-4 h-4 text-emerald-300" />
+            <span>Dispersão Somas Estratificada</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+              75 / 15 / 10%
             </span>
           </button>
 
@@ -2318,6 +2334,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             savedTickets={savedTickets}
             draws={RECENT_DRAWS}
             unitBetCost={VALOR_APOSTA_LOTOFACIL}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: DISPERSÃO SOMAS DA MATRIZ ESTRATIFICADA (RECHARTS 75/15/10%) */}
+      {activeSubTab === 'dispersao_estratificada' && (
+        <div className="space-y-6">
+          <DispersaoSomaEstratificadaRecharts
+            tickets={savedTickets}
+            title="Dispersão de Somas da Matriz Estratificada (Golden Zone vs Caudas)"
           />
         </div>
       )}

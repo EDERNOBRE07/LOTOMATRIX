@@ -36,9 +36,18 @@ export const DispersaoSomaEstratificadaRecharts: React.FC<DispersaoSomaEstratifi
   tickets: propTickets,
   title = 'Dispersão de Somas da Matriz Estratificada (Anti-Cisne Negro)',
 }) => {
-  // Resolve tickets: propTickets se houver, ou dos fechamentos salvos no localStorage
+  // Resolve tickets: propTickets se houver, ou dos tickets ativos/salvos no localStorage
   const ticketsToUse = useMemo(() => {
     if (propTickets && propTickets.length > 0) return propTickets;
+    try {
+      const activeRaw = localStorage.getItem('lotosniper_saved_tickets');
+      if (activeRaw) {
+        const parsed = JSON.parse(activeRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
     const saved = getSavedFechamentos();
     if (saved && saved.length > 0 && saved[0].tickets?.length > 0) {
       return saved[0].tickets;
@@ -76,8 +85,8 @@ export const DispersaoSomaEstratificadaRecharts: React.FC<DispersaoSomaEstratifi
     let foraCount = 0;
 
     const pts: ScatterPoint[] = ticketsToUse.map((t, idx) => {
-      const dezenas = t.dezenas || [];
-      const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
+      const dezenas: number[] = t.dezenas || (t as any).numbers || [];
+      const soma = t.soma ?? dezenas.reduce((a: number, b: number) => a + b, 0);
       let cat: 'gold' | 'cauda_baixa' | 'cauda_alta' | 'fora' = 'fora';
 
       if (soma >= 180 && soma <= 215) {
@@ -97,8 +106,8 @@ export const DispersaoSomaEstratificadaRecharts: React.FC<DispersaoSomaEstratifi
         id: t.id || `t-${idx + 1}`,
         index: idx + 1,
         soma,
-        pares: t.pares ?? dezenas.filter((d) => d % 2 === 0).length,
-        impares: t.impares ?? dezenas.filter((d) => d % 2 !== 0).length,
+        pares: t.pares ?? dezenas.filter((d: number) => d % 2 === 0).length,
+        impares: t.impares ?? dezenas.filter((d: number) => d % 2 !== 0).length,
         primos: t.primos ?? 6,
         moldura: t.moldura ?? 10,
         dezenas,
