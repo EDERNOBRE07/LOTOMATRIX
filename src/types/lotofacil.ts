@@ -79,6 +79,15 @@ export interface FilterCriteria {
   validacaoEstritaCruz?: boolean; // Modo Validação Estrita: restringe estritamente para 5-6 dezenas na Cruz da Lotofácil
   strictValidation?: boolean; // Trava booleana de Validação Estrita: descarta jogos fora de 5 a 6 dezenas na Cruz
   presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'custom';
+  // Aliases canônicos de limites de filtros
+  minSoma?: number;
+  maxSoma?: number;
+  minPares?: number;
+  maxPares?: number;
+  minPrimos?: number;
+  maxPrimos?: number;
+  minMoldura?: number;
+  maxMoldura?: number;
 }
 
 export type FechamentoMode = 
@@ -121,6 +130,8 @@ export interface GameTicket {
   maxConsecutivas: number;
   scoreIA: number;
   tags?: string[];
+  auditoriaAnomalias?: string;
+  faixaSoma?: 'ouro' | 'baixa' | 'alta';
 }
 
 export interface SimulationResult {

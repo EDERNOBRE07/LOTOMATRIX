@@ -63,6 +63,8 @@ import { CurvaDistribuicaoSomasD3 } from './CurvaDistribuicaoSomasD3';
 import { DesempenhoFiltrosUltimos10Recharts } from './DesempenhoFiltrosUltimos10Recharts';
 import { ResumoFinanceiro } from './ResumoFinanceiro';
 import { FrequenciaDezenasD3 } from './FrequenciaDezenasD3';
+import { CiclosHistoricoRecharts } from './CiclosHistoricoRecharts';
+import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificadaRecharts';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket, FilterCriteria } from '../types/lotofacil';
@@ -2175,6 +2177,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               concursos de duração).
             </p>
           </div>
+
+          {/* Gráfico Recharts de Evolução e Duração dos Ciclos com Linha de Média */}
+          <CiclosHistoricoRecharts />
         </div>
       )}
 
@@ -2298,6 +2303,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               }
             }}
           />
+          <DispersaoSomaEstratificadaRecharts tickets={savedTickets} />
           <AnaliseVarianciaComponent
             latestDraw={latestDraw}
             onApplyBiasRecommendation={onApplyNumbers}

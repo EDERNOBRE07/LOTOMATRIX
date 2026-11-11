@@ -102,33 +102,70 @@ export function auditarTicketsGerados(
     };
   }
 
+  const f = configFechamento?.filters;
+  const minSoma = f?.minSoma ?? f?.somaMin ?? 180;
+  const maxSoma = f?.maxSoma ?? f?.somaMax ?? 215;
+  const minPares = f?.minPares ?? f?.paresMin ?? 6;
+  const maxPares = f?.maxPares ?? f?.paresMax ?? 9;
+  const minPrimos = f?.minPrimos ?? f?.primosMin ?? 4;
+  const maxPrimos = f?.maxPrimos ?? f?.primosMax ?? 7;
+  const minMoldura = f?.minMoldura ?? f?.molduraMin ?? 8;
+  const maxMoldura = f?.maxMoldura ?? f?.molduraMax ?? 11;
+  const maxSeqLimit = f?.maxConsecutivas ?? 6;
+
   let estritosCount = 0;
   let protecaoBordaCount = 0;
   let foraPadraoCount = 0;
+  let somaDentroCount = 0;
+  const total = tickets.length;
 
+  // Primeiro passo: computa conformidade global da métrica de soma
+  tickets.forEach((t) => {
+    const dezenas = t.dezenas || (t as any).numbers || [];
+    const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
+    if (soma >= minSoma && soma <= maxSoma) {
+      somaDentroCount++;
+    }
+  });
+
+  const resumoSoma = `${somaDentroCount}/${total} bilhetes dentro dos parâmetros de soma`;
+
+  // Segundo passo: audita cada ticket individualmente e grava o resumo real no campo auditoriaAnomalias
   tickets.forEach((t) => {
     const dezenas = t.dezenas || (t as any).numbers || [];
     const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
     const maxSeq = t.maxConsecutivas ?? getMaxConsecutiveSequence(dezenas);
+    const pares = t.pares ?? dezenas.filter((d) => d % 2 === 0).length;
+    const primos = t.primos ?? dezenas.filter((d) => PRIMOS.includes(d)).length;
+    const moldura = t.moldura ?? dezenas.filter((d) => MOLDURA.includes(d)).length;
+
+    const somaOk = soma >= minSoma && soma <= maxSoma;
+    const paresOk = pares >= minPares && pares <= maxPares;
+    const primosOk = primos >= minPrimos && primos <= maxPrimos;
+    const molduraOk = moldura >= minMoldura && moldura <= maxMoldura;
+    const seqOk = maxSeq <= maxSeqLimit;
 
     // Cota de proteção de cauda / borda (Soma 155-179 ou 216-230, ou até 8 consecutivas como no Concurso 3825)
     const isBorda =
       (soma >= 155 && soma < 180) ||
       (soma > 215 && soma <= 230) ||
-      (maxSeq > 6 && maxSeq <= 8);
+      (maxSeq > 6 && maxSeq <= 9);
 
-    if (isBorda) {
-      protecaoBordaCount++;
-    } else if (!isCanonicalAnomaly(dezenas)) {
+    if (somaOk && paresOk && primosOk && molduraOk && seqOk) {
       estritosCount++;
+      t.auditoriaAnomalias = `${resumoSoma} • Padrão Ouro (Soma: ${soma}, ${pares}P/${15 - pares}I, ${primos} Primos)`;
+    } else if (isBorda) {
+      protecaoBordaCount++;
+      t.auditoriaAnomalias = `${resumoSoma} • Proteção de Cauda Anti-Cisne Negro (Soma: ${soma}, Seq: ${maxSeq})`;
     } else {
       foraPadraoCount++;
+      t.auditoriaAnomalias = `${resumoSoma} • Fora do Padrão Estrito (Soma: ${soma}, ${pares}P, ${primos} Primos)`;
     }
   });
 
-  const resumo = `${estritosCount}/${tickets.length} bilhetes 100% dentro dos filtros estritos | ${protecaoBordaCount} bilhetes em cota de proteção de borda`;
+  const resumo = `${resumoSoma} • ${estritosCount}/${total} conformidade estrita`;
   return {
-    total: tickets.length,
+    total,
     estritosCount,
     protecaoBordaCount,
     foraPadraoCount,
@@ -1537,9 +1574,44 @@ export function gerarMatrizEstratificada(
   const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
   const neededFromNonFixed = 15 - effectiveFixas.length;
 
-  const rawCombos = getCombinations(nonFixedPool, neededFromNonFixed).map((tail) =>
-    [...effectiveFixas, ...tail].sort((a, b) => a - b)
-  );
+  const countPossibleCombos = (nVal: number, kVal: number): number => {
+    if (kVal < 0 || kVal > nVal) return 0;
+    if (kVal === 0 || kVal === nVal) return 1;
+    let c = 1;
+    for (let i = 1; i <= kVal; i++) c = (c * (nVal - (kVal - i))) / i;
+    return Math.round(c);
+  };
+
+  const totalPossible = countPossibleCombos(nonFixedPool.length, neededFromNonFixed);
+  let rawCombos: number[][] = [];
+
+  if (totalPossible <= 40000) {
+    rawCombos = getCombinations(nonFixedPool, neededFromNonFixed).map((tail) =>
+      [...effectiveFixas, ...tail].sort((a, b) => a - b)
+    );
+  } else {
+    const sampleSet = new Set<string>();
+    const maxSamples = Math.min(6000, Math.max(3000, totalJogos * 200));
+    const poolCopy = [...nonFixedPool];
+    const poolLen = poolCopy.length;
+    let attempts = 0;
+    while (rawCombos.length < maxSamples && attempts < maxSamples * 2.5) {
+      attempts++;
+      for (let i = 0; i < neededFromNonFixed; i++) {
+        const r = i + Math.floor(Math.random() * (poolLen - i));
+        const temp = poolCopy[i];
+        poolCopy[i] = poolCopy[r];
+        poolCopy[r] = temp;
+      }
+      const chosenTail = poolCopy.slice(0, neededFromNonFixed);
+      const fullCombo = [...effectiveFixas, ...chosenTail].sort((a, b) => a - b);
+      const key = fullCombo.join('-');
+      if (!sampleSet.has(key)) {
+        sampleSet.add(key);
+        rawCombos.push(fullCombo);
+      }
+    }
+  }
 
   // 4. Classificação dos candidatos por estrato estatístico
   const candidatosOuro: number[][] = [];
