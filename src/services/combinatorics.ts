@@ -178,10 +178,12 @@ export function auditarTicketsGerados(
       (soma > 215 && soma <= 230) ||
       (maxSeq > 6 && maxSeq <= 9);
 
+    // Grava o resumo de conformidade (ex: '20/20 bilhetes dentro da faixa') na propriedade auditoriaAnomalias
+    t.auditoriaAnomalias = resumoFaixa;
+
     if (somaOk && paresOk && primosOk && molduraOk && seqOk) {
       estritosCount++;
       const msg = `${resumoFaixa} • Padrão Ouro (Soma: ${soma}, ${pares}P/${15 - pares}I, ${primos} Primos)`;
-      t.auditoriaAnomalias = msg;
       detalhes.push({
         index: t.index ?? idx + 1,
         soma,
@@ -195,7 +197,6 @@ export function auditarTicketsGerados(
     } else if (isBorda) {
       protecaoBordaCount++;
       const msg = `${resumoFaixa} • Proteção de Cauda Anti-Cisne Negro (Soma: ${soma}, Seq: ${maxSeq})`;
-      t.auditoriaAnomalias = msg;
       detalhes.push({
         index: t.index ?? idx + 1,
         soma,
@@ -209,7 +210,6 @@ export function auditarTicketsGerados(
     } else {
       foraPadraoCount++;
       const msg = `${resumoFaixa} • Fora da Faixa Estrita (Soma: ${soma}, ${pares}P, ${primos} Primos)`;
-      t.auditoriaAnomalias = msg;
       detalhes.push({
         index: t.index ?? idx + 1,
         soma,

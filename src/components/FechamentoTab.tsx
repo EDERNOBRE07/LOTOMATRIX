@@ -2588,6 +2588,141 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* BARRA DE MOTORES DE GERAÇÃO RÁPIDA (BENTO GRID RESPONSIVO)               */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <Zap className="w-4 h-4 fill-current" />
+            </span>
+            <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
+              Motores Cirúrgicos de Geração Rápida
+            </h3>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700 font-bold">
+              100% AUDITADOS
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            Alturas uniformes e visibilidade total em dispositivos móveis e desktop
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+          {/* Card 1: GERADOR TURBO */}
+          <button
+            type="button"
+            onClick={() => setIsTurboModalOpen(true)}
+            className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/30 hover:border-emerald-400 hover:from-slate-850 hover:to-emerald-950/50 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all text-left group cursor-pointer"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
+                  &lt; 2s • WEB WORKER
+                </span>
+                <Zap className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform fill-current" />
+              </div>
+              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-emerald-300 transition-colors">
+                Gerador Turbo
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                Força Bruta 14 Pts • 100% Auditado
+              </p>
+            </div>
+            <div className="pt-3 mt-2 border-t border-emerald-500/20 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
+              <span>Execução Paralela</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card 2: SEQUÊNCIAS OTIMIZADAS */}
+          <button
+            type="button"
+            onClick={handleGenerateFibonacci}
+            disabled={isGenerating}
+            className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-sky-500/40 bg-gradient-to-b from-slate-900 to-sky-950/30 hover:border-sky-400 hover:from-slate-850 hover:to-sky-950/50 shadow-lg shadow-sky-500/10 hover:shadow-sky-500/25 transition-all text-left group cursor-pointer disabled:opacity-60"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-sky-400 text-slate-950 shadow-sm">
+                  5 JOGOS
+                </span>
+                <Sparkles className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-sky-300 transition-colors">
+                Padrões Fibonacci
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                ≥ 3 Fibo • Regra de Ouro (190–210)
+              </p>
+            </div>
+            <div className="pt-3 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
+              <span>Série Áurea da Matemática</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card 3: FECHAMENTO PONDERADO */}
+          <button
+            type="button"
+            onClick={handleGeneratePonderado}
+            disabled={selectedNumbers.length < targetCount || isGenerating}
+            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-purple-500/40 bg-gradient-to-b from-slate-900 to-purple-950/30 hover:border-purple-400 hover:from-slate-850 hover:to-purple-950/50 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/25 transition-all text-left group cursor-pointer ${
+              selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-purple-400 text-slate-950 shadow-sm">
+                  IP &amp; ROBUSTEZ
+                </span>
+                <Flame className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform fill-current" />
+              </div>
+              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-purple-300 transition-colors">
+                Fechamento Ponderado
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                Frequência × Atraso • 50 Apurações
+              </p>
+            </div>
+            <div className="pt-3 mt-2 border-t border-purple-500/20 flex items-center justify-between text-[10px] text-purple-400 font-bold">
+              <span>Índice de Performance</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card 4: ANTI-CISNE NEGRO */}
+          <button
+            type="button"
+            onClick={handleGenerateEstratificada}
+            disabled={selectedNumbers.length < targetCount || isGenerating}
+            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-amber-500/50 bg-gradient-to-b from-slate-900 to-amber-950/30 hover:border-amber-400 hover:from-slate-850 hover:to-amber-950/50 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/25 transition-all text-left group cursor-pointer ${
+              selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
+                  75 / 15 / 10% • PRO
+                </span>
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                Anti-Cisne Negro
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                Matriz Estratificada 3 Níveis
+              </p>
+            </div>
+            <div className="pt-3 mt-2 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-amber-300 font-bold">
+              <span>Blindagem Concurso #3825</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* CENTRAL UNIFICADA DE FECHAMENTOS & MOTORES CIRÚRGICOS */}
       <CentralUnificadaFechamento
         mode={mode}
