@@ -28,6 +28,7 @@ import {
 } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import { downloadRelatorioFechamentoAtivoPDF } from '../services/relatorioFechamentoAtivoPdf';
+export { downloadRelatorioFechamentoAtivoPDF, downloadRelatorioFechamentoAtivoPDF as gerarEDispararRelatorioPDF };
 import jsPDF from 'jspdf';
 import Papa from 'papaparse';
 import {
