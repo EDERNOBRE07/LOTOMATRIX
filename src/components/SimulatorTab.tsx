@@ -146,10 +146,14 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           <button
             type="button"
             onClick={() => setActiveSubTab('duelo_algoritmos')}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500/25 to-pink-500/25 hover:from-rose-500/40 hover:to-pink-500/40 border border-rose-500/50 text-rose-300 font-bold text-xs transition cursor-pointer shadow-sm"
-            title="Modo Duelo: Comparar Garantia 14 pts vs Filtro de IA lado a lado em gráfico de barras de acertos"
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer shadow-sm ${
+              activeSubTab === 'duelo_algoritmos'
+                ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white font-black border-rose-400 shadow-rose-500/25'
+                : 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/40 text-rose-300'
+            }`}
+            title="Modo Duelo: Comparar Garantia 14 pts vs Filtro de IA e auditar fechamentos do backup"
           >
-            <Swords className="w-4 h-4 text-rose-400" />
+            <Swords className="w-4 h-4 text-rose-300" />
             <span>⚔️ Modo Duelo (14 Pts vs IA)</span>
           </button>
 

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { GameTicket, LotofacilDraw, DezenaStats, SimulationResult } from '../types/lotofacil';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { GameTicket, LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { RECENT_DRAWS, CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 import {
   generateFechamentoCovering,
@@ -7,9 +7,10 @@ import {
   runSimulation,
   countMatches,
   DEFAULT_FILTERS,
-  FECHAMENTO_PRESETS,
 } from '../services/combinatorics';
 import { getSavedFechamentos, SavedFechamentoPrognostico } from '../services/savedFechamentosStorage';
+import { restoreBackupFromJSON } from '../services/backupManagerService';
+import { soundService } from '../services/soundAlert';
 import {
   ResponsiveContainer,
   BarChart,
@@ -18,7 +19,6 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
   ReferenceLine,
   Cell,
 } from 'recharts';
@@ -36,6 +36,15 @@ import {
   BarChart3,
   CheckCircle2,
   Percent,
+  Upload,
+  FileJson,
+  AlertTriangle,
+  Flame,
+  ArrowUpRight,
+  Star,
+  Check,
+  Target,
+  FileText,
 } from 'lucide-react';
 
 interface AlgorithmDuelSimulatorProps {
@@ -72,7 +81,7 @@ interface StrategyDefinition {
   badge: string;
 }
 
-const STRATEGIES: StrategyDefinition[] = [
+const CANONICAL_STRATEGIES: StrategyDefinition[] = [
   {
     key: 'garantia_14_pts',
     name: '🎯 Garantia 14 Pontos (Fechamento 18D • 14 se 15 • 24 Jogos)',
@@ -183,6 +192,27 @@ const STRATEGIES: StrategyDefinition[] = [
   },
 ];
 
+export interface BackupAuditedFechamento {
+  fechamento: SavedFechamentoPrognostico;
+  totalJogos: number;
+  custoTotal: number;
+  premioTotal: number;
+  saldoLiquido: number;
+  roi: number;
+  hits15: number;
+  hits14: number;
+  hits13: number;
+  hits12: number;
+  hits11: number;
+  totalPremiados: number;
+  taxaPremiacao: number; // % de jogos que premiaram (11 a 15)
+  maxHits: number;
+  bestTicket: GameTicket | null;
+  dezenasAcertadasNoUniverso: number; // Quantas das 15 sorteadas estavam no universo
+  taxaUniversoIA: number; // % do universo que acertou
+  isAbove50Percent: boolean;
+}
+
 export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
@@ -195,34 +225,80 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
     return savedFechamentosList && savedFechamentosList.length > 0 ? savedFechamentosList : getSavedFechamentos();
   });
 
-  // Atualiza fechamentos salvos caso mudem no storage
-  React.useEffect(() => {
-    const handleUpdated = (e: any) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<'duelo' | 'backup_audit'>('duelo');
+  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>('garantia_14_pts');
+  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>('filtro_ia');
+  const [testScope, setTestScope] = useState<'10_concursos' | '25_concursos' | '50_concursos'>('25_concursos');
+  const [activeChartMetric, setActiveChartMetric] = useState<'roi' | 'financeiro' | 'acertos'>('acertos');
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [duelRunCounter, setDuelRunCounter] = useState<number>(0);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+
+  // Escuta restauração de backup de fechamentos para atualizar e reauditar instantaneamente
+  useEffect(() => {
+    const handleBackupRestored = () => {
+      const updated = getSavedFechamentos();
+      setSavedFechamentos(updated);
+      setDuelRunCounter((c) => c + 1);
+      setActiveTab('backup_audit');
+      try {
+        soundService.playGoldenZoneSuccessChime();
+      } catch {}
+      setFeedbackNotice(
+        `✓ Backup de fechamentos carregado! ${updated.length} fechamentos confrontados contra o Concurso #${latestDraw.concurso}.`
+      );
+      setTimeout(() => setFeedbackNotice(null), 6000);
+    };
+
+    const handleFechamentosUpdated = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {
         setSavedFechamentos(e.detail);
       } else {
         setSavedFechamentos(getSavedFechamentos());
       }
+      setDuelRunCounter((c) => c + 1);
     };
-    window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdated);
-    return () => window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdated);
-  }, []);
 
-  const [strategyAKey, setStrategyAKey] = useState<StrategyKey>(() => {
-    const list = getSavedFechamentos();
-    if (list.length >= 1) return `saved_${list[0].id}`;
-    return 'garantia_14_pts';
-  });
-  const [strategyBKey, setStrategyBKey] = useState<StrategyKey>(() => {
-    const list = getSavedFechamentos();
-    if (list.length >= 2) return `saved_${list[1].id}`;
-    return 'filtro_ia';
-  });
-  const [testScope, setTestScope] = useState<'10_concursos' | '25_concursos' | '50_concursos'>('25_concursos');
-  const [activeChartMetric, setActiveChartMetric] = useState<'roi' | 'financeiro' | 'acertos'>('acertos');
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [duelRunCounter, setDuelRunCounter] = useState<number>(0);
+    window.addEventListener('lotosniper-backup-restored', handleBackupRestored);
+    window.addEventListener('lotosniper-saved-fechamentos-updated', handleFechamentosUpdated);
+    return () => {
+      window.removeEventListener('lotosniper-backup-restored', handleBackupRestored);
+      window.removeEventListener('lotosniper-saved-fechamentos-updated', handleFechamentosUpdated);
+    };
+  }, [latestDraw.concurso]);
 
+  // Carrega arquivo de backup JSON diretamente
+  const handleUploadBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const res = restoreBackupFromJSON(content, 'replace');
+        if (res.success) {
+          const list = getSavedFechamentos();
+          setSavedFechamentos(list);
+          setDuelRunCounter((c) => c + 1);
+          setActiveTab('backup_audit');
+          try {
+            soundService.playGoldenZoneSuccessChime();
+          } catch {}
+          setFeedbackNotice(
+            `✓ Backup restaurado com sucesso! ${res.fechamentosRestored} fechamentos confrontados contra o Concurso #${latestDraw.concurso}.`
+          );
+        } else {
+          setFeedbackNotice(`Erro ao carregar backup: ${res.message}`);
+        }
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Helper para obter configuração de uma estratégia ou fechamento salvo
   const getStrategyConfig = (key: string): StrategyDefinition => {
     if (key.startsWith('saved_')) {
       const id = key.replace('saved_', '');
@@ -230,17 +306,116 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
       if (found) {
         return {
           key: key as any,
-          name: `📂 ${found.modalidadeMatriz || 'Fechamento Salvo'} (${found.totalJogos || found.tickets.length} Jogos)`,
-          shortName: (found.modalidadeMatriz || 'Fechamento Salvo').slice(0, 22),
-          description: `Fechamento salvo (${found.dataCriacao || `Conc #${found.concurso}`}) com ${found.universoDezenas?.length || 18} dezenas e ${found.tickets.length} apostas.`,
+          name: `📂 ${found.modalidadeMatriz || found.tipoFechamento || 'Fechamento Salvo'} (${found.totalJogos || found.tickets.length} Jogos)`,
+          shortName: (found.modalidadeMatriz || found.tipoFechamento || 'Fechamento Salvo').slice(0, 22),
+          description: `Fechamento do backup (${found.dataCriacao || `Conc #${found.concurso}`}) com ${found.universoDezenas?.length || 18} dezenas e ${found.tickets.length} apostas.`,
           dezenasCount: found.universoDezenas?.length || 18,
           ticketsCount: found.tickets.length,
-          badge: `${found.tickets.length} Jogos • Salvo`,
+          badge: `${found.tickets.length} Jogos • Backup`,
         };
       }
     }
-    return STRATEGIES.find((s) => s.key === key) || STRATEGIES[0];
+    return CANONICAL_STRATEGIES.find((s) => s.key === key) || CANONICAL_STRATEGIES[0];
   };
+
+  // AUDITORIA DO BACKUP DE FECHAMENTOS CONTRA O CONCURSO SORTEADO
+  const backupAuditReport = useMemo(() => {
+    const P11 = latestDraw.premiacoes?.faixa11?.valor || 7.0;
+    const P12 = latestDraw.premiacoes?.faixa12?.valor || 14.0;
+    const P13 = latestDraw.premiacoes?.faixa13?.valor || 35.0;
+    const P14 = latestDraw.premiacoes?.faixa14?.valor || 1500.0;
+    const P15 = latestDraw.premiacoes?.faixa15?.valor || 1800000.0;
+    const drawnNumbers = latestDraw.dezenas || [];
+
+    const auditedList: BackupAuditedFechamento[] = savedFechamentos.map((f) => {
+      const tickets = f.tickets || [];
+      const totalJogos = tickets.length;
+      const custoTotal = totalJogos * 3.5;
+
+      let h15 = 0;
+      let h14 = 0;
+      let h13 = 0;
+      let h12 = 0;
+      let h11 = 0;
+      let premioTotal = 0;
+      let maxHits = 0;
+      let bestTicket: GameTicket | null = null;
+
+      tickets.forEach((t) => {
+        const hits = countMatches(t.dezenas, drawnNumbers);
+        if (hits > maxHits) {
+          maxHits = hits;
+          bestTicket = t;
+        }
+
+        if (hits === 15) {
+          h15++;
+          premioTotal += P15;
+        } else if (hits === 14) {
+          h14++;
+          premioTotal += P14;
+        } else if (hits === 13) {
+          h13++;
+          premioTotal += P13;
+        } else if (hits === 12) {
+          h12++;
+          premioTotal += P12;
+        } else if (hits === 11) {
+          h11++;
+          premioTotal += P11;
+        }
+      });
+
+      const totalPremiados = h15 + h14 + h13 + h12 + h11;
+      const taxaPremiacao = totalJogos > 0 ? (totalPremiados / totalJogos) * 100 : 0;
+      const saldoLiquido = premioTotal - custoTotal;
+      const roi = custoTotal > 0 ? ((premioTotal - custoTotal) / custoTotal) * 100 : 0;
+
+      // Análise dos prognósticos da IA no universo de dezenas
+      const universo = f.universoDezenas || [];
+      const dezenasAcertadasNoUniverso = universo.filter((d) => drawnNumbers.includes(d)).length;
+      const taxaUniversoIA = universo.length > 0 ? (dezenasAcertadasNoUniverso / 15) * 100 : 0;
+
+      return {
+        fechamento: f,
+        totalJogos,
+        custoTotal,
+        premioTotal,
+        saldoLiquido,
+        roi,
+        hits15: h15,
+        hits14: h14,
+        hits13: h13,
+        hits12: h12,
+        hits11: h11,
+        totalPremiados,
+        taxaPremiacao,
+        maxHits,
+        bestTicket,
+        dezenasAcertadasNoUniverso,
+        taxaUniversoIA,
+        isAbove50Percent: taxaPremiacao > 50,
+      };
+    });
+
+    // Ordena do melhor resultado para o pior (maior pontuação e maior taxa de premiação)
+    auditedList.sort((a, b) => {
+      if (b.maxHits !== a.maxHits) return b.maxHits - a.maxHits;
+      if (b.taxaPremiacao !== a.taxaPremiacao) return b.taxaPremiacao - a.taxaPremiacao;
+      return b.premioTotal - a.premioTotal;
+    });
+
+    const bestResult = auditedList.length > 0 ? auditedList[0] : null;
+    const above50List = auditedList.filter((a) => a.isAbove50Percent);
+
+    return {
+      auditedList,
+      bestResult,
+      above50List,
+      totalFechamentos: auditedList.length,
+      totalBilhetes: auditedList.reduce((acc, curr) => acc + curr.totalJogos, 0),
+    };
+  }, [savedFechamentos, latestDraw, duelRunCounter]);
 
   // Gera o conjunto de jogos de cada estratégia
   const generateTicketsForStrategy = (key: StrategyKey): { tickets: GameTicket[]; pool: number[] } => {
@@ -267,11 +442,13 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
       maxTickets = 24;
       targetHits = 14;
     } else if (key === 'filtro_ia') {
-      const sortedByScore = [...dynamicStats].sort((a, b) => {
-        const scoreA = b.vezes * 1.5 + (b.atrasoAtual === 0 ? 8 : -b.atrasoAtual * 2);
-        const scoreB = a.vezes * 1.5 + (a.atrasoAtual === 0 ? 8 : -a.atrasoAtual * 2);
-        return scoreA - scoreB;
-      }).map((s) => s.numero);
+      const sortedByScore = [...dynamicStats]
+        .sort((a, b) => {
+          const scoreA = b.vezes * 1.5 + (b.atrasoAtual === 0 ? 8 : -b.atrasoAtual * 2);
+          const scoreB = a.vezes * 1.5 + (a.atrasoAtual === 0 ? 8 : -a.atrasoAtual * 2);
+          return scoreA - scoreB;
+        })
+        .map((s) => s.numero);
       pool = sortedByScore.slice(0, 18).sort((a, b) => a - b);
       maxTickets = 24;
       targetHits = 14;
@@ -313,7 +490,9 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
           .sort(() => Math.random() - 0.5)
           .slice(0, 15)
           .sort((a, b) => a - b);
-        const molduraCount = nums.filter((n) => [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25].includes(n)).length;
+        const molduraCount = nums.filter((n) =>
+          [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25].includes(n)
+        ).length;
         randTickets.push({
           id: `rand-${i}`,
           index: i,
@@ -353,7 +532,7 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
     return [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)].slice(0, count);
   }, [testScope, latestDraw]);
 
-  // Simulação e Comparação do Duelo
+  // Simulação e Comparação do Duelo Head-to-Head
   const duelResults = useMemo(() => {
     const stratA = generateTicketsForStrategy(strategyAKey);
     const stratB = generateTicketsForStrategy(strategyBKey);
@@ -361,7 +540,6 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
     const simA = runSimulation(stratA.tickets, drawsForBacktest);
     const simB = runSimulation(stratB.tickets, drawsForBacktest);
 
-    // Determina o vencedor pelo ROI (ou saldo líquido se empatado)
     const winner: 'A' | 'B' | 'Empate' =
       simA.roi > simB.roi ? 'A' : simB.roi > simA.roi ? 'B' : simA.saldoLiquido >= simB.saldoLiquido ? 'A' : 'B';
 
@@ -378,18 +556,21 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategyAKey, strategyBKey, drawsForBacktest, duelRunCounter]);
 
-  const stratAConfig = STRATEGIES.find((s) => s.key === strategyAKey)!;
-  const stratBConfig = STRATEGIES.find((s) => s.key === strategyBKey)!;
+  const stratAConfig = getStrategyConfig(strategyAKey);
+  const stratBConfig = getStrategyConfig(strategyBKey);
 
   const handleRerunDuel = () => {
     setIsSimulating(true);
     setTimeout(() => {
       setDuelRunCounter((c) => c + 1);
       setIsSimulating(false);
+      try {
+        soundService.playFilterClick();
+      } catch {}
     }, 300);
   };
 
-  // Dados para o Gráfico de Barras do Duelo
+  // Gráficos Recharts
   const roiChartData = [
     {
       metric: 'Retorno Sobre Investimento (ROI)',
@@ -445,394 +626,785 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   ];
 
   return (
-    <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-6 font-sans">
-      {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500/20 via-pink-500/20 to-amber-500/20 text-rose-400 border border-rose-500/30">
-              <Swords className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>Duelo de Algoritmos: Comparativo de Eficiência & ROI</span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                  Head-to-Head
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Simule e compare o desempenho financeiro de 2 matrizes de fechamento simultaneamente contra o histórico
-                oficial da Caixa para descobrir qual modelo entrega o melhor retorno líquido sobre o investimento.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleRerunDuel}
-          disabled={isSimulating}
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-white font-bold text-xs shadow-lg shadow-rose-500/20 transition cursor-pointer"
-        >
-          <RotateCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
-          <span>{isSimulating ? 'Calculando Duelo...' : 'Recalcular Duelo'}</span>
-        </button>
-      </div>
-
-      {/* Selectors Bar: Estratégia A vs Estratégia B & Scope */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Selector A */}
-        <div className="bg-slate-950/80 p-4 rounded-xl border border-emerald-500/40 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-              Algoritmo A (Verde)
-            </span>
-            <span className="text-[10px] font-mono text-slate-400">
-              {stratAConfig.badge}
-            </span>
-          </div>
-
-          <select
-            value={strategyAKey}
-            onChange={(e) => setStrategyAKey(e.target.value as StrategyKey)}
-            className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            {STRATEGIES.map((s) => (
-              <option key={s.key} value={s.key} disabled={s.key === 'meus_jogos' && userSavedTickets.length === 0}>
-                {s.name} {s.key === 'meus_jogos' && userSavedTickets.length === 0 ? '(Nenhum salvo)' : ''}
-              </option>
-            ))}
-          </select>
-
-          <p className="text-[11px] text-slate-400 leading-tight">
-            {stratAConfig.description} • {duelResults.stratA.tickets.length} apostas por concurso.
-          </p>
-        </div>
-
-        {/* Selector B */}
-        <div className="bg-slate-950/80 p-4 rounded-xl border border-sky-500/40 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wider">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
-              Algoritmo B (Azul)
-            </span>
-            <span className="text-[10px] font-mono text-slate-400">
-              {stratBConfig.badge}
-            </span>
-          </div>
-
-          <select
-            value={strategyBKey}
-            onChange={(e) => setStrategyBKey(e.target.value as StrategyKey)}
-            className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs font-semibold focus:outline-none focus:border-sky-500 cursor-pointer"
-          >
-            {STRATEGIES.map((s) => (
-              <option key={s.key} value={s.key} disabled={s.key === 'meus_jogos' && userSavedTickets.length === 0}>
-                {s.name} {s.key === 'meus_jogos' && userSavedTickets.length === 0 ? '(Nenhum salvo)' : ''}
-              </option>
-            ))}
-          </select>
-
-          <p className="text-[11px] text-slate-400 leading-tight">
-            {stratBConfig.description} • {duelResults.stratB.tickets.length} apostas por concurso.
-          </p>
-        </div>
-
-        {/* Scope Selector */}
-        <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Escopo Histórico de Teste
-            </span>
-            <span className="text-[10px] font-mono text-emerald-400 font-bold">
-              {drawsForBacktest.length} sorteios
-            </span>
-          </div>
-
-          <select
-            value={testScope}
-            onChange={(e) => setTestScope(e.target.value as any)}
-            className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
-          >
-            <option value="10_concursos">Últimos 10 Concursos Oficiais</option>
-            <option value="25_concursos">Últimos 25 Concursos Oficiais (Recomendado)</option>
-            <option value="50_concursos">Últimos 50 Concursos Oficiais (Longo Prazo)</option>
-          </select>
-
-          <p className="text-[11px] text-slate-400 leading-tight">
-            Concursos #{drawsForBacktest[drawsForBacktest.length - 1]?.concurso} ao #{latestDraw.concurso}.
-          </p>
-        </div>
-      </div>
-
-      {/* Duel Winner Banner */}
-      <div className="bg-gradient-to-r from-amber-950/60 via-slate-950 to-slate-950 rounded-2xl border-2 border-amber-500/40 p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 rounded-2xl font-black shadow-lg shadow-amber-500/20 shrink-0">
-            <Trophy className="w-7 h-7" />
+    <div className="bg-slate-900/95 rounded-3xl border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-6 font-sans">
+      {/* Top Banner com Subtabs de Modo Duelo e Auditoria de Backup */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500/20 via-pink-500/20 to-amber-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+            <Swords className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="bg-amber-400 text-slate-950 font-black text-[10px] uppercase px-2 py-0.5 rounded-full tracking-wider font-mono">
-                Vencedor do Duelo
-              </span>
-              <span className="text-xs text-amber-300 font-bold">
-                {duelResults.winner === 'A' ? stratAConfig.shortName : stratBConfig.shortName}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                <span>⚔️ Modo Duelo (14 Pts vs IA) & Auditoria de Backup</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                Concurso Base #{latestDraw.concurso}
               </span>
             </div>
-
-            <h4 className="text-lg font-black text-white mt-0.5">
-              {duelResults.winner === 'A' ? stratAConfig.shortName : stratBConfig.shortName} superou o adversário com{' '}
-              <span className="text-emerald-400 font-mono">+{duelResults.roiDiff}%</span> de vantagem em ROI!
-            </h4>
-            <p className="text-xs text-slate-300 mt-0.5">
-              {duelResults.winner === 'A'
-                ? `Algoritmo A obteve ROI de ${duelResults.simA.roi}% (Saldo R$ ${duelResults.simA.saldoLiquido.toFixed(2)}) versus ${duelResults.simB.roi}% do Algoritmo B.`
-                : `Algoritmo B obteve ROI de ${duelResults.simB.roi}% (Saldo R$ ${duelResults.simB.saldoLiquido.toFixed(2)}) versus ${duelResults.simA.roi}% do Algoritmo A.`}
+            <p className="text-xs text-slate-400 mt-0.5">
+              Confronte a Garantia Canônica de 14 Pontos contra o Filtro Neural de IA e audite os fechamentos do backup
+              frente ao resultado oficial da Caixa.
             </p>
           </div>
         </div>
 
-        {onApplyStrategy && (
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {/* Navegação entre Visualizações */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setActiveTab('duelo')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'duelo'
+                  ? 'bg-rose-500 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>Duelo Head-to-Head</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('backup_audit')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'backup_audit'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-300" />
+              <span>Auditoria do Backup ({savedFechamentos.length})</span>
+            </button>
+          </div>
+
+          {/* Upload de Backup JSON */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleUploadBackup}
+            accept=".json"
+            className="hidden"
+          />
           <button
             type="button"
-            onClick={() => {
-              const winningPool = duelResults.winner === 'A' ? duelResults.stratA.pool : duelResults.stratB.pool;
-              onApplyStrategy(winningPool);
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg transition cursor-pointer shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+            title="Carregar arquivo .json de backup para auditar fechamentos e comparar com a IA"
           >
-            <span>Carregar Vencedor no Fechamento</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Metric Selector Tabs for Chart */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-          <button
-            type="button"
-            onClick={() => setActiveChartMetric('roi')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeChartMetric === 'roi'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Percent className="w-3.5 h-3.5" />
-            <span>Comparativo de ROI (%)</span>
+            <Upload className="w-3.5 h-3.5 text-amber-400" />
+            <span>Carregar Backup (.json)</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveChartMetric('financeiro')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeChartMetric === 'financeiro'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={handleRerunDuel}
+            disabled={isSimulating}
+            className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-white font-bold text-xs shadow-lg shadow-rose-500/20 transition cursor-pointer active:scale-95"
           >
-            <DollarSign className="w-3.5 h-3.5" />
-            <span>Custo vs Premiações (R$)</span>
+            <RotateCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
+            <span>{isSimulating ? 'Calculando...' : 'Recalcular'}</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveChartMetric('acertos')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeChartMetric === 'acertos'
-                ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>Faixas de Acerto (11 a 15)</span>
-          </button>
-        </div>
-
-        <div className="text-xs text-slate-400 font-mono">
-          <span className="text-emerald-400 font-bold">Verde: {stratAConfig.shortName}</span>
-          <span className="mx-2">•</span>
-          <span className="text-sky-400 font-bold">Azul: {stratBConfig.shortName}</span>
         </div>
       </div>
 
-      {/* Comparative Bar Chart */}
-      <div className="bg-slate-950/80 rounded-xl border border-slate-800 p-4">
-        <div className="h-64 sm:h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            {activeChartMetric === 'roi' ? (
-              <BarChart data={roiChartData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="metric" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis
-                  stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
-                  tickFormatter={(val) => `${val}%`}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
-                          <strong className="text-white block border-b border-slate-800 pb-1">
-                            Eficiência de ROI
-                          </strong>
-                          <div className="text-emerald-400 flex items-center justify-between gap-4">
-                            <span>{stratAConfig.shortName}:</span>
-                            <span className="font-bold">{payload[0]?.value}%</span>
-                          </div>
-                          <div className="text-sky-400 flex items-center justify-between gap-4">
-                            <span>{stratBConfig.shortName}:</span>
-                            <span className="font-bold">{payload[1]?.value}%</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <ReferenceLine y={0} stroke="#475569" strokeWidth={1.5} />
-                <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            ) : activeChartMetric === 'financeiro' ? (
-              <BarChart data={financialChartData} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="category" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis
-                  stroke="#64748b"
-                  tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
-                  tickFormatter={(val) => `R$ ${val}`}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
-                          <strong className="text-white block border-b border-slate-800 pb-1">{label}</strong>
-                          <div className="text-emerald-400 flex items-center justify-between gap-4">
-                            <span>{stratAConfig.shortName}:</span>
-                            <span className="font-bold">R$ {Number(payload[0]?.value).toFixed(2)}</span>
-                          </div>
-                          <div className="text-sky-400 flex items-center justify-between gap-4">
-                            <span>{stratBConfig.shortName}:</span>
-                            <span className="font-bold">R$ {Number(payload[1]?.value).toFixed(2)}</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <ReferenceLine y={0} stroke="#475569" strokeWidth={1} />
-                <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-              </BarChart>
+      {/* Mensagem de Feedback */}
+      {feedbackNotice && (
+        <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{feedbackNotice}</span>
+          </div>
+          <button onClick={() => setFeedbackNotice(null)} className="text-slate-400 hover:text-white text-xs font-bold">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA 1: AUDITORIA DO BACKUP DE FECHAMENTOS (MELHOR RESULTADO & TAXA > 50%) */}
+      {/* ========================================================================= */}
+      {activeTab === 'backup_audit' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* 1. CARD HERO: MELHOR RESULTADO DO BACKUP */}
+          {backupAuditReport.bestResult ? (
+            <div className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 rounded-3xl border-2 border-amber-500/50 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-md shadow-amber-500/20">
+                      <Trophy className="w-3.5 h-3.5 text-slate-950 fill-current" />
+                      Melhor Resultado do Backup
+                    </span>
+                    <span className="text-xs font-mono font-bold text-amber-300">
+                      Concurso #{latestDraw.concurso} ({latestDraw.data})
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xl sm:text-2xl font-black text-white">
+                      {backupAuditReport.bestResult.fechamento.tipoFechamento ||
+                        backupAuditReport.bestResult.fechamento.modalidadeMatriz}
+                    </h4>
+                    <p className="text-xs text-slate-300 mt-1">
+                      Este fechamento cravou{' '}
+                      <strong className="text-amber-400 font-mono text-sm">
+                        {backupAuditReport.bestResult.maxHits} ACERTOS
+                      </strong>{' '}
+                      e obteve{' '}
+                      <strong className="text-emerald-400 font-mono text-sm">
+                        {backupAuditReport.bestResult.totalPremiados} de {backupAuditReport.bestResult.totalJogos} bilhetes premiados ({backupAuditReport.bestResult.taxaPremiacao.toFixed(1)}%)
+                      </strong>!
+                    </p>
+                  </div>
+
+                  {/* Detalhe do Bilhete Campeão com Dezenas Sorteadas Destacadas */}
+                  {backupAuditReport.bestResult.bestTicket && (
+                    <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                        <span>
+                          Bilhete Campeão #
+                          {(backupAuditReport.bestResult.bestTicket.index || 1).toString().padStart(2, '0')}
+                        </span>
+                        <span className="text-emerald-400 font-bold">
+                          {backupAuditReport.bestResult.maxHits} dezenas sorteadas cravadas!
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {backupAuditReport.bestResult.bestTicket.dezenas.map((num) => {
+                          const isMatch = latestDraw.dezenas.includes(num);
+                          return (
+                            <span
+                              key={num}
+                              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold transition ${
+                                isMatch
+                                  ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400'
+                                  : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}
+                            >
+                              {num.toString().padStart(2, '0')}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Métricas Rápidas do Campeão */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 shrink-0 bg-slate-950/70 p-4 rounded-2xl border border-slate-800/80">
+                  <div className="text-center p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-bold">Taxa de Premiação</span>
+                    <span
+                      className={`text-base font-mono font-black ${
+                        backupAuditReport.bestResult.taxaPremiacao > 50 ? 'text-emerald-400' : 'text-amber-400'
+                      }`}
+                    >
+                      {backupAuditReport.bestResult.taxaPremiacao.toFixed(1)}%
+                    </span>
+                    <span className="text-[9px] text-slate-500 block">
+                      {backupAuditReport.bestResult.totalPremiados}/{backupAuditReport.bestResult.totalJogos} jogos
+                    </span>
+                  </div>
+
+                  <div className="text-center p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-bold">Prêmio Estimado</span>
+                    <span className="text-base font-mono font-black text-emerald-400">
+                      R$ {backupAuditReport.bestResult.premioTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[9px] text-slate-500 block">
+                      Custo: R$ {backupAuditReport.bestResult.custoTotal.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="text-center p-2 rounded-xl bg-slate-900 border border-slate-800 col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-slate-400 block font-bold">Universo da IA</span>
+                    <span className="text-base font-mono font-black text-sky-400">
+                      {backupAuditReport.bestResult.dezenasAcertadasNoUniverso}/15
+                    </span>
+                    <span className="text-[9px] text-slate-500 block">
+                      {backupAuditReport.bestResult.taxaUniversoIA.toFixed(0)}% de acerto
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-950/60 rounded-3xl border border-slate-800 p-8 text-center space-y-3">
+              <FileJson className="w-10 h-10 text-amber-500/60 mx-auto" />
+              <h4 className="text-base font-bold text-white">Nenhum fechamento salvo carregado no momento</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                Carregue um arquivo de backup (.json) usando o botão acima ou gere um novo fechamento no{' '}
+                <strong>Estúdio de Fechamentos</strong> para auditar aqui.
+              </p>
+            </div>
+          )}
+
+          {/* 2. RESULTADOS COM TAXA DE PREMIAÇÃO ACIMA DE 50% */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Flame className="w-4 h-4 fill-current" />
+                </div>
+                <h4 className="text-sm sm:text-base font-black text-white">
+                  Fechamentos de Alta Performance (Taxa de Premiação &gt; 50%)
+                </h4>
+              </div>
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                {backupAuditReport.above50List.length} fechamento(s) qualificado(s)
+              </span>
+            </div>
+
+            {backupAuditReport.above50List.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {backupAuditReport.above50List.map((item) => (
+                  <div
+                    key={item.fechamento.id}
+                    className="bg-slate-950/80 rounded-2xl border-2 border-emerald-500/40 p-4 space-y-3 shadow-lg hover:border-emerald-400 transition"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {item.taxaPremiacao.toFixed(1)}% PREMIADO
+                        </span>
+                        <h5 className="text-sm font-bold text-white mt-1.5 line-clamp-1">
+                          {item.fechamento.tipoFechamento || item.fechamento.modalidadeMatriz}
+                        </h5>
+                      </div>
+                      <span className="text-xs font-mono font-black text-amber-400 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 shrink-0">
+                        {item.maxHits} Pts
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1 border-t border-slate-800">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block font-sans">Jogos Premiados:</span>
+                        <strong className="text-emerald-400">
+                          {item.totalPremiados} de {item.totalJogos} jogos
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block font-sans">Retorno / Saldo:</span>
+                        <strong className={item.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-slate-300'}>
+                          R$ {item.premioTotal.toFixed(2)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Resumo das faixas acertadas */}
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-mono">
+                      {item.hits15 > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-bold">
+                          {item.hits15}x 15 pts!
+                        </span>
+                      )}
+                      {item.hits14 > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                          {item.hits14}x 14 pts
+                        </span>
+                      )}
+                      {item.hits13 > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                          {item.hits13}x 13 pts
+                        </span>
+                      )}
+                      {item.hits12 > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                          {item.hits12}x 12 pts
+                        </span>
+                      )}
+                      {item.hits11 > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          {item.hits11}x 11 pts
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <BarChart data={hitsChartData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="faixa" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }} />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
-                          <strong className="text-white block border-b border-slate-800 pb-1">{label}</strong>
-                          <div className="text-emerald-400 flex items-center justify-between gap-4">
-                            <span>{stratAConfig.shortName}:</span>
-                            <span className="font-bold">{payload[0]?.value} bilhete(s)</span>
-                          </div>
-                          <div className="text-sky-400 flex items-center justify-between gap-4">
-                            <span>{stratBConfig.shortName}:</span>
-                            <span className="font-bold">{payload[1]?.value} bilhete(s)</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 text-xs text-slate-400 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-white block font-bold">
+                    Nenhum fechamento atingiu &gt; 50% de premiação no Concurso #{latestDraw.concurso}
+                  </strong>
+                  <p className="mt-0.5">
+                    {backupAuditReport.bestResult
+                      ? `O fechamento mais próximo foi "${backupAuditReport.bestResult.fechamento.tipoFechamento}" com ${backupAuditReport.bestResult.taxaPremiacao.toFixed(1)}% de bilhetes premiados. Para superar 50%, utilize a matriz canônica 18-15-14-15 com 9 repetidas e 9 ausentes.`
+                      : 'Carregue um arquivo de backup contendo fechamentos salvos para visualizar esta análise.'}
+                  </p>
+                </div>
+              </div>
             )}
-          </ResponsiveContainer>
-        </div>
-      </div>
+          </div>
 
-      {/* Head-to-Head Detailed Comparative Table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
-            <tr>
-              <th className="p-3">Métrica Estatística / Financeira</th>
-              <th className="p-3 text-emerald-400 font-bold">{stratAConfig.shortName} (A)</th>
-              <th className="p-3 text-sky-400 font-bold">{stratBConfig.shortName} (B)</th>
-              <th className="p-3 text-right pr-4">Diferencial / Vantagem</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800 font-mono">
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">ROI (Retorno Sobre Investimento)</td>
-              <td className="p-3 font-bold text-sm text-emerald-400">{duelResults.simA.roi}%</td>
-              <td className="p-3 font-bold text-sm text-sky-400">{duelResults.simB.roi}%</td>
-              <td className="p-3 text-right pr-4 font-bold text-amber-300">
-                {duelResults.winner === 'A'
-                  ? `+${duelResults.roiDiff}% para Algoritmo A`
-                  : `+${duelResults.roiDiff}% para Algoritmo B`}
-              </td>
-            </tr>
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">Saldo Líquido Final (R$)</td>
-              <td className={`p-3 font-bold ${duelResults.simA.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                R$ {duelResults.simA.saldoLiquido.toFixed(2)}
-              </td>
-              <td className={`p-3 font-bold ${duelResults.simB.saldoLiquido >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
-                R$ {duelResults.simB.saldoLiquido.toFixed(2)}
-              </td>
-              <td className="p-3 text-right pr-4 text-slate-300">
-                Dif. R$ {Math.abs(duelResults.simA.saldoLiquido - duelResults.simB.saldoLiquido).toFixed(2)}
-              </td>
-            </tr>
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">Total de Prêmios Arrecadados (R$)</td>
-              <td className="p-3 text-slate-200">R$ {duelResults.simA.premioTotal.toFixed(2)}</td>
-              <td className="p-3 text-slate-200">R$ {duelResults.simB.premioTotal.toFixed(2)}</td>
-              <td className="p-3 text-right pr-4 text-slate-400">
-                {duelResults.simA.premioTotal >= duelResults.simB.premioTotal ? 'A faturou mais' : 'B faturou mais'}
-              </td>
-            </tr>
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">Custo Total Investido (R$)</td>
-              <td className="p-3 text-slate-400">R$ {duelResults.simA.custoTotal.toFixed(2)}</td>
-              <td className="p-3 text-slate-400">R$ {duelResults.simB.custoTotal.toFixed(2)}</td>
-              <td className="p-3 text-right pr-4 text-slate-400">
-                {duelResults.simA.custoTotal <= duelResults.simB.custoTotal ? 'A é mais econômico' : 'B é mais econômico'}
-              </td>
-            </tr>
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">Bilhetes com 14 Pontos</td>
-              <td className="p-3 font-bold text-amber-300">{duelResults.simA.acertos14} bilhete(s)</td>
-              <td className="p-3 font-bold text-amber-300">{duelResults.simB.acertos14} bilhete(s)</td>
-              <td className="p-3 text-right pr-4 text-slate-300">
-                {duelResults.simA.acertos14 > duelResults.simB.acertos14 ? 'A cravou mais' : duelResults.simB.acertos14 > duelResults.simA.acertos14 ? 'B cravou mais' : 'Empate'}
-              </td>
-            </tr>
-            <tr>
-              <td className="p-3 text-slate-300 font-sans font-medium">Bilhetes com 15 Pontos (Jackpot)</td>
-              <td className="p-3 font-bold text-yellow-400">{duelResults.simA.acertos15} bilhete(s)</td>
-              <td className="p-3 font-bold text-yellow-400">{duelResults.simB.acertos15} bilhete(s)</td>
-              <td className="p-3 text-right pr-4 text-slate-300">
-                {duelResults.simA.acertos15 > duelResults.simB.acertos15 ? 'A cravou 15!' : duelResults.simB.acertos15 > duelResults.simA.acertos15 ? 'B cravou 15!' : 'Nenhum'}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+          {/* 3. TABELA COMPLETA DE ANÁLISE DOS PROGNÓSTICOS DA IA */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-sky-400" />
+              <span>Análise dos Prognósticos da IA em Todos os Fechamentos do Backup</span>
+            </h4>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-800">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-slate-950 text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-800 font-sans">
+                  <tr>
+                    <th className="p-3">Fechamento / Prognóstico</th>
+                    <th className="p-3 text-center">Universo IA</th>
+                    <th className="p-3 text-center">Jogos</th>
+                    <th className="p-3 text-center">Máx Acertos</th>
+                    <th className="p-3 text-center">Premiados</th>
+                    <th className="p-3 text-center">Taxa Premiação</th>
+                    <th className="p-3 text-right pr-4">Premiação (R$)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80 bg-slate-900/60">
+                  {backupAuditReport.auditedList.map((item, idx) => (
+                    <tr key={item.fechamento.id || idx} className="hover:bg-slate-800/40 transition">
+                      <td className="p-3 font-sans font-medium text-slate-200">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                          <span className="line-clamp-1">
+                            {item.fechamento.tipoFechamento || item.fechamento.modalidadeMatriz}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono block">
+                          {item.fechamento.dataCriacao || `Concurso #${item.fechamento.concurso}`}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <span className="text-sky-300 font-bold">
+                          {item.dezenasAcertadasNoUniverso}/15 ({item.taxaUniversoIA.toFixed(0)}%)
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-center text-slate-300">{item.totalJogos}</td>
+
+                      <td className="p-3 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded font-black ${
+                            item.maxHits >= 14
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : item.maxHits >= 13
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          {item.maxHits} pts
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-center text-slate-300">
+                        {item.totalPremiados}/{item.totalJogos}
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <span
+                          className={`font-black ${
+                            item.taxaPremiacao > 50 ? 'text-emerald-400 font-bold' : 'text-slate-300'
+                          }`}
+                        >
+                          {item.taxaPremiacao.toFixed(1)}%
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-right pr-4 font-bold text-emerald-400">
+                        R$ {item.premioTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA 2: MODO DUELO HEAD-TO-HEAD (14 PTS VS IA & RECHARTS)                  */}
+      {/* ========================================================================= */}
+      {activeTab === 'duelo' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Selectores Bar: Estratégia A vs Estratégia B & Scope */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Selector A */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-emerald-500/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                  Algoritmo A (Verde)
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">{stratAConfig.badge}</span>
+              </div>
+
+              <select
+                value={strategyAKey}
+                onChange={(e) => setStrategyAKey(e.target.value as StrategyKey)}
+                className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
+              >
+                <optgroup label="Estratégias Canônicas">
+                  {CANONICAL_STRATEGIES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+                {savedFechamentos.length > 0 && (
+                  <optgroup label="Fechamentos do Backup">
+                    {savedFechamentos.map((f) => (
+                      <option key={`saved_${f.id}`} value={`saved_${f.id}`}>
+                        📂 {f.tipoFechamento || f.modalidadeMatriz} ({f.tickets?.length || 0} Jogos)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+
+              <p className="text-[11px] text-slate-400 leading-tight">
+                {stratAConfig.description} • {duelResults.stratA.tickets.length} apostas por concurso.
+              </p>
+            </div>
+
+            {/* Selector B */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-sky-500/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                  Algoritmo B (Azul)
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">{stratBConfig.badge}</span>
+              </div>
+
+              <select
+                value={strategyBKey}
+                onChange={(e) => setStrategyBKey(e.target.value as StrategyKey)}
+                className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                <optgroup label="Estratégias Canônicas">
+                  {CANONICAL_STRATEGIES.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+                {savedFechamentos.length > 0 && (
+                  <optgroup label="Fechamentos do Backup">
+                    {savedFechamentos.map((f) => (
+                      <option key={`saved_${f.id}`} value={`saved_${f.id}`}>
+                        📂 {f.tipoFechamento || f.modalidadeMatriz} ({f.tickets?.length || 0} Jogos)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+
+              <p className="text-[11px] text-slate-400 leading-tight">
+                {stratBConfig.description} • {duelResults.stratB.tickets.length} apostas por concurso.
+              </p>
+            </div>
+
+            {/* Scope Selector */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Escopo Histórico de Teste
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                  {drawsForBacktest.length} sorteios
+                </span>
+              </div>
+
+              <select
+                value={testScope}
+                onChange={(e) => setTestScope(e.target.value as any)}
+                className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="10_concursos">Últimos 10 Concursos Oficiais</option>
+                <option value="25_concursos">Últimos 25 Concursos Oficiais (Recomendado)</option>
+                <option value="50_concursos">Últimos 50 Concursos Oficiais (Longo Prazo)</option>
+              </select>
+
+              <p className="text-[11px] text-slate-400 leading-tight">
+                Confrontando Concursos #{drawsForBacktest[drawsForBacktest.length - 1]?.concurso} ao #{latestDraw.concurso}.
+              </p>
+            </div>
+          </div>
+
+          {/* Duel Winner Banner */}
+          <div className="bg-gradient-to-r from-amber-950/60 via-slate-950 to-slate-950 rounded-2xl border-2 border-amber-500/40 p-4 sm:p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 rounded-2xl font-black shadow-lg shadow-amber-500/20 shrink-0">
+                <Trophy className="w-7 h-7" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-amber-400 text-slate-950 font-black text-[10px] uppercase px-2 py-0.5 rounded-full tracking-wider font-mono">
+                    Vencedor do Duelo
+                  </span>
+                  <span className="text-xs text-amber-300 font-bold">
+                    {duelResults.winner === 'A' ? stratAConfig.shortName : stratBConfig.shortName}
+                  </span>
+                </div>
+
+                <h4 className="text-lg font-black text-white mt-0.5">
+                  {duelResults.winner === 'A' ? stratAConfig.shortName : stratBConfig.shortName} superou o adversário com{' '}
+                  <span className="text-emerald-400 font-mono">+{duelResults.roiDiff}%</span> de vantagem em ROI!
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  {duelResults.winner === 'A'
+                    ? `Algoritmo A obteve ROI de ${duelResults.simA.roi}% (Saldo R$ ${duelResults.simA.saldoLiquido.toFixed(2)}) versus ${duelResults.simB.roi}% do Algoritmo B.`
+                    : `Algoritmo B obteve ROI de ${duelResults.simB.roi}% (Saldo R$ ${duelResults.simB.saldoLiquido.toFixed(2)}) versus ${duelResults.simA.roi}% do Algoritmo A.`}
+                </p>
+              </div>
+            </div>
+
+            {onApplyStrategy && (
+              <button
+                type="button"
+                onClick={() => {
+                  const winningPool = duelResults.winner === 'A' ? duelResults.stratA.pool : duelResults.stratB.pool;
+                  onApplyStrategy(winningPool);
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg transition cursor-pointer shrink-0"
+              >
+                <span>Carregar Vencedor no Fechamento</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Metric Selector Tabs for Chart */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveChartMetric('roi')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  activeChartMetric === 'roi' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Percent className="w-3.5 h-3.5" />
+                <span>Comparativo de ROI (%)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveChartMetric('financeiro')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  activeChartMetric === 'financeiro' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Custo vs Premiações (R$)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveChartMetric('acertos')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  activeChartMetric === 'acertos' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Faixas de Acerto (11 a 15)</span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400 font-mono">
+              <span className="text-emerald-400 font-bold">Verde: {stratAConfig.shortName}</span>
+              <span className="mx-2">•</span>
+              <span className="text-sky-400 font-bold">Azul: {stratBConfig.shortName}</span>
+            </div>
+          </div>
+
+          {/* Comparative Bar Chart */}
+          <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4">
+            <div className="h-64 sm:h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                {activeChartMetric === 'roi' ? (
+                  <BarChart data={roiChartData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="metric" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}
+                      tickFormatter={(val) => `${val}%`}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
+                              <strong className="text-white block border-b border-slate-800 pb-1">
+                                Eficiência de ROI
+                              </strong>
+                              <div className="text-emerald-400 flex items-center justify-between gap-4">
+                                <span>{stratAConfig.shortName}:</span>
+                                <span className="font-bold">{payload[0]?.value}%</span>
+                              </div>
+                              <div className="text-sky-400 flex items-center justify-between gap-4">
+                                <span>{stratBConfig.shortName}:</span>
+                                <span className="font-bold">{payload[1]?.value}%</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <ReferenceLine y={0} stroke="#475569" strokeWidth={1.5} />
+                    <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                ) : activeChartMetric === 'financeiro' ? (
+                  <BarChart data={financialChartData} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="category" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+                      tickFormatter={(val) => `R$ ${val}`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
+                              <strong className="text-white block border-b border-slate-800 pb-1">{label}</strong>
+                              <div className="text-emerald-400 flex items-center justify-between gap-4">
+                                <span>{stratAConfig.shortName}:</span>
+                                <span className="font-bold">R$ {Number(payload[0]?.value).toFixed(2)}</span>
+                              </div>
+                              <div className="text-sky-400 flex items-center justify-between gap-4">
+                                <span>{stratBConfig.shortName}:</span>
+                                <span className="font-bold">R$ {Number(payload[1]?.value).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <ReferenceLine y={0} stroke="#475569" strokeWidth={1} />
+                    <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                ) : (
+                  <BarChart data={hitsChartData} margin={{ top: 20, right: 30, left: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="faixa" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-xl text-xs space-y-1.5 font-mono">
+                              <strong className="text-white block border-b border-slate-800 pb-1">{label}</strong>
+                              <div className="text-emerald-400 flex items-center justify-between gap-4">
+                                <span>{stratAConfig.shortName}:</span>
+                                <span className="font-bold">{payload[0]?.value} bilhete(s)</span>
+                              </div>
+                              <div className="text-sky-400 flex items-center justify-between gap-4">
+                                <span>{stratBConfig.shortName}:</span>
+                                <span className="font-bold">{payload[1]?.value} bilhete(s)</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey={stratAConfig.shortName} fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey={stratBConfig.shortName} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Head-to-Head Detailed Comparative Table */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="p-3">Métrica Estatística / Financeira</th>
+                  <th className="p-3 text-emerald-400 font-bold">{stratAConfig.shortName} (A)</th>
+                  <th className="p-3 text-sky-400 font-bold">{stratBConfig.shortName} (B)</th>
+                  <th className="p-3 text-right pr-4">Diferencial / Vantagem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 font-mono">
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">ROI (Retorno Sobre Investimento)</td>
+                  <td className="p-3 font-bold text-sm text-emerald-400">{duelResults.simA.roi}%</td>
+                  <td className="p-3 font-bold text-sm text-sky-400">{duelResults.simB.roi}%</td>
+                  <td className="p-3 text-right pr-4 font-bold text-amber-300">
+                    {duelResults.winner === 'A'
+                      ? `+${duelResults.roiDiff}% para Algoritmo A`
+                      : `+${duelResults.roiDiff}% para Algoritmo B`}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">Saldo Líquido Final (R$)</td>
+                  <td className={`p-3 font-bold ${duelResults.simA.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    R$ {duelResults.simA.saldoLiquido.toFixed(2)}
+                  </td>
+                  <td className={`p-3 font-bold ${duelResults.simB.saldoLiquido >= 0 ? 'text-sky-400' : 'text-rose-400'}`}>
+                    R$ {duelResults.simB.saldoLiquido.toFixed(2)}
+                  </td>
+                  <td className="p-3 text-right pr-4 text-slate-300">
+                    Dif. R$ {Math.abs(duelResults.simA.saldoLiquido - duelResults.simB.saldoLiquido).toFixed(2)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">Total de Prêmios Arrecadados (R$)</td>
+                  <td className="p-3 text-slate-200">R$ {duelResults.simA.premioTotal.toFixed(2)}</td>
+                  <td className="p-3 text-slate-200">R$ {duelResults.simB.premioTotal.toFixed(2)}</td>
+                  <td className="p-3 text-right pr-4 text-slate-400">
+                    {duelResults.simA.premioTotal >= duelResults.simB.premioTotal ? 'A faturou mais' : 'B faturou mais'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">Custo Total Investido (R$)</td>
+                  <td className="p-3 text-slate-400">R$ {duelResults.simA.custoTotal.toFixed(2)}</td>
+                  <td className="p-3 text-slate-400">R$ {duelResults.simB.custoTotal.toFixed(2)}</td>
+                  <td className="p-3 text-right pr-4 text-slate-400">
+                    {duelResults.simA.custoTotal <= duelResults.simB.custoTotal ? 'A é mais econômico' : 'B é mais econômico'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">Bilhetes com 14 Pontos</td>
+                  <td className="p-3 font-bold text-amber-300">{duelResults.simA.acertos14} bilhete(s)</td>
+                  <td className="p-3 font-bold text-amber-300">{duelResults.simB.acertos14} bilhete(s)</td>
+                  <td className="p-3 text-right pr-4 text-slate-300">
+                    {duelResults.simA.acertos14 > duelResults.simB.acertos14
+                      ? 'A cravou mais'
+                      : duelResults.simB.acertos14 > duelResults.simA.acertos14
+                      ? 'B cravou mais'
+                      : 'Empate'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="p-3 text-slate-300 font-sans font-medium">Bilhetes com 15 Pontos (Jackpot)</td>
+                  <td className="p-3 font-bold text-yellow-400">{duelResults.simA.acertos15} bilhete(s)</td>
+                  <td className="p-3 font-bold text-yellow-400">{duelResults.simB.acertos15} bilhete(s)</td>
+                  <td className="p-3 text-right pr-4 text-slate-300">
+                    {duelResults.simA.acertos15 > duelResults.simB.acertos15
+                      ? 'A cravou 15!'
+                      : duelResults.simB.acertos15 > duelResults.simA.acertos15
+                      ? 'B cravou 15!'
+                      : 'Nenhum'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
