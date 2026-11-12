@@ -48,6 +48,7 @@ import { AuthAccountSecurityForms } from './AuthAccountSecurityForms';
 import { AdminPanel } from './AdminPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { sendNativeTop5TrendNotification } from '../services/nativeNotificationService';
+import { auditAndNotifySavedGames } from '../services/savedGamesAuditorService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
 
@@ -1095,7 +1096,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 </span>
               </span>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await auditAndNotifySavedGames(latestDraw, true);
+                    if (res) {
+                      setNotificationSuccessNotice(
+                        `✓ Push enviado: ${res.totalBilhetesAvaliados} bilhetes auditados, ${res.totalWinningTickets} premiados!`
+                      );
+                    } else {
+                      setNotificationSuccessNotice('✓ Push de teste enviado para todos os jogos salvos!');
+                    }
+                    setTimeout(() => setNotificationSuccessNotice(null), 4000);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-slate-950 font-black text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm"
+                  title="Auditar todos os jogos salvos e disparar notificação push imediata"
+                >
+                  <Bell className="w-3 h-3 fill-current" />
+                  <span>Testar Push Agora</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleTestTop5Notification('repeticao_consecutiva')}

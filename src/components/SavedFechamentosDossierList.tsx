@@ -146,10 +146,10 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       const res = await auditAndNotifySavedGames(latestDraw, true);
       if (res) {
         showFeedback(
-          `Notificação de teste enviada via Service Worker para o Concurso #${res.concurso} (${res.totalBilhetesAvaliados} bilhetes avaliados)!`
+          `✓ Auditoria de todos os jogos salva: ${res.totalBilhetesAvaliados} bilhetes auditados, ${res.totalWinningTickets} premiados (Máx: ${res.maxHits} acertos). Notificação push enviada via Service Worker!`
         );
       } else {
-        showFeedback('Notificação de teste disparada com sucesso!');
+        showFeedback('✓ Auditoria executada e notificação push enviada via Service Worker!');
       }
     } catch (e) {
       showFeedback('Erro ao disparar notificação push de teste.');

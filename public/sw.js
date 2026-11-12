@@ -88,17 +88,62 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Message Listener: Allows frontend to trigger persistent background notifications
+// Message Listener: Allows frontend to trigger persistent background notifications & audits
 self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  const { type, title, options, draw, totalHits, winningCount } = event.data;
+
+  // Rich Audit Notification for Saved Games
   if (
-    event.data &&
-    (event.data.type === 'SHOW_SAVED_GAMES_NOTIFICATION' ||
-      event.data.type === 'SHOW_TOP5_TREND_NOTIFICATION' ||
-      event.data.type === 'SHOW_JACKPOT_NOTIFICATION' ||
-      event.data.type === 'SHOW_PRIZE_TIER_NOTIFICATION' ||
-      event.data.type === 'SHOW_NOTIFICATION')
+    type === 'AUDIT_ALL_SAVED_GAMES' ||
+    type === 'TEST_PUSH_NOW' ||
+    type === 'BACKUP_RESTORE_AUDIT' ||
+    type === 'CAIXA_NEW_DRAW_AUDIT' ||
+    type === 'SHOW_SAVED_GAMES_NOTIFICATION'
   ) {
-    const { title, options } = event.data;
+    const notifTitle =
+      title ||
+      (winningCount && winningCount > 0
+        ? `🎉 Lotofácil #${draw?.concurso || ''}: ${winningCount} Bilhetes Premiados!`
+        : `🎯 Lotofácil #${draw?.concurso || ''}: Jogos Salvos Auditados`);
+
+    const defaultOptions = {
+      body:
+        options?.body ||
+        `Auditoria concluída com sucesso: todos os seus jogos salvos foram conferidos contra o resultado oficial da Caixa.`,
+      icon: '/favicon.svg',
+      badge: '/favicon.svg',
+      tag: 'lotosniper-audit-summary',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [300, 100, 300, 100, 300],
+      data: {
+        url: '/#jogos',
+        tab: 'jogos',
+        section: 'fechamentos_salvos',
+        concurso: draw?.concurso,
+        totalHits: totalHits,
+        winningCount: winningCount,
+      },
+      actions: [
+        { action: 'conferir', title: '🎯 Conferir Jogos' },
+        { action: 'fechar', title: 'Fechar' },
+      ],
+      ...options,
+    };
+
+    event.waitUntil(self.registration.showNotification(notifTitle, defaultOptions));
+    return;
+  }
+
+  // General Notification Types
+  if (
+    type === 'SHOW_TOP5_TREND_NOTIFICATION' ||
+    type === 'SHOW_JACKPOT_NOTIFICATION' ||
+    type === 'SHOW_PRIZE_TIER_NOTIFICATION' ||
+    type === 'SHOW_NOTIFICATION'
+  ) {
     event.waitUntil(self.registration.showNotification(title, options));
   }
 });
@@ -146,13 +191,15 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   try {
     const payload = event.data.json();
-    const title = payload.title || 'LotoSniper • Alerta de Jogos Salvos';
+    const title = payload.title || 'LotoSniper • Auditoria de Jogos Salvos';
     const options = {
-      body: payload.body || 'Novo sorteio apurado.',
+      body: payload.body || 'Novo sorteio apurado pela Caixa. Seus jogos foram auditados.',
       icon: '/favicon.svg',
       badge: '/favicon.svg',
-      data: payload.data || { url: '/#jogos' },
+      data: payload.data || { url: '/#jogos', tab: 'jogos' },
       vibrate: [300, 100, 300, 100, 300],
+      renotify: true,
+      requireInteraction: true,
       actions: [
         { action: 'conferir', title: '🎯 Conferir Jogos' },
         { action: 'fechar', title: 'Fechar' }
@@ -162,10 +209,10 @@ self.addEventListener('push', (event) => {
   } catch {
     const text = event.data.text();
     event.waitUntil(
-      self.registration.showNotification('LotoSniper', {
+      self.registration.showNotification('LotoSniper • Auditoria', {
         body: text,
         icon: '/favicon.svg',
-        data: { url: '/#jogos' },
+        data: { url: '/#jogos', tab: 'jogos' },
       })
     );
   }

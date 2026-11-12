@@ -258,6 +258,28 @@ export default function App() {
     return () => window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
   }, []);
 
+  // Escuta restauração de backup de fechamentos para auditar automaticamente todos os jogos salvos sem exceção
+  useEffect(() => {
+    const handleBackupRestored = async () => {
+      try {
+        const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
+        if (rawTickets) {
+          setSavedTickets(JSON.parse(rawTickets));
+        }
+      } catch {}
+      try {
+        const res = await auditAndNotifySavedGames(latestDraw, true);
+        if (res) {
+          setSavedGamesAuditNotice(res);
+        }
+      } catch (err) {
+        console.warn('Erro ao auditar jogos após restauração do backup:', err);
+      }
+    };
+    window.addEventListener('lotosniper-backup-restored', handleBackupRestored);
+    return () => window.removeEventListener('lotosniper-backup-restored', handleBackupRestored);
+  }, [latestDraw]);
+
   // Escuta cliques nas notificações emitidas pelo Service Worker em segundo plano
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

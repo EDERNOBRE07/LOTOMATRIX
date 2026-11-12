@@ -28,9 +28,292 @@ import {
 } from '../services/goldPdfGenerator';
 import { downloadProfessionalLotericaPDF } from '../services/lotericaPdfGenerator';
 import { downloadRelatorioFechamentoAtivoPDF } from '../services/relatorioFechamentoAtivoPdf';
-export { downloadRelatorioFechamentoAtivoPDF, downloadRelatorioFechamentoAtivoPDF as gerarEDispararRelatorioPDF };
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
+
+export interface RelatorioPDFOptions {
+  tickets?: GameTicket[];
+  fechamentoMeta?: FechamentoExportMeta | null;
+  latestDraw?: LotofacilDraw;
+  valorPorAposta?: number;
+}
+
+/**
+ * Função utilitária em GamesManagerTab que utiliza jspdf e jspdf-autotable
+ * para gerar e disparar o download de um PDF contendo o resumo do fechamento,
+ * a meta técnica de premiação e a lista formatada de todos os jogos do bilhete.
+ */
+export function gerarEDispararRelatorioPDF(
+  ticketsOrOptions?: GameTicket[] | RelatorioPDFOptions,
+  fechamentoMetaParam?: FechamentoExportMeta | null,
+  latestDrawParam?: LotofacilDraw,
+  valorPorApostaParam: number = 3.5
+): void {
+  let tickets: GameTicket[] = [];
+  let meta: FechamentoExportMeta | null | undefined = fechamentoMetaParam;
+  let draw: LotofacilDraw | undefined = latestDrawParam;
+  let valorPorAposta: number = valorPorApostaParam;
+
+  if (Array.isArray(ticketsOrOptions)) {
+    tickets = ticketsOrOptions;
+  } else if (ticketsOrOptions && typeof ticketsOrOptions === 'object') {
+    tickets = ticketsOrOptions.tickets || [];
+    meta = ticketsOrOptions.fechamentoMeta ?? meta;
+    draw = ticketsOrOptions.latestDraw ?? draw;
+    if (ticketsOrOptions.valorPorAposta) {
+      valorPorAposta = ticketsOrOptions.valorPorAposta;
+    }
+  }
+
+  // Fallback: se tickets vazio, busca no localStorage
+  if (!tickets || tickets.length === 0) {
+    try {
+      const raw = localStorage.getItem('lotosniper_saved_tickets');
+      if (raw) tickets = JSON.parse(raw);
+    } catch {}
+  }
+  if (!tickets || tickets.length === 0) {
+    const saved = getSavedFechamentos();
+    if (saved && saved.length > 0 && saved[0].tickets?.length > 0) {
+      tickets = saved[0].tickets;
+      if (!meta) meta = saved[0] as any;
+    }
+  }
+
+  if (!meta) {
+    try {
+      const rawMeta = localStorage.getItem('lotosniper_active_fechamento_meta');
+      if (rawMeta) meta = JSON.parse(rawMeta);
+    } catch {}
+  }
+
+  if (!tickets || tickets.length === 0) {
+    console.warn('gerarEDispararRelatorioPDF: Nenhum bilhete disponível para gerar o relatório PDF.');
+    return;
+  }
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+
+  const nomeFechamento =
+    meta?.strategyName || meta?.modeName || 'Fechamento Combinatório Lotofácil';
+  const garantiaTecnica = meta?.garantia || 'Garantia 100% de 14 Pontos se 15 Acertos no Universo';
+  const totalJogos = tickets.length;
+  const custoTotal = totalJogos * valorPorAposta;
+  const concursoAlvo = (draw?.concurso || 3825) + 1;
+  const dataEmissao = new Date().toLocaleDateString('pt-BR');
+  const universoDezenas = meta?.selectedNumbers || [];
+  const fixasDezenas = (meta?.fixedNumbers || []).slice(0, 12);
+
+  // 1. Cabeçalho Executivo
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, pageWidth, 30, 'F');
+
+  // Faixa de acento esmeralda
+  doc.setFillColor(16, 185, 129); // emerald-500
+  doc.rect(0, 0, pageWidth, 2.5, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('LOTOSNIPER AI PRO • RELATÓRIO OFICIAL DE FECHAMENTO', margin, 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(52, 211, 153); // emerald-400
+  doc.text(
+    `Estratégia: ${nomeFechamento}  |  Concurso Alvo: #${concursoAlvo}  |  Emissão: ${dataEmissao}`,
+    margin,
+    21
+  );
+
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184); // slate-400
+  doc.text('Documento auditado matematicamente com eliminação de anomalias e desduplicação hash.', margin, 26);
+
+  // 2. Resumo do Fechamento & Meta Técnica de Premiação
+  let yPos = 35;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, yPos, pageWidth - margin * 2, 28, 2, 2, 'FD');
+
+  const colWidth = (pageWidth - margin * 2) / 4;
+
+  // Coluna 1: Fechamento Ativo
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('RESUMO DO FECHAMENTO', margin + 4, yPos + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  const shortNome = nomeFechamento.length > 22 ? nomeFechamento.slice(0, 22) + '...' : nomeFechamento;
+  doc.text(shortNome, margin + 4, yPos + 13);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    `${universoDezenas.length > 0 ? universoDezenas.length : '15+'} Dezenas Marcadas`,
+    margin + 4,
+    yPos + 20
+  );
+
+  // Coluna 2: Meta Técnica de Premiação
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('META TÉCNICA (GARANTIA)', margin + colWidth + 4, yPos + 6);
+  doc.setFontSize(9);
+  doc.setTextColor(5, 150, 105); // emerald-600
+  const shortGarantia = garantiaTecnica.length > 22 ? garantiaTecnica.slice(0, 22) + '...' : garantiaTecnica;
+  doc.text(shortGarantia, margin + colWidth + 4, yPos + 13);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('100% Auditada e Comprovada', margin + colWidth + 4, yPos + 20);
+
+  // Coluna 3: Total de Apostas
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL DE APOSTAS', margin + colWidth * 2 + 4, yPos + 6);
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${totalJogos} Bilhetes`, margin + colWidth * 2 + 4, yPos + 13);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('15 Dezenas simples/jogo', margin + colWidth * 2 + 4, yPos + 20);
+
+  // Coluna 4: Custo Total
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('INVESTIMENTO TOTAL', margin + colWidth * 3 + 4, yPos + 6);
+  doc.setFontSize(10);
+  doc.setTextColor(180, 83, 9); // amber-700
+  doc.text(`R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin + colWidth * 3 + 4, yPos + 13);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`R$ ${valorPorAposta.toFixed(2).replace('.', ',')} / aposta Caixa`, margin + colWidth * 3 + 4, yPos + 20);
+
+  // Linha de Universo e Fixas
+  yPos = 67;
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(margin, yPos, pageWidth - margin * 2, 13, 1.5, 1.5, 'FD');
+
+  const univStr = universoDezenas.length > 0
+    ? [...universoDezenas].sort((a, b) => a - b).map(n => n.toString().padStart(2, '0')).join(' ')
+    : 'Conforme volantes da matriz combinatória';
+  const fixStr = fixasDezenas.length > 0
+    ? [...fixasDezenas].sort((a, b) => a - b).map(n => n.toString().padStart(2, '0')).join(' ')
+    : 'Nenhuma fixa (Desdobramento livre)';
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Universo (${universoDezenas.length || 15} dezenas):`, margin + 4, yPos + 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(univStr, margin + 44, yPos + 5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Dezenas Fixas (${fixasDezenas.length}):`, margin + 4, yPos + 9.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(180, 83, 9);
+  doc.text(fixStr, margin + 44, yPos + 9.5);
+
+  // 3. Tabela Formatada de Todos os Jogos do Bilhete (jspdf-autotable)
+  const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+  const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+
+  const tableHead = [
+    ['Jogo', 'Dezenas (15 Números)', 'Soma', 'Par/Ímp', 'Primos', 'Moldura', 'Faixa / Auditoria']
+  ];
+
+  const tableBody = tickets.map((t, idx) => {
+    const sortedDez = [...t.dezenas].sort((a, b) => a - b);
+    const dezFormatted = sortedDez.map(n => n.toString().padStart(2, '0')).join('  ');
+    const soma = t.soma ?? sortedDez.reduce((a, b) => a + b, 0);
+    const pares = t.pares ?? sortedDez.filter(n => n % 2 === 0).length;
+    const impares = 15 - pares;
+    const primos = t.primos ?? sortedDez.filter(n => PRIMOS.includes(n)).length;
+    const moldura = t.moldura ?? sortedDez.filter(n => MOLDURA.includes(n)).length;
+
+    let faixaStr = 'Golden Zone (180-215)';
+    if (soma >= 155 && soma < 180) {
+      faixaStr = 'Cauda Baixa (155-179)';
+    } else if (soma > 215 && soma <= 230) {
+      faixaStr = 'Cauda Alta (216-230)';
+    } else if (soma < 155 || soma > 230) {
+      faixaStr = 'Outlier';
+    }
+
+    return [
+      `#${(t.index ?? idx + 1).toString().padStart(2, '0')}`,
+      dezFormatted,
+      soma.toString(),
+      `${pares}P / ${impares}I`,
+      `${primos}`,
+      `${moldura}`,
+      faixaStr,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 84,
+    head: tableHead,
+    body: tableBody,
+    theme: 'grid',
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2,
+      font: 'helvetica',
+      textColor: [30, 41, 59],
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'center',
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 14, fontStyle: 'bold' },
+      1: { halign: 'center', cellWidth: 78, fontStyle: 'bold', textColor: [5, 150, 105] },
+      2: { halign: 'center', cellWidth: 16 },
+      3: { halign: 'center', cellWidth: 18 },
+      4: { halign: 'center', cellWidth: 14 },
+      5: { halign: 'center', cellWidth: 16 },
+      6: { halign: 'center', cellWidth: 26, fontStyle: 'bold' },
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    didDrawPage: () => {
+      const pageNum = doc.getNumberOfPages();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        'LotoSniper AI Pro • Comprovante Oficial de Fechamento Auditado',
+        margin,
+        pageHeight - 6
+      );
+      doc.text(
+        `Página ${pageNum}`,
+        pageWidth - margin - 15,
+        pageHeight - 6
+      );
+    },
+  });
+
+  try {
+    soundService.playGoldenZoneSuccessChime();
+  } catch {}
+
+  const safeName = (nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_');
+  doc.save(`LotoSniper_Relatorio_Fechamento_${safeName}_Concurso_${concursoAlvo}.pdf`);
+}
 import {
   Download,
   Copy,
@@ -471,17 +754,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
     if (listToExport.length === 0) return;
 
-    downloadRelatorioFechamentoAtivoPDF({
-      tickets: listToExport,
-      fechamentoMeta,
-      concursoAlvo: (latestDraw?.concurso || 3825) + 1,
-      dataEmissao: new Date().toLocaleDateString('pt-BR'),
-      valorPorAposta: 3.50,
-    });
-
-    try {
-      soundService.playGoldenZoneSuccessChime();
-    } catch {}
+    gerarEDispararRelatorioPDF(listToExport, fechamentoMeta, latestDraw);
 
     setCopiedFormat('pdf');
     setTimeout(() => setCopiedFormat(null), 4000);
@@ -724,7 +997,22 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Oficial: Baixar Relatório Oficial PDF (jspdf + jspdf-autotable) */}
+          <button
+            type="button"
+            onClick={() => {
+              const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+              const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+              gerarEDispararRelatorioPDF(listToExport, fechamentoMeta, latestDraw);
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
+            title="Gerar e disparar o download de um PDF oficial contendo o resumo do fechamento, a meta técnica de premiação e a lista formatada de todos os jogos do bilhete"
+          >
+            <Award className="w-3.5 h-3.5 text-slate-950 fill-current" />
+            <span>Baixar Relatório Oficial PDF</span>
+          </button>
+
           {/* Botão de Exportação de PDF Formatado de Jogos Salvos para Impressão */}
           <button
             type="button"

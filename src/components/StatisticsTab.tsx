@@ -65,6 +65,8 @@ import { ResumoFinanceiro } from './ResumoFinanceiro';
 import { FrequenciaDezenasD3 } from './FrequenciaDezenasD3';
 import { CiclosHistoricoRecharts } from './CiclosHistoricoRecharts';
 import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificadaRecharts';
+import { GoldenZoneChart } from './GoldenZoneChart';
+export { GoldenZoneChart };
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket, FilterCriteria } from '../types/lotofacil';
@@ -2341,6 +2343,11 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: DISPERSÃO SOMAS DA MATRIZ ESTRATIFICADA (RECHARTS 75/15/10%) */}
       {activeSubTab === 'dispersao_estratificada' && (
         <div className="space-y-6">
+          <GoldenZoneChart
+            savedTickets={savedTickets}
+            title="Golden Zone & Dispersão Estratificada de Somas"
+            subtitle="Dispersão dos bilhetes salvos em relação às faixas estatísticas (155–179, 180–215, 216–230)"
+          />
           <DispersaoSomaEstratificadaRecharts
             tickets={savedTickets}
             title="Dispersão de Somas da Matriz Estratificada (Golden Zone vs Caudas)"

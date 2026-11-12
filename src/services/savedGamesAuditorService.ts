@@ -369,6 +369,18 @@ export async function auditAndNotifySavedGames(
 
     try {
       if ('serviceWorker' in navigator) {
+        // Post message to active Service Worker controller for background execution
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'AUDIT_ALL_SAVED_GAMES',
+            title,
+            options: notificationOptions,
+            draw: { concurso: draw.concurso, data: draw.data },
+            totalHits: maxHits,
+            winningCount: totalWinningTickets,
+          });
+        }
+
         const registration = await navigator.serviceWorker.ready;
         if (registration && 'showNotification' in registration) {
           await registration.showNotification(title, notificationOptions);
@@ -376,7 +388,7 @@ export async function auditAndNotifySavedGames(
         }
       }
 
-      if (!notificationDispatched) {
+      if (!notificationDispatched && typeof window !== 'undefined' && 'Notification' in window) {
         // Fallback: standard Window Notification
         const notif = new Notification(title, notificationOptions);
         notif.onclick = () => {
