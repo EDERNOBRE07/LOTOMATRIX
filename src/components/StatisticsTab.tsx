@@ -167,7 +167,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'evolucao'
     | 'ciclos'
     | 'padroes'
-  >('custo_retorno_acumulado');
+  >('dispersao_estratificada');
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
   >('atraso_desc');

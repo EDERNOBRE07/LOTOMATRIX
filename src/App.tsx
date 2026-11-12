@@ -10,6 +10,8 @@ import { SettingsTab } from './components/SettingsTab';
 import { GuidedTourModal } from './components/GuidedTourModal';
 import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
+import { AppShellSidebar } from './components/AppShellSidebar';
+import { AppShellMobileBottomNav } from './components/AppShellMobileBottomNav';
 import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
@@ -69,6 +71,24 @@ export type TabType =
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('fechamento');
+  const [jogosSubView, setJogosSubView] = useState<'salvos' | 'conferencia'>('salvos');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lotosniper_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('lotosniper_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Estado unificado e persistente do activeFilterConfig (Pipeline Combinatório)
   const {
@@ -625,9 +645,22 @@ export default function App() {
         onOpenBackup={() => setIsBackupModalOpen(true)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
-        {/* Real-time Update Notification Banner */}
+      {/* App Shell Layout: Sidebar Colapsável (Desktop) + Conteúdo Principal */}
+      <div className="flex-1 flex w-full relative">
+        {/* Desktop Sidebar Fina/Colapsável com os 4 Pilares */}
+        <AppShellSidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          savedTicketsCount={savedTickets.length}
+          onOpenBackup={() => setIsBackupModalOpen(true)}
+          onOpenTour={() => setIsTourOpen(true)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
+        />
+
+        {/* Main Content Area */}
+        <main className="flex-1 min-w-0 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 pb-24 md:pb-8 space-y-5">
+          {/* Real-time Update Notification Banner */}
         {syncNotice && (
           <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 sm:px-4 flex items-center justify-between gap-3 text-xs shadow-md">
             <div className="flex items-center gap-2.5">
@@ -821,15 +854,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Navigation Tabs Menu: Design Vibrante, Botões Animados e Localização Facilitada */}
-        <NavigationMenu
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          savedTickets={savedTickets}
-          onOpenTour={() => setIsTourOpen(true)}
-          concursoAtualNumero={latestDraw?.concurso}
-        />
-
         {/* Tab Viewport */}
         <ErrorBoundary fallbackTitle="LotoSniper • Módulo Ativo">
           {activeTab === 'fechamento' && (
@@ -884,7 +908,7 @@ export default function App() {
                 targetCount={15}
               />
 
-              {/* Módulo de Conferência Oficial de Jogos (Colocado após o Volante Oficial Interativo 5×5) */}
+              {/* Módulo de Conferência Oficial de Jogos */}
               <ModuloConferenciaJogos
                 latestDraw={latestDraw}
                 generatedTickets={savedTickets}
@@ -933,13 +957,82 @@ export default function App() {
           )}
 
           {activeTab === 'jogos' && (
-            <GamesManagerTab
-              tickets={savedTickets}
-              latestDraw={latestDraw}
-              fechamentoMeta={activeFechamentoMeta}
-              onClearTickets={() => setSavedTickets([])}
-              onGoToGenerator={() => setActiveTab('fechamento')}
-            />
+            <div className="space-y-4">
+              {/* Seletor Segmentado Unificado: Jogos Salvos vs Conferidor Oficial */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-2.5 rounded-2xl shadow-xl">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setJogosSubView('salvos')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      jogosSubView === 'salvos'
+                        ? 'bg-gradient-to-r from-cyan-400 to-sky-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Fechamentos Salvos & Dossiê</span>
+                    {savedTickets.length > 0 && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-slate-950/20 text-slate-950 font-black">
+                        {savedTickets.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setJogosSubView('conferencia')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      jogosSubView === 'conferencia'
+                        ? 'bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    <span>Conferidor Automático & Volante 5×5</span>
+                  </button>
+                </div>
+
+                <div className="text-xs text-slate-400 hidden sm:flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-mono text-[11px]">Destaque 11 a 15 Acertos Caixa</span>
+                </div>
+              </div>
+
+              {jogosSubView === 'salvos' ? (
+                <GamesManagerTab
+                  tickets={savedTickets}
+                  latestDraw={latestDraw}
+                  fechamentoMeta={activeFechamentoMeta}
+                  onClearTickets={() => setSavedTickets([])}
+                  onGoToGenerator={() => setActiveTab('fechamento')}
+                />
+              ) : (
+                <div className="space-y-6">
+                  <VolanteSelector
+                    selectedNumbers={conferenciaVolanteNumbers}
+                    fixedNumbers={[]}
+                    excludedNumbers={[]}
+                    statsList={dynamicStats}
+                    cyclePendingNumbers={dezenasPendentesCiclo}
+                    latestDraw={latestDraw}
+                    onToggleNumber={handleToggleConferenciaNumber}
+                    onSetFixed={() => {}}
+                    onSetExcluded={() => {}}
+                    onSelectSet={(nums) => setConferenciaVolanteNumbers(nums.slice(0, 15))}
+                    onClear={() => setConferenciaVolanteNumbers([])}
+                    targetCount={15}
+                  />
+
+                  <ModuloConferenciaJogos
+                    latestDraw={latestDraw}
+                    generatedTickets={savedTickets}
+                    inspectedVolanteNumbers={conferenciaVolanteNumbers}
+                    onGoToFechamento={() => setActiveTab('fechamento')}
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'configuracoes' && (
@@ -958,6 +1051,14 @@ export default function App() {
           {activeTab === 'hostinger' && <HostingerGuideTab />}
         </ErrorBoundary>
       </main>
+    </div>
+
+    {/* Mobile Bottom Navigation Bar Fixa (PWA) */}
+    <AppShellMobileBottomNav
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      savedTicketsCount={savedTickets.length}
+    />
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500">

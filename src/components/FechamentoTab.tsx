@@ -33,7 +33,7 @@ import {
   criarMascara,
   IndicadorGarantiaPayload,
 } from '../services/combinatorics';
-import { CentralUnificadaFechamento } from './CentralUnificadaFechamento';
+import { CentralUnificadaFechamento, UNIFIED_MATRIX_CATALOG, MatrixCatalogItem } from './CentralUnificadaFechamento';
 import { BentoGridFechamento } from './BentoGridFechamento';
 import { IndicadorGarantiaLJCR } from './IndicadorGarantiaLJCR';
 import { HistogramaDistribuicaoAcertos } from './HistogramaDistribuicaoAcertos';
@@ -92,6 +92,8 @@ import {
   Play,
   Layers,
   ChevronDown,
+  ChevronUp,
+  Sliders,
   Filter,
   History,
   RotateCcw,
@@ -225,6 +227,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [workerProgress, setWorkerProgress] = useState<CombinatoricsProgress | null>(null);
   const [goldenGlowTrigger, setGoldenGlowTrigger] = useState<number>(0);
   const [isPrintVolantesModalOpen, setIsPrintVolantesModalOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  const [isVolanteSupportOpen, setIsVolanteSupportOpen] = useState(false);
+  const [selectedCatalogUniverse, setSelectedCatalogUniverse] = useState<number>(targetCount);
+
+  useEffect(() => {
+    setSelectedCatalogUniverse(targetCount);
+  }, [targetCount]);
 
   // Auditoria de pré-voo: Verifica se a aba anterior colapsou em tela preta e restaura dossiê
   useEffect(() => {
@@ -2589,754 +2598,592 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* BARRA DE MOTORES DE GERAÇÃO RÁPIDA (BENTO GRID RESPONSIVO)               */}
+      {/* ESTÚDIO DE FECHAMENTOS: LAYOUT EXECUTIVO DE 2 COLUNAS & FLUXO CONTÍNUO     */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <Zap className="w-4 h-4 fill-current" />
-            </span>
-            <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
-              Motores Cirúrgicos de Geração Rápida
-            </h3>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700 font-bold">
-              100% AUDITADOS
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-400 hidden sm:inline">
-            Alturas uniformes e visibilidade total em dispositivos móveis e desktop
-          </span>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* COLUNA ESQUERDA: Volante Interativo 5×5 + Ações Rápidas de Seleção */}
+        <div className="lg:col-span-5 xl:col-span-5 space-y-4">
+          {/* Volante Oficial 5x5 */}
+          <VolanteSelector
+            selectedNumbers={selectedNumbers}
+            fixedNumbers={fixedNumbers}
+            excludedNumbers={excludedNumbers}
+            aiScores={aiPrediction?.scores}
+            statsList={dynamicStats}
+            cyclePendingNumbers={cyclePendingNumbers}
+            latestDraw={latestDraw}
+            onToggleNumber={handleToggleNumber}
+            onSetFixed={handleSetFixed}
+            onSetExcluded={handleSetExcluded}
+            onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+            onStrategySelect={(stratName) => {
+              setStrategyName(stratName);
+              setActiveModel(stratName);
+            }}
+            activeStrategy={strategyName}
+            onClear={() => {
+              setSelectedNumbers([]);
+              setFixedNumbers([]);
+              setExcludedNumbers([]);
+            }}
+            targetCount={targetCount}
+          />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
-          {/* Card 1: GERADOR TURBO */}
-          <button
-            type="button"
-            onClick={() => setIsTurboModalOpen(true)}
-            className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/30 hover:border-emerald-400 hover:from-slate-850 hover:to-emerald-950/50 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all text-left group cursor-pointer"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
-                  &lt; 2s • WEB WORKER
-                </span>
-                <Zap className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform fill-current" />
-              </div>
-              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-emerald-300 transition-colors">
-                Gerador Turbo
-              </h4>
-              <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                Força Bruta 14 Pts • 100% Auditado
-              </p>
-            </div>
-            <div className="pt-3 mt-2 border-t border-emerald-500/20 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
-              <span>Execução Paralela</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          {/* Card 2: SEQUÊNCIAS OTIMIZADAS */}
-          <button
-            type="button"
-            onClick={handleGenerateFibonacci}
-            disabled={isGenerating}
-            className="h-full flex flex-col justify-between p-3.5 rounded-xl border border-sky-500/40 bg-gradient-to-b from-slate-900 to-sky-950/30 hover:border-sky-400 hover:from-slate-850 hover:to-sky-950/50 shadow-lg shadow-sky-500/10 hover:shadow-sky-500/25 transition-all text-left group cursor-pointer disabled:opacity-60"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-sky-400 text-slate-950 shadow-sm">
-                  5 JOGOS
-                </span>
-                <Sparkles className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-sky-300 transition-colors">
-                Padrões Fibonacci
-              </h4>
-              <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                ≥ 3 Fibo • Regra de Ouro (190–210)
-              </p>
-            </div>
-            <div className="pt-3 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
-              <span>Série Áurea da Matemática</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          {/* Card 3: FECHAMENTO PONDERADO */}
-          <button
-            type="button"
-            onClick={handleGeneratePonderado}
-            disabled={selectedNumbers.length < targetCount || isGenerating}
-            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-purple-500/40 bg-gradient-to-b from-slate-900 to-purple-950/30 hover:border-purple-400 hover:from-slate-850 hover:to-purple-950/50 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/25 transition-all text-left group cursor-pointer ${
-              selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-purple-400 text-slate-950 shadow-sm">
-                  IP &amp; ROBUSTEZ
-                </span>
-                <Flame className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform fill-current" />
-              </div>
-              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-purple-300 transition-colors">
-                Fechamento Ponderado
-              </h4>
-              <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                Frequência × Atraso • 50 Apurações
-              </p>
-            </div>
-            <div className="pt-3 mt-2 border-t border-purple-500/20 flex items-center justify-between text-[10px] text-purple-400 font-bold">
-              <span>Índice de Performance</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          {/* Card 4: ANTI-CISNE NEGRO */}
-          <button
-            type="button"
-            onClick={handleGenerateEstratificada}
-            disabled={selectedNumbers.length < targetCount || isGenerating}
-            className={`h-full flex flex-col justify-between p-3.5 rounded-xl border border-amber-500/50 bg-gradient-to-b from-slate-900 to-amber-950/30 hover:border-amber-400 hover:from-slate-850 hover:to-amber-950/50 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/25 transition-all text-left group cursor-pointer ${
-              selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
-                  75 / 15 / 10% • PRO
-                </span>
-                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-              </div>
-              <h4 className="text-sm font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
-                Anti-Cisne Negro
-              </h4>
-              <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                Matriz Estratificada 3 Níveis
-              </p>
-            </div>
-            <div className="pt-3 mt-2 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-amber-300 font-bold">
-              <span>Blindagem Concurso #3825</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* CENTRAL UNIFICADA DE FECHAMENTOS & MOTORES CIRÚRGICOS */}
-      <CentralUnificadaFechamento
-        mode={mode}
-        onSelectMode={(newMode, newTarget) => {
-          setMode(newMode);
-          if (newTarget && selectedNumbers.length > newTarget) {
-            setSelectedNumbers(selectedNumbers.slice(0, newTarget));
-          }
-          soundService.playFilterClick();
-        }}
-        selectedNumbers={selectedNumbers}
-        fixedNumbers={fixedNumbers}
-        targetCount={targetCount}
-        isGenerating={isGenerating}
-        onApplyTopIA={() => applyStrategyModel('Top 18')}
-        onApplyFecharCiclo={() => applyStrategyModel('Fechar Ciclo')}
-        onApplyEquilibrioCanonico={() => applyStrategyModel('Equilíbrio Canônico')}
-        onApplyParDeOuro={handleApplyParesDeOuro}
-        onApplyEstrategia9x9={handleApplyDailyAIInsights}
-        onClearSelection={() => {
-          setSelectedNumbers([]);
-          setFixedNumbers([]);
-          setExcludedNumbers([]);
-        }}
-        onCompleteWithTopIA={() => {
-          const available = Array.from({ length: 25 }, (_, i) => i + 1)
-            .filter((n) => !selectedNumbers.includes(n) && !excludedNumbers.includes(n))
-            .sort((a, b) => {
-              const scoreA = aiPrediction?.scores ? aiPrediction.scores[a - 1] : 0;
-              const scoreB = aiPrediction?.scores ? aiPrediction.scores[b - 1] : 0;
-              return scoreB - scoreA;
-            });
-          const needed = Math.max(0, targetCount - selectedNumbers.length);
-          setSelectedNumbers([...selectedNumbers, ...available.slice(0, needed)].sort((a, b) => a - b));
-          soundService.playFilterClick();
-        }}
-        onOpenTurboModal={() => setIsTurboModalOpen(true)}
-        onGenerateFibonacci={handleGenerateFibonacci}
-        onGeneratePonderado={handleGeneratePonderado}
-        onGenerateEstratificada={handleGenerateEstratificada}
-        onGeneratePrimary={handleGenerate}
-        activePreset={
-          filters.presetEstatistico === 'conservador'
-            ? 'conservador'
-            : filters.presetEstatistico === 'agressivo'
-            ? 'agressivo'
-            : (filters.somaMin === 155 && filters.somaMax === 230)
-            ? 'anti_cisne_negro'
-            : 'balanceado'
-        }
-        onSelectPreset={(p) => {
-          if (p === 'anti_cisne_negro') {
-            setFilters((prev) => ({
-              ...prev,
-              somaMin: 155,
-              somaMax: 230,
-              maxConsecutivas: 8,
-              presetEstatistico: 'custom',
-            }));
-            soundService.playFilterClick();
-          } else {
-            handleSelectStatisticalPreset(PRESETS_LOTOFACIL[p]);
-          }
-        }}
-        cyclePendingCount={cyclePendingNumbers?.length || 2}
-        garantiaEfetivaPct={
-          indicadorGarantia?.garantiaEfetiva ? parseFloat(indicadorGarantia.garantiaEfetiva.toFixed(1)) : 99.4
-        }
-      />
-
-      {/* Centro de Sugestões Estratégicas & Incorporação de Filtros na Matriz */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                <span>Sugestões Estratégicas & Incorporação na Matriz</span>
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  CONCURSO #{latestDraw.concurso}
-                </span>
-                {activeStrategicBox && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 flex items-center gap-1.5 animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span>Estratégia Iluminada: <strong className="text-white">{strategyName}</strong></span>
-                  </span>
-                )}
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Incorpore instantaneamente as recomendações da IA, Pares de Ouro, Preditor e calibração de filtros na matriz de fechamento.
-              </p>
-            </div>
-          </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            {selectedNumbers.length}/{targetCount} dezenas selecionadas
-          </span>
-        </div>
-
-        {/* 6 Botões de Ação Rápida com Curva ABC e Iluminação Dinâmica do Box Escolhido */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
-          {/* 1. Curva ABC (A) */}
-          <button
-            type="button"
-            onClick={handleApplyCurvaAbcClasseA}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'curva_abc'
-                ? 'bg-gradient-to-br from-amber-500/35 via-yellow-500/25 to-slate-900 border-2 border-amber-300 ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(245,158,11,0.55)] scale-[1.02] z-10'
-                : filters.curvaAbcAtiva
-                ? 'bg-amber-500/15 border-amber-400/80 ring-1 ring-amber-400/40 shadow-sm'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-amber-500/40 hover:border-amber-300'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 font-black ${
-              activeStrategicBox === 'curva_abc'
-                ? 'bg-gradient-to-br from-amber-400 to-yellow-300 text-slate-950 shadow-md shadow-amber-500/50 scale-110 animate-pulse'
-                : 'bg-gradient-to-br from-amber-500 to-yellow-400 text-slate-950 group-hover:scale-105'
-            }`}>
-              <Award className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>⭐ Curva ABC (A)</span>
-                {activeStrategicBox === 'curva_abc' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'curva_abc' ? 'text-amber-200 font-bold' : 'text-amber-300'}`}>
-                {activeStrategicBox === 'curva_abc' ? '★ ILUMINADO' : filters.curvaAbcAtiva ? 'Filtro Ativo (Mín. 11)' : 'Dominância 80%'}
-              </p>
-            </div>
-          </button>
-
-          {/* 2. Top 18 IA */}
-          <button
-            type="button"
-            onClick={handleApplyTop18}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'top_18'
-                ? 'bg-gradient-to-br from-amber-500/35 via-orange-500/25 to-slate-900 border-2 border-amber-300 ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(251,191,36,0.55)] scale-[1.02] z-10'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-amber-500/30 hover:border-amber-400 shadow-sm'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 ${
-              activeStrategicBox === 'top_18'
-                ? 'bg-gradient-to-br from-amber-400 to-orange-400 text-slate-950 shadow-md shadow-amber-500/50 scale-110 animate-pulse'
-                : 'bg-amber-500/20 text-amber-300 group-hover:scale-105'
-            }`}>
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>⚡ Top 18 IA</span>
-                {activeStrategicBox === 'top_18' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'top_18' ? 'text-amber-200 font-bold' : 'text-slate-400'}`}>
-                {activeStrategicBox === 'top_18' ? '★ ILUMINADO' : '18 dezenas ponderadas'}
-              </p>
-            </div>
-          </button>
-
-          {/* 3. Pares de Ouro */}
-          <button
-            type="button"
-            onClick={handleApplyParesDeOuro}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'pares_ouro'
-                ? 'bg-gradient-to-br from-yellow-500/35 via-amber-500/25 to-slate-900 border-2 border-yellow-300 ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(234,179,8,0.55)] scale-[1.02] z-10'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-yellow-500/30 hover:border-yellow-400 shadow-sm'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 ${
-              activeStrategicBox === 'pares_ouro'
-                ? 'bg-gradient-to-br from-yellow-400 to-amber-400 text-slate-950 shadow-md shadow-yellow-500/50 scale-110 animate-pulse'
-                : 'bg-yellow-500/20 text-yellow-300 group-hover:scale-105'
-            }`}>
-              <Award className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>🏆 Pares de Ouro</span>
-                {activeStrategicBox === 'pares_ouro' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-yellow-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'pares_ouro' ? 'text-yellow-200 font-bold' : 'text-slate-400'}`}>
-                {activeStrategicBox === 'pares_ouro' ? '★ FIXA [11, 20]' : 'Fixa [11, 20] afinidade'}
-              </p>
-            </div>
-          </button>
-
-          {/* 4. Preditor Real */}
-          <button
-            type="button"
-            onClick={handleApplyRealTimePredictor}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'preditor_real'
-                ? 'bg-gradient-to-br from-cyan-500/35 via-blue-500/25 to-slate-900 border-2 border-cyan-300 ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(6,182,212,0.6)] scale-[1.02] z-10'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-cyan-500/30 hover:border-cyan-400 shadow-sm'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 ${
-              activeStrategicBox === 'preditor_real'
-                ? 'bg-gradient-to-br from-cyan-400 to-blue-400 text-slate-950 shadow-md shadow-cyan-500/50 scale-110 animate-pulse'
-                : 'bg-cyan-500/20 text-cyan-300 group-hover:scale-105'
-            }`}>
-              <Activity className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>🔮 Preditor Real</span>
-                {activeStrategicBox === 'preditor_real' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-cyan-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'preditor_real' ? 'text-cyan-200 font-bold' : 'text-slate-400'}`}>
-                {activeStrategicBox === 'preditor_real' ? '★ ILUMINADO' : 'Motor estocástico'}
-              </p>
-            </div>
-          </button>
-
-          {/* 5. Insights IA */}
-          <button
-            type="button"
-            onClick={handleApplyDailyAIInsights}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'insights_ia'
-                ? 'bg-gradient-to-br from-purple-500/35 via-fuchsia-500/25 to-slate-900 border-2 border-purple-300 ring-2 ring-purple-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(168,85,247,0.6)] scale-[1.02] z-10'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-purple-500/30 hover:border-purple-400 shadow-sm'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 ${
-              activeStrategicBox === 'insights_ia'
-                ? 'bg-gradient-to-br from-purple-400 to-fuchsia-400 text-slate-950 shadow-md shadow-purple-500/50 scale-110 animate-pulse'
-                : 'bg-purple-500/20 text-purple-300 group-hover:scale-105'
-            }`}>
-              <Lightbulb className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>💡 Insights IA</span>
-                {activeStrategicBox === 'insights_ia' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-purple-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'insights_ia' ? 'text-purple-200 font-bold' : 'text-slate-400'}`}>
-                {activeStrategicBox === 'insights_ia' ? '★ PRESET ATIVO' : '9 rep. + ausentes chave'}
-              </p>
-            </div>
-          </button>
-
-          {/* 6. Garantir Filtros */}
-          <button
-            type="button"
-            onClick={handleEnsureFilters}
-            className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-300 group cursor-pointer relative ${
-              activeStrategicBox === 'garantir_filtros'
-                ? 'bg-gradient-to-br from-emerald-500/35 via-teal-500/25 to-slate-900 border-2 border-emerald-300 ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900 shadow-[0_0_25px_rgba(16,185,129,0.6)] scale-[1.02] z-10'
-                : 'bg-slate-950/80 hover:bg-slate-800 border-emerald-500/40 hover:border-emerald-400 shadow-sm'
-            }`}
-          >
-            <div className={`p-2 rounded-lg transition shrink-0 ${
-              activeStrategicBox === 'garantir_filtros'
-                ? 'bg-gradient-to-br from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/50 scale-110 animate-pulse'
-                : 'bg-emerald-500/20 text-emerald-300 group-hover:scale-105'
-            }`}>
-              <Filter className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
-                <span>🛡️ Garantir Filtros</span>
-                {activeStrategicBox === 'garantir_filtros' && (
-                  <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded-full bg-emerald-400 text-slate-950 animate-pulse">
-                    ✓
-                  </span>
-                )}
-              </div>
-              <p className={`text-[10px] truncate ${activeStrategicBox === 'garantir_filtros' ? 'text-emerald-200 font-bold' : 'text-emerald-400'}`}>
-                {activeStrategicBox === 'garantir_filtros' ? '★ INCORPORADOS' : 'Zona de Ouro (185-215)'}
-              </p>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Componente de Filtro de Tendência dos Últimos 3 Concursos */}
-      <FiltroTendencia3Concursos
-        recentDraws={RECENT_DRAWS}
-        selectedNumbers={selectedNumbers}
-        fixedNumbers={fixedNumbers}
-        excludedNumbers={excludedNumbers}
-        onToggleNumber={handleToggleNumber}
-        onSetFixedNumbers={(nums) => setFixedNumbers(nums)}
-        onSetExcludedNumbers={(nums) => setExcludedNumbers(nums)}
-        onAddNumbersToSelected={(nums) => {
-          const combined = Array.from(new Set([...selectedNumbers, ...nums])).slice(0, targetCount);
-          setSelectedNumbers(combined);
-        }}
-      />
-
-
-      {/* Volante 5x5 Grid */}
-      <VolanteSelector
-
-        selectedNumbers={selectedNumbers}
-        fixedNumbers={fixedNumbers}
-        excludedNumbers={excludedNumbers}
-        aiScores={aiPrediction?.scores}
-        statsList={dynamicStats}
-        cyclePendingNumbers={cyclePendingNumbers}
-        latestDraw={latestDraw}
-        onToggleNumber={handleToggleNumber}
-        onSetFixed={handleSetFixed}
-        onSetExcluded={handleSetExcluded}
-        onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
-        onStrategySelect={(stratName) => {
-          setStrategyName(stratName);
-          setActiveModel(stratName);
-        }}
-        activeStrategy={strategyName}
-        onClear={() => {
-          setSelectedNumbers([]);
-          setFixedNumbers([]);
-          setExcludedNumbers([]);
-        }}
-        targetCount={targetCount}
-      />
-
-      {/* MAPA DE CALOR INTERATIVO (ÚLTIMOS 50 CONCURSOS) - DIRETAMENTE ABAIXO DO VOLANTE OFICIAL */}
-      <MapaCalorVolante50Component
-        latestDraw={latestDraw}
-        selectedNumbers={selectedNumbers}
-        fixedNumbers={fixedNumbers}
-        excludedNumbers={excludedNumbers}
-        onToggleNumber={handleToggleNumber}
-        onSetFixed={handleSetFixed}
-        onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
-        onClear={() => {
-          setSelectedNumbers([]);
-          setFixedNumbers([]);
-          setExcludedNumbers([]);
-        }}
-      />
-
-      {/* PAINEL DE CONTROLE: TENDÊNCIA DE CICLO (FILTROS DE DEZENAS PENDENTES VS ALTA FREQUÊNCIA) */}
-      <PainelTendenciaCiclo
-        latestDraw={latestDraw}
-        dynamicStats={dynamicStats}
-        cyclePendingNumbers={cyclePendingNumbers}
-        concursosNoCiclo={concursosNoCiclo}
-        config={cycleTendencyConfig}
-        onChangeConfig={setCycleTendencyConfig}
-        onApplyToVolante={handleApplyCycleTendencyToVolante}
-        targetCount={targetCount}
-      />
-
-      {/* SELETOR DE PRESETS ESTATÍSTICOS (CONSERVADOR, BALANCEADO, AGRESSIVO) */}
-      <SeletorPresetsEstatisticos
-        activePresetId={filters.presetEstatistico || 'balanceado'}
-        onSelectPreset={handleSelectStatisticalPreset}
-        className="my-3"
-      />
-
-      {/* 1. SELETOR VISUAL DE EQUILÍBRIO ESTRUTURAL (PARES & ÍMPARES) */}
-      <EquilibrioEstruturalSelector
-        filters={filters}
-        onChange={(f) => handleFiltersChange(f, true)}
-        selectedNumbers={selectedNumbers}
-        latestDraw={latestDraw}
-      />
-
-      {/* MÓDULO DE ROBUSTEZ ESTATÍSTICA (BASE 50 APURAÇÕES) & FECHAMENTO PONDERADO */}
-      <ModuloRobustezEstatistica
-        filters={filters}
-        onChange={(f) => handleFiltersChange(f, true)}
-        dynamicStats={dynamicStats}
-        latestDraw={latestDraw}
-        discardedByRobustezCount={discardedByRobustezCount}
-        totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
-        onGeneratePonderado={handleGeneratePonderado}
-        isGenerating={isGenerating}
-      />
-
-      {/* 2. FILTROS PERSONALIZADOS & RESTRIÇÕES CANÔNICAS (GRID 2X2 COM FIBONACCI E ALERTA SONORO) */}
-      <FilterControls
-        filters={filters}
-        onChange={(f) => handleFiltersChange(f, true)}
-        onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
-        latestDraw={latestDraw}
-        soundAlertEnabled={soundAlertEnabled}
-        onToggleSoundAlert={handleToggleSoundAlert}
-      />
-
-      {/* 4. GRÁFICO DE DISPERSÃO DE SOMAS DOS ÚLTIMOS 100 CONCURSOS & ZONA DE OURO (190–210) */}
-      <SomaScatterPlot
-        latestDraw={latestDraw}
-        currentSomaMin={filters.somaMin}
-        currentSomaMax={filters.somaMax}
-        onApplySomaRange={(min, max) =>
-          handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
-        }
-      />
-
-      {/* 3. PRONTO PARA PROCESSAR A MATRIZ? (EM DESTAQUE COM DESIGN APRIMORADO) */}
-      <div
-        className={`relative overflow-hidden rounded-2xl border-2 transition-all p-5 sm:p-6 shadow-2xl ${
-          selectedNumbers.length === targetCount
-            ? 'bg-gradient-to-br from-slate-900 via-emerald-950/50 to-slate-900 border-emerald-500/60 shadow-emerald-500/15'
-            : 'bg-gradient-to-br from-slate-900 via-slate-900/95 to-amber-950/30 border-amber-500/40 shadow-slate-950/60'
-        }`}
-      >
-        {/* Glow ambient background effect */}
-        <div
-          className={`absolute -top-12 -right-12 w-64 h-64 blur-3xl pointer-events-none rounded-full transition-opacity ${
-            selectedNumbers.length === targetCount ? 'bg-emerald-500/25 opacity-100' : 'bg-amber-500/15 opacity-80'
-          }`}
-        />
-
-        <div className="relative z-10 space-y-5">
-          {/* Top Status & Heading */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-800/80">
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                {selectedNumbers.length === targetCount ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-black text-xs uppercase tracking-wider font-mono shadow-sm">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-                    </span>
-                    <span>✓ Matriz Calibrada ({targetCount} Dezenas)</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-bold text-xs uppercase tracking-wider font-mono">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-                    </span>
-                    <span>Faltam {targetCount - selectedNumbers.length} dezena(s) para completar</span>
-                  </span>
-                )}
-
-                <span className="text-[11px] font-semibold text-slate-400 font-mono">
-                  Garantia: <strong className="text-white">{preset.garantia}</strong> • {preset.jogosMaximos} Bilhetes
-                </span>
-              </div>
-
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-2 flex items-center gap-2.5">
-                <span className="p-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  <Zap className="w-5 h-5 fill-current" />
-                </span>
-                <span>Pronto para processar a Matriz?</span>
-              </h2>
-
-              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                O motor combinatório de alta precisão podará combinações estatisticamente inviáveis
-                com base nas restrições canônicas ativas e desdobrará as {targetCount} dezenas em exatamente{' '}
-                <strong className="text-emerald-300 font-bold">{preset.jogosMaximos} jogos otimizados</strong> de 15 números.
-              </p>
-            </div>
-
-            {/* Quick Metrics Telemetry Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 shrink-0 text-xs">
-              <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Garantia</span>
-                <strong className="text-white font-bold font-mono text-xs">{preset.garantia}</strong>
-                <span className="text-[10px] text-emerald-400 block font-medium">100% matemática</span>
-              </div>
-
-              <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total de Jogos</span>
-                <strong className="text-white font-bold font-mono text-xs">{preset.jogosMaximos} Bilhetes</strong>
-                <span className="text-[10px] text-slate-400 block font-medium">15 dezenas cada</span>
-              </div>
-
-              <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 col-span-2 sm:col-span-1">
-                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Investimento</span>
-                <strong className="text-emerald-400 font-bold font-mono text-xs">
-                  R$ {(preset.jogosMaximos * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </strong>
-                <span className="text-[10px] text-slate-400 block font-medium">R$ 3,50 / aposta</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Selection Progress or Numbers Preview Bar */}
-          <div className="bg-slate-950/80 rounded-xl p-3 sm:p-4 border border-slate-800/80 space-y-2.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-300 flex items-center gap-2">
-                <span>Progresso da Matriz de {targetCount} Dezenas:</span>
-                <span className="font-mono font-bold text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
-                  {selectedNumbers.length} / {targetCount}
-                </span>
+          {/* Atalhos Rápidos de Preenchimento & Contador de Dezenas */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                Preenchimento Inteligente
               </span>
-
-              <span className="font-mono text-xs font-bold text-emerald-400">
-                {Math.round((selectedNumbers.length / targetCount) * 100)}%
+              <span className="text-xs font-mono font-bold text-emerald-400">
+                {selectedNumbers.length}/{targetCount} no Volante
               </span>
             </div>
 
-            {/* Visual Progress bar */}
-            <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  selectedNumbers.length === targetCount
-                    ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]'
-                    : 'bg-gradient-to-r from-amber-500 to-orange-500'
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleApplyTop18}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition cursor-pointer"
+              >
+                🎯 Top IA
+              </button>
+              <button
+                type="button"
+                onClick={() => applyStrategyModel('Fechar Ciclo')}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer"
+              >
+                🔄 Fechar Ciclo ({cyclePendingNumbers?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyParesDeOuro}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30 transition cursor-pointer"
+              >
+                👑 Par de Ouro [11, 20]
+              </button>
+              <button
+                type="button"
+                onClick={() => applyStrategyModel('Equilíbrio Canônico')}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition cursor-pointer"
+              >
+                ⚖️ Canônico
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyDailyAIInsights}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer"
+              >
+                📄 9x9 Rep/Aus
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNumbers([]);
+                  setFixedNumbers([]);
+                  setExcludedNumbers([]);
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                Limpar
+              </button>
+            </div>
+
+            {selectedNumbers.length < targetCount && (
+              <button
+                type="button"
+                onClick={() => {
+                  const available = Array.from({ length: 25 }, (_, i) => i + 1)
+                    .filter((n) => !selectedNumbers.includes(n) && !excludedNumbers.includes(n))
+                    .sort((a, b) => {
+                      const scoreA = aiPrediction?.scores ? aiPrediction.scores[a - 1] : 0;
+                      const scoreB = aiPrediction?.scores ? aiPrediction.scores[b - 1] : 0;
+                      return scoreB - scoreA;
+                    });
+                  const needed = Math.max(0, targetCount - selectedNumbers.length);
+                  setSelectedNumbers([...selectedNumbers, ...available.slice(0, needed)].sort((a, b) => a - b));
+                  soundService.playFilterClick();
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                <span>Completar com Top IA (+{targetCount - selectedNumbers.length} dezenas)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Módulos de Apoio Colapsáveis (Mapa de Calor 50 / Tendência de Ciclo) */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <button
+              type="button"
+              onClick={() => setIsVolanteSupportOpen((prev) => !prev)}
+              className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400" />
+                <span>Mapa de Calor 50 &amp; Tendência de Ciclo</span>
+              </div>
+              {isVolanteSupportOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {isVolanteSupportOpen && (
+              <div className="p-4 pt-1 border-t border-slate-800/80 space-y-4">
+                <MapaCalorVolante50Component
+                  latestDraw={latestDraw}
+                  selectedNumbers={selectedNumbers}
+                  fixedNumbers={fixedNumbers}
+                  excludedNumbers={excludedNumbers}
+                  onToggleNumber={handleToggleNumber}
+                  onSetFixed={handleSetFixed}
+                  onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+                  onClear={() => {
+                    setSelectedNumbers([]);
+                    setFixedNumbers([]);
+                    setExcludedNumbers([]);
+                  }}
+                />
+
+                <PainelTendenciaCiclo
+                  latestDraw={latestDraw}
+                  dynamicStats={dynamicStats}
+                  cyclePendingNumbers={cyclePendingNumbers}
+                  concursosNoCiclo={concursosNoCiclo}
+                  config={cycleTendencyConfig}
+                  onChangeConfig={setCycleTendencyConfig}
+                  onApplyToVolante={handleApplyCycleTendencyToVolante}
+                  targetCount={targetCount}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUNA DIREITA: Bento Grid 4 Motores + Catálogo de Matrizes + Filtros Progressivos */}
+        <div className="lg:col-span-7 xl:col-span-7 space-y-4">
+          {/* 1. Bento Grid dos 4 Motores Rápidos */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <Zap className="w-4 h-4 fill-current" />
+                </span>
+                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
+                  Motores Cirúrgicos de Geração Rápida
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700 font-bold">
+                  100% AUDITADOS
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                R$ 3,50 / aposta Caixa
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+              {/* Card 1: GERADOR TURBO */}
+              <button
+                type="button"
+                onClick={() => setIsTurboModalOpen(true)}
+                className="h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/30 hover:border-emerald-400 hover:from-slate-850 hover:to-emerald-950/50 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all text-left group cursor-pointer"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
+                      &lt; 2s • WORKER
+                    </span>
+                    <Zap className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform fill-current" />
+                  </div>
+                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-emerald-300 transition-colors">
+                    Gerador Turbo
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                    Força Bruta 14 Pts • 100% Auditado
+                  </p>
+                </div>
+                <div className="pt-2 mt-2 border-t border-emerald-500/20 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
+                  <span>Execução Paralela</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </button>
+
+              {/* Card 2: PADRÕES FIBONACCI */}
+              <button
+                type="button"
+                onClick={handleGenerateFibonacci}
+                disabled={isGenerating}
+                className="h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-sky-500/40 bg-gradient-to-b from-slate-900 to-sky-950/30 hover:border-sky-400 hover:from-slate-850 hover:to-sky-950/50 shadow-lg shadow-sky-500/10 hover:shadow-sky-500/25 transition-all text-left group cursor-pointer disabled:opacity-60"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-sky-400 text-slate-950 shadow-sm">
+                      5 JOGOS
+                    </span>
+                    <Sparkles className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-sky-300 transition-colors">
+                    Padrões Fibonacci
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                    ≥ 3 Fibo • Regra de Ouro (190–210)
+                  </p>
+                </div>
+                <div className="pt-2 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
+                  <span>Série Áurea</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </button>
+
+              {/* Card 3: FECHAMENTO PONDERADO */}
+              <button
+                type="button"
+                onClick={handleGeneratePonderado}
+                disabled={selectedNumbers.length < targetCount || isGenerating}
+                className={`h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-purple-500/40 bg-gradient-to-b from-slate-900 to-purple-950/30 hover:border-purple-400 hover:from-slate-850 hover:to-purple-950/50 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/25 transition-all text-left group cursor-pointer ${
+                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
-                style={{ width: `${Math.min(100, (selectedNumbers.length / targetCount) * 100)}%` }}
-              />
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-purple-400 text-slate-950 shadow-sm">
+                      IP &amp; ROBUSTEZ
+                    </span>
+                    <Flame className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform fill-current" />
+                  </div>
+                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-purple-300 transition-colors">
+                    Fechamento Ponderado
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                    Frequência × Atraso • 50 Apurações
+                  </p>
+                </div>
+                <div className="pt-2 mt-2 border-t border-purple-500/20 flex items-center justify-between text-[10px] text-purple-400 font-bold">
+                  <span>Índice Performance</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </button>
+
+              {/* Card 4: ANTI-CISNE NEGRO */}
+              <button
+                type="button"
+                onClick={handleGenerateEstratificada}
+                disabled={selectedNumbers.length < targetCount || isGenerating}
+                className={`h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-amber-500/50 bg-gradient-to-b from-slate-900 to-amber-950/30 hover:border-amber-400 hover:from-slate-850 hover:to-amber-950/50 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/25 transition-all text-left group cursor-pointer ${
+                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
+                      75/15/10% • PRO
+                    </span>
+                    <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                    Anti-Cisne Negro
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
+                    Matriz Estratificada 3 Níveis
+                  </p>
+                </div>
+                <div className="pt-2 mt-2 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-amber-300 font-bold">
+                  <span>Blindagem #3825</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Catálogo Unificado de Matrizes Combinatórias (15 a 21 Dezenas) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center font-mono">
+                  M
+                </span>
+                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
+                  Catálogo de Matrizes de 15 a 21 Dezenas
+                </h3>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400">
+                Ativa: <strong className="text-emerald-400">{targetCount} Dezenas ({preset.garantia})</strong>
+              </span>
             </div>
 
-            {/* Selected Numbers Chip Preview when filled */}
-            {selectedNumbers.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] text-slate-400 mr-1">Dezenas prontas:</span>
-                {selectedNumbers.map((n) => {
-                  const isPendingCycle = cyclePendingNumbers?.includes(n);
-                  return (
-                    <span
-                      key={n}
-                      className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-mono text-[11px] font-bold shadow-sm ${
-                        isPendingCycle
-                          ? 'bg-amber-500 text-slate-950 ring-1 ring-amber-300'
-                          : 'bg-slate-800 text-slate-100 border border-slate-700'
-                      }`}
-                    >
-                      {n.toString().padStart(2, '0')}
-                    </span>
-                  );
-                })}
+            {/* Abas de Universo 15 a 21 */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {[15, 16, 17, 18, 19, 20, 21].map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCatalogUniverse(size);
+                    const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
+                    if (firstMatrix) {
+                      setMode(firstMatrix.mode);
+                      if (selectedNumbers.length > size) {
+                        setSelectedNumbers(selectedNumbers.slice(0, size));
+                      }
+                      soundService.playFilterClick();
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border ${
+                    selectedCatalogUniverse === size
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  {size} Dezenas
+                </button>
+              ))}
+            </div>
+
+            {/* Cards de Matrizes para o Universo Selecionado */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {UNIFIED_MATRIX_CATALOG.filter((m) => m.dezenas === selectedCatalogUniverse).map((item) => {
+                const isSelected = mode === item.mode && targetCount === item.dezenas;
+                const custoItem = item.jogos * VALOR_APOSTA_LOTOFACIL;
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      setMode(item.mode);
+                      if (selectedNumbers.length > item.dezenas) {
+                        setSelectedNumbers(selectedNumbers.slice(0, item.dezenas));
+                      }
+                      soundService.playFilterClick();
+                    }}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
+                      isSelected
+                        ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-2 ring-emerald-400/20 shadow-lg shadow-emerald-500/10'
+                        : 'bg-slate-950/80 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-mono font-bold text-white">
+                          {item.dezenas} Dez • {item.jogos} {item.jogos === 1 ? 'Jogo' : 'Jogos'}
+                        </span>
+                        {item.tag && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            {item.tag}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-black text-emerald-400 tracking-tight">
+                        {item.garantia}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">
+                        {item.condicao}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                      <span className="text-xs font-mono font-bold text-amber-300">
+                        R$ {custoItem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition ${
+                          isSelected
+                            ? 'bg-emerald-400 text-slate-950 font-black'
+                            : 'bg-slate-800 text-slate-300 group-hover:bg-slate-700'
+                        }`}
+                      >
+                        {isSelected ? '✓ Ativa' : 'Escolher'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3. Presets de Filtros Canônicos com Progressive Disclosure */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                  <Filter className="w-4 h-4" />
+                </span>
+                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
+                  Filtros Canônicos &amp; Proteção Estatística
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAdvancedFiltersOpen((prev) => !prev)}
+                className="text-xs font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>{isAdvancedFiltersOpen ? 'Recolher Ajuste Fino' : 'Ajuste Fino Avançado'}</span>
+                {isAdvancedFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {/* 4 Presets Rápidos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.conservador)}
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                  filters.presetEstatistico === 'conservador'
+                    ? 'bg-emerald-500/20 border-emerald-400 text-white shadow-md shadow-emerald-500/20'
+                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+              >
+                <div className="text-xs font-bold text-emerald-400">🛡️ Conservador</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Soma 190–210 • 7P/8I</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.balanceado)}
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                  filters.presetEstatistico === 'balanceado' || (!filters.presetEstatistico && filters.somaMin === 180)
+                    ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md shadow-cyan-500/20'
+                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+              >
+                <div className="text-xs font-bold text-cyan-400">⚖️ Balanceado</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Soma 180–215 • Amplo</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.agressivo)}
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                  filters.presetEstatistico === 'agressivo'
+                    ? 'bg-purple-500/20 border-purple-400 text-white shadow-md shadow-purple-500/20'
+                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+              >
+                <div className="text-xs font-bold text-purple-400">⚡ Agressivo</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Foco Prêmios Altos</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters((prev) => ({
+                    ...prev,
+                    somaMin: 155,
+                    somaMax: 230,
+                    maxConsecutivas: 8,
+                    presetEstatistico: 'custom',
+                  }));
+                  soundService.playFilterClick();
+                }}
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                  filters.somaMin === 155 && filters.somaMax === 230
+                    ? 'bg-amber-500/20 border-amber-400 text-white shadow-md shadow-amber-500/20'
+                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+              >
+                <div className="text-xs font-bold text-amber-400">👑 Anti-Cisne Negro</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">75 / 15 / 10% Estratificado</div>
+              </button>
+            </div>
+
+            {/* Drawer Expandível de Ajuste Fino */}
+            {isAdvancedFiltersOpen && (
+              <div className="pt-3 border-t border-slate-800/80 space-y-4 animate-in fade-in duration-200">
+                <EquilibrioEstruturalSelector
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  selectedNumbers={selectedNumbers}
+                  latestDraw={latestDraw}
+                />
+
+                <FilterControls
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
+                  latestDraw={latestDraw}
+                  soundAlertEnabled={soundAlertEnabled}
+                  onToggleSoundAlert={handleToggleSoundAlert}
+                />
+
+                <ModuloRobustezEstatistica
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  dynamicStats={dynamicStats}
+                  latestDraw={latestDraw}
+                  discardedByRobustezCount={discardedByRobustezCount}
+                  totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
+                  onGeneratePonderado={handleGeneratePonderado}
+                  isGenerating={isGenerating}
+                />
+
+                <SomaScatterPlot
+                  latestDraw={latestDraw}
+                  currentSomaMin={filters.somaMin}
+                  currentSomaMax={filters.somaMax}
+                  onApplySomaRange={(min, max) =>
+                    handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
+                  }
+                />
               </div>
             )}
           </div>
 
-          {/* Calculadora de Apostas Mínimas Garantia 14 Pontos */}
-          <CalculadoraMinima14Pontos
-            fixedCount={fixedNumbers.length}
-            selectedCount={selectedNumbers.length}
-            currentMatrixSize={targetCount as (16 | 17 | 18)}
-            onApplyMatrixSize={(size) => {
-              if (size === 16) setMode('16_14_15');
-              else if (size === 17) setMode('17_14_15');
-              else setMode('18_14_15');
-              if (selectedNumbers.length > size) {
-                setSelectedNumbers(selectedNumbers.slice(0, size));
-              }
-              soundService.playFilterClick();
-            }}
-          />
+          {/* 4. Sticky HUD Action Bar */}
+          <div className="sticky bottom-2 z-20 pt-2">
+            <div className="bg-slate-950/95 border-2 border-emerald-500/50 backdrop-blur-xl rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Universo</span>
+                  <span className="font-mono font-bold text-white text-xs">
+                    {selectedNumbers.length}/{targetCount} Dez
+                  </span>
+                </div>
 
-          {/* ========================================================================= */}
-          {/* BENTO GRID RESPONSIVO: MOTORES, MATRIZ ESTRATIFICADA, FILTROS & EXPORTAÇÃO */}
-          {/* ========================================================================= */}
-          <BentoGridFechamento
-            targetCount={targetCount}
-            selectedNumbers={selectedNumbers}
-            fixedNumbers={fixedNumbers}
-            preset={preset}
-            filters={filters}
-            isGenerating={isGenerating}
-            onOpenTurboModal={() => setIsTurboModalOpen(true)}
-            onGenerateEstratificada={handleGenerateEstratificada}
-            activePreset={
-              filters.presetEstatistico === 'conservador'
-                ? 'conservador'
-                : filters.presetEstatistico === 'agressivo'
-                ? 'agressivo'
-                : (filters.somaMin === 155 && filters.somaMax === 230)
-                ? 'anti_cisne_negro'
-                : 'balanceado'
-            }
-            onSelectPreset={(p) => {
-              if (p === 'anti_cisne_negro') {
-                setFilters((prev) => ({
-                  ...prev,
-                  somaMin: 155,
-                  somaMax: 230,
-                  maxConsecutivas: 8,
-                  presetEstatistico: 'custom',
-                }));
-                soundService.playFilterClick();
-              } else {
-                handleSelectStatisticalPreset(PRESETS_LOTOFACIL[p]);
-              }
-            }}
-            onGeneratePonderado={handleGeneratePonderado}
-            onGenerateFibonacci={handleGenerateFibonacci}
-            onGeneratePrimary={handleGenerate}
-            hasGeneratedTickets={generatedTickets.length > 0}
-            generatedTicketsCount={generatedTickets.length}
-            onExportPDF={handleExportPDF}
-            onExportCartoesPDF={handleExportCartoesPDF}
-            onExportCSV={handleExportCSV}
-            onDownloadTXT={handleDownloadTXT}
-            onExportCologa={handleExportCologa}
-            onOpenPrintVolantesModal={() => setIsPrintVolantesModalOpen(true)}
-            onGoToSimulator={() => onGoToSimulator(generatedTickets)}
-            onCopyTXT={handleCopyAll}
-          />
+                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Fixas</span>
+                  <span className="font-mono font-bold text-amber-400 text-xs">
+                    {fixedNumbers.length} Dezenas
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Jogos</span>
+                  <span className="font-mono font-bold text-white text-xs">
+                    {preset.jogosMaximos} Bilhetes
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Investimento</span>
+                  <span className="font-mono font-bold text-emerald-400 text-xs">
+                    R$ {(preset.jogosMaximos * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={selectedNumbers.length < targetCount || isGenerating}
+                  className={`w-full sm:w-auto px-6 py-3 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-xl ${
+                    selectedNumbers.length === targetCount && !isGenerating
+                      ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:scale-102 active:scale-95 ring-2 ring-emerald-300'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-70'
+                  }`}
+                >
+                  <Zap className="w-4 h-4 fill-current" />
+                  <span>
+                    {isGenerating
+                      ? 'Processando Matriz...'
+                      : selectedNumbers.length < targetCount
+                      ? `Faltam ${targetCount - selectedNumbers.length} Dezenas`
+                      : 'Gerar Fechamento Agora'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
 
       {/* Atalho & Painel de Planejamento de Bolão Oficial Caixa */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
