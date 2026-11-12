@@ -47,7 +47,7 @@ import {
   FileText,
 } from 'lucide-react';
 
-interface AlgorithmDuelSimulatorProps {
+export interface AlgorithmDuelSimulatorProps {
   latestDraw?: LotofacilDraw;
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];

@@ -8,7 +8,7 @@ import { AnimatedDrawChecker } from './AnimatedDrawChecker';
 import { EfficiencyReportModal } from './EfficiencyReportModal';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { EvolucaoSaldoChart } from './EvolucaoSaldoChart';
-import { AlgorithmDuelSimulator } from './AlgorithmDuelSimulator';
+import { ModoDuelo } from './ModoDuelo';
 import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
 import { QuickBacktestD3Area } from './QuickBacktestD3Area';
 import { MapaCalorProbabilidadeVolante10 } from './MapaCalorProbabilidadeVolante10';
@@ -387,10 +387,10 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           latestDraw={latestDraw}
         />
       ) : activeSubTab === 'duelo_algoritmos' ? (
-        <AlgorithmDuelSimulator
+        <ModoDuelo
           latestDraw={latestDraw}
           userSavedTickets={tickets}
-          onApplyStrategy={(winningPool) => {
+          onApplyStrategy={(winningPool: number[]) => {
             onGoToGenerator();
           }}
         />
