@@ -72,6 +72,201 @@ export function unmarkDeletedFechamentoId(id: string): void {
   } catch {}
 }
 
+export function normalizeSavedFechamento(
+  item: any,
+  fallbackIndex: number = 0
+): SavedFechamentoPrognostico {
+  if (!item || typeof item !== 'object') {
+    return createInitialSampleFechamento();
+  }
+
+  const id = item.id ? String(item.id) : `fechamento-${Date.now()}-${fallbackIndex}`;
+  const concurso = typeof item.concurso === 'number' ? item.concurso : 3827;
+  const dataConcurso = item.dataConcurso ? String(item.dataConcurso) : '';
+  const dataCriacao = item.dataCriacao ? String(item.dataCriacao) : new Date().toLocaleString('pt-BR');
+
+  // Tipo de fechamento com fallback estrito e garantia de string
+  const rawTipo =
+    item.tipoFechamento ||
+    item.nome ||
+    item.name ||
+    item.strategyName ||
+    item.modeName ||
+    item.modalidadeMatriz ||
+    '⚡ Fechamento Combinatório Lotofácil';
+  const tipoFechamento = String(rawTipo);
+
+  const rawModalidade =
+    item.modalidadeMatriz ||
+    item.garantia ||
+    'Matriz Pro (Garantia 14 se 15)';
+  const modalidadeMatriz = String(rawModalidade);
+
+  // Extração segura de tickets
+  let rawTickets: any[] = [];
+  if (Array.isArray(item.tickets)) {
+    rawTickets = item.tickets;
+  } else if (Array.isArray(item.jogos)) {
+    rawTickets = item.jogos;
+  } else if (Array.isArray(item.dezenas) && item.dezenas.length >= 15) {
+    // O próprio objeto era um ticket individual salvo erroneamente
+    rawTickets = [item];
+  }
+
+  const tickets: GameTicket[] = rawTickets.map((t: any, idx: number) => {
+    const rawDez = Array.isArray(t?.dezenas)
+      ? t.dezenas
+      : Array.isArray(t?.numbers)
+      ? t.numbers
+      : [];
+    const dezenas = rawDez
+      .filter((n: any) => typeof n === 'number' && n >= 1 && n <= 25)
+      .sort((a: number, b: number) => a - b);
+    const validDez =
+      dezenas.length === 15
+        ? dezenas
+        : dezenas.length > 0
+        ? dezenas.slice(0, 15)
+        : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    const soma = typeof t?.soma === 'number' ? t.soma : validDez.reduce((a: number, b: number) => a + b, 0);
+    const pares = typeof t?.pares === 'number' ? t.pares : validDez.filter((n: number) => n % 2 === 0).length;
+    const impares = typeof t?.impares === 'number' ? t.impares : 15 - pares;
+    const primos =
+      typeof t?.primos === 'number'
+        ? t.primos
+        : validDez.filter((n: number) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length;
+    const moldura =
+      typeof t?.moldura === 'number'
+        ? t.moldura
+        : validDez.filter((n: number) => MOLDURA.includes(n)).length;
+
+    return {
+      id: t?.id ? String(t.id) : `ticket-${idx + 1}`,
+      index: typeof t?.index === 'number' ? t.index : idx + 1,
+      dezenas: validDez,
+      soma,
+      pares,
+      impares,
+      primos,
+      moldura,
+      fibonacci:
+        typeof t?.fibonacci === 'number'
+          ? t.fibonacci
+          : validDez.filter((n: number) => FIBONACCI_NUMBERS.includes(n)).length,
+      miolo: 15 - moldura,
+      repetidas: typeof t?.repetidas === 'number' ? t.repetidas : 9,
+      maxConsecutivas: typeof t?.maxConsecutivas === 'number' ? t.maxConsecutivas : 4,
+      scoreIA: typeof t?.scoreIA === 'number' ? t.scoreIA : 92,
+      auditoriaAnomalias: t?.auditoriaAnomalias || 'Conforme filtros',
+    };
+  });
+
+  // Universo de dezenas
+  let universoDezenas: number[] = Array.isArray(item.universoDezenas)
+    ? item.universoDezenas.filter((n: any) => typeof n === 'number' && n >= 1 && n <= 25)
+    : Array.isArray(item.selectedNumbers)
+    ? item.selectedNumbers.filter((n: any) => typeof n === 'number' && n >= 1 && n <= 25)
+    : [];
+
+  if (universoDezenas.length === 0 && tickets.length > 0) {
+    const set = new Set<number>();
+    tickets.forEach((t) => t.dezenas.forEach((d) => set.add(d)));
+    universoDezenas = Array.from(set).sort((a, b) => a - b);
+  }
+  if (universoDezenas.length === 0) {
+    universoDezenas = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 22, 23, 24, 25];
+  }
+
+  const dezenasFixas: number[] = Array.isArray(item.dezenasFixas)
+    ? item.dezenasFixas.filter((n: any) => typeof n === 'number' && universoDezenas.includes(n))
+    : [];
+
+  const dezenasExcluidas: number[] = Array.isArray(item.dezenasExcluidas)
+    ? item.dezenasExcluidas.filter((n: any) => typeof n === 'number')
+    : [];
+
+  const totalJogos =
+    typeof item.totalJogos === 'number' && item.totalJogos > 0
+      ? item.totalJogos
+      : tickets.length > 0
+      ? tickets.length
+      : 1;
+
+  const custoTotal =
+    typeof item.custoTotal === 'number' && item.custoTotal > 0
+      ? item.custoTotal
+      : totalJogos * VALOR_APOSTA_LOTOFACIL;
+
+  const faixaSoma = {
+    min: typeof item.faixaSoma?.min === 'number' ? item.faixaSoma.min : 180,
+    max: typeof item.faixaSoma?.max === 'number' ? item.faixaSoma.max : 215,
+    zonaOuro: item.faixaSoma?.zonaOuro ? String(item.faixaSoma.zonaOuro) : '190 a 210',
+  };
+
+  const paridade = {
+    minPares: typeof item.paridade?.minPares === 'number' ? item.paridade.minPares : 6,
+    maxPares: typeof item.paridade?.maxPares === 'number' ? item.paridade.maxPares : 9,
+    canonico: item.paridade?.canonico ? String(item.paridade.canonico) : '7P/8I ou 8P/7I',
+  };
+
+  const repetidas = {
+    min: typeof item.repetidas?.min === 'number' ? item.repetidas.min : 8,
+    max: typeof item.repetidas?.max === 'number' ? item.repetidas.max : 10,
+    concursoRef:
+      typeof item.repetidas?.concursoRef === 'number'
+        ? item.repetidas.concursoRef
+        : concurso,
+  };
+
+  const moldura = {
+    min: typeof item.moldura?.min === 'number' ? item.moldura.min : 8,
+    max: typeof item.moldura?.max === 'number' ? item.moldura.max : 11,
+  };
+
+  const primos = {
+    min: typeof item.primos?.min === 'number' ? item.primos.min : 4,
+    max: typeof item.primos?.max === 'number' ? item.primos.max : 7,
+  };
+
+  const fibonacci = {
+    min: typeof item.fibonacci?.min === 'number' ? item.fibonacci.min : 3,
+    max: typeof item.fibonacci?.max === 'number' ? item.fibonacci.max : 6,
+  };
+
+  const maxConsecutivas =
+    typeof item.maxConsecutivas === 'number' ? item.maxConsecutivas : 5;
+
+  const auditoriaAnomalias =
+    typeof item.auditoriaAnomalias === 'string'
+      ? item.auditoriaAnomalias
+      : `${totalJogos}/${totalJogos} bilhetes dentro da faixa`;
+
+  return {
+    id,
+    timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
+    dataCriacao,
+    concurso,
+    dataConcurso,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoDezenas,
+    dezenasFixas,
+    dezenasExcluidas,
+    faixaSoma,
+    paridade,
+    maxConsecutivas,
+    auditoriaAnomalias,
+    repetidas,
+    moldura,
+    primos,
+    fibonacci,
+    tickets,
+    totalJogos,
+    custoTotal,
+  };
+}
+
 export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
   try {
     const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true';
@@ -85,9 +280,36 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
     }
 
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+
+    if (!Array.isArray(parsed)) return [];
+
+    let needsRepair = false;
+    const normalized = parsed
+      .filter((p) => p && typeof p === 'object')
+      .map((item, idx) => {
+        if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz) {
+          needsRepair = true;
+        }
+        return normalizeSavedFechamento(item, idx);
+      });
+
+    // Se encontramos dados corrompidos ou não normalizados, corrigimos imediatamente no localStorage
+    if (needsRepair && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(normalized));
+      } catch {}
+    }
+
+    return normalized;
+  } catch (err) {
+    console.warn('[LotoSniper] Erro ao carregar fechamentos salvos:', err);
     return [];
   }
 }
@@ -641,13 +863,14 @@ export function createInitialSampleFechamento(): SavedFechamentoPrognostico {
  * Converts a list of tickets into text formatted for "Entrada de Jogos para Conferência"
  */
 export function formatTicketsForConferenciaInput(tickets: GameTicket[]): string {
-  if (!tickets || tickets.length === 0) return '';
+  if (!tickets || !Array.isArray(tickets) || tickets.length === 0) return '';
   return tickets
     .map((t, idx) => {
-      const dezenasStr = t.dezenas
-        .map((n) => n.toString().padStart(2, '0'))
+      const rawDez = Array.isArray(t?.dezenas) ? t.dezenas : ((t as any)?.numbers || []);
+      const dezenasStr = rawDez
+        .map((n: number) => Number(n).toString().padStart(2, '0'))
         .join(' - ');
-      return `Jogo ${(idx + 1).toString().padStart(2, '0')}: ${dezenasStr}`;
+      return `Jogo ${(t?.index ?? idx + 1).toString().padStart(2, '0')}: ${dezenasStr}`;
     })
     .join('\n');
 }

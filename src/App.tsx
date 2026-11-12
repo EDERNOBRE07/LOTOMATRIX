@@ -152,7 +152,13 @@ export default function App() {
   const [savedTickets, setSavedTickets] = useState<GameTicket[]>(() => {
     try {
       const saved = localStorage.getItem('lotosniper_saved_tickets');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t: any) => t && Array.isArray(t.dezenas) && t.dezenas.length > 0);
+        }
+      }
+      return [];
     } catch {
       return [];
     }

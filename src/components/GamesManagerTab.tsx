@@ -1019,8 +1019,11 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             onClick={() => {
               const allSaved = getSavedFechamentos();
               if (allSaved.length > 0) {
-                const allTickets = allSaved.flatMap((f) => f.tickets);
-                const totalCost = allSaved.reduce((acc, f) => acc + f.custoTotal, 0);
+                const allTickets = allSaved.flatMap((f) => f.tickets || []);
+                const totalCost = allSaved.reduce(
+                  (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * 3.5),
+                  0
+                );
                 downloadProfessionalLotericaPDF({
                   tickets: allTickets.length > 0 ? allTickets : tickets,
                   concurso: latestDraw.concurso,

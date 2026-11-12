@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, RotateCcw, ShieldAlert, Layers, Download } from 'lucide-react';
 import { triggerForcedJSONDownload } from '../services/backupManagerService';
+import { sanitizarFechamentosSalvos } from '../services/sanitizer';
 
 interface Props {
   children: ReactNode;
@@ -31,6 +32,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReload = () => {
+    try {
+      sanitizarFechamentosSalvos();
+    } catch {}
     if (this.props.onReset) {
       this.props.onReset();
     }
@@ -39,6 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleHardReset = () => {
     try {
+      sanitizarFechamentosSalvos();
       localStorage.removeItem('lotosniper_active_fechamento_meta');
       localStorage.removeItem('lotosniper_matrix_autosave');
     } catch {}

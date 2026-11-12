@@ -1,5 +1,6 @@
 import { GameTicket } from '../types/lotofacil';
 import { analyzeTicket, auditarTicketsGerados } from './combinatorics';
+import { normalizeSavedFechamento, SavedFechamentoPrognostico } from './savedFechamentosStorage';
 
 export type SanitizerReport = any[] & {
   sanitizedCount: number;
@@ -12,19 +13,19 @@ export type SanitizerReport = any[] & {
 /**
  * sanitizarFechamentosSalvos
  *
- * Percorre o localStorage na chave 'lotosniper_saved_tickets' (e chaves legadas compatíveis),
- * aplicando a regra de limpeza:
- * 1. Remove dezenas de 'dezenasFixas' que não estão no 'universoDezenas'.
- * 2. Limita 'dezenasFixas.length' a no máximo 12 itens.
- * 3. Garante que todos os bilhetes salvos contenham apenas dezenas presentes no 'universoDezenas'.
- *
- * Persiste as correções no localStorage e dispara eventos de atualização.
+ * Percorre o localStorage (ou dados customizados passados por parâmetro):
+ * 1. Sanitiza 'dezenasFixas' (removendo dezenas fora do universo e limitando a no máximo 12).
+ * 2. Garante que todos os bilhetes salvos contenham exatamente 15 dezenas pertencentes ao universo.
+ * 3. Normaliza a estrutura completa do fechamento (tipoFechamento, modalidadeMatriz, filtros).
+ * 4. Salva apenas Fechamentos válidos em 'lotosniper_saved_prognosticos' e 'lotosniper_saved_fechamentos'.
+ * 5. Salva os bilhetes individuais limpos em 'lotosniper_saved_tickets'.
  */
 export function sanitizarFechamentosSalvos(customStorageOrData?: any): SanitizerReport {
-  const STORAGE_KEY = 'lotosniper_saved_tickets';
+  const TICKETS_KEY = 'lotosniper_saved_tickets';
   const PROGNOSTICOS_KEY = 'lotosniper_saved_prognosticos';
+  const FECHAMENTOS_KEY = 'lotosniper_saved_fechamentos';
+
   let rawData: any = null;
-  let isLocalStorage = false;
 
   if (customStorageOrData !== undefined && customStorageOrData !== null) {
     if (typeof customStorageOrData === 'string') {
@@ -37,15 +38,17 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
       rawData = customStorageOrData;
     }
   } else if (typeof localStorage !== 'undefined') {
-    isLocalStorage = true;
     try {
-      const storedTickets = localStorage.getItem(STORAGE_KEY);
       const storedPrognosticos = localStorage.getItem(PROGNOSTICOS_KEY);
+      const storedFechamentos = localStorage.getItem(FECHAMENTOS_KEY);
+      const storedTickets = localStorage.getItem(TICKETS_KEY);
 
-      if (storedTickets) {
-        rawData = JSON.parse(storedTickets);
-      } else if (storedPrognosticos) {
+      if (storedPrognosticos) {
         rawData = JSON.parse(storedPrognosticos);
+      } else if (storedFechamentos) {
+        rawData = JSON.parse(storedFechamentos);
+      } else if (storedTickets) {
+        rawData = JSON.parse(storedTickets);
       } else {
         rawData = [];
       }
@@ -56,166 +59,123 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
     rawData = [];
   }
 
-  // Normaliza para array de itens (fechamentos ou tickets com metadados)
-  let items: any[] = [];
+  // Normaliza a entrada para lista de itens
+  let rawList: any[] = [];
   if (Array.isArray(rawData)) {
-    items = rawData;
+    rawList = rawData;
   } else if (rawData && typeof rawData === 'object') {
     if (Array.isArray(rawData.fechamentos)) {
-      items = rawData.fechamentos;
+      rawList = rawData.fechamentos;
     } else if (Array.isArray(rawData.tickets)) {
-      items = rawData.tickets;
+      rawList = rawData.tickets;
     } else {
-      items = [rawData];
+      rawList = [rawData];
     }
   }
 
   let sanitizedCount = 0;
   let ticketsCorrigidosCount = 0;
 
-  const sanitizedItems = items.map((item: any, idx: number) => {
-    // 1. Identifica o universo de dezenas do fechamento/item
-    let universo: number[] = [];
-    if (Array.isArray(item.universoDezenas) && item.universoDezenas.length > 0) {
-      universo = item.universoDezenas;
-    } else if (Array.isArray(item.universo) && item.universo.length > 0) {
-      universo = item.universo;
-    } else if (Array.isArray(item.selectedNumbers) && item.selectedNumbers.length > 0) {
-      universo = item.selectedNumbers;
-    } else if (Array.isArray(item.dezenas) && item.dezenas.length >= 15) {
-      universo = item.dezenas;
-    } else {
-      // Universo padrão da Lotofácil (1 a 25) se nenhum especificado
-      universo = Array.from({ length: 25 }, (_, i) => i + 1);
-    }
+  // Processa e normaliza cada fechamento
+  const sanitizedFechamentos: SavedFechamentoPrognostico[] = rawList.map((rawItem: any, idx: number) => {
+    // Se o item for um ticket solto, normalizeSavedFechamento o encapsula com segurança
+    const item = normalizeSavedFechamento(rawItem, idx);
 
-    const uniqueUniverse = [...new Set(universo)].sort((a, b) => a - b);
-    const universeSet = new Set(uniqueUniverse);
+    // 1. Universo de dezenas
+    const universe = [...new Set(item.universoDezenas || [])].sort((a, b) => a - b);
+    const universeSet = new Set(universe);
 
-    // 2. Regra de limpeza das dezenas fixas:
-    // - Remove dezenas de 'dezenasFixas' que não estão no 'universoDezenas'
-    // - Limita 'dezenasFixas.length' a no máximo 12 itens
-    const originalFixas: number[] = Array.isArray(item.dezenasFixas) ? item.dezenasFixas : [];
-    const filteredFixas = originalFixas.filter((d: number) => universeSet.has(d));
-    const clampedFixas = filteredFixas.slice(0, 12).sort((a, b) => a - b);
+    // 2. Limpeza estrita de fixas
+    const originalFixas = item.dezenasFixas || [];
+    const clampedFixas = originalFixas
+      .filter((d) => universeSet.has(d))
+      .slice(0, 12)
+      .sort((a, b) => a - b);
 
     const fixasChanged =
       originalFixas.length !== clampedFixas.length ||
       originalFixas.some((d, fIdx) => d !== clampedFixas[fIdx]);
 
-    // 3. Regra de integridade dos bilhetes:
-    // - Garante que todos os bilhetes salvos contenham apenas dezenas presentes no 'universoDezenas'
-    let itemTicketsChanged = 0;
+    // 3. Integridade dos bilhetes
+    let ticketsChanged = 0;
+    const sanitizedTickets = (item.tickets || []).map((t, tIdx) => {
+      const originalDez = Array.isArray(t.dezenas) ? t.dezenas : [];
+      const validInUniv = originalDez.filter((d) => universeSet.has(d));
 
-    let sanitizedTickets: GameTicket[] | undefined = undefined;
-    if (Array.isArray(item.tickets)) {
-      sanitizedTickets = item.tickets.map((t: any, tIdx: number) => {
-        const originalNumbers: number[] = Array.isArray(t.dezenas)
-          ? t.dezenas
-          : Array.isArray(t.numbers)
-          ? t.numbers
-          : [];
-
-        // Filtra apenas dezenas que pertencem ao universoDezenas
-        const onlyUniverseNumbers = originalNumbers.filter((d: number) => universeSet.has(d));
-        const hadInvalidNumbers = onlyUniverseNumbers.length !== originalNumbers.length;
-
-        if (!hadInvalidNumbers && onlyUniverseNumbers.length === 15) {
-          return t;
-        }
-
-        itemTicketsChanged++;
-        ticketsCorrigidosCount++;
-
-        // Substitui números inválidos com dezenas disponíveis do universo para completar 15
-        const availableInUniverse = uniqueUniverse.filter((d) => !onlyUniverseNumbers.includes(d));
-        const corrected = [...onlyUniverseNumbers];
-        for (const candidate of availableInUniverse) {
-          if (corrected.length >= 15) break;
-          corrected.push(candidate);
-        }
-        corrected.sort((a, b) => a - b);
-
-        const analysis = analyzeTicket(corrected);
-        return {
-          ...t,
-          id: t.id || `ticket-sanitizado-${tIdx + 1}`,
-          index: t.index || tIdx + 1,
-          ...analysis,
-          dezenas: corrected,
-        };
-      });
-    }
-
-    // Caso o próprio item seja um ticket individual com dezenas
-    let singleTicketNumbers: number[] | undefined = undefined;
-    if (Array.isArray(item.dezenas) && !item.tickets) {
-      let filtered = item.dezenas.filter((d: number) => universeSet.has(d));
-      if (filtered.length !== item.dezenas.length || filtered.length !== 15) {
-        itemTicketsChanged++;
-        ticketsCorrigidosCount++;
-        const pool = uniqueUniverse.filter((d) => !filtered.includes(d));
-        for (const num of pool) {
-          if (filtered.length >= 15) break;
-          filtered.push(num);
-        }
-        if (filtered.length > 15) {
-          filtered = filtered.slice(0, 15);
-        }
-        filtered.sort((a: number, b: number) => a - b);
-        singleTicketNumbers = filtered;
+      if (validInUniv.length === 15 && originalDez.length === 15) {
+        return t;
       }
-    }
 
-    if (fixasChanged || itemTicketsChanged > 0) {
+      ticketsChanged++;
+      ticketsCorrigidosCount++;
+
+      // Completa com dezenas do universo até 15
+      const available = universe.filter((d) => !validInUniv.includes(d));
+      const corrected = [...validInUniv];
+      for (const num of available) {
+        if (corrected.length >= 15) break;
+        corrected.push(num);
+      }
+      corrected.sort((a, b) => a - b);
+
+      const analysis = analyzeTicket(corrected);
+      return {
+        ...t,
+        id: t.id || `ticket-sanitizado-${tIdx + 1}`,
+        index: t.index || tIdx + 1,
+        ...analysis,
+        dezenas: corrected,
+      };
+    });
+
+    if (fixasChanged || ticketsChanged > 0) {
       sanitizedCount++;
     }
 
-    const updatedItem: any = {
+    const audit = auditarTicketsGerados(sanitizedTickets);
+
+    return {
       ...item,
-      universoDezenas: uniqueUniverse,
       dezenasFixas: clampedFixas,
+      tickets: sanitizedTickets,
+      totalJogos: sanitizedTickets.length,
+      custoTotal: sanitizedTickets.length * 3.5,
+      auditoriaAnomalias: audit.resumo,
     };
-
-    if (sanitizedTickets) {
-      updatedItem.tickets = sanitizedTickets;
-      try {
-        const audit = auditarTicketsGerados(sanitizedTickets);
-        updatedItem.auditoriaAnomalias = audit.resumo;
-      } catch {}
-    }
-
-    if (singleTicketNumbers) {
-      updatedItem.dezenas = singleTicketNumbers;
-      const analysis = analyzeTicket(singleTicketNumbers);
-      Object.assign(updatedItem, analysis);
-    }
-
-    return updatedItem;
   });
 
-  // Persiste de volta no localStorage se estiver em ambiente de navegador ou teste com localStorage
+  // Extrai todos os bilhetes limpos
+  const allTickets: GameTicket[] = sanitizedFechamentos.flatMap((f) => f.tickets);
+
+  // Persistência segura e segmentada no localStorage
   if (typeof localStorage !== 'undefined') {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedItems));
-      // Mantém 'lotosniper_saved_prognosticos' e 'lotosniper_saved_fechamentos' sincronizados
-      localStorage.setItem(PROGNOSTICOS_KEY, JSON.stringify(sanitizedItems.slice(0, 50)));
-      localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(sanitizedItems.slice(0, 50)));
+      // 1. Fechamentos em lotosniper_saved_prognosticos e lotosniper_saved_fechamentos
+      localStorage.setItem(PROGNOSTICOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 50)));
+      localStorage.setItem(FECHAMENTOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 50)));
+
+      // 2. Bilhetes limpos em lotosniper_saved_tickets
+      localStorage.setItem(TICKETS_KEY, JSON.stringify(allTickets));
+
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: sanitizedItems }));
-        window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: sanitizedItems }));
+        window.dispatchEvent(
+          new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: sanitizedFechamentos })
+        );
+        window.dispatchEvent(
+          new CustomEvent('lotosniper-saved-tickets-updated', { detail: allTickets })
+        );
       }
     } catch (e) {
       console.warn('Erro ao persistir itens sanitizados no localStorage:', e);
     }
   }
 
-  const result: any = sanitizedItems;
+  const result: any = sanitizedFechamentos;
   result.sanitizedCount = sanitizedCount;
-  result.totalFechamentos = sanitizedItems.length;
+  result.totalFechamentos = sanitizedFechamentos.length;
   result.ticketsCorrigidosCount = ticketsCorrigidosCount;
-  result.data = sanitizedItems;
-  result.fechamentos = sanitizedItems;
+  result.data = sanitizedFechamentos;
+  result.fechamentos = sanitizedFechamentos;
 
   return result as SanitizerReport;
 }

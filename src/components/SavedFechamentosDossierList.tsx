@@ -410,8 +410,11 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const handleDownloadAllLotericaPDFDirect = () => {
     if (fechamentos.length === 0) return;
     try {
-      const allTickets = fechamentos.flatMap((f) => f.tickets);
-      const totalCost = fechamentos.reduce((acc, f) => acc + f.custoTotal, 0);
+      const allTickets = fechamentos.flatMap((f) => f.tickets || []);
+      const totalCost = fechamentos.reduce(
+        (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * 3.5),
+        0
+      );
       downloadProfessionalLotericaPDF({
         tickets: allTickets,
         concurso: fechamentos[0]?.concurso || 3818,
@@ -945,38 +948,42 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 leading-snug">
                           <span>
-                            ⚡{f.tipoFechamento.replace(/^⚡\s*/, '')}
-                            {!f.tipoFechamento.includes('Concurso #') && !f.tipoFechamento.includes('Alvo:') && (
-                              <span className="text-slate-400 font-semibold text-xs ml-1.5">
-                                (Alvo: Concurso Caixa #{f.concurso + 1})
-                              </span>
-                            )}
+                            ⚡{String(f.tipoFechamento || f.modalidadeMatriz || 'Fechamento Combinatório').replace(/^⚡\s*/, '')}
+                            {!String(f.tipoFechamento || '').includes('Concurso #') &&
+                              !String(f.tipoFechamento || '').includes('Alvo:') && (
+                                <span className="text-slate-400 font-semibold text-xs ml-1.5">
+                                  (Alvo: Concurso Caixa #{(f.concurso || 3827) + 1})
+                                </span>
+                              )}
                           </span>
                         </h3>
                       </div>
 
-                      {/* Linha 2: 18 Dezenas (Garantia 14 se 15) - Matriz Pro (24 Jogos - Garantia 14 Pontos (com 35% de chance de 15)) */}
+                      {/* Linha 2: Modalidade / Matriz */}
                       <div className="text-xs font-bold text-emerald-400 font-mono">
-                        {f.modalidadeMatriz.includes('Matriz Pro')
+                        {String(f.modalidadeMatriz || '').includes('Matriz Pro')
                           ? f.modalidadeMatriz
-                          : `${f.universoDezenas.length} Dezenas (Garantia 14 se 15) - Matriz Pro (${f.totalJogos} Jogos - Garantia 14 Pontos (com 35% de chance de 15))`}
+                          : `${(f.universoDezenas || []).length} Dezenas (Garantia 14 se 15) - Matriz Pro (${f.totalJogos || (f.tickets || []).length} Jogos - Garantia 14 Pontos (com 35% de chance de 15))`}
                       </div>
 
-                      {/* Linha 3: 24 Jogos (R$ 84.00) */}
+                      {/* Linha 3: Total de Jogos & Custo */}
                       <div className="text-xs font-black text-amber-300 font-mono">
-                        {f.totalJogos} Jogos (R$ {f.custoTotal.toFixed(2)})
+                        {f.totalJogos || (f.tickets || []).length} Jogos (R${' '}
+                        {(f.custoTotal ?? (f.totalJogos || (f.tickets || []).length || 0) * 3.5).toFixed(2)})
                       </div>
 
-                      {/* Linha 4: 02/11/2026, 13:31:41 */}
+                      {/* Linha 4: Data de Criação */}
                       <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{f.dataCriacao}</span>
+                        <span>{f.dataCriacao || 'Data não registrada'}</span>
                       </div>
 
-                      {/* Linhas 5 e 6: •Concurso Base Caixa #3819 •Universo: 18 Dezenas */}
+                      {/* Linhas 5 e 6: •Concurso Base Caixa •Universo */}
                       <div className="flex items-center gap-3 text-xs text-slate-300 font-mono">
-                        <span>•Concurso Base Caixa #{f.concurso}</span>
-                        <span className="text-amber-400 font-bold">•Universo: {f.universoDezenas.length} Dezenas</span>
+                        <span>•Concurso Base Caixa #{f.concurso || 3827}</span>
+                        <span className="text-amber-400 font-bold">
+                          •Universo: {(f.universoDezenas || []).length} Dezenas
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1136,21 +1143,21 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Tipo de Fechamento:</strong> {f.tipoFechamento}
+                            <strong className="text-white">Tipo de Fechamento:</strong> {f.tipoFechamento || 'Fechamento Combinatório'}
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Modalidade / Matriz:</strong> {f.modalidadeMatriz}
+                            <strong className="text-white">Modalidade / Matriz:</strong> {f.modalidadeMatriz || 'Matriz Pro (Garantia 14 se 15)'}
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <div>
-                            <strong className="text-white">Universo de Dezenas ({f.universoDezenas.length} números):</strong>{' '}
+                            <strong className="text-white">Universo de Dezenas ({(f.universoDezenas || []).length} números):</strong>{' '}
                             <div className="flex flex-wrap gap-1 mt-1.5">
-                              {f.universoDezenas.map((n) => (
+                              {(f.universoDezenas || []).map((n) => (
                                 <span
                                   key={n}
                                   className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-bold text-[11px] ${
@@ -1170,7 +1177,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                           <span>
                             <strong className="text-white">Dezenas Fixas:</strong>{' '}
                             {(f.dezenasFixas || []).length > 0
-                              ? f.dezenasFixas.map((d) => d.toString().padStart(2, '0')).join(' ')
+                              ? (f.dezenasFixas || []).map((d) => d.toString().padStart(2, '0')).join(' ')
                               : 'Nenhuma dezena fixa'}
                           </span>
                         </div>
@@ -1179,7 +1186,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                           <span>
                             <strong className="text-white">Dezenas Excluídas:</strong>{' '}
                             {(f.dezenasExcluidas || []).length > 0
-                              ? f.dezenasExcluidas.map((d) => d.toString().padStart(2, '0')).join(' ')
+                              ? (f.dezenasExcluidas || []).map((d) => d.toString().padStart(2, '0')).join(' ')
                               : 'Nenhuma dezena excluída'}
                           </span>
                         </div>
@@ -1196,25 +1203,25 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Faixa de Soma das 15 Dezenas:</strong> {f.faixaSoma.min} a {f.faixaSoma.max} (Zona de Ouro Canônica: {f.faixaSoma.zonaOuro || '190 a 210'})
+                            <strong className="text-white">Faixa de Soma das 15 Dezenas:</strong> {f.faixaSoma?.min ?? 180} a {f.faixaSoma?.max ?? 215} (Zona de Ouro Canônica: {f.faixaSoma?.zonaOuro || '190 a 210'})
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Paridade Estrutural (Pares/Ímpares):</strong> {f.paridade.minPares} a {f.paridade.maxPares} Pares / {15 - f.paridade.maxPares} a {15 - f.paridade.minPares} Ímpares (Canônico: {f.paridade.canonico || '7P/8I ou 8P/7I'})
+                            <strong className="text-white">Paridade Estrutural (Pares/Ímpares):</strong> {f.paridade?.minPares ?? 6} a {f.paridade?.maxPares ?? 9} Pares / {15 - (f.paridade?.maxPares ?? 9)} a {15 - (f.paridade?.minPares ?? 6)} Ímpares (Canônico: {f.paridade?.canonico || '7P/8I ou 8P/7I'})
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Sequência Máxima Consecutiva:</strong> Até {f.maxConsecutivas} dezenas consecutivas
+                            <strong className="text-white">Sequência Máxima Consecutiva:</strong> Até {f.maxConsecutivas ?? 5} dezenas consecutivas
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Auditoria de Anomalias:</strong> {f.auditoriaAnomalias}
+                            <strong className="text-white">Auditoria de Anomalias:</strong> {f.auditoriaAnomalias || 'Auditado dinamicamente com filtros canônicos'}
                           </span>
                         </div>
                       </div>
@@ -1230,25 +1237,25 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Repetidas do Concurso Anterior (#{f.repetidas.concursoRef || f.concurso}):</strong> {f.repetidas.min} a {f.repetidas.max} dezenas repetidas
+                            <strong className="text-white">Repetidas do Concurso Anterior (#{f.repetidas?.concursoRef || f.concurso || 3827}):</strong> {f.repetidas?.min ?? 8} a {f.repetidas?.max ?? 10} dezenas repetidas
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Dezenas na Moldura (16 externas):</strong> {f.moldura.min} a {f.moldura.max} dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
+                            <strong className="text-white">Dezenas na Moldura (16 externas):</strong> {f.moldura?.min ?? 8} a {f.moldura?.max ?? 11} dezenas [Moldura Oficial: 01, 02, 03, 04, 05, 06, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Números Primos:</strong> {f.primos.min} a {f.primos.max} dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
+                            <strong className="text-white">Números Primos:</strong> {f.primos?.min ?? 4} a {f.primos?.max ?? 7} dezenas [Primos: 02, 03, 05, 07, 11, 13, 17, 19, 23]
                           </span>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-slate-500">•</span>
                           <span>
-                            <strong className="text-white">Sequência Fibonacci:</strong> {f.fibonacci.min} a {f.fibonacci.max} dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
+                            <strong className="text-white">Sequência Fibonacci:</strong> {f.fibonacci?.min ?? 3} a {f.fibonacci?.max ?? 6} dezenas [Fibonacci: 01, 02, 03, 05, 08, 13, 21]
                           </span>
                         </div>
                       </div>
@@ -1262,7 +1269,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5"
                       >
                         <Layers className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isTicketsExpanded ? 'Ocultar Bilhetes' : `Inspecionar ${f.tickets.length} Bilhetes Gerados`}</span>
+                        <span>{isTicketsExpanded ? 'Ocultar Bilhetes' : `Inspecionar ${(f.tickets || []).length} Bilhetes Gerados`}</span>
                       </button>
 
                       <button
@@ -1280,31 +1287,34 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     {isTicketsExpanded && (
                       <div className="pt-3 border-t border-slate-800/80 space-y-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                          {f.tickets.map((t, tIdx) => (
-                            <div
-                              key={t.id || tIdx}
-                              className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between gap-2"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 font-bold">
-                                  #{(tIdx + 1).toString().padStart(2, '0')}
-                                </span>
-                                <div className="flex flex-wrap gap-1">
-                                  {t.dezenas.map((num) => (
-                                    <span
-                                      key={num}
-                                      className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold bg-slate-800 text-slate-200"
-                                    >
-                                      {num.toString().padStart(2, '0')}
-                                    </span>
-                                  ))}
+                          {(f.tickets || []).map((t, tIdx) => {
+                            const dezenas = Array.isArray(t.dezenas) ? t.dezenas : [];
+                            return (
+                              <div
+                                key={t.id || tIdx}
+                                className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500 font-bold">
+                                    #{(t.index ?? tIdx + 1).toString().padStart(2, '0')}
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {dezenas.map((num) => (
+                                      <span
+                                        key={num}
+                                        className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold bg-slate-800 text-slate-200"
+                                      >
+                                        {num.toString().padStart(2, '0')}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
+                                <span className="text-[9px] text-slate-400 shrink-0 font-mono">
+                                  S:{t.soma ?? dezenas.reduce((a, b) => a + b, 0)} | P:{t.pares ?? dezenas.filter((n) => n % 2 === 0).length}
+                                </span>
                               </div>
-                              <span className="text-[9px] text-slate-400 shrink-0 font-mono">
-                                S:{t.soma} | P:{t.pares}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
