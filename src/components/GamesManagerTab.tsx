@@ -1158,7 +1158,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       );
       const concursoAlvo = Number(concursoBase) + 1;
       const dataFormatada = new Date().toISOString().slice(0, 10);
-      const fileName = formatBackupJsonFilename(concursoAlvo, dataFormatada);
+      const fileName = `lotosniper_concurso_${concursoAlvo}_${dataFormatada}.json`;
 
       const backupPayload = {
         app: 'LotoSniper AI Pro',

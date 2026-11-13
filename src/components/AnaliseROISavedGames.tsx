@@ -505,17 +505,17 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
             >
               {isPositive ? (
                 <>
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <ArrowUpRight className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>Alta</span>
                 </>
               ) : isNeutral ? (
                 <>
-                  <Minus className="w-4 h-4 text-amber-400" />
+                  <Minus className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>Estável</span>
                 </>
               ) : (
                 <>
-                  <TrendingDown className="w-4 h-4 text-rose-400" />
+                  <ArrowDownRight className="w-4 h-4 text-rose-400 shrink-0" />
                   <span>Queda</span>
                 </>
               )}

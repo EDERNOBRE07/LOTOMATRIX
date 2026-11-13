@@ -402,15 +402,15 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
       {/* Render Subtab Views */}
       {activeSubTab === 'quick_backtest' ? (
         <div className="space-y-6">
+          <AnaliseROISavedGames
+            tickets={tickets}
+            latestDraw={latestDraw}
+          />
           <QuickBacktestD3Area
             tickets={tickets}
             latestDraw={latestDraw}
             onGoToGenerator={onGoToGenerator}
             onGoToGamesManager={handleGoToGamesManager}
-          />
-          <AnaliseROISavedGames
-            tickets={tickets}
-            latestDraw={latestDraw}
           />
         </div>
       ) : activeSubTab === 'auditoria_roi' ? (
@@ -500,9 +500,9 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
             totalJogos={tickets.length}
             isGenerated={true}
             title="Totalizador de Custos dos Jogos Gerados"
-            subtitle={`Investimento total calculado: ${tickets.length} jogos × R$ 3,50 = R$ ${(
+            subtitle={`Investimento total calculado: ${tickets.length} jogos × ${formatBRLScorecard(VALOR_APOSTA_LOTOFACIL)} = ${formatBRLScorecard(
               tickets.length * VALOR_APOSTA_LOTOFACIL
-            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            )}`}
             shortcutButtonLabel="Gerenciar & Conferir"
             onGoToGamesManager={handleGoToGamesManager}
           />
@@ -730,7 +730,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                     >
                       {isLucroPositivo ? (
                         <>
-                          <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <ArrowUpRight className="w-4 h-4 text-emerald-400 shrink-0" />
                           <span>Alta</span>
                         </>
                       ) : isLucroNeutro ? (
@@ -740,7 +740,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                         </>
                       ) : (
                         <>
-                          <TrendingDown className="w-4 h-4 text-rose-400 shrink-0" />
+                          <ArrowDownRight className="w-4 h-4 text-rose-400 shrink-0" />
                           <span>Queda</span>
                         </>
                       )}
