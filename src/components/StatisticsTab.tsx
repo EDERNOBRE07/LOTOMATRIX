@@ -67,6 +67,7 @@ import { CiclosHistoricoRecharts } from './CiclosHistoricoRecharts';
 import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificadaRecharts';
 import { GoldenZoneChart } from './GoldenZoneChart';
 export { GoldenZoneChart };
+import { Historico5ConcursosD3Chart } from './Historico5ConcursosD3Chart';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket, FilterCriteria } from '../types/lotofacil';
@@ -123,6 +124,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
     | 'dispersao_estratificada'
+    | 'historico_5_d3'
     | 'frequencia_50_d3'
     | 'simulador_historico_d3'
     | 'desempenho_cruz_extremidades'
@@ -227,6 +229,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Dispersão Somas Estratificada</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
               75 / 15 / 10%
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('historico_5_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'historico_5_d3'
+                ? 'bg-gradient-to-r from-emerald-400 via-cyan-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-cyan-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 text-cyan-300" />
+            <span>Histórico 5 Concursos (D3.js)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
+              BILHETES SALVOS
             </span>
           </button>
 
@@ -2348,9 +2365,25 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             title="Golden Zone & Dispersão Estratificada de Somas"
             subtitle="Dispersão dos bilhetes salvos em relação às faixas estatísticas (155–179, 180–215, 216–230)"
           />
+          <Historico5ConcursosD3Chart
+            savedTickets={savedTickets}
+            latestDraw={latestDraw}
+            draws={RECENT_DRAWS}
+          />
           <DispersaoSomaEstratificadaRecharts
             tickets={savedTickets}
             title="Dispersão de Somas da Matriz Estratificada (Golden Zone vs Caudas)"
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: HISTÓRICO DE PONTUAÇÃO DOS BILHETES SALVOS NOS ÚLTIMOS 5 CONCURSOS (D3.JS) */}
+      {activeSubTab === 'historico_5_d3' && (
+        <div className="space-y-6">
+          <Historico5ConcursosD3Chart
+            savedTickets={savedTickets}
+            latestDraw={latestDraw}
+            draws={RECENT_DRAWS}
           />
         </div>
       )}

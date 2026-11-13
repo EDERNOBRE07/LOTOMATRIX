@@ -36,7 +36,8 @@ import {
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
-import { buildOptimal18Pool, countMatches } from './services/combinatorics';
+import { buildOptimal18Pool, countMatches, normalizeGameTickets } from './services/combinatorics';
+import { getSavedFechamentos } from './services/savedFechamentosStorage';
 import { soundService } from './services/soundAlert';
 import { auditAndTriggerIntelligentAlerts, auditAndTriggerHybridAlerts } from './services/notificationService';
 import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
@@ -154,8 +155,19 @@ export default function App() {
       const saved = localStorage.getItem('lotosniper_saved_tickets');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((t: any) => t && Array.isArray(t.dezenas) && t.dezenas.length > 0);
+        const normalized = normalizeGameTickets(parsed);
+        if (normalized.length > 0) {
+          return normalized;
+        }
+      }
+      // Fallback seguro: caso lotosniper_saved_tickets esteja vazio, extrai dos fechamentos salvos
+      const fechamentos = getSavedFechamentos();
+      if (fechamentos.length > 0) {
+        const fromFechamentos = normalizeGameTickets(
+          fechamentos.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : []))
+        );
+        if (fromFechamentos.length > 0) {
+          return fromFechamentos;
         }
       }
       return [];
@@ -165,18 +177,27 @@ export default function App() {
   });
 
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const hasSavedTicketsMountedRef = React.useRef<boolean>(false);
 
-  // Salvar no localStorage sempre que novos jogos forem gerados e disparar snapshot de proteção
+  // Salvar no localStorage sempre que savedTickets mudar (inclusive ao limpar) e disparar snapshot
   useEffect(() => {
-    if (savedTickets.length > 0) {
-      try {
-        localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
+    try {
+      if (!hasSavedTicketsMountedRef.current) {
+        hasSavedTicketsMountedRef.current = true;
+        if (savedTickets.length > 0) {
+          localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
+        }
+        return;
+      }
+
+      localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
+      if (savedTickets.length > 0) {
         saveLocalSnapshot('auto');
         if (isAutoDownloadOnSaveEnabled()) {
           triggerForcedJSONDownload();
         }
-      } catch {}
-    }
+      }
+    } catch {}
   }, [savedTickets]);
 
   const [jackpotHitNotice, setJackpotHitNotice] = useState<{
@@ -246,7 +267,7 @@ export default function App() {
         setActiveTab(detail as any);
       } else if (detail && typeof detail === 'object') {
         if (detail.tickets && Array.isArray(detail.tickets)) {
-          setSavedTickets(detail.tickets);
+          setSavedTickets(normalizeGameTickets(detail.tickets, latestDraw.dezenas));
         }
         if (detail.tab) {
           setActiveTab(detail.tab);
@@ -255,7 +276,7 @@ export default function App() {
     };
     window.addEventListener('switch-tab', handleSwitchTab);
     return () => window.removeEventListener('switch-tab', handleSwitchTab);
-  }, []);
+  }, [latestDraw.dezenas]);
 
   // Escuta evento global para abrir a Central de Backup & Segurança
   useEffect(() => {
@@ -264,13 +285,50 @@ export default function App() {
     return () => window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
   }, []);
 
+  // Escuta atualização direta de bilhetes (ex: sanitização forense / resincronização)
+  useEffect(() => {
+    const handleTicketsUpdated = (e: any) => {
+      try {
+        if (e?.detail && Array.isArray(e.detail)) {
+          setSavedTickets(normalizeGameTickets(e.detail, latestDraw.dezenas));
+          return;
+        }
+        const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
+        if (rawTickets) {
+          setSavedTickets(normalizeGameTickets(JSON.parse(rawTickets), latestDraw.dezenas));
+        }
+      } catch {}
+    };
+    window.addEventListener('lotosniper-saved-tickets-updated', handleTicketsUpdated);
+    return () => window.removeEventListener('lotosniper-saved-tickets-updated', handleTicketsUpdated);
+  }, [latestDraw.dezenas]);
+
   // Escuta restauração de backup de fechamentos para auditar automaticamente todos os jogos salvos sem exceção
   useEffect(() => {
     const handleBackupRestored = async () => {
       try {
         const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
         if (rawTickets) {
-          setSavedTickets(JSON.parse(rawTickets));
+          const normalized = normalizeGameTickets(JSON.parse(rawTickets), latestDraw.dezenas);
+          if (normalized.length > 0) {
+            setSavedTickets(normalized);
+          } else {
+            const fechamentos = getSavedFechamentos();
+            setSavedTickets(
+              normalizeGameTickets(
+                fechamentos.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : [])),
+                latestDraw.dezenas
+              )
+            );
+          }
+        } else {
+          const fechamentos = getSavedFechamentos();
+          setSavedTickets(
+            normalizeGameTickets(
+              fechamentos.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : [])),
+              latestDraw.dezenas
+            )
+          );
         }
       } catch {}
       try {
@@ -893,7 +951,7 @@ export default function App() {
               aiPrediction={aiPrediction}
               initialFixedNumbers={pendingFixedNumbers}
               onSaveTickets={(tickets, meta) => {
-                setSavedTickets(tickets);
+                setSavedTickets(normalizeGameTickets(tickets, latestDraw.dezenas));
                 if (meta) {
                   setActiveFechamentoMeta(meta);
                   try {
@@ -903,7 +961,9 @@ export default function App() {
               }}
               onGoToSimulator={handleGoToSimulator}
               onGoToGamesManager={(tickets, meta) => {
-                if (tickets && tickets.length > 0) setSavedTickets(tickets);
+                if (tickets && tickets.length > 0) {
+                  setSavedTickets(normalizeGameTickets(tickets, latestDraw.dezenas));
+                }
                 if (meta) {
                   setActiveFechamentoMeta(meta);
                   try {
@@ -1029,10 +1089,15 @@ export default function App() {
 
               {jogosSubView === 'salvos' ? (
                 <GamesManagerTab
-                  tickets={savedTickets}
+                  savedTickets={savedTickets}
                   latestDraw={latestDraw}
                   fechamentoMeta={activeFechamentoMeta}
-                  onClearTickets={() => setSavedTickets([])}
+                  onClearTickets={() => {
+                    setSavedTickets([]);
+                    try {
+                      localStorage.setItem('lotosniper_saved_tickets', '[]');
+                    } catch {}
+                  }}
                   onGoToGenerator={() => setActiveTab('fechamento')}
                 />
               ) : (
@@ -1067,7 +1132,7 @@ export default function App() {
             <SettingsTab
               latestDraw={latestDraw}
               savedTickets={savedTickets}
-              onRestoreTickets={(t) => setSavedTickets(t)}
+              onRestoreTickets={(t) => setSavedTickets(normalizeGameTickets(t, latestDraw.dezenas))}
               onSyncNow={() => runAutoUpdate(true)}
               isSyncing={isSyncing}
               statsList={dynamicStats}

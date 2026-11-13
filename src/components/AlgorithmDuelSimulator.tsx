@@ -7,6 +7,7 @@ import {
   runSimulation,
   countMatches,
   DEFAULT_FILTERS,
+  normalizeGameTickets,
 } from '../services/combinatorics';
 import { getSavedFechamentos, SavedFechamentoPrognostico } from '../services/savedFechamentosStorage';
 import { restoreBackupFromJSON } from '../services/backupManagerService';
@@ -45,6 +46,7 @@ import {
   Check,
   Target,
   FileText,
+  Filter,
 } from 'lucide-react';
 
 export interface AlgorithmDuelSimulatorProps {
@@ -213,6 +215,16 @@ export interface BackupAuditedFechamento {
   isAbove50Percent: boolean;
 }
 
+export interface SavedTicketComparison {
+  ticket: GameTicket;
+  hits: number;
+  aproveitamento: number;
+  isAbove50Percent: boolean;
+  isAwarded: boolean;
+  premioEstimado: number;
+  isBestScore: boolean;
+}
+
 export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
@@ -226,7 +238,13 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState<'duelo' | 'backup_audit'>('duelo');
+  const hasInitialSaved =
+    (userSavedTickets && userSavedTickets.length > 0) ||
+    (savedFechamentosList && savedFechamentosList.length > 0);
+  const [activeTab, setActiveTab] = useState<'comparacao_salvos' | 'duelo' | 'backup_audit'>(
+    hasInitialSaved ? 'comparacao_salvos' : 'duelo'
+  );
+  const [ticketFilterMode, setTicketFilterMode] = useState<'above_50' | 'all'>('above_50');
   const [strategyAKey, setStrategyAKey] = useState<StrategyKey>('garantia_14_pts');
   const [strategyBKey, setStrategyBKey] = useState<StrategyKey>('filtro_ia');
   const [testScope, setTestScope] = useState<'10_concursos' | '25_concursos' | '50_concursos'>('25_concursos');
@@ -241,7 +259,7 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
       const updated = getSavedFechamentos();
       setSavedFechamentos(updated);
       setDuelRunCounter((c) => c + 1);
-      setActiveTab('backup_audit');
+      setActiveTab('comparacao_salvos');
       try {
         soundService.playGoldenZoneSuccessChime();
       } catch {}
@@ -260,11 +278,17 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
       setDuelRunCounter((c) => c + 1);
     };
 
+    const handleTicketsUpdated = () => {
+      setDuelRunCounter((c) => c + 1);
+    };
+
     window.addEventListener('lotosniper-backup-restored', handleBackupRestored);
     window.addEventListener('lotosniper-saved-fechamentos-updated', handleFechamentosUpdated);
+    window.addEventListener('lotosniper-saved-tickets-updated', handleTicketsUpdated);
     return () => {
       window.removeEventListener('lotosniper-backup-restored', handleBackupRestored);
       window.removeEventListener('lotosniper-saved-fechamentos-updated', handleFechamentosUpdated);
+      window.removeEventListener('lotosniper-saved-tickets-updated', handleTicketsUpdated);
     };
   }, [latestDraw.concurso]);
 
@@ -416,6 +440,109 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
       totalBilhetes: auditedList.reduce((acc, curr) => acc + curr.totalJogos, 0),
     };
   }, [savedFechamentos, latestDraw, duelRunCounter]);
+
+  // Bilhetes salvos efetivos (props -> localStorage lotosniper_saved_tickets -> fechamentos salvos)
+  const effectiveSavedTickets = useMemo(() => {
+    const sortedDrawn = [...(latestDraw.dezenas || [])].sort((a, b) => a - b);
+    if (userSavedTickets && userSavedTickets.length > 0) {
+      return normalizeGameTickets(userSavedTickets, sortedDrawn);
+    }
+    try {
+      const raw = localStorage.getItem('lotosniper_saved_tickets');
+      if (raw) {
+        const parsed = normalizeGameTickets(JSON.parse(raw), sortedDrawn);
+        if (parsed.length > 0) return parsed;
+      }
+    } catch {}
+    if (savedFechamentos.length > 0) {
+      return normalizeGameTickets(
+        savedFechamentos.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : [])),
+        sortedDrawn
+      );
+    }
+    return [];
+  }, [userSavedTickets, savedFechamentos, latestDraw.dezenas, duelRunCounter]);
+
+  // COMPARAÇÃO AUTOMÁTICA: Bilhetes Salvos vs Concurso Sorteado + Filtro > 50% Aproveitamento
+  const savedTicketsComparison = useMemo(() => {
+    const sortedDrawn = [...(latestDraw.dezenas || [])].sort((a, b) => a - b);
+    const P11 = latestDraw.premiacoes?.faixa11?.valor || 7.0;
+    const P12 = latestDraw.premiacoes?.faixa12?.valor || 14.0;
+    const P13 = latestDraw.premiacoes?.faixa13?.valor || 35.0;
+    const P14 = latestDraw.premiacoes?.faixa14?.valor || 1500.0;
+    const P15 = latestDraw.premiacoes?.faixa15?.valor || 1800000.0;
+
+    if (effectiveSavedTickets.length === 0 || sortedDrawn.length === 0) {
+      return {
+        allComparisons: [] as SavedTicketComparison[],
+        above50Comparisons: [] as SavedTicketComparison[],
+        bestComparison: null as SavedTicketComparison | null,
+        maxHits: 0,
+        awardedCount: 0,
+        totalPremioEstimado: 0,
+        mediaAcertos: 0,
+      };
+    }
+
+    let maxHits = 0;
+    let totalHitsSum = 0;
+    let awardedCount = 0;
+    let totalPremioEstimado = 0;
+
+    const prelim = effectiveSavedTickets.map((ticket) => {
+      const sortedTicketDez = [...ticket.dezenas].sort((a, b) => a - b);
+      const hits = countMatches(sortedTicketDez, sortedDrawn);
+      const aproveitamento = (hits / 15) * 100;
+      const isAbove50Percent = aproveitamento > 50; // > 50% (8+ acertos de 15)
+      const isAwarded = hits >= 11;
+
+      let premioEstimado = 0;
+      if (hits === 15) premioEstimado = P15;
+      else if (hits === 14) premioEstimado = P14;
+      else if (hits === 13) premioEstimado = P13;
+      else if (hits === 12) premioEstimado = P12;
+      else if (hits === 11) premioEstimado = P11;
+
+      if (hits > maxHits) maxHits = hits;
+      if (isAwarded) awardedCount++;
+      totalHitsSum += hits;
+      totalPremioEstimado += premioEstimado;
+
+      return {
+        ticket,
+        hits,
+        aproveitamento,
+        isAbove50Percent,
+        isAwarded,
+        premioEstimado,
+        isBestScore: false,
+      };
+    });
+
+    // Ordena por maior pontuação, depois maior scoreIA
+    prelim.sort((a, b) => {
+      if (b.hits !== a.hits) return b.hits - a.hits;
+      return (b.ticket.scoreIA || 0) - (a.ticket.scoreIA || 0);
+    });
+
+    const bestId = prelim[0]?.ticket.id;
+    const allComparisons: SavedTicketComparison[] = prelim.map((item) => ({
+      ...item,
+      isBestScore: item.ticket.id === bestId && item.hits === maxHits,
+    }));
+
+    const above50Comparisons = allComparisons.filter((c) => c.isAbove50Percent);
+
+    return {
+      allComparisons,
+      above50Comparisons,
+      bestComparison: allComparisons[0] || null,
+      maxHits,
+      awardedCount,
+      totalPremioEstimado,
+      mediaAcertos: Number((totalHitsSum / effectiveSavedTickets.length).toFixed(2)),
+    };
+  }, [effectiveSavedTickets, latestDraw]);
 
   // Gera o conjunto de jogos de cada estratégia
   const generateTicketsForStrategy = (key: StrategyKey): { tickets: GameTicket[]; pool: number[] } => {
@@ -651,18 +778,18 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           {/* Navegação entre Visualizações */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 flex-wrap gap-1">
             <button
               type="button"
-              onClick={() => setActiveTab('duelo')}
+              onClick={() => setActiveTab('comparacao_salvos')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'duelo'
-                  ? 'bg-rose-500 text-white shadow-md'
+                activeTab === 'comparacao_salvos'
+                  ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Swords className="w-3.5 h-3.5" />
-              <span>Duelo Head-to-Head</span>
+              <Target className="w-3.5 h-3.5" />
+              <span>Bilhetes vs Sorteio ({effectiveSavedTickets.length})</span>
             </button>
 
             <button
@@ -674,8 +801,21 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Trophy className="w-3.5 h-3.5 text-amber-300" />
-              <span>Auditoria do Backup ({savedFechamentos.length})</span>
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Auditoria Backup ({savedFechamentos.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('duelo')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'duelo'
+                  ? 'bg-rose-500 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Swords className="w-3.5 h-3.5" />
+              <span>Duelo Head-to-Head</span>
             </button>
           </div>
 
@@ -719,6 +859,274 @@ export const AlgorithmDuelSimulator: React.FC<AlgorithmDuelSimulatorProps> = ({
           <button onClick={() => setFeedbackNotice(null)} className="text-slate-400 hover:text-white text-xs font-bold">
             ✕
           </button>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ABA 0: COMPARAÇÃO AUTOMÁTICA DE BILHETES SALVOS VS CONCURSO SORTEADO    */}
+      {/* ========================================================================= */}
+      {activeTab === 'comparacao_salvos' && (
+        <div className="space-y-5 animate-in fade-in">
+          {/* Dezenas Oficiais do Concurso Base */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 block">
+                Concurso Sorteado de Referência
+              </span>
+              <div className="text-sm font-mono font-bold text-white">
+                Concurso #{latestDraw.concurso} · {latestDraw.data}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[...latestDraw.dezenas]
+                .sort((a, b) => a - b)
+                .map((num) => (
+                  <span
+                    key={num}
+                    className="w-7 h-7 rounded-lg bg-emerald-500 text-slate-950 font-mono font-black text-xs flex items-center justify-center tabular-nums"
+                  >
+                    {num.toString().padStart(2, '0')}
+                  </span>
+                ))}
+            </div>
+          </div>
+
+          {savedTicketsComparison.allComparisons.length === 0 ? (
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
+              <Target className="w-10 h-10 text-slate-500 mx-auto" />
+              <h4 className="text-sm font-bold text-white">Nenhum bilhete salvo disponível para comparação</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                Salve bilhetes no Estúdio de Fechamentos ou carregue um arquivo JSON de backup para comparar automaticamente contra o Concurso #{latestDraw.concurso}.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* KPIs de Comparação Automática */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 font-mono tabular-nums">
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-slate-400 font-sans block">Bilhetes Comparados</span>
+                  <strong className="text-xl font-black text-white">
+                    {savedTicketsComparison.allComparisons.length}
+                  </strong>
+                  <span className="text-[11px] text-slate-500 block">
+                    Média: {savedTicketsComparison.mediaAcertos} pts
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/80 border border-amber-500/40 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-amber-300 font-sans block">Maior Pontuação</span>
+                  <strong className="text-xl font-black text-amber-400">
+                    {savedTicketsComparison.maxHits}/15 pts
+                  </strong>
+                  <span className="text-[11px] text-slate-400 block">
+                    Jogo #{savedTicketsComparison.bestComparison?.ticket.index.toString().padStart(2, '0')}
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/80 border border-emerald-500/40 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-emerald-300 font-sans block">Aproveitamento &gt; 50%</span>
+                  <strong className="text-xl font-black text-emerald-400">
+                    {savedTicketsComparison.above50Comparisons.length} jogos
+                  </strong>
+                  <span className="text-[11px] text-slate-400 block">
+                    {((savedTicketsComparison.above50Comparisons.length / savedTicketsComparison.allComparisons.length) * 100).toFixed(1)}% da matriz (≥ 8 pts)
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-slate-400 font-sans block">Premiados (11–15 pts)</span>
+                  <strong className="text-xl font-black text-cyan-400">
+                    {savedTicketsComparison.awardedCount} jogos
+                  </strong>
+                  <span className="text-[11px] text-emerald-400 block">
+                    R$ {savedTicketsComparison.totalPremioEstimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card Destaque: Bilhete de Maior Pontuação */}
+              {savedTicketsComparison.bestComparison && (
+                <div className="bg-slate-900/80 border border-amber-500/50 rounded-2xl p-5 space-y-3 shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-mono text-xs font-black uppercase flex items-center gap-1.5">
+                        <Trophy className="w-3.5 h-3.5" />
+                        <span>Maior Pontuação</span>
+                      </span>
+                      <span className="font-mono font-black text-white text-base tabular-nums">
+                        Bilhete #{savedTicketsComparison.bestComparison.ticket.index.toString().padStart(2, '0')}
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        Soma {savedTicketsComparison.bestComparison.ticket.soma} · {savedTicketsComparison.bestComparison.ticket.pares}P/{savedTicketsComparison.bestComparison.ticket.impares}I
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 font-mono tabular-nums">
+                      <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black">
+                        {savedTicketsComparison.bestComparison.hits} ACERTOS ({savedTicketsComparison.bestComparison.aproveitamento.toFixed(1)}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {savedTicketsComparison.bestComparison.ticket.dezenas.map((num) => {
+                      const matched = latestDraw.dezenas.includes(num);
+                      return (
+                        <span
+                          key={num}
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs tabular-nums transition ${
+                            matched
+                              ? 'bg-emerald-500 text-slate-950 font-black ring-2 ring-emerald-300/60'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {num.toString().padStart(2, '0')}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Controle de Filtro Automático (> 50% Aproveitamento) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5">
+                <div className="flex items-center gap-2 text-xs">
+                  <Filter className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-white">Filtro Automático de Desempenho:</span>
+                  <span className="text-slate-400 font-mono">
+                    {ticketFilterMode === 'above_50'
+                      ? `Exibindo ${savedTicketsComparison.above50Comparisons.length} jogo(s) com aproveitamento > 50% (≥ 8 acertos)`
+                      : `Exibindo todos os ${savedTicketsComparison.allComparisons.length} jogo(s)`}
+                  </span>
+                </div>
+
+                <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setTicketFilterMode('above_50')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      ticketFilterMode === 'above_50'
+                        ? 'bg-emerald-500 text-slate-950 font-black'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Aproveitamento &gt; 50% ({savedTicketsComparison.above50Comparisons.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTicketFilterMode('all')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      ticketFilterMode === 'all'
+                        ? 'bg-slate-700 text-white font-black'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Todos ({savedTicketsComparison.allComparisons.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista de Bilhetes Comparados */}
+              {(() => {
+                const listToShow =
+                  ticketFilterMode === 'above_50'
+                    ? savedTicketsComparison.above50Comparisons
+                    : savedTicketsComparison.allComparisons;
+
+                if (listToShow.length === 0) {
+                  return (
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 text-center space-y-2">
+                      <AlertTriangle className="w-7 h-7 text-amber-400 mx-auto" />
+                      <p className="text-xs text-slate-300">
+                        Nenhum bilhete ultrapassou 50% de aproveitamento (≥ 8 acertos) neste concurso.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setTicketFilterMode('all')}
+                        className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer"
+                      >
+                        Visualizar Todos os {savedTicketsComparison.allComparisons.length} Bilhetes
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[540px] overflow-y-auto pr-1">
+                    {listToShow.map((item) => (
+                      <div
+                        key={item.ticket.id}
+                        className={`p-3.5 rounded-2xl border bg-slate-900/80 space-y-2.5 font-mono transition ${
+                          item.isBestScore
+                            ? 'border-amber-400/60 ring-1 ring-amber-400/40'
+                            : item.isAwarded
+                            ? 'border-emerald-500/40'
+                            : 'border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-white tabular-nums">
+                              Jogo #{item.ticket.index.toString().padStart(2, '0')}
+                            </span>
+                            {item.isBestScore && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
+                                Top Score
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 tabular-nums">
+                            <span
+                              className={`px-2 py-0.5 rounded font-black text-[11px] ${
+                                item.hits >= 14
+                                  ? 'bg-amber-400 text-slate-950'
+                                  : item.hits >= 11
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                  : item.isAbove50Percent
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {item.hits}/15 ({item.aproveitamento.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {item.ticket.dezenas.map((num) => {
+                            const matched = latestDraw.dezenas.includes(num);
+                            return (
+                              <span
+                                key={num}
+                                className={`w-7 h-7 rounded flex items-center justify-center text-xs tabular-nums ${
+                                  matched
+                                    ? 'bg-emerald-500 text-slate-950 font-black'
+                                    : 'bg-slate-800/80 text-slate-400'
+                                }`}
+                              >
+                                {num.toString().padStart(2, '0')}
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800 tabular-nums">
+                          <span>Soma: {item.ticket.soma} · P/I: {item.ticket.pares}/{item.ticket.impares}</span>
+                          <span className={item.premioEstimado > 0 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                            {item.premioEstimado > 0
+                              ? `Prêmio: R$ ${item.premioEstimado.toFixed(2)}`
+                              : item.isAbove50Percent
+                              ? 'Desempenho > 50%'
+                              : 'Abaixo de 50%'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </>
+          )}
         </div>
       )}
 

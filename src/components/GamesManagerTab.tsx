@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
-import { countMatches, DEFAULT_FILTERS } from '../services/combinatorics';
+import { countMatches, DEFAULT_FILTERS, normalizeGameTickets } from '../services/combinatorics';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
@@ -341,10 +341,126 @@ import {
   ChevronDown,
   Settings2,
   Award,
+  Terminal,
+  RefreshCw,
 } from 'lucide-react';
 
-interface GamesManagerTabProps {
-  tickets: GameTicket[];
+interface LocalStorageKeyDiagnostic {
+  key: string;
+  label: string;
+  available: boolean;
+  status: 'OK' | 'VAZIO' | 'ERRO';
+  count: number;
+  sizeKB: string;
+  detail: string;
+}
+
+interface DiagnosticSnapshot {
+  checkedAt: string;
+  storageAvailable: boolean;
+  keys: LocalStorageKeyDiagnostic[];
+}
+
+function inspectLocalStorageDiagnostics(): DiagnosticSnapshot {
+  const checkedAt = new Date().toLocaleTimeString('pt-BR');
+  let storageAvailable = false;
+  try {
+    localStorage.setItem('__lotosniper_diag_probe', '1');
+    localStorage.removeItem('__lotosniper_diag_probe');
+    storageAvailable = true;
+  } catch {
+    storageAvailable = false;
+  }
+
+  const keySpecs = [
+    { key: 'lotosniper_saved_tickets', label: 'Bilhetes Ativos' },
+    { key: 'lotosniper_saved_prognosticos', label: 'Fechamentos (Prognósticos)' },
+    { key: 'lotosniper_saved_fechamentos', label: 'Fechamentos (Espelho)' },
+    { key: 'lotosniper_active_fechamento_meta', label: 'Metadados da Matriz' },
+  ];
+
+  const keys: LocalStorageKeyDiagnostic[] = keySpecs.map(({ key, label }) => {
+    if (!storageAvailable) {
+      return {
+        key,
+        label,
+        available: false,
+        status: 'ERRO',
+        count: 0,
+        sizeKB: '0.0',
+        detail: 'localStorage indisponível no navegador',
+      };
+    }
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        return {
+          key,
+          label,
+          available: true,
+          status: 'VAZIO',
+          count: 0,
+          sizeKB: '0.0',
+          detail: 'Chave não preenchida',
+        };
+      }
+      const sizeKB = (new Blob([raw]).size / 1024).toFixed(1);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return {
+          key,
+          label,
+          available: true,
+          status: parsed.length > 0 ? 'OK' : 'VAZIO',
+          count: parsed.length,
+          sizeKB,
+          detail: `${parsed.length} registro(s) JSON válidos`,
+        };
+      }
+      if (parsed && typeof parsed === 'object') {
+        return {
+          key,
+          label,
+          available: true,
+          status: 'OK',
+          count: 1,
+          sizeKB,
+          detail: parsed.strategyName || parsed.modeName || 'Objeto válido',
+        };
+      }
+      return {
+        key,
+        label,
+        available: true,
+        status: 'ERRO',
+        count: 0,
+        sizeKB,
+        detail: 'Formato JSON inesperado',
+      };
+    } catch {
+      return {
+        key,
+        label,
+        available: true,
+        status: 'ERRO',
+        count: 0,
+        sizeKB: '0.0',
+        detail: 'JSON inválido / corrompido',
+      };
+    }
+  });
+
+  return {
+    checkedAt,
+    storageAvailable,
+    keys,
+  };
+}
+
+export interface GamesManagerTabProps {
+  savedTickets?: GameTicket[];
+  tickets?: GameTicket[];
   latestDraw?: LotofacilDraw;
   fechamentoMeta?: FechamentoExportMeta | null;
   onClearTickets: () => void;
@@ -352,15 +468,23 @@ interface GamesManagerTabProps {
 }
 
 export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
-  tickets,
+  savedTickets,
+  tickets: legacyTicketsProp,
   latestDraw = CONCURSO_ATUAL,
   fechamentoMeta,
   onClearTickets,
   onGoToGenerator,
 }) => {
-  const [conferirDezenas, setConferirDezenas] = useState<number[]>(latestDraw.dezenas);
+  // Alinhamento estrito com savedTickets passado via props de App.tsx
+  const tickets = useMemo(
+    () => normalizeGameTickets(savedTickets ?? legacyTicketsProp ?? [], latestDraw.dezenas),
+    [savedTickets, legacyTicketsProp, latestDraw.dezenas]
+  );
+
   const [selectedConcurso, setSelectedConcurso] = useState<number>(latestDraw.concurso);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState<boolean>(false);
+  const [diagRefreshNonce, setDiagRefreshNonce] = useState<number>(0);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);
@@ -375,19 +499,67 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     includeStatsFooter: true,
   });
   const [isPdfConfigOpen, setIsPdfConfigOpen] = useState<boolean>(false);
-  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>('fechamentos_salvos');
+  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>(
+    tickets.length > 0 ? 'bilhetes_individuais' : 'fechamentos_salvos'
+  );
 
-  // Relatório de duplicatas e limpeza automática
-  const [dupReport, setDupReport] = useState<DuplicateFechamentosReport>(() => getDuplicateFechamentosReport());
+  // Diagnóstico em tempo real de disponibilidade no localStorage vs prop savedTickets
+  const diagnosticSnapshot = useMemo(
+    () => inspectLocalStorageDiagnostics(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tickets.length, diagRefreshNonce]
+  );
+
+  // Relatório de duplicatas derivado diretamente sem estado local redundante
+  const dupReport: DuplicateFechamentosReport = useMemo(
+    () => getDuplicateFechamentosReport(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tickets.length, diagRefreshNonce]
+  );
   const [duplicateActionFeedback, setDuplicateActionFeedback] = useState<string | null>(null);
 
   React.useEffect(() => {
     const handleUpdate = () => {
-      setDupReport(getDuplicateFechamentosReport());
+      setDiagRefreshNonce((n) => n + 1);
     };
     window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
-    return () => window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+    window.addEventListener('lotosniper-saved-tickets-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+      window.removeEventListener('lotosniper-saved-tickets-updated', handleUpdate);
+    };
   }, []);
+
+  const handleReverifyAndSyncStorage = () => {
+    setDiagRefreshNonce((n) => n + 1);
+    try {
+      const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
+      if (rawTickets) {
+        const parsed = normalizeGameTickets(JSON.parse(rawTickets), latestDraw.dezenas);
+        if (parsed.length > 0) {
+          window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: parsed }));
+          setDuplicateActionFeedback(`✓ Diagnóstico: ${parsed.length} bilhete(s) sincronizado(s) a partir do localStorage.`);
+          setTimeout(() => setDuplicateActionFeedback(null), 4000);
+          return;
+        }
+      }
+      const savedList = getSavedFechamentos();
+      const flattened = normalizeGameTickets(
+        savedList.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : [])),
+        latestDraw.dezenas
+      );
+      if (flattened.length > 0) {
+        localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(flattened));
+        window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: flattened }));
+        setDuplicateActionFeedback(`✓ Diagnóstico: ${flattened.length} bilhete(s) restaurado(s) dos fechamentos salvos.`);
+      } else {
+        setDuplicateActionFeedback('Diagnóstico concluído: localStorage verificado e íntegro (0 bilhetes pendentes).');
+      }
+    } catch {
+      setDuplicateActionFeedback('Aviso: Falha ao ler dados do localStorage.');
+    }
+    setTimeout(() => setDuplicateActionFeedback(null), 4500);
+  };
 
   const handleLimpezaDuplicatas = () => {
     const report = getDuplicateFechamentosReport();
@@ -397,7 +569,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       return;
     }
     const res = removeDuplicateFechamentos();
-    setDupReport(getDuplicateFechamentosReport());
+    setDiagRefreshNonce((n) => n + 1);
     try {
       soundService.playGoldenZoneSuccessChime();
     } catch {}
@@ -409,6 +581,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
   const handleSanitizarBase = () => {
     const res = sanitizarFechamentosSalvos();
+    setDiagRefreshNonce((n) => n + 1);
     try {
       soundService.playGoldenZoneSuccessChime();
     } catch {}
@@ -495,11 +668,10 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     } catch {}
   };
 
-  // Update when latestDraw changes
+  // Sincroniza concurso selecionado quando latestDraw muda (sem duplicar estado de dezenas)
   React.useEffect(() => {
-    setConferirDezenas(latestDraw.dezenas);
     setSelectedConcurso(latestDraw.concurso);
-  }, [latestDraw.concurso, latestDraw.dezenas]);
+  }, [latestDraw.concurso]);
 
   // Lista de todos os tags únicos existentes
   const allExistingTags = React.useMemo(() => {
@@ -600,6 +772,17 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }));
   }, [tickets, ticketTags]);
 
+  const allDraws = useMemo(
+    () => [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)],
+    [latestDraw]
+  );
+
+  const activeCompareDraw = useMemo(
+    () => allDraws.find((d) => d.concurso === selectedConcurso) || latestDraw,
+    [allDraws, selectedConcurso, latestDraw]
+  );
+  const conferirDezenas = activeCompareDraw.dezenas;
+
   // Convert selected tickets to CSVExportGame format for batch export
   const csvExportGames: CSVExportGame[] = React.useMemo(() => {
     const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
@@ -646,14 +829,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     });
   }, [tickets, selectedTicketIds, conferirDezenas, latestDraw, ticketTags]);
 
-  const allDraws = [latestDraw, ...RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso)];
-
   const handleSelectConcurso = (concursoNum: number) => {
     setSelectedConcurso(concursoNum);
-    const draw = allDraws.find((d) => d.concurso === concursoNum);
-    if (draw) {
-      setConferirDezenas(draw.dezenas);
-    }
   };
 
   // Export TXT com cabeçalho técnico completo: estratégia, filtros obrigatórios e avançados
@@ -949,17 +1126,61 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }
   };
 
+  const handleExportLotericaOrganizadoPDF = () => {
+    const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+
+    if (listToExport.length > 0) {
+      downloadProfessionalLotericaPDF({
+        tickets: listToExport,
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        strategyName: fechamentoMeta?.strategyName || fechamentoMeta?.modeName || 'Bilhetes Salvos LotoSniper',
+        modalidadeMatriz: `${listToExport.length} Jogos Formatados para Lotérica`,
+        custoTotalEstimado: listToExport.length * 3.5,
+      });
+      setCopiedFormat('pdf');
+      setTimeout(() => setCopiedFormat(null), 3500);
+      return;
+    }
+
+    const allSaved = getSavedFechamentos();
+    const allSavedTickets = normalizeGameTickets(
+      allSaved.flatMap((f) => f.tickets || []),
+      latestDraw.dezenas
+    );
+    if (allSavedTickets.length > 0) {
+      const totalCost = allSaved.reduce(
+        (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * 3.5),
+        0
+      );
+      downloadProfessionalLotericaPDF({
+        tickets: allSavedTickets,
+        concurso: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        strategyName: `Dossiê Geral • ${allSaved.length} Fechamentos Salvos`,
+        modalidadeMatriz: `${allSavedTickets.length} Jogos Prontos para Impressão`,
+        custoTotalEstimado: totalCost,
+      });
+      setCopiedFormat('pdf');
+      setTimeout(() => setCopiedFormat(null), 3500);
+    } else {
+      setDuplicateActionFeedback('Nenhum bilhete salvo disponível para exportar em PDF.');
+      setTimeout(() => setDuplicateActionFeedback(null), 4000);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Seletor de Visão Principal: Dossiê de Fechamentos Salvos vs Gerenciador de Bilhetes */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 p-2 rounded-2xl border-2 border-slate-800 shadow-xl">
+    <div className="space-y-5">
+      {/* Seletor de Visão Principal & Ações (App Shell bg-slate-900/80 + font-mono) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800 shadow-xl backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveSection('fechamentos_salvos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeSection === 'fechamentos_salvos'
-                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'text-amber-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -970,34 +1191,50 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           <button
             type="button"
             onClick={() => setActiveSection('bilhetes_individuais')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeSection === 'bilhetes_individuais'
-                ? 'bg-gradient-to-r from-teal-400 to-emerald-500 text-slate-950 shadow-md shadow-teal-500/25'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                ? 'bg-gradient-to-r from-teal-400 to-emerald-500 text-slate-950 font-black shadow-md shadow-teal-500/20'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>Gerenciador de Bilhetes ({tickets.length} Jogos)</span>
+            <span>Bilhetes Salvos</span>
+            <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded bg-slate-950/30">
+              {tickets.length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSection('analise_roi')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeSection === 'analise_roi'
-                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-emerald-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <TrendingUp className="w-4 h-4" />
             <span>Análise de ROI</span>
-            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
-              LUCRO REAL
-            </span>
           </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Principal: Exportar Bilhetes Atuais Salvos em PDF Formatado para Lotérica */}
+          <button
+            type="button"
+            onClick={handleExportLotericaOrganizadoPDF}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer"
+            title="Exportar os bilhetes salvos atuais como PDF formatado e organizado para impressão e apostas na lotérica"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-950" />
+            <span>Exportar PDF para Lotérica</span>
+            {tickets.length > 0 && (
+              <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-slate-950/20 text-slate-950 font-black">
+                {tickets.length}
+              </span>
+            )}
+          </button>
+
           {/* Botão Oficial: Baixar Relatório Oficial PDF (jspdf + jspdf-autotable) */}
           <button
             type="button"
@@ -1006,76 +1243,47 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
               gerarEDispararRelatorioPDF(listToExport, fechamentoMeta, latestDraw);
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
-            title="Gerar e disparar o download de um PDF oficial contendo o resumo do fechamento, a meta técnica de premiação e a lista formatada de todos os jogos do bilhete"
+            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            title="Gerar relatório executivo PDF com resumo do fechamento, meta técnica e tabela completa"
           >
-            <Award className="w-3.5 h-3.5 text-slate-950 fill-current" />
-            <span>Baixar Relatório Oficial PDF</span>
+            <Award className="w-3.5 h-3.5 text-amber-400" />
+            <span>Relatório PDF</span>
           </button>
 
-          {/* Botão de Exportação de PDF Formatado de Jogos Salvos para Impressão */}
           <button
             type="button"
-            onClick={() => {
-              const allSaved = getSavedFechamentos();
-              if (allSaved.length > 0) {
-                const allTickets = allSaved.flatMap((f) => f.tickets || []);
-                const totalCost = allSaved.reduce(
-                  (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * 3.5),
-                  0
-                );
-                downloadProfessionalLotericaPDF({
-                  tickets: allTickets.length > 0 ? allTickets : tickets,
-                  concurso: latestDraw.concurso,
-                  dataConcurso: latestDraw.data,
-                  strategyName: `Dossiê Geral • ${allSaved.length} Fechamentos Salvos`,
-                  modalidadeMatriz: `${allTickets.length} Jogos Prontos para Impressão`,
-                  custoTotalEstimado: totalCost,
-                });
-              } else if (tickets.length > 0) {
-                downloadProfessionalLotericaPDF({
-                  tickets,
-                  concurso: latestDraw.concurso,
-                  dataConcurso: latestDraw.data,
-                  strategyName: 'Bilhetes LotoSniper',
-                  modalidadeMatriz: `${tickets.length} Jogos Formatados para Impressão`,
-                  custoTotalEstimado: tickets.length * 3.5,
-                });
-              } else {
-                setIsLotericaPDFModalOpen(true);
-              }
-            }}
-            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer"
-            title="Exportar jogos salvos em PDF profissional formatado, pronto para impressão em lotéricas"
+            onClick={() => setIsDiagnosticOpen((prev) => !prev)}
+            className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-cyan-300 border border-slate-700 text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+            title="Exibir/ocultar log de diagnóstico do localStorage e sincronização de props"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-950" />
-            <span>Exportar PDF para Impressão</span>
+            <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Log LocalStorage</span>
           </button>
 
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('lotosniper-open-backup'))}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
             title="Backup completo e automático de jogos e configurações (JSON & Google Drive)"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Backup Cloud Pro</span>
+            <span>Backup JSON</span>
           </button>
 
           <button
             type="button"
             onClick={handleLimpezaDuplicatas}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               dupReport.duplicateCount > 0
-                ? 'bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black animate-pulse'
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
             }`}
             title="Identificar e remover automaticamente fechamentos idênticos ou que contenham 100% de tickets repetidos"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Limpeza de Duplicatas</span>
+            <span>Limpar Duplicatas</span>
             {dupReport.duplicateCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 font-mono text-[10px] font-black">
+              <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-mono tabular-nums text-[10px] font-black">
                 {dupReport.duplicateCount}
               </span>
             )}
@@ -1094,12 +1302,102 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'fechamento' }))}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Criar Novo Fechamento</span>
+            <span>Novo Fechamento</span>
           </button>
+
+          {tickets.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                onClearTickets();
+                setDiagRefreshNonce((n) => n + 1);
+              }}
+              className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Limpar todos os bilhetes salvos da memória ativa"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Limpar Lista</span>
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* Painel de Diagnóstico de UI & LocalStorage (App Shell bg-slate-900/80 + font-mono) */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 shadow-lg font-mono text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-cyan-400 font-bold">
+              <Terminal className="w-3.5 h-3.5" />
+              <span>DIAGNÓSTICO STORAGE</span>
+            </span>
+            <span className="text-slate-500">·</span>
+            <span className="text-slate-300 tabular-nums">
+              savedTickets (Prop): <strong className="text-emerald-400">{tickets.length}</strong>
+            </span>
+            <span className="text-slate-500">·</span>
+            <span className="text-slate-300 tabular-nums">
+              localStorage:{' '}
+              <strong className={diagnosticSnapshot.storageAvailable ? 'text-emerald-400' : 'text-rose-400'}>
+                {diagnosticSnapshot.storageAvailable ? 'DISPONÍVEL' : 'BLOQUEADO'}
+              </strong>
+            </span>
+            <span className="text-slate-500 hidden sm:inline">·</span>
+            <span className="text-slate-400 hidden sm:inline tabular-nums">
+              Checagem: {diagnosticSnapshot.checkedAt}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleReverifyAndSyncStorage}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Reverificar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDiagnosticOpen((prev) => !prev)}
+              className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 text-[11px] transition cursor-pointer"
+            >
+              {isDiagnosticOpen ? 'Ocultar Detalhes' : 'Ver Log Completo'}
+            </button>
+          </div>
+        </div>
+
+        {isDiagnosticOpen && (
+          <div className="mt-3 pt-3 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+            {diagnosticSnapshot.keys.map((item) => (
+              <div
+                key={item.key}
+                className="bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <div className="text-slate-200 font-bold truncate">{item.key}</div>
+                  <div className="text-slate-500 text-[10px] truncate">{item.detail}</div>
+                </div>
+                <div className="text-right shrink-0 tabular-nums">
+                  <span
+                    className={`font-bold ${
+                      item.status === 'OK'
+                        ? 'text-emerald-400'
+                        : item.status === 'VAZIO'
+                        ? 'text-amber-400'
+                        : 'text-rose-400'
+                    }`}
+                  >
+                    [{item.status}] {item.count}
+                  </span>
+                  <div className="text-[10px] text-slate-500">{item.sizeKB} KB</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {sanitizacaoFeedback && (
@@ -1159,14 +1457,14 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
             }}
           />
           {/* Top Export Bar */}
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-5 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <h2 className="text-lg font-black text-white flex items-center gap-2 font-mono">
                 <Download className="w-5 h-5 text-emerald-400" />
-                <span>Gerenciador de Bilhetes Individuais, Exportador & Conferidor</span>
+                <span>Bilhetes Salvos & Exportação para Lotérica</span>
               </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Exporte seus bilhetes para formatos oficiais (PDF com Volantes 5×5 e CSV para planilhas/lotéricas) ou confira a premiação instantânea.
+            Exporte seus bilhetes para formatos oficiais (PDF organizado para lotérica, Volantes 5×5, CSV ou TXT) ou confira acertos em tempo real.
           </p>
         </div>
 
@@ -1593,7 +1891,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       ) : (
         <>
           {/* Live Checker (Conferidor Instantâneo) */}
-          <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+          <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-3">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1613,7 +1911,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                   onChange={(e) => handleSelectConcurso(parseInt(e.target.value, 10))}
                   className="bg-slate-950 border border-slate-800 text-white rounded-lg px-2.5 py-1 font-mono cursor-pointer"
                 >
-                  {RECENT_DRAWS.map((d) => (
+                  {allDraws.map((d) => (
                     <option key={d.concurso} value={d.concurso}>
                       #{d.concurso} ({d.data})
                     </option>
@@ -1716,12 +2014,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 return (
                   <div
                     key={id}
-                    className={`p-3.5 rounded-2xl border transition space-y-2.5 ${
+                    className={`p-3.5 rounded-2xl border transition space-y-2.5 font-mono ${
                       isExtremidadesFora
-                        ? 'border-rose-500/40 bg-rose-950/10'
+                        ? 'border-rose-500/40 bg-rose-950/15'
                         : isSelected
-                        ? 'border-emerald-500/50 bg-slate-950'
-                        : 'border-slate-800/80 bg-slate-950/40 opacity-75'
+                        ? 'border-emerald-500/50 bg-slate-900/80'
+                        : 'border-slate-800/80 bg-slate-900/50 opacity-75'
                     } ${
                       hits >= 14
                         ? 'ring-1 ring-amber-400/50 bg-amber-500/5'
@@ -1737,19 +2035,19 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                           onChange={() => handleToggleSelectTicket(id)}
                           className="w-4 h-4 rounded text-emerald-500 accent-emerald-500 cursor-pointer"
                         />
-                        <span className="font-mono font-black text-white text-sm">
+                        <span className="font-mono font-black text-white text-sm tabular-nums">
                           Jogo #{t.index.toString().padStart(2, '0')}
                         </span>
 
                         {isExtremidadesFora && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse shadow-sm">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
                             <AlertTriangle className="w-3 h-3 text-rose-400" />
                             <span>Fora do Padrão</span>
                           </span>
                         )}
 
                         {isZonaOuroCruz && (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm">
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
                             ★ Cruz Ouro ({cruzCount})
                           </span>
                         )}

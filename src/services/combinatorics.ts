@@ -575,6 +575,89 @@ export function analyzeTicket(
   };
 }
 
+/**
+ * Normaliza defensivamente um objeto de bilhete bruto vindo de props ou localStorage,
+ * garantindo dezenas válidas (1..25) ordenadas e todas as propriedades numéricas preenchidas.
+ */
+export function normalizeGameTicket(
+  rawTicket: any,
+  fallbackIndex: number = 0,
+  concursoAnterior: number[] = CONCURSO_ATUAL.dezenas
+): GameTicket | null {
+  if (!rawTicket || typeof rawTicket !== 'object') return null;
+
+  const candidateArr = Array.isArray(rawTicket.dezenas)
+    ? rawTicket.dezenas
+    : Array.isArray(rawTicket.numbers)
+    ? rawTicket.numbers
+    : null;
+
+  if (!candidateArr || candidateArr.length === 0) return null;
+
+  const cleanSet = new Set<number>();
+  for (const item of candidateArr) {
+    const num = typeof item === 'number' ? item : parseInt(String(item), 10);
+    if (!Number.isNaN(num) && num >= 1 && num <= 25) {
+      cleanSet.add(num);
+    }
+  }
+
+  const dezenas = Array.from(cleanSet).sort((a, b) => a - b);
+  if (dezenas.length === 0) return null;
+
+  const analysis = analyzeTicket(dezenas, concursoAnterior);
+  const index =
+    typeof rawTicket.index === 'number' && Number.isFinite(rawTicket.index) && rawTicket.index > 0
+      ? rawTicket.index
+      : fallbackIndex + 1;
+  const id =
+    typeof rawTicket.id === 'string' && rawTicket.id.trim().length > 0
+      ? rawTicket.id
+      : `ticket-${index}`;
+
+  return {
+    ...analysis,
+    id,
+    index,
+    dezenas,
+    pares: typeof rawTicket.pares === 'number' ? rawTicket.pares : analysis.pares,
+    impares: typeof rawTicket.impares === 'number' ? rawTicket.impares : analysis.impares,
+    primos: typeof rawTicket.primos === 'number' ? rawTicket.primos : analysis.primos,
+    soma: typeof rawTicket.soma === 'number' ? rawTicket.soma : analysis.soma,
+    moldura: typeof rawTicket.moldura === 'number' ? rawTicket.moldura : analysis.moldura,
+    miolo: typeof rawTicket.miolo === 'number' ? rawTicket.miolo : analysis.miolo,
+    fibonacci: typeof rawTicket.fibonacci === 'number' ? rawTicket.fibonacci : analysis.fibonacci,
+    cruz: typeof rawTicket.cruz === 'number' ? rawTicket.cruz : analysis.cruz,
+    bola1: typeof rawTicket.bola1 === 'number' ? rawTicket.bola1 : analysis.bola1,
+    bola15: typeof rawTicket.bola15 === 'number' ? rawTicket.bola15 : analysis.bola15,
+    repetidas: typeof rawTicket.repetidas === 'number' ? rawTicket.repetidas : analysis.repetidas,
+    maxConsecutivas:
+      typeof rawTicket.maxConsecutivas === 'number'
+        ? rawTicket.maxConsecutivas
+        : analysis.maxConsecutivas,
+    scoreIA: typeof rawTicket.scoreIA === 'number' ? rawTicket.scoreIA : analysis.scoreIA,
+    tags: Array.isArray(rawTicket.tags) ? rawTicket.tags.map(String) : undefined,
+    auditoriaAnomalias:
+      typeof rawTicket.auditoriaAnomalias === 'string' ? rawTicket.auditoriaAnomalias : undefined,
+    faixaSoma: rawTicket.faixaSoma,
+  };
+}
+
+export function normalizeGameTickets(
+  rawList: any,
+  concursoAnterior: number[] = CONCURSO_ATUAL.dezenas
+): GameTicket[] {
+  if (!Array.isArray(rawList)) return [];
+  const result: GameTicket[] = [];
+  rawList.forEach((item, idx) => {
+    const normalized = normalizeGameTicket(item, idx, concursoAnterior);
+    if (normalized) {
+      result.push(normalized);
+    }
+  });
+  return result;
+}
+
 export interface FilterValidationResult {
   isValid: boolean;
   reason?: string;
