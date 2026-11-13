@@ -16,7 +16,6 @@ import {
   removeDuplicateFechamentos,
   DuplicateFechamentosReport,
   sanitizarFechamentosSalvos,
-  formatBackupJsonFilename,
   getBackupConcursoAlvo,
   resolveConcursoAlvo,
   resolveConcursoBase,
@@ -1157,7 +1156,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         3824
       );
       const concursoAlvo = Number(concursoBase) + 1;
-      const dataFormatada = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const dataFormatada = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const fileName = `lotosniper_concurso_${concursoAlvo}_${dataFormatada}.json`;
 
       const backupPayload = {

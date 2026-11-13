@@ -17,7 +17,6 @@ import {
   Play,
   RotateCcw,
   TrendingUp,
-  TrendingDown,
   Minus,
   DollarSign,
   Award,
@@ -38,7 +37,12 @@ import {
 } from 'lucide-react';
 
 const formatBRLScorecard = (val: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(val) ? val : 0);
 
 interface SimulatorTabProps {
   tickets: GameTicket[];
