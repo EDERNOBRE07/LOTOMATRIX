@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   PRIMOS,
   MOLDURA,
@@ -54,6 +54,96 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   >('normal');
   const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude'>('select');
   const [showRollingModal, setShowRollingModal] = useState<boolean>(false);
+  const shouldReduceMotion = useReducedMotion();
+
+  const recommended18 = React.useMemo(() => {
+    const pool = buildOptimal18Pool(latestDraw, statsList, cyclePendingNumbers);
+    return [...pool.dezenas].slice(0, 18).sort((a, b) => a - b);
+  }, [latestDraw, statsList, cyclePendingNumbers]);
+  const recommended18Key = recommended18.join(',');
+
+  const [introRollBalls, setIntroRollBalls] = useState<
+    { slot: number; currentDisplay: number; target: number; isLocked: boolean }[]
+  >(() =>
+    recommended18.map((num, idx) => ({
+      slot: idx,
+      currentDisplay: num,
+      target: num,
+      isLocked: Boolean(shouldReduceMotion),
+    }))
+  );
+  const [isIntroRolling, setIsIntroRolling] = useState<boolean>(false);
+  const [introRollNonce, setIntroRollNonce] = useState<number>(0);
+
+  const startIntroRollingSequence = useCallback(
+    (targets: number[]) => {
+      if (shouldReduceMotion || targets.length === 0) {
+        setIsIntroRolling(false);
+        setIntroRollBalls(
+          targets.map((num, idx) => ({
+            slot: idx,
+            currentDisplay: num,
+            target: num,
+            isLocked: true,
+          }))
+        );
+        return () => {};
+      }
+
+      setIsIntroRolling(true);
+      setIntroRollBalls(
+        targets.map((num, idx) => ({
+          slot: idx,
+          currentDisplay: ((num + idx * 3) % 25) + 1,
+          target: num,
+          isLocked: false,
+        }))
+      );
+
+      const intervalId = window.setInterval(() => {
+        setIntroRollBalls((prev) =>
+          prev.map((ball) =>
+            ball.isLocked
+              ? ball
+              : { ...ball, currentDisplay: Math.floor(Math.random() * 25) + 1 }
+          )
+        );
+      }, 65);
+
+      const timeoutIds: number[] = [];
+      targets.forEach((targetNum, idx) => {
+        const lockDelay = 160 + Math.round((idx / targets.length) * 840);
+        const tid = window.setTimeout(() => {
+          setIntroRollBalls((prev) =>
+            prev.map((ball, bIdx) =>
+              bIdx === idx
+                ? { ...ball, currentDisplay: targetNum, target: targetNum, isLocked: true }
+                : ball
+            )
+          );
+          if (idx === targets.length - 1) {
+            window.clearInterval(intervalId);
+            setIsIntroRolling(false);
+          }
+        }, lockDelay);
+        timeoutIds.push(tid);
+      });
+
+      return () => {
+        window.clearInterval(intervalId);
+        timeoutIds.forEach((id) => window.clearTimeout(id));
+      };
+    },
+    [shouldReduceMotion]
+  );
+
+  useEffect(() => {
+    const targets = recommended18Key
+      .split(',')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 25);
+    return startIntroRollingSequence(targets);
+  }, [recommended18Key, introRollNonce, startIntroRollingSequence]);
 
   // Compute scores map
   const scoresMap = React.useMemo(() => {
@@ -646,31 +736,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Sorteio Rolling Numbers Manual (Framer Motion Modal) */}
+      {/* Sorteio Rolling Numbers Manual (Framer Motion) */}
       {showRollingModal && (
-        <div className="my-4 p-4 rounded-2xl bg-slate-950/90 border border-amber-500/40 relative shadow-2xl">
-          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
-            <span className="text-xs font-black text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              Sorteio Rolling Numbers no Volante (Framer Motion)
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowRollingModal(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              title="Fechar Sorteio Animado"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
+        <div className="my-4">
           <RollingNumbersSorteio
             finalNumbers={numbersToSpin}
             title="Sorteio das Dezenas do Volante"
-            subtitle={`Girando ${numbersToSpin.length} dezenas selecionadas/recomendadas com animação mecânica Framer Motion`}
+            subtitle={`Girando ${numbersToSpin.length} dezenas selecionadas/recomendadas com animação mecânica`}
             cycleKeyNumbers={cyclePendingNumbers}
             scoresMap={scoresMap}
             autoStart={true}
+            onClose={() => setShowRollingModal(false)}
             onApplyNumbers={(nums) => {
               onSelectSet(nums);
               setShowRollingModal(false);
@@ -702,6 +778,98 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Tambor Mecânico Automático (18 Dezenas Recomendadas IA • Rolling Numbers ao Carregar) */}
+      <div className="mt-3 p-3 rounded-xl bg-slate-950/75 border border-slate-800/90">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+              <Sparkles className={`w-3.5 h-3.5 text-amber-400 ${isIntroRolling ? 'animate-spin' : ''}`} />
+              18 Recomendadas IA • Rolling Numbers
+            </span>
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded-md border ${
+                isIntroRolling
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30 animate-pulse'
+                  : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+              }`}
+            >
+              {isIntroRolling ? 'GIRANDO TAMBOR...' : '18 TRAVADAS'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIntroRollNonce((prev) => prev + 1)}
+              disabled={isIntroRolling}
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-300 border border-slate-700 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+              title="Reexecutar animação mecânica Rolling Numbers das 18 dezenas recomendadas"
+            >
+              Rever Rolling
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onSelectSet(recommended18.slice(0, targetCount));
+                onStrategySelect?.('Rolling Numbers · 18 Recomendadas IA');
+                setStabilizedNumbers(recommended18.slice(0, targetCount));
+                setIsStabilizing(true);
+                soundService.playSuccess();
+                window.setTimeout(() => {
+                  setIsStabilizing(false);
+                  setStabilizedNumbers([]);
+                }, 500);
+              }}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Aplicar as 18 dezenas recomendadas diretamente no volante 5×5"
+            >
+              Aplicar 18 no Volante
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-6 sm:grid-cols-9 gap-1.5">
+          {introRollBalls.map((ball) => {
+            const isCycleKey = cyclePendingNumbers.includes(ball.target);
+            return (
+              <motion.div
+                key={`intro-roll-${ball.slot}`}
+                animate={
+                  ball.isLocked
+                    ? { scale: shouldReduceMotion ? 1 : [1.14, 1] }
+                    : { scale: [0.94, 1.06, 0.94] }
+                }
+                transition={{ duration: 0.18 }}
+                className={`h-7 rounded-lg flex items-center justify-center font-mono tabular-nums text-xs font-black border overflow-hidden ${
+                  ball.isLocked
+                    ? isCycleKey
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-400/60'
+                      : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                    : 'bg-slate-900 text-amber-300 border-amber-500/40'
+                }`}
+                title={
+                  ball.isLocked
+                    ? `Dezena ${ball.target.toString().padStart(2, '0')} recomendada pela IA`
+                    : 'Sorteando no tambor...'
+                }
+              >
+                <AnimatePresence mode="popLayout">
+                  <motion.span
+                    key={`intro-val-${ball.slot}-${ball.currentDisplay}`}
+                    initial={shouldReduceMotion ? false : { y: -12, opacity: 0.35 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={shouldReduceMotion ? undefined : { y: 12, opacity: 0.35 }}
+                    transition={{ type: 'spring', stiffness: 520, damping: 24 }}
+                  >
+                    {ball.currentDisplay.toString().padStart(2, '0')}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Volante Grid 5x5 */}
       <div className="py-4 flex justify-center">

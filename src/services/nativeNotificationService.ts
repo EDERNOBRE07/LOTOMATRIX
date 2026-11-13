@@ -9,6 +9,8 @@ export interface NativeJackpotPayload {
   winningTicketsCount: number;
   bestTicketIndex: number;
   dataSorteio?: string;
+  playAudio?: boolean;
+  sendPush?: boolean;
 }
 
 /**
@@ -117,25 +119,34 @@ export function isPrizeTierEnabled(hits: number): boolean {
  * utilizing the Service Worker registration when available.
  */
 export async function sendNativeJackpotNotification(payload: NativeJackpotPayload): Promise<boolean> {
-  const { concurso, maxHits, winningTicketsCount, bestTicketIndex } = payload;
+  const {
+    concurso,
+    maxHits,
+    winningTicketsCount,
+    bestTicketIndex,
+    playAudio = true,
+    sendPush = true,
+  } = payload;
   
   // Verify if this specific tier is activated in user preferences
   if (!isPrizeTierEnabled(maxHits)) {
     return false;
   }
 
-  // 1. Play auditory celebration based on hit tier
-  try {
-    if (maxHits >= 15) {
-      soundService.play15PontosJackpotSound();
-    } else if (maxHits >= 14) {
-      soundService.play14PontosCelebrationSound();
-    } else if (maxHits >= 13) {
-      soundService.playGoldenZoneSuccessChime();
-    } else {
-      soundService.playSuccess();
-    }
-  } catch {}
+  // 1. Play auditory celebration based on hit tier (honoring user sound preference)
+  if (playAudio) {
+    try {
+      if (maxHits >= 15) {
+        soundService.play15PontosJackpotSound();
+      } else if (maxHits >= 14) {
+        soundService.play14PontosCelebrationSound();
+      } else if (maxHits >= 13) {
+        soundService.play13PlusAlert();
+      } else {
+        soundService.playSuccess();
+      }
+    } catch {}
+  }
 
   // 2. Prepare Title and Badge by tier
   let title = '';
@@ -180,7 +191,7 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
   } catch {}
 
   // 4. Native Browser Notification (Foreground & Background Tab Support)
-  if (!isNotificationSupported() || Notification.permission !== 'granted') {
+  if (!sendPush || !isNotificationSupported() || Notification.permission !== 'granted') {
     return false;
   }
 

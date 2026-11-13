@@ -54,9 +54,11 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   });
 
   // Metadados do fechamento
-  const resolvedConcurso = savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso;
+  const resolvedConcurso = Number(savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso) || 3824;
+  const resolvedConcursoAlvo = savedFechamento?.concursoAlvo ?? fechamentoMeta?.concursoAlvo ?? resolvedConcurso + 1;
   const resolvedData = savedFechamento?.dataConcurso || fechamentoMeta?.dataConcurso || latestDraw.data;
   const strategyName =
+    savedFechamento?.nomeFechamento ||
     savedFechamento?.tipoFechamento ||
     fechamentoMeta?.strategyName ||
     'Fechamento Inteligente Ponderado (Zona de Ouro)';
@@ -398,7 +400,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `volantes_lotosniper_gold_${validTickets.length}_jogos_concurso_${resolvedConcurso}.html`;
+    link.download = `volantes_lotosniper_gold_concurso_${resolvedConcursoAlvo}_${validTickets.length}_jogos.html`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -453,6 +455,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
               onClick={() => {
                 downloadTicketsVolantePDF(validTickets, {
                   concurso: resolvedConcurso,
+                  concursoAlvo: resolvedConcursoAlvo,
                   dataConcurso: resolvedData,
                   titulo: `LOTOSNIPER GOLD • VOLANTES 5X5 (${strategyName})`,
                   style: 'oficial',
@@ -471,6 +474,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
               onClick={() => {
                 downloadTicketsVolantePDF(validTickets, {
                   concurso: resolvedConcurso,
+                  concursoAlvo: resolvedConcursoAlvo,
                   dataConcurso: resolvedData,
                   titulo: `LOTOSNIPER • LISTA OTIMIZADA (${strategyName})`,
                   style: 'economico',
@@ -523,9 +527,9 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
 
               <div className="flex items-center gap-2 bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 rounded-xl font-mono text-xs">
                 <Calendar className="w-3.5 h-3.5 text-amber-300" />
-                <span className="text-slate-300">Concurso Base:</span>
-                <strong className="text-amber-300">#{resolvedConcurso}</strong>
-                <span className="text-slate-500">({resolvedData})</span>
+                <span className="text-slate-300">Alvo:</span>
+                <strong className="text-emerald-300">#{resolvedConcursoAlvo}</strong>
+                <span className="text-slate-400">(Base #{resolvedConcurso} • {resolvedData})</span>
               </div>
             </div>
 

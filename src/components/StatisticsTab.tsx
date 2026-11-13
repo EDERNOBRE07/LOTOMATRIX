@@ -68,6 +68,7 @@ import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificada
 import { GoldenZoneChart } from './GoldenZoneChart';
 export { GoldenZoneChart };
 import { Historico5ConcursosD3Chart } from './Historico5ConcursosD3Chart';
+import { MatrizCalor50ConcursosD3 } from './MatrizCalor50ConcursosD3';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 import { exportHistoricoRoiProbabilidadeJSON } from '../services/relatorioJsonExportService';
 import { GameTicket, FilterCriteria } from '../types/lotofacil';
@@ -125,6 +126,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'resumo_financeiro'
     | 'dispersao_estratificada'
     | 'historico_5_d3'
+    | 'matriz_calor_50_d3'
     | 'frequencia_50_d3'
     | 'simulador_historico_d3'
     | 'desempenho_cruz_extremidades'
@@ -244,6 +246,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Histórico 5 Concursos (D3.js)</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
               BILHETES SALVOS
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('matriz_calor_50_d3')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'matriz_calor_50_d3'
+                ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-sky-500 text-slate-950 shadow-md shadow-rose-500/25 font-black ring-1 ring-rose-300'
+                : 'text-rose-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-rose-300" />
+            <span>Matriz de Calor 50 (D3.js)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+              QUENTES & FRIAS
             </span>
           </button>
 
@@ -1751,9 +1768,25 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
+      {/* SUBTAB DEDICADA: MATRIZ DE CALOR D3.JS (25 DEZENAS NOS ÚLTIMOS 50 CONCURSOS) */}
+      {activeSubTab === 'matriz_calor_50_d3' && (
+        <div className="space-y-6">
+          <MatrizCalor50ConcursosD3
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
+      )}
+
       {/* SUBTAB DEDICADA: MAPA DE CALOR (HEATMAP) FREQUÊNCIA HISTÓRICA 25 DEZENAS (AZUL AO VERMELHO) */}
       {activeSubTab === 'mapa_calor_frequencia' && (
         <div className="space-y-6">
+          <MatrizCalor50ConcursosD3
+            latestDraw={latestDraw}
+            statsList={statsList}
+            onApplyNumbers={onApplyNumbers}
+          />
           <MapaCalorFrequenciaHistorica
             latestDraw={latestDraw}
             statsList={statsList}

@@ -29,9 +29,14 @@ import {
   BarChart3,
   Download,
   ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
   Swords,
   Zap,
 } from 'lucide-react';
+
+const formatBRLScorecard = (val: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
 interface SimulatorTabProps {
   tickets: GameTicket[];
@@ -590,27 +595,45 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               {/* Scorecard Financial & Hits */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">Total Investido</span>
-                  <strong className="text-white font-mono text-base font-bold">
-                    R$ {results.custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[11px] text-slate-400">Total Investido</span>
+                    <DollarSign className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  </div>
+                  <strong className="text-white font-mono tabular-nums text-base font-bold">
+                    {formatBRLScorecard(results.custoTotal)}
                   </strong>
                 </div>
 
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">Total Premiado</span>
-                  <strong className="text-emerald-400 font-mono text-base font-bold">
-                    R$ {results.premioTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <div className="bg-slate-900 p-4 rounded-xl border border-emerald-500/20">
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[11px] text-slate-400">Total Premiado</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  </div>
+                  <strong className="text-emerald-400 font-mono tabular-nums text-base font-bold">
+                    {formatBRLScorecard(results.premioTotal)}
                   </strong>
                 </div>
 
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">Saldo Líquido</span>
+                <div
+                  className={`bg-slate-900 p-4 rounded-xl border ${
+                    results.saldoLiquido >= 0 ? 'border-emerald-500/30' : 'border-rose-500/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[11px] text-slate-400">Saldo Líquido</span>
+                    {results.saldoLiquido >= 0 ? (
+                      <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    )}
+                  </div>
                   <strong
-                    className={`font-mono text-base font-bold ${
+                    className={`font-mono tabular-nums text-base font-bold ${
                       results.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}
                   >
-                    R$ {results.saldoLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {results.saldoLiquido >= 0 ? '+' : ''}
+                    {formatBRLScorecard(results.saldoLiquido)}
                   </strong>
                 </div>
 

@@ -32,8 +32,8 @@ export function exportCartoesJogosToPdf({
   const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
   const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
 
-  const concurso = meta?.concurso || latestDraw.concurso;
-  const targetConcurso = concurso + 1;
+  const concurso = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const targetConcurso = Number(meta?.concursoAlvo) || concurso + 1;
   const dataConcurso = meta?.dataConcurso || latestDraw.data || new Date().toLocaleDateString('pt-BR');
   const nomeFechamento =
     fechamentoNome || meta?.strategyName || 'Fechamento Clássico';
@@ -104,7 +104,11 @@ export function exportCartoesJogosToPdf({
     );
   }
 
-  const filename = `lotosniper_cartoes_${nomeFechamento.toLowerCase().replace(/\s+/g, '_')}_${totalJogos}_jogos.pdf`;
+  const safeSlug = String(nomeFechamento || 'fechamento')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .slice(0, 32);
+  const filename = `lotosniper_cartoes_concurso_${targetConcurso}_${safeSlug}_${totalJogos}_jogos.pdf`;
   doc.save(filename);
 }
 

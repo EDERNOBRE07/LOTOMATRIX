@@ -9,7 +9,9 @@ export interface SavedFechamentoPrognostico {
   timestamp: number;
   dataCriacao: string;
   concurso: number;
+  concursoAlvo?: number;
   dataConcurso?: string;
+  nomeFechamento?: string;
   tipoFechamento: string;
   modalidadeMatriz: string;
   universoDezenas: number[];
@@ -26,6 +28,128 @@ export interface SavedFechamentoPrognostico {
   tickets: GameTicket[];
   totalJogos: number;
   custoTotal: number;
+}
+
+export function resolveConcursoBase(
+  concurso?: number | string | null,
+  fallback: number = 3824
+): number {
+  const num = Number(concurso);
+  return Number.isFinite(num) && num > 0 ? Math.trunc(num) : fallback;
+}
+
+export function resolveConcursoAlvo(
+  concursoBase?: number | string | null,
+  explicitAlvo?: number | string | null,
+  fallbackBase: number = 3824
+): number {
+  const alvoNum = Number(explicitAlvo);
+  if (Number.isFinite(alvoNum) && alvoNum > 0) {
+    return Math.trunc(alvoNum);
+  }
+  return resolveConcursoBase(concursoBase, fallbackBase) + 1;
+}
+
+export function getBackupConcursoAlvo(
+  fechamentos: Array<{ concurso?: number; concursoAlvo?: number }> = [],
+  fallbackBase: number = 3824
+): number {
+  if (!Array.isArray(fechamentos) || fechamentos.length === 0) {
+    return resolveConcursoAlvo(fallbackBase);
+  }
+  let maxAlvo = 0;
+  for (const f of fechamentos) {
+    const alvo = resolveConcursoAlvo(f?.concurso, f?.concursoAlvo, fallbackBase);
+    if (alvo > maxAlvo) maxAlvo = alvo;
+  }
+  return maxAlvo > 0 ? maxAlvo : resolveConcursoAlvo(fallbackBase);
+}
+
+export function formatBackupJsonFilename(
+  concursoAlvo: number,
+  dataFormatada: string = new Date().toISOString().slice(0, 10)
+): string {
+  const safeAlvo = Number.isFinite(Number(concursoAlvo)) && Number(concursoAlvo) > 0
+    ? Math.trunc(Number(concursoAlvo))
+    : 3825;
+  return `lotosniper_concurso_${safeAlvo}_${dataFormatada}.json`;
+}
+
+export function stripConcursoAlvoPrefix(rawTitle?: string | null): string {
+  const str = String(rawTitle || '').trim();
+  if (!str) return '';
+  return str
+    .replace(/^Concurso Alvo #\d+\s*\(Base #\d+\)\s*•\s*/i, '')
+    .replace(/^⚡\s*/, '')
+    .trim();
+}
+
+export function buildStandardFilterSummary(item: {
+  faixaSoma?: { min?: number; max?: number };
+  paridade?: { minPares?: number; maxPares?: number };
+  moldura?: { min?: number; max?: number };
+  primos?: { min?: number; max?: number };
+  fibonacci?: { min?: number; max?: number };
+  repetidas?: { min?: number; max?: number };
+  dezenasFixas?: number[];
+  dezenasExcluidas?: number[];
+}): string {
+  const tokens: string[] = [
+    `Soma ${item.faixaSoma?.min ?? 180}-${item.faixaSoma?.max ?? 215}`,
+    `Pares ${item.paridade?.minPares ?? 6}-${item.paridade?.maxPares ?? 9}`,
+    `Moldura ${item.moldura?.min ?? 8}-${item.moldura?.max ?? 12}`,
+    `Primos ${item.primos?.min ?? 4}-${item.primos?.max ?? 6}`,
+    `Fib ${item.fibonacci?.min ?? 3}-${item.fibonacci?.max ?? 5}`,
+    `Rep ${item.repetidas?.min ?? 6}-${item.repetidas?.max ?? 10}`,
+  ];
+  if (Array.isArray(item.dezenasFixas) && item.dezenasFixas.length > 0) {
+    tokens.push(`Fixas: [${[...item.dezenasFixas].sort((a, b) => a - b).join(',')}]`);
+  }
+  if (Array.isArray(item.dezenasExcluidas) && item.dezenasExcluidas.length > 0) {
+    tokens.push(`Excl: [${[...item.dezenasExcluidas].sort((a, b) => a - b).join(',')}]`);
+  }
+  return `Filtros: ${tokens.join(' | ')}`;
+}
+
+export function formatStandardFechamentoTitle(params: {
+  concursoBase: number;
+  concursoAlvo?: number;
+  tipoFechamento?: string;
+  modalidadeMatriz?: string;
+  universoCount: number;
+  totalJogos: number;
+  garantia?: string;
+  filterSummary?: string;
+}): string {
+  const concursoBase = resolveConcursoBase(params.concursoBase);
+  const concursoAlvo = resolveConcursoAlvo(concursoBase, params.concursoAlvo);
+
+  // Extrai somente o nome limpo da estratégia caso já venha formatado
+  let tipoClean = stripConcursoAlvoPrefix(params.tipoFechamento);
+  if (tipoClean.includes(' • ')) {
+    tipoClean = tipoClean.split(' • ')[0].trim();
+  }
+  if (!tipoClean) {
+    tipoClean = 'Fechamento Clássico';
+  }
+
+  let garantiaText = String(params.garantia || '').trim();
+  if (!garantiaText && params.modalidadeMatriz) {
+    const matchGar = String(params.modalidadeMatriz).match(/Garantia[^)\]]*/i);
+    if (matchGar) {
+      garantiaText = matchGar[0].trim();
+    }
+  }
+  if (!garantiaText) {
+    garantiaText = 'Garantia 14 se 15';
+  } else if (!/^garantia/i.test(garantiaText)) {
+    garantiaText = `Garantia ${garantiaText}`;
+  }
+
+  const resumoMatriz = `${params.universoCount} Dezenas (${params.totalJogos} Jogos • ${garantiaText})`;
+  const resumoFiltros = params.filterSummary || 'Filtros: Soma 180-215 | Pares 6-9 | Moldura 8-12 | Primos 4-6 | Fib 3-5 | Rep 6-10';
+
+  return `Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) • ${tipoClean} • ${resumoMatriz} [${resumoFiltros}]`;
 }
 
 const STORAGE_KEY = 'lotosniper_saved_prognosticos';
@@ -81,7 +205,8 @@ export function normalizeSavedFechamento(
   }
 
   const id = item.id ? String(item.id) : `fechamento-${Date.now()}-${fallbackIndex}`;
-  const concurso = typeof item.concurso === 'number' ? item.concurso : 3827;
+  const concurso = resolveConcursoBase(item.concurso, 3824);
+  const concursoAlvo = resolveConcursoAlvo(concurso, item.concursoAlvo);
   const dataConcurso = item.dataConcurso ? String(item.dataConcurso) : '';
   const dataCriacao = item.dataCriacao ? String(item.dataCriacao) : new Date().toLocaleString('pt-BR');
 
@@ -93,8 +218,9 @@ export function normalizeSavedFechamento(
     item.strategyName ||
     item.modeName ||
     item.modalidadeMatriz ||
-    '⚡ Fechamento Combinatório Lotofácil';
-  const tipoFechamento = String(rawTipo);
+    'Fechamento Clássico';
+  const strippedTipo = stripConcursoAlvoPrefix(String(rawTipo));
+  const tipoFechamento = (strippedTipo.includes(' • ') ? strippedTipo.split(' • ')[0].trim() : strippedTipo) || 'Fechamento Clássico';
 
   const rawModalidade =
     item.modalidadeMatriz ||
@@ -243,12 +369,35 @@ export function normalizeSavedFechamento(
       ? item.auditoriaAnomalias
       : `${totalJogos}/${totalJogos} bilhetes dentro da faixa`;
 
+  const filterSummary = buildStandardFilterSummary({
+    faixaSoma,
+    paridade,
+    moldura,
+    primos,
+    fibonacci,
+    repetidas,
+    dezenasFixas,
+    dezenasExcluidas,
+  });
+
+  const nomeFechamento = formatStandardFechamentoTitle({
+    concursoBase: concurso,
+    concursoAlvo,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoCount: universoDezenas.length,
+    totalJogos,
+    filterSummary,
+  });
+
   return {
     id,
     timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
     dataCriacao,
     concurso,
+    concursoAlvo,
     dataConcurso,
+    nomeFechamento,
     tipoFechamento,
     modalidadeMatriz,
     universoDezenas,
@@ -294,7 +443,7 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
     const normalized = parsed
       .filter((p) => p && typeof p === 'object')
       .map((item, idx) => {
-        if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz) {
+        if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz || !item.concursoAlvo || !item.nomeFechamento) {
           needsRepair = true;
         }
         return normalizeSavedFechamento(item, idx);
@@ -490,6 +639,23 @@ export function saveFechamentoPrognostico(
     fechamento.universoDezenas = universe;
     fechamento.auditoriaAnomalias = auditarTicketsGerados(fechamento.tickets || []).resumo;
 
+    // Garantia explícita do Concurso Alvo e Nomenclatura Padronizada
+    const concursoBase = resolveConcursoBase(fechamento.concurso);
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, fechamento.concursoAlvo);
+    fechamento.concurso = concursoBase;
+    fechamento.concursoAlvo = concursoAlvo;
+    if (!fechamento.nomeFechamento || !fechamento.nomeFechamento.startsWith(`Concurso Alvo #${concursoAlvo}`)) {
+      fechamento.nomeFechamento = formatStandardFechamentoTitle({
+        concursoBase,
+        concursoAlvo,
+        tipoFechamento: fechamento.tipoFechamento,
+        modalidadeMatriz: fechamento.modalidadeMatriz,
+        universoCount: universe.length,
+        totalJogos: fechamento.totalJogos || fechamento.tickets?.length || 0,
+        filterSummary: buildStandardFilterSummary(fechamento),
+      });
+    }
+
     // Verificação de Hash / Duplicidade contra registros existentes
     if (!options.force) {
       const check = checkFechamentoDuplicateStatus(fechamento.tickets);
@@ -515,10 +681,11 @@ export function saveFechamentoPrognostico(
           detail: {
             id: fechamento.id,
             title: '✓ Fechamento Salvo com Sucesso!',
-            name: fechamento.tipoFechamento,
+            name: fechamento.nomeFechamento || fechamento.tipoFechamento,
             totalJogos: fechamento.totalJogos || fechamento.tickets?.length || 24,
             garantia: fechamento.modalidadeMatriz,
             concurso: fechamento.concurso,
+            concursoAlvo: fechamento.concursoAlvo,
             timestamp: fechamento.timestamp,
           },
         })
@@ -837,25 +1004,55 @@ export function createInitialSampleFechamento(): SavedFechamentoPrognostico {
     },
   ];
 
+  const sampleConcurso = 3815;
+  const sampleConcursoAlvo = sampleConcurso + 1;
+  const sampleFaixaSoma = { min: 175, max: 220, zonaOuro: '190 a 210' };
+  const sampleParidade = { minPares: 7, maxPares: 8, canonico: '7P/8I ou 8P/7I' };
+  const sampleMoldura = { min: 8, max: 11 };
+  const samplePrimos = { min: 4, max: 7 };
+  const sampleFibonacci = { min: 3, max: 5 };
+  const sampleRepetidas = { min: 8, max: 10, concursoRef: sampleConcurso };
+  const sampleTipo = 'Gerador Turbo (Força Bruta 14 Pts • 17ms)';
+  const sampleModalidade = '21 Dezenas Amplo (18 Jogos • Garantia 14 se 15)';
+
   return {
     id: 'fechamento-amplo-21-turbo',
     timestamp: Date.now() - 3600000,
     dataCriacao: new Date(Date.now() - 3600000).toLocaleString('pt-BR'),
-    concurso: 3815,
+    concurso: sampleConcurso,
+    concursoAlvo: sampleConcursoAlvo,
     dataConcurso: '24/10/2026',
-    tipoFechamento: '⚡ Gerador Turbo (Força Bruta 14 Pts • 17ms)',
-    modalidadeMatriz: '21 Dezenas Amplo',
+    nomeFechamento: formatStandardFechamentoTitle({
+      concursoBase: sampleConcurso,
+      concursoAlvo: sampleConcursoAlvo,
+      tipoFechamento: sampleTipo,
+      modalidadeMatriz: sampleModalidade,
+      universoCount: universo.length,
+      totalJogos: 18,
+      garantia: 'Garantia 14 se 15',
+      filterSummary: buildStandardFilterSummary({
+        faixaSoma: sampleFaixaSoma,
+        paridade: sampleParidade,
+        moldura: sampleMoldura,
+        primos: samplePrimos,
+        fibonacci: sampleFibonacci,
+        repetidas: sampleRepetidas,
+        dezenasFixas: [1, 2],
+      }),
+    }),
+    tipoFechamento: sampleTipo,
+    modalidadeMatriz: sampleModalidade,
     universoDezenas: universo,
     dezenasFixas: [1, 2],
     dezenasExcluidas: [],
-    faixaSoma: { min: 175, max: 220, zonaOuro: '190 a 210' },
-    paridade: { minPares: 7, maxPares: 8, canonico: '7P/8I ou 8P/7I' },
+    faixaSoma: sampleFaixaSoma,
+    paridade: sampleParidade,
     maxConsecutivas: 5,
     auditoriaAnomalias: 'Todos os bilhetes foram auditados com 0 anomalias estatísticas',
-    repetidas: { min: 8, max: 10, concursoRef: 3815 },
-    moldura: { min: 8, max: 11 },
-    primos: { min: 4, max: 7 },
-    fibonacci: { min: 3, max: 5 },
+    repetidas: sampleRepetidas,
+    moldura: sampleMoldura,
+    primos: samplePrimos,
+    fibonacci: sampleFibonacci,
     tickets: sampleTickets,
     totalJogos: 18,
     custoTotal: 18 * VALOR_APOSTA_LOTOFACIL,
@@ -913,46 +1110,77 @@ export function createSavedFechamentoFromCurrent({
   const sanitizedFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
   const auditRes = auditarTicketsGerados(tickets);
 
+  const concursoBase = resolveConcursoBase(concurso, 3824);
+  const concursoAlvo = Number(concursoBase) + 1;
+  const faixaSomaObj = {
+    min: filters?.somaMin ?? 180,
+    max: filters?.somaMax ?? 220,
+    zonaOuro: '190 a 210',
+  };
+  const paridadeObj = {
+    minPares: filters?.paresMin ?? 6,
+    maxPares: filters?.paresMax ?? 9,
+    canonico: '6 a 9 Pares (Banda Flexível)',
+  };
+  const repetidasObj = {
+    min: filters?.repetidasMin ?? 6,
+    max: filters?.repetidasMax ?? 11,
+    concursoRef: concursoBase,
+  };
+  const molduraObj = {
+    min: filters?.molduraMin ?? 8,
+    max: filters?.molduraMax ?? 11,
+  };
+  const primosObj = {
+    min: filters?.primosMin ?? 4,
+    max: filters?.primosMax ?? 7,
+  };
+  const fibonacciObj = {
+    min: filters?.fibonacciMin ?? 3,
+    max: filters?.fibonacciMax ?? 5,
+  };
+  const sanitizedExcluidas = [...dezenasExcluidas].sort((a, b) => a - b);
+
+  const nomePadronizado = formatStandardFechamentoTitle({
+    concursoBase,
+    concursoAlvo,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoCount: universe.length,
+    totalJogos,
+    filterSummary: buildStandardFilterSummary({
+      faixaSoma: faixaSomaObj,
+      paridade: paridadeObj,
+      moldura: molduraObj,
+      primos: primosObj,
+      fibonacci: fibonacciObj,
+      repetidas: repetidasObj,
+      dezenasFixas: sanitizedFixas,
+      dezenasExcluidas: sanitizedExcluidas,
+    }),
+  });
+
   const prognostico: SavedFechamentoPrognostico = {
     id: `fechamento-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     timestamp: Date.now(),
     dataCriacao: now.toLocaleString('pt-BR'),
-    concurso,
+    concurso: concursoBase,
+    concursoAlvo,
     dataConcurso,
-    tipoFechamento,
+    nomeFechamento: nomePadronizado,
+    tipoFechamento: stripConcursoAlvoPrefix(tipoFechamento) || tipoFechamento,
     modalidadeMatriz,
     universoDezenas: universe,
     dezenasFixas: sanitizedFixas,
-    dezenasExcluidas: [...dezenasExcluidas].sort((a, b) => a - b),
-    faixaSoma: {
-      min: filters?.somaMin ?? 180,
-      max: filters?.somaMax ?? 220,
-      zonaOuro: '190 a 210',
-    },
-    paridade: {
-      minPares: filters?.paresMin ?? 6,
-      maxPares: filters?.paresMax ?? 9,
-      canonico: '6 a 9 Pares (Banda Flexível)',
-    },
+    dezenasExcluidas: sanitizedExcluidas,
+    faixaSoma: faixaSomaObj,
+    paridade: paridadeObj,
     maxConsecutivas: filters?.maxConsecutivas ?? 6,
     auditoriaAnomalias: auditRes.resumo,
-    repetidas: {
-      min: filters?.repetidasMin ?? 6,
-      max: filters?.repetidasMax ?? 11,
-      concursoRef: concurso,
-    },
-    moldura: {
-      min: filters?.molduraMin ?? 8,
-      max: filters?.molduraMax ?? 11,
-    },
-    primos: {
-      min: filters?.primosMin ?? 4,
-      max: filters?.primosMax ?? 7,
-    },
-    fibonacci: {
-      min: filters?.fibonacciMin ?? 3,
-      max: filters?.fibonacciMax ?? 5,
-    },
+    repetidas: repetidasObj,
+    moldura: molduraObj,
+    primos: primosObj,
+    fibonacci: fibonacciObj,
     tickets,
     totalJogos,
     custoTotal,
@@ -1007,11 +1235,15 @@ export function getBackupSnapshots(): BackupSnapshot[] {
   }
 }
 
-export function exportBackupJSON(): void {
+export function exportBackupJSON(concursoBaseFallback?: number): void {
   const list = getSavedFechamentos();
+  const concursoAlvo = getBackupConcursoAlvo(list, concursoBaseFallback ?? 3824);
+  const dataFormatada = new Date().toISOString().slice(0, 10);
+
   const backupData = {
     app: 'LotoSniper AI Pro',
-    versao: '2026.4',
+    versao: '2026.5',
+    concursoAlvo,
     dataExportacao: new Date().toISOString(),
     totalFechamentos: list.length,
     fechamentos: list,
@@ -1021,7 +1253,7 @@ export function exportBackupJSON(): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `lotosniper_backup_jogos_salvos_${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = formatBackupJsonFilename(concursoAlvo, dataFormatada);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -1106,13 +1338,39 @@ export function restoreBackupJSON(
 } {
   try {
     const parsed = JSON.parse(jsonString);
-    const fechamentosToRestore = Array.isArray(parsed)
+    let fechamentosToRestore = Array.isArray(parsed)
       ? parsed
       : Array.isArray(parsed?.fechamentos)
       ? parsed.fechamentos
       : Array.isArray(parsed?.meusJogos?.fechamentosSalvos)
       ? parsed.meusJogos.fechamentosSalvos
       : null;
+
+    // Retrocompatibilidade com backups gerados por handleExportBackup (savedTickets)
+    if ((!fechamentosToRestore || fechamentosToRestore.length === 0) && Array.isArray(parsed?.savedTickets) && parsed.savedTickets.length > 0) {
+      const concursoBase = resolveConcursoBase(
+        parsed?.concursoReferencia ?? parsed?.concursoBase ?? parsed?.fechamentoMeta?.concurso,
+        3824
+      );
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, parsed?.concursoAlvo);
+      const universo = Array.from(
+        new Set<number>(parsed.savedTickets.flatMap((t: any) => (Array.isArray(t?.dezenas) ? t.dezenas : [])))
+      ).sort((a, b) => a - b);
+      fechamentosToRestore = [
+        {
+          id: `backup-${Date.now()}`,
+          timestamp: parsed?.exportedAt ? new Date(parsed.exportedAt).getTime() || Date.now() : Date.now(),
+          dataCriacao: new Date().toLocaleString('pt-BR'),
+          concurso: concursoBase,
+          concursoAlvo,
+          dataConcurso: parsed?.dataConcurso || '',
+          tipoFechamento: parsed?.fechamentoMeta?.strategyName || parsed?.fechamentoMeta?.modeName || 'Fechamento Importado (Backup JSON)',
+          modalidadeMatriz: parsed?.fechamentoMeta?.modeName || `${universo.length} Dezenas (${parsed.savedTickets.length} Jogos)`,
+          universoDezenas: universo,
+          tickets: parsed.savedTickets,
+        },
+      ];
+    }
 
     if (!fechamentosToRestore || fechamentosToRestore.length === 0) {
       return { success: false, count: 0, error: 'Nenhum fechamento válido encontrado no arquivo.' };

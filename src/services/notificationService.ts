@@ -61,10 +61,146 @@ export interface PushNotificationConfig {
   soundEnabled: boolean;
 }
 
+export type NotificationEventKey =
+  | 'inicioCiclo'
+  | 'fimCiclo'
+  | 'atrasosCriticos'
+  | 'premiacoes13Plus'
+  | 'premiacoes11e12'
+  | 'radarTendencias'
+  | 'novoConcurso';
+
+export interface NotificationEventRule {
+  enabled: boolean;
+  soundEnabled: boolean;
+  nativePushEnabled: boolean;
+  threshold?: number;
+}
+
+export interface DetailedNotificationRules {
+  masterEnabled: boolean;
+  quietMode: boolean;
+  events: Record<NotificationEventKey, NotificationEventRule>;
+}
+
+export const DEFAULT_DETAILED_NOTIFICATION_RULES: DetailedNotificationRules = {
+  masterEnabled: true,
+  quietMode: false,
+  events: {
+    inicioCiclo: { enabled: true, soundEnabled: true, nativePushEnabled: true },
+    fimCiclo: { enabled: true, soundEnabled: true, nativePushEnabled: true, threshold: 3 },
+    atrasosCriticos: { enabled: true, soundEnabled: true, nativePushEnabled: true, threshold: 5 },
+    premiacoes13Plus: { enabled: true, soundEnabled: true, nativePushEnabled: true, threshold: 13 },
+    premiacoes11e12: { enabled: false, soundEnabled: false, nativePushEnabled: false, threshold: 11 },
+    radarTendencias: { enabled: true, soundEnabled: true, nativePushEnabled: true, threshold: 90 },
+    novoConcurso: { enabled: true, soundEnabled: true, nativePushEnabled: true },
+  },
+};
+
+const DETAILED_RULES_KEY = 'lotosniper_detailed_notification_rules';
 const HYBRID_RULES_KEY = 'lotosniper_hybrid_alert_rules';
 
 const CONFIG_KEY = 'lotosniper_push_notification_config';
 const ALERTS_KEY = 'lotosniper_push_alerts_history';
+
+export function getDetailedNotificationRules(): DetailedNotificationRules {
+  try {
+    const raw = localStorage.getItem(DETAILED_RULES_KEY);
+    if (!raw) {
+      return {
+        ...DEFAULT_DETAILED_NOTIFICATION_RULES,
+        events: { ...DEFAULT_DETAILED_NOTIFICATION_RULES.events },
+      };
+    }
+    const parsed = JSON.parse(raw);
+    const mergedEvents = { ...DEFAULT_DETAILED_NOTIFICATION_RULES.events };
+    (Object.keys(mergedEvents) as NotificationEventKey[]).forEach((key) => {
+      if (parsed?.events?.[key]) {
+        mergedEvents[key] = { ...mergedEvents[key], ...parsed.events[key] };
+      }
+    });
+    return {
+      masterEnabled: parsed?.masterEnabled !== undefined ? Boolean(parsed.masterEnabled) : true,
+      quietMode: Boolean(parsed?.quietMode),
+      events: mergedEvents,
+    };
+  } catch {
+    return {
+      ...DEFAULT_DETAILED_NOTIFICATION_RULES,
+      events: { ...DEFAULT_DETAILED_NOTIFICATION_RULES.events },
+    };
+  }
+}
+
+export function saveDetailedNotificationRules(rules: DetailedNotificationRules): void {
+  try {
+    localStorage.setItem(DETAILED_RULES_KEY, JSON.stringify(rules));
+
+    // Sincroniza chaves legadas para manter compatibilidade total com auditores existentes
+    const legacyCfg: PushNotificationConfig = {
+      pushEnabled: rules.masterEnabled && rules.events.novoConcurso.nativePushEnabled,
+      radarAlertEnabled: rules.masterEnabled && rules.events.radarTendencias.enabled,
+      radarThreshold: rules.events.radarTendencias.threshold ?? 90,
+      newCycleAlertEnabled: rules.masterEnabled && rules.events.inicioCiclo.enabled,
+      soundEnabled:
+        rules.masterEnabled &&
+        !rules.quietMode &&
+        (rules.events.inicioCiclo.soundEnabled ||
+          rules.events.atrasosCriticos.soundEnabled ||
+          rules.events.premiacoes13Plus.soundEnabled),
+    };
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(legacyCfg));
+
+    // Sincroniza configurações de premiação 13+
+    const minPrizeHits = rules.events.premiacoes13Plus.threshold ?? 13;
+    const prizeThreshold =
+      minPrizeHits >= 15 ? '15_only' : minPrizeHits === 14 ? '14_and_15' : '13_plus';
+    localStorage.setItem(
+      'lotosniper_alert_14_15_enabled',
+      String(rules.masterEnabled && rules.events.premiacoes13Plus.enabled)
+    );
+    localStorage.setItem('lotosniper_alert_threshold', prizeThreshold);
+
+    // Sincroniza faixas de premiação (11-15)
+    try {
+      const tiers = {
+        hits11: rules.masterEnabled && rules.events.premiacoes11e12.enabled && rules.events.premiacoes11e12.nativePushEnabled,
+        hits12: rules.masterEnabled && rules.events.premiacoes11e12.enabled && rules.events.premiacoes11e12.nativePushEnabled,
+        hits13: rules.masterEnabled && rules.events.premiacoes13Plus.enabled && minPrizeHits <= 13,
+        hits14: rules.masterEnabled && rules.events.premiacoes13Plus.enabled && minPrizeHits <= 14,
+        hits15: rules.masterEnabled && rules.events.premiacoes13Plus.enabled && minPrizeHits <= 15,
+      };
+      localStorage.setItem('lotosniper_prize_notification_tiers', JSON.stringify(tiers));
+    } catch {}
+
+    // Sincroniza configurações de oportunidades (atrasos críticos & ciclo)
+    try {
+      const prevOppRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
+      const prevOpp = prevOppRaw ? JSON.parse(prevOppRaw) : {};
+      const nextOpp = {
+        ...prevOpp,
+        enabled:
+          rules.masterEnabled &&
+          (rules.events.atrasosCriticos.enabled || rules.events.fimCiclo.enabled),
+        criticalDelayThreshold: rules.events.atrasosCriticos.threshold ?? 5,
+        cycleAlertEnabled: rules.events.fimCiclo.enabled,
+        soundEnabled:
+          !rules.quietMode &&
+          (rules.events.atrasosCriticos.soundEnabled || rules.events.fimCiclo.soundEnabled),
+        pushEnabled:
+          rules.events.atrasosCriticos.nativePushEnabled || rules.events.fimCiclo.nativePushEnabled,
+      };
+      localStorage.setItem('lotosniper_opportunity_alerts_config', JSON.stringify(nextOpp));
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lotosniper-detailed-rules-updated', { detail: rules }));
+      window.dispatchEvent(new CustomEvent('lotosniper-push-config-updated', { detail: legacyCfg }));
+    }
+  } catch (e) {
+    console.error('Falha ao salvar regras detalhadas de notificação:', e);
+  }
+}
 
 export function getPushNotificationConfig(): PushNotificationConfig {
   try {
@@ -152,20 +288,33 @@ export async function requestBrowserPushPermission(): Promise<NotificationPermis
 }
 
 /**
- * Send an OS-level browser push notification if permitted
+ * Send an OS-level browser push notification if permitted (prefers Service Worker when available)
  */
-export function fireBrowserPushNotification(title: string, body: string): void {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (Notification.permission === 'granted') {
-    try {
-      new Notification(title, {
-        body,
-        icon: '/favicon.ico',
-        tag: 'lotosniper-alert',
-      });
-    } catch (e) {
-      console.warn('Erro ao disparar push notification:', e);
+export async function fireBrowserPushNotification(title: string, body: string, tag: string = 'lotosniper-alert'): Promise<boolean> {
+  if (typeof window === 'undefined' || !('Notification' in window)) return false;
+  if (Notification.permission !== 'granted') return false;
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && 'showNotification' in reg) {
+        await reg.showNotification(title, {
+          body,
+          icon: '/favicon.svg',
+          badge: '/favicon.svg',
+          tag,
+        });
+        return true;
+      }
     }
+    new Notification(title, {
+      body,
+      icon: '/favicon.ico',
+      tag,
+    });
+    return true;
+  } catch (e) {
+    console.warn('Erro ao disparar push notification:', e);
+    return false;
   }
 }
 
@@ -232,26 +381,29 @@ export function auditAndTriggerIntelligentAlerts(
   radarTopNumbers?: { dezena: number; probabilidade: number; forcaEma: number }[]
 ): void {
   const config = getPushNotificationConfig();
+  const detailed = getDetailedNotificationRules();
+  if (!detailed.masterEnabled) return;
+
   const existingAlerts = getAlertsHistory();
   const newAlerts: IntelligentAlert[] = [];
 
   const now = Date.now();
   const dateStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  // 1. Check Radar de Tendências Quentes > 90%
+  // 1. Check Radar de Tendências Quentes
+  const radarRule = detailed.events.radarTendencias;
   const radarData = radarTopNumbers || computeEmaTrends(latestDraw, RECENT_DRAWS);
-  if (config.radarAlertEnabled && radarData && radarData.length > 0) {
-    const threshold = config.radarThreshold || 90;
+  if (config.radarAlertEnabled && radarRule.enabled && radarData && radarData.length > 0) {
+    const threshold = radarRule.threshold || config.radarThreshold || 90;
     const hotNumbersOver90 = radarData.filter((r) => r.probabilidade >= threshold || r.forcaEma >= threshold);
 
     hotNumbersOver90.forEach((item) => {
       const dezenaPad = item.dezena.toString().padStart(2, '0');
       const alertId = `radar_90_${item.dezena}_${latestDraw.concurso}`;
 
-      // Avoid duplicates for the same draw and number
       const alreadyTriggered = existingAlerts.some((a) => a.id === alertId);
       if (!alreadyTriggered) {
-        const title = `🔥 Radar de Tendências: Dezena ${dezenaPad} em ${Math.round(item.probabilidade)}%!`;
+        const title = `Radar de Tendências: Dezena ${dezenaPad} em ${Math.round(item.probabilidade)}%`;
         const body = `A Dezena ${dezenaPad} atingiu ${Math.round(item.probabilidade)}% de probabilidade pelo algoritmo EMA para os próximos 5 concursos (Concurso #${latestDraw.concurso}).`;
 
         newAlerts.push({
@@ -267,10 +419,10 @@ export function auditAndTriggerIntelligentAlerts(
           read: false,
         });
 
-        if (config.pushEnabled) {
-          fireBrowserPushNotification(title, body);
+        if (config.pushEnabled && radarRule.nativePushEnabled) {
+          void fireBrowserPushNotification(title, body, alertId);
         }
-        if (config.soundEnabled) {
+        if (config.soundEnabled && !detailed.quietMode && radarRule.soundEnabled) {
           soundService.playGoldenZoneSuccessChime();
         }
       }
@@ -278,12 +430,13 @@ export function auditAndTriggerIntelligentAlerts(
   }
 
   // 2. Check if a new cycle is started (concursosNoCiclo === 1)
-  if (config.newCycleAlertEnabled && concursosNoCiclo === 1) {
+  const cycleRule = detailed.events.inicioCiclo;
+  if (config.newCycleAlertEnabled && cycleRule.enabled && concursosNoCiclo === 1) {
     const alertId = `new_cycle_${latestDraw.concurso}`;
     const alreadyTriggered = existingAlerts.some((a) => a.id === alertId);
 
     if (!alreadyTriggered) {
-      const title = `🚀 Início de um Novo Ciclo das 25 Dezenas!`;
+      const title = `Início de Novo Ciclo das 25 Dezenas (#${latestDraw.concurso})`;
       const body = `O Concurso #${latestDraw.concurso} iniciou o 1º sorteio de um novo ciclo. As 10 dezenas ausentes entram com alta propensão estatística para o fechamento.`;
 
       newAlerts.push({
@@ -297,10 +450,10 @@ export function auditAndTriggerIntelligentAlerts(
         read: false,
       });
 
-      if (config.pushEnabled) {
-        fireBrowserPushNotification(title, body);
+      if (cycleRule.nativePushEnabled) {
+        void fireBrowserPushNotification(title, body, alertId);
       }
-      if (config.soundEnabled) {
+      if (!detailed.quietMode && cycleRule.soundEnabled) {
         soundService.playOpportunityAlert();
       }
     }

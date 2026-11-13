@@ -47,11 +47,13 @@ export function generateGoldFechamentoPDF({
   doc.text('ENGENHARIA ESTATÍSTICA & FECHAMENTOS INTELIGENTES LOTOFÁCIL', margin, 20);
 
   // Metadados Laterais no Header
+  const concursoBase = Number(fechamento.concurso) || 3824;
+  const concursoAlvo = fechamento.concursoAlvo ?? concursoBase + 1;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184); // slate-400
   doc.text(`Data de Emissão: ${fechamento.dataCriacao || new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin, 14, { align: 'right' });
-  doc.text(`Concurso Alvo: #${fechamento.concurso} (${fechamento.dataConcurso || 'Atual'})`, pageWidth - margin, 20, { align: 'right' });
+  doc.text(`Concurso Alvo: #${concursoAlvo} (Base #${concursoBase})`, pageWidth - margin, 20, { align: 'right' });
 
   // Badge de Jogos e Investimento
   doc.setFont('helvetica', 'bold');
@@ -219,7 +221,7 @@ export function generateGoldFechamentoPDF({
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        `LotoSniper AI Pro • Dossiê Oficial #${fechamento.concurso} • Página ${doc.getNumberOfPages()}`,
+        `LotoSniper AI Pro • Dossiê Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) • Página ${doc.getNumberOfPages()}`,
         pageWidth / 2,
         pageHeight - 6,
         { align: 'center' }
@@ -232,7 +234,8 @@ export function generateGoldFechamentoPDF({
 
 export function downloadGoldFechamentoPDF(fechamento: SavedFechamentoPrognostico): void {
   const doc = generateGoldFechamentoPDF({ fechamento });
-  const filename = `lotosniper_fechamento_gold_${fechamento.concurso}_${fechamento.totalJogos}_jogos.pdf`;
+  const concursoAlvo = fechamento.concursoAlvo ?? (Number(fechamento.concurso) || 3824) + 1;
+  const filename = `lotosniper_concurso_${concursoAlvo}_gold_${fechamento.totalJogos}_jogos.pdf`;
   doc.save(filename);
 }
 
@@ -242,6 +245,7 @@ export type PdfMarginPreference = 'compact' | 'normal' | 'wide';
 
 export interface GenerateTicketsPdfOptions {
   concurso?: number;
+  concursoAlvo?: number;
   dataConcurso?: string;
   titulo?: string;
   style?: VolanteExportStyle;
@@ -301,8 +305,9 @@ export function generateTicketsVolantePDF(
 
   const statsFooterText = `RESUMO TÉCNICO: ${totalJogos} Jogos • Média Soma: ${mediaSoma} (Zona de Ouro) • Paridade: ${mediaPares}P/${mediaImpares}I • Moldura: ${mediaMoldura} • Primos: ${mediaPrimos}`;
 
-  const concurso = options.concurso || 3822;
-  const dataConcurso = options.dataConcurso || '05/11/2026';
+  const concursoBase = Number(options.concurso) || 3824;
+  const concursoAlvo = Number(options.concursoAlvo) || concursoBase + 1;
+  const dataConcurso = options.dataConcurso || 'Atual';
   const style = options.style || 'oficial';
 
   // ==========================================
@@ -327,7 +332,7 @@ export function generateTicketsVolantePDF(
       doc.setFontSize(8);
       doc.setTextColor(71, 85, 105);
       doc.text(
-        `Modelo Econômico (Economia de Tinta) • Concurso #${concurso} (${dataConcurso}) • Total: ${tickets.length} Jogos`,
+        `Modelo Econômico • Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) • Total: ${tickets.length} Jogos`,
         margin,
         17
       );
@@ -477,7 +482,7 @@ export function generateTicketsVolantePDF(
     doc.setFontSize(8);
     doc.setTextColor(226, 232, 240);
     doc.text(
-      `Concurso #${concurso} (${dataConcurso}) • Total de ${tickets.length} Jogos • Modelo Aposta Oficial 5×5`,
+      `Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) • Total de ${tickets.length} Jogos • Modelo Aposta Oficial 5×5`,
       margin,
       17
     );
@@ -624,8 +629,9 @@ export function downloadTicketsVolantePDF(
 ): void {
   const doc = generateTicketsVolantePDF(tickets, options);
   const style = options.style || 'oficial';
-  const prefix = style === 'economico' ? 'lotosniper_lista_otimizada_economica' : 'volantes_lotosniper_oficiais_5x5';
-  const filename = `${prefix}_${tickets.length}_jogos_concurso_${options.concurso || 3822}.pdf`;
+  const concursoAlvo = Number(options.concursoAlvo) || (Number(options.concurso) || 3824) + 1;
+  const prefix = style === 'economico' ? 'lotosniper_lista_economica' : 'lotosniper_volantes_5x5';
+  const filename = `${prefix}_concurso_${concursoAlvo}_${tickets.length}_jogos.pdf`;
   doc.save(filename);
 }
 

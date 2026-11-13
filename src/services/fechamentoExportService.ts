@@ -36,9 +36,10 @@ export function exportFechamentoToPdf({
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  const concurso = meta?.concurso || latestDraw.concurso;
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
   const dataConcurso = meta?.dataConcurso || latestDraw.data || new Date().toLocaleDateString('pt-BR');
-  const strategyName = meta?.strategyName || '⚡ Fechamento Otimizado para 14 Pontos';
+  const strategyName = meta?.strategyName || 'Fechamento Otimizado para 14 Pontos';
   const garantia = meta?.garantia || 'Garantia de 14 Pontos';
   const totalJogos = tickets.length;
   const custoTotal = totalJogos * VALOR_APOSTA_LOTOFACIL;
@@ -82,7 +83,7 @@ export function exportFechamentoToPdf({
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(203, 213, 225);
-  doc.text(`Concurso Base: #${concurso} (${dataConcurso})`, 14, 32);
+  doc.text(`Concurso Alvo: #${concursoAlvo} (Ref. Base: #${concursoBase} • ${dataConcurso})`, 14, 32);
   doc.text(`Total: ${totalJogos} Jogos | Investimento: R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, 32, { align: 'right' });
 
   // 2. CARD RESUMO ESTRATÉGICO
@@ -196,7 +197,7 @@ export function exportFechamentoToPdf({
   });
 
   // Salva e aciona download automático no browser
-  const filename = `lotosniper_fechamento_concurso_${concurso}_${totalJogos}_jogos.pdf`;
+  const filename = `lotosniper_concurso_${concursoAlvo}_${totalJogos}_jogos.pdf`;
   doc.save(filename);
 }
 
@@ -211,7 +212,8 @@ export function exportFechamentoToCsv({
 }: FechamentoExportOptions): void {
   if (!tickets || tickets.length === 0) return;
 
-  const concurso = meta?.concurso || latestDraw.concurso;
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
   const previousDrawDezenas = latestDraw?.dezenas || [];
 
   const headers = [
@@ -273,7 +275,7 @@ export function exportFechamentoToCsv({
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `lotosniper_fechamento_concurso_${concurso}_${tickets.length}_jogos.csv`;
+  link.download = `lotosniper_concurso_${concursoAlvo}_${tickets.length}_jogos.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

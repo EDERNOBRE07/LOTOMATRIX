@@ -161,9 +161,10 @@ export async function uploadBackupToS3(
     return { success: false, message: validation.error || 'Configuração inválida', filesUploaded: [] };
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const concurso = data.concursoRef || 3817;
-  const prefix = config.backupPrefix.replace(/\/+$/, '').replace(/^\/+/, '');
+  const dateStamp = new Date().toISOString().split('T')[0];
+  const concursoBase = Number(data.concursoRef) || 3824;
+  const concursoAlvo = concursoBase + 1;
+  const prefix = String(config.backupPrefix || '').replace(/\/+$/, '').replace(/^\/+/, '');
   const prefixPath = prefix ? `${prefix}/` : '';
 
   const filesUploaded: string[] = [];
@@ -175,7 +176,7 @@ export async function uploadBackupToS3(
     // 1. Arquivo .json
     if (config.includeJson && data.jsonContent) {
       onProgress?.({ step: 'Serializando e compactando matriz JSON...', percent: 35, details: `${data.jsonContent.length} bytes` });
-      const jsonFileName = `${prefixPath}lotosniper_backup_conc_${concurso}_${timestamp}.json`;
+      const jsonFileName = `${prefixPath}lotosniper_concurso_${concursoAlvo}_${dateStamp}.json`;
       filesUploaded.push(jsonFileName);
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -183,7 +184,7 @@ export async function uploadBackupToS3(
     // 2. Arquivo .csv
     if (config.includeCsv && data.csvContent) {
       onProgress?.({ step: 'Formatando planilhas CSV com codificação UTF-8 BOM...', percent: 60, details: `${data.csvContent.length} bytes` });
-      const csvFileName = `${prefixPath}lotosniper_apostas_conc_${concurso}_${timestamp}.csv`;
+      const csvFileName = `${prefixPath}lotosniper_concurso_${concursoAlvo}_apostas_${dateStamp}.csv`;
       filesUploaded.push(csvFileName);
       await new Promise((r) => setTimeout(r, 250));
     }

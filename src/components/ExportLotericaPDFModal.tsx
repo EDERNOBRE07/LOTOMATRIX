@@ -44,9 +44,10 @@ export const ExportLotericaPDFModal: React.FC<ExportLotericaPDFModalProps> = ({
     ? fechamento.tickets
     : propTickets;
 
-  const concurso = fechamento?.concurso || latestDraw?.concurso || 3818;
+  const concursoBase = Number(fechamento?.concurso || latestDraw?.concurso) || 3824;
+  const concursoAlvo = fechamento?.concursoAlvo ?? concursoBase + 1;
   const dataConcurso = fechamento?.dataConcurso || latestDraw?.data || new Date().toLocaleDateString('pt-BR');
-  const strategyName = fechamento?.tipoFechamento || 'Fechamento Inteligente Ponderado';
+  const strategyName = fechamento?.nomeFechamento || fechamento?.tipoFechamento || 'Fechamento Inteligente Ponderado';
   const modalidadeMatriz = fechamento?.modalidadeMatriz || `${targetTickets.length} Jogos • Garantia 14 Pontos`;
   const universoDezenas = fechamento?.universoDezenas || Array.from(new Set(targetTickets.flatMap(t => t.dezenas))).sort((a, b) => a - b);
 
@@ -68,7 +69,8 @@ export const ExportLotericaPDFModal: React.FC<ExportLotericaPDFModalProps> = ({
       downloadProfessionalLotericaPDF({
         fechamento,
         tickets: targetTickets,
-        concurso,
+        concurso: concursoBase,
+        concursoAlvo,
         dataConcurso,
         strategyName,
         modalidadeMatriz,
@@ -149,7 +151,7 @@ export const ExportLotericaPDFModal: React.FC<ExportLotericaPDFModalProps> = ({
           </div>
           <div className="flex items-center justify-between text-slate-300">
             <span className="text-slate-400">Concurso Alvo:</span>
-            <span className="font-mono font-bold text-white">#{concurso} ({dataConcurso})</span>
+            <span className="font-mono font-bold text-white">#{concursoAlvo} (Ref. Base: #{concursoBase} • {dataConcurso})</span>
           </div>
           <div className="flex items-center justify-between text-slate-300">
             <span className="text-slate-400">Universo de Dezenas:</span>

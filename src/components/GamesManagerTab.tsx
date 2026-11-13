@@ -16,6 +16,10 @@ import {
   removeDuplicateFechamentos,
   DuplicateFechamentosReport,
   sanitizarFechamentosSalvos,
+  formatBackupJsonFilename,
+  getBackupConcursoAlvo,
+  resolveConcursoAlvo,
+  resolveConcursoBase,
 } from '../services/savedFechamentosStorage';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
@@ -102,7 +106,8 @@ export function gerarEDispararRelatorioPDF(
   const garantiaTecnica = meta?.garantia || 'Garantia 100% de 14 Pontos se 15 Acertos no Universo';
   const totalJogos = tickets.length;
   const custoTotal = totalJogos * valorPorAposta;
-  const concursoAlvo = (draw?.concurso || 3825) + 1;
+  const concursoBase = resolveConcursoBase(meta?.concurso ?? draw?.concurso, 3824);
+  const concursoAlvo = resolveConcursoAlvo(concursoBase, meta?.concursoAlvo);
   const dataEmissao = new Date().toLocaleDateString('pt-BR');
   const universoDezenas = meta?.selectedNumbers || [];
   const fixasDezenas = (meta?.fixedNumbers || []).slice(0, 12);
@@ -310,8 +315,8 @@ export function gerarEDispararRelatorioPDF(
     soundService.playGoldenZoneSuccessChime();
   } catch {}
 
-  const safeName = (nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_');
-  doc.save(`LotoSniper_Relatorio_Fechamento_${safeName}_Concurso_${concursoAlvo}.pdf`);
+  const safeName = String(nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
+  doc.save(`LotoSniper_Relatorio_concurso_${concursoAlvo}_${safeName}.pdf`);
 }
 import {
   Download,
@@ -853,10 +858,13 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       } catch {}
     }
 
+    const concursoBase = resolveConcursoBase(metaToUse?.concurso ?? latestDraw.concurso, 3824);
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, metaToUse?.concursoAlvo);
+
     const content = generateFechamentoTxtContent({
       tickets: listToExport,
       latestDraw,
-      meta: metaToUse,
+      meta: metaToUse ? { ...metaToUse, concurso: concursoBase, concursoAlvo } : { concurso: concursoBase, concursoAlvo },
       ticketTags,
     });
 
@@ -864,7 +872,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_fechamento_${listToExport.length}_jogos.txt`;
+    link.download = `lotosniper_concurso_${concursoAlvo}_${listToExport.length}_jogos.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -884,7 +892,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }
 
     const estrategia = metaToUse?.strategyName || metaToUse?.modeName || 'Fechamento LotoSniper';
-    const concursoRef = metaToUse?.concurso || latestDraw.concurso;
+    const concursoRef = resolveConcursoBase(metaToUse?.concurso ?? latestDraw.concurso, 3824);
+    const concursoAlvo = resolveConcursoAlvo(concursoRef, metaToUse?.concursoAlvo);
     const dataRef = metaToUse?.dataConcurso || latestDraw.data;
 
     const dataRows = listToExport.map((t) => {
@@ -908,7 +917,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       rowObj['Score IA'] = (t.scoreIA || 0).toFixed(1);
       rowObj['Tags'] = tags;
       rowObj['Estratégia'] = estrategia;
-      rowObj['Concurso Referência'] = concursoRef;
+      rowObj['Concurso Alvo'] = concursoAlvo;
+      rowObj['Concurso Base'] = concursoRef;
       rowObj['Data Concurso'] = dataRef;
       return rowObj;
     });
@@ -921,7 +931,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_jogos_concurso_${concursoRef}_${listToExport.length}_apostas.csv`;
+    link.download = `lotosniper_concurso_${concursoAlvo}_${listToExport.length}_apostas.csv`;
     link.click();
     URL.revokeObjectURL(url);
 
@@ -958,11 +968,14 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     doc.setFontSize(15);
     doc.text('LOTOSNIPER • VOLANTES OFICIAIS DE FECHAMENTO', 14, 12);
 
+    const concursoBase = resolveConcursoBase(fechamentoMeta?.concurso ?? latestDraw.concurso, 3824);
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, fechamentoMeta?.concursoAlvo);
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(52, 211, 153); // emerald-400
     doc.text(
-      `Concurso Base: #${latestDraw.concurso} | ${listToExport.length} Apostas Otimizadas | 14 se 15 100% Auditado | ${new Date().toLocaleDateString('pt-BR')}`,
+      `Concurso Alvo: #${concursoAlvo} (Base #${concursoBase}) | ${listToExport.length} Apostas Otimizadas | ${new Date().toLocaleDateString('pt-BR')}`,
       14,
       20
     );
@@ -1044,7 +1057,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       yOffset += 53;
     });
 
-    doc.save(`lotosniper_volantes_formatados_${listToExport.length}_jogos.pdf`);
+    doc.save(`lotosniper_volantes_concurso_${concursoAlvo}_${listToExport.length}_jogos.pdf`);
     setCopiedFormat('pdf');
     setTimeout(() => setCopiedFormat(null), 3500);
   };
@@ -1107,17 +1120,19 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       } catch {}
     }
 
-    const concursoRef = metaToUse?.concurso || latestDraw.concurso;
+    const concursoRef = resolveConcursoBase(metaToUse?.concurso ?? latestDraw.concurso, 3824);
+    const concursoAlvo = resolveConcursoAlvo(concursoRef, metaToUse?.concursoAlvo);
     const dataRef = metaToUse?.dataConcurso || latestDraw.data;
 
     try {
       downloadTicketsVolantePDF(listToExport, {
         concurso: concursoRef,
+        concursoAlvo,
         dataConcurso: dataRef,
         titulo:
           pdfExportStyle === 'economico'
-            ? 'LOTOSNIPER • LISTA OTIMIZADA DE JOGOS (ECONOMIA DE TINTA)'
-            : 'LOTOSNIPER GOLD • VOLANTES DE APOSTA OFICIAIS 5X5',
+            ? `LOTOSNIPER • LISTA OTIMIZADA • ALVO #${concursoAlvo}`
+            : `LOTOSNIPER GOLD • VOLANTES OFICIAIS 5X5 • ALVO #${concursoAlvo}`,
         style: pdfExportStyle,
         fontSize: pdfPreferences.fontSize,
         margin: pdfPreferences.margin,
@@ -1130,14 +1145,85 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }
   };
 
+  const handleExportBackup = () => {
+    try {
+      const sourceTickets =
+        Array.isArray(savedTickets) && savedTickets.length > 0 ? savedTickets : tickets;
+      const savedFechamentosList = getSavedFechamentos();
+
+      const concursoBase = resolveConcursoBase(
+        fechamentoMeta?.concurso ?? selectedConcurso ?? latestDraw.concurso,
+        3824
+      );
+      const concursoAlvo =
+        savedFechamentosList.length > 0
+          ? getBackupConcursoAlvo(savedFechamentosList, concursoBase)
+          : resolveConcursoAlvo(concursoBase, fechamentoMeta?.concursoAlvo);
+
+      const backupPayload = {
+        app: 'LotoSniper AI Pro',
+        versao: '2026.5',
+        exportedAt: new Date().toISOString(),
+        concursoBase,
+        concursoAlvo,
+        concursoReferencia: concursoBase,
+        dataConcurso: latestDraw.data,
+        totalBilhetes: sourceTickets.length,
+        totalFechamentos: savedFechamentosList.length,
+        fechamentoMeta: fechamentoMeta
+          ? {
+              modeName: fechamentoMeta.modeName,
+              strategyName: fechamentoMeta.strategyName,
+              concurso: concursoBase,
+              concursoAlvo,
+              selectedCount: fechamentoMeta.selectedNumbers?.length ?? 0,
+            }
+          : null,
+        fechamentos: savedFechamentosList,
+        savedTickets: sourceTickets,
+      };
+
+      const jsonContent = JSON.stringify(backupPayload, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const fileName = formatBackupJsonFilename(concursoAlvo, dateStamp);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setCopiedFormat('json_backup');
+      setDuplicateActionFeedback(
+        `Backup JSON exportado (${fileName} · ${sourceTickets.length} bilhete(s)).`
+      );
+      setTimeout(() => {
+        setCopiedFormat((prev) => (prev === 'json_backup' ? null : prev));
+        setDuplicateActionFeedback(null);
+      }, 4000);
+    } catch (error) {
+      console.error('Erro ao exportar backup JSON:', error);
+      setDuplicateActionFeedback('Falha ao gerar arquivo de backup JSON.');
+      setTimeout(() => setDuplicateActionFeedback(null), 4000);
+    }
+  };
+
   const handleExportLotericaOrganizadoPDF = () => {
     const targetTickets = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
     const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
+    const concursoBase = resolveConcursoBase(fechamentoMeta?.concurso ?? latestDraw.concurso, 3824);
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, fechamentoMeta?.concursoAlvo);
 
     if (listToExport.length > 0) {
       downloadProfessionalLotericaPDF({
         tickets: listToExport,
-        concurso: latestDraw.concurso,
+        concurso: concursoBase,
+        concursoAlvo,
         dataConcurso: latestDraw.data,
         strategyName: fechamentoMeta?.strategyName || fechamentoMeta?.modeName || 'Bilhetes Salvos LotoSniper',
         modalidadeMatriz: `${listToExport.length} Jogos Formatados para Lotérica`,
@@ -1158,11 +1244,13 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * 3.5),
         0
       );
+      const maxAlvo = getBackupConcursoAlvo(allSaved, latestDraw.concurso);
       downloadProfessionalLotericaPDF({
         tickets: allSavedTickets,
-        concurso: latestDraw.concurso,
+        concurso: resolveConcursoBase(allSaved[0]?.concurso, latestDraw.concurso),
+        concursoAlvo: maxAlvo,
         dataConcurso: latestDraw.data,
-        strategyName: `Dossiê Geral • ${allSaved.length} Fechamentos Salvos`,
+        strategyName: `Dossiê Geral • Concurso Alvo #${maxAlvo} (${allSaved.length} Fechamentos Salvos)`,
         modalidadeMatriz: `${allSavedTickets.length} Jogos Prontos para Impressão`,
         custoTotalEstimado: totalCost,
       });
@@ -1253,12 +1341,24 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
 
           <button
             type="button"
+            onClick={handleExportBackup}
+            className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 cursor-pointer"
+            title="Serializar savedTickets e metadados em arquivo JSON e baixar automaticamente"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span>
+              {copiedFormat === 'json_backup' ? 'Backup Baixado!' : 'Exportar Backup (.JSON)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('lotosniper-open-backup'))}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-            title="Backup completo e automático de jogos e configurações (JSON & Google Drive)"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+            title="Gerenciar restauração e backup automático (JSON & Google Drive)"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Backup JSON</span>
+            <span>Restaurar / Nuvem</span>
           </button>
 
           <button

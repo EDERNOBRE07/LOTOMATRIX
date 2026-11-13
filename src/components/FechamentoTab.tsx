@@ -45,7 +45,12 @@ import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
 
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
-import { saveFechamentoPrognostico } from '../services/savedFechamentosStorage';
+import {
+  saveFechamentoPrognostico,
+  formatStandardFechamentoTitle,
+  buildStandardFilterSummary,
+  resolveConcursoBase,
+} from '../services/savedFechamentosStorage';
 import { TotalizadorDeCustos } from './TotalizadorDeCustos';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import { SomaScatterPlot } from './SomaScatterPlot';
@@ -904,24 +909,31 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const getFullPrognosticoFechamentoName = (): string => {
     const canonicalName = getCanonicalFechamentoTypeName();
-    const garantiaStr = preset?.garantia ? ` (${preset.garantia})` : ' (Garantia 14 se 15)';
+    const garantiaStr = preset?.garantia ? `Garantia ${preset.garantia}` : 'Garantia 14 se 15';
     const ticketCount = generatedTickets.length > 0 ? generatedTickets.length : (preset?.jogosMaximos || 24);
+    const concursoBase = resolveConcursoBase(latestDraw?.concurso, 3824);
+    const concursoAlvo = Number(concursoBase) + 1;
 
-    // Tipos de Filtros Canônicos e Avançados Calibrados
-    const filterTokens: string[] = [];
-    if (filters.somaMin && filters.somaMax) filterTokens.push(`Soma ${filters.somaMin}-${filters.somaMax}`);
-    if (filters.paresMin && filters.paresMax) filterTokens.push(`Pares ${filters.paresMin}-${filters.paresMax}`);
-    if (filters.molduraMin && filters.molduraMax) filterTokens.push(`Moldura ${filters.molduraMin}-${filters.molduraMax}`);
-    if (filters.primosMin && filters.primosMax) filterTokens.push(`Primos ${filters.primosMin}-${filters.primosMax}`);
-    if (filters.fibonacciMin && filters.fibonacciMax) filterTokens.push(`Fib ${filters.fibonacciMin}-${filters.fibonacciMax}`);
-    if (filters.repetidasMin && filters.repetidasMax) filterTokens.push(`Rep ${filters.repetidasMin}-${filters.repetidasMax}`);
-    if (fixedNumbers && fixedNumbers.length > 0) filterTokens.push(`Fixas: [${[...fixedNumbers].sort((a,b)=>a-b).join(',')}]`);
-    if (excludedNumbers && excludedNumbers.length > 0) filterTokens.push(`Excl: [${[...excludedNumbers].sort((a,b)=>a-b).join(',')}]`);
+    const filterSummary = buildStandardFilterSummary({
+      faixaSoma: { min: filters.somaMin ?? 180, max: filters.somaMax ?? 215 },
+      paridade: { minPares: filters.paresMin ?? 6, maxPares: filters.paresMax ?? 9 },
+      moldura: { min: filters.molduraMin ?? 8, max: filters.molduraMax ?? 12 },
+      primos: { min: filters.primosMin ?? 4, max: filters.primosMax ?? 6 },
+      fibonacci: { min: filters.fibonacciMin ?? 3, max: filters.fibonacciMax ?? 5 },
+      repetidas: { min: filters.repetidasMin ?? 6, max: filters.repetidasMax ?? 10 },
+      dezenasFixas: fixedNumbers,
+      dezenasExcluidas: excludedNumbers,
+    });
 
-    const filtersDesc = filterTokens.length > 0 ? ` [Filtros: ${filterTokens.join(' | ')}]` : '';
-    const targetConcurso = latestDraw?.concurso ? ` (Para Concurso #${latestDraw.concurso + 1})` : '';
-
-    return `⚡ ${canonicalName} • ${targetCount} Dezenas • ${ticketCount} Jogos${garantiaStr}${filtersDesc}${targetConcurso}`;
+    return formatStandardFechamentoTitle({
+      concursoBase,
+      concursoAlvo,
+      tipoFechamento: canonicalName,
+      universoCount: selectedNumbers.length > 0 ? selectedNumbers.length : targetCount,
+      totalJogos: ticketCount,
+      garantia: garantiaStr,
+      filterSummary,
+    });
   };
 
   const applyStrategyModel = (modelType: string, overrideTargetCount?: number) => {
@@ -1405,46 +1417,86 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   ): { success: boolean; isDuplicate?: boolean; reason?: string } => {
     try {
       const f = metaData.filters || filters;
+      const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, 3824);
+      const concursoAlvo = Number(concursoBase) + 1;
+      const poolToSave = activePool.length > 0 ? activePool : selectedNumbers;
+      const fixasToSave = (metaData.fixedNumbers || fixedNumbers || [])
+        .filter((d) => poolToSave.includes(d))
+        .slice(0, Math.min(12, Math.max(0, poolToSave.length - 3)));
+      const excluidasToSave = metaData.excludedNumbers || excludedNumbers || [];
+      const canonicalType = fechamentoType ? getCanonicalFechamentoTypeName() : getCanonicalFechamentoTypeName();
+      const garantiaTexto = metaData.garantia || preset?.garantia || '14 se 15';
+
+      const faixaSomaObj = {
+        min: f.somaMin,
+        max: f.somaMax,
+        zonaOuro: '190 a 210',
+      };
+      const paridadeObj = {
+        minPares: f.paresMin,
+        maxPares: f.paresMax,
+        canonico: '7P/8I ou 8P/7I',
+      };
+      const repetidasObj = {
+        min: f.repetidasMin,
+        max: f.repetidasMax,
+        concursoRef: concursoBase,
+      };
+      const molduraObj = {
+        min: f.molduraMin,
+        max: f.molduraMax,
+      };
+      const primosObj = {
+        min: f.primosMin,
+        max: f.primosMax,
+      };
+      const fibonacciObj = {
+        min: f.fibonacciMin,
+        max: f.fibonacciMax,
+      };
+
+      const filterSummary = buildStandardFilterSummary({
+        faixaSoma: faixaSomaObj,
+        paridade: paridadeObj,
+        moldura: molduraObj,
+        primos: primosObj,
+        fibonacci: fibonacciObj,
+        repetidas: repetidasObj,
+        dezenasFixas: fixasToSave,
+        dezenasExcluidas: excluidasToSave,
+      });
+
+      const nomePadronizado = formatStandardFechamentoTitle({
+        concursoBase,
+        concursoAlvo,
+        tipoFechamento: canonicalType,
+        universoCount: poolToSave.length,
+        totalJogos: ticketsToSave.length,
+        garantia: garantiaTexto,
+        filterSummary,
+      });
+
       const res = saveFechamentoPrognostico({
         id: `fechamento-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         timestamp: Date.now(),
         dataCriacao: new Date().toLocaleString('pt-BR'),
-        concurso: latestDraw.concurso,
+        concurso: concursoBase,
+        concursoAlvo,
         dataConcurso: latestDraw.data,
-        tipoFechamento: getCanonicalFechamentoTypeName(),
-        modalidadeMatriz: `${preset?.nome || 'Matriz Pro'} (${(activePool.length > 0 ? activePool : selectedNumbers).length} Dezenas • ${ticketsToSave.length} Jogos • Garantia ${preset?.garantia || '14 Pontos (com 35% de chance de 15)'}) [Filtros: Soma ${f.somaMin}-${f.somaMax} | Pares ${f.paresMin}-${f.paresMax} | Moldura ${f.molduraMin}-${f.molduraMax} | Primos ${f.primosMin}-${f.primosMax} | Fib ${f.fibonacciMin}-${f.fibonacciMax} | Rep ${f.repetidasMin}-${f.repetidasMax}]`,
-        universoDezenas: activePool.length > 0 ? activePool : selectedNumbers,
-        dezenasFixas: (metaData.fixedNumbers || fixedNumbers || []).filter((d) => (activePool.length > 0 ? activePool : selectedNumbers).includes(d)).slice(0, Math.min(12, Math.max(0, (activePool.length > 0 ? activePool : selectedNumbers).length - 3))),
-        dezenasExcluidas: metaData.excludedNumbers || excludedNumbers || [],
-        faixaSoma: {
-          min: f.somaMin,
-          max: f.somaMax,
-          zonaOuro: '190 a 210',
-        },
-        paridade: {
-          minPares: f.paresMin,
-          maxPares: f.paresMax,
-          canonico: '7P/8I ou 8P/7I',
-        },
+        nomeFechamento: nomePadronizado,
+        tipoFechamento: canonicalType,
+        modalidadeMatriz: `${poolToSave.length} Dezenas (${ticketsToSave.length} Jogos • Garantia ${garantiaTexto})`,
+        universoDezenas: poolToSave,
+        dezenasFixas: fixasToSave,
+        dezenasExcluidas: excluidasToSave,
+        faixaSoma: faixaSomaObj,
+        paridade: paridadeObj,
         maxConsecutivas: f.maxConsecutivas || 5,
         auditoriaAnomalias: 'Auditado dinamicamente com filtros canônicos e proteção de borda',
-        repetidas: {
-          min: f.repetidasMin,
-          max: f.repetidasMax,
-          concursoRef: latestDraw.concurso,
-        },
-        moldura: {
-          min: f.molduraMin,
-          max: f.molduraMax,
-        },
-        primos: {
-          min: f.primosMin,
-          max: f.primosMax,
-        },
-        fibonacci: {
-          min: f.fibonacciMin,
-          max: f.fibonacciMax,
-        },
+        repetidas: repetidasObj,
+        moldura: molduraObj,
+        primos: primosObj,
+        fibonacci: fibonacciObj,
         tickets: ticketsToSave,
         totalJogos: ticketsToSave.length,
         custoTotal: ticketsToSave.length * VALOR_APOSTA_LOTOFACIL,
@@ -1607,6 +1659,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers: excludedNumbers,
         filters: fullFilters,
         concurso: latestDraw.concurso,
+        concursoAlvo: Number(latestDraw.concurso) + 1,
         dataConcurso: latestDraw.data,
         timestamp: Date.now(),
       };
@@ -1788,6 +1841,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers: excludedNumbers,
         filters: fullFilters,
         concurso: latestDraw.concurso,
+        concursoAlvo: Number(latestDraw.concurso) + 1,
         dataConcurso: latestDraw.data,
         timestamp: Date.now(),
       };
@@ -1977,6 +2031,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       excludedNumbers,
       filters: fullFilters,
       concurso: latestDraw.concurso,
+      concursoAlvo: Number(latestDraw.concurso) + 1,
       dataConcurso: latestDraw.data,
       timestamp: Date.now(),
     };
@@ -2009,6 +2064,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasExcluidas: excludedNumbers,
     };
 
+    const concursoBase = resolveConcursoBase(latestDraw.concurso, 3824);
+    const concursoAlvo = Number(concursoBase) + 1;
+
     const exportMeta: FechamentoExportMeta = {
       strategyName,
       modeName: `${preset.nome} (${generatedTickets.length} Jogos - Garantia ${preset.garantia})`,
@@ -2018,7 +2076,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       fixedNumbers: fixedNumbers,
       excludedNumbers: excludedNumbers,
       filters: fullFilters,
-      concurso: latestDraw.concurso,
+      concurso: concursoBase,
+      concursoAlvo,
       dataConcurso: latestDraw.data,
       timestamp: Date.now(),
     };
@@ -2033,7 +2092,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_fechamento_concurso_${latestDraw.concurso}_${generatedTickets.length}_jogos.txt`;
+    link.download = `lotosniper_concurso_${concursoAlvo}_${generatedTickets.length}_jogos.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2063,6 +2122,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           excludedNumbers: [],
           filters,
           concurso: latestDraw.concurso,
+          concursoAlvo: Number(latestDraw.concurso) + 1,
           dataConcurso: latestDraw.data,
           timestamp: Date.now(),
         };
@@ -2134,6 +2194,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         excludedNumbers: excludedNumbers,
         filters: fullFilters,
         concurso: latestDraw.concurso,
+        concursoAlvo: Number(latestDraw.concurso) + 1,
         dataConcurso: latestDraw.data,
         timestamp: Date.now(),
       };
@@ -2240,6 +2301,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const getCurrentExportMeta = (): FechamentoExportMeta => {
     const finalPrognosticoName = getFullPrognosticoFechamentoName();
+    const concursoBase = resolveConcursoBase(latestDraw.concurso, 3824);
+    const concursoAlvo = Number(concursoBase) + 1;
     return {
       strategyName: finalPrognosticoName,
       modeName: `${preset.nome} (${preset.jogosMaximos} Jogos - Garantia ${preset.garantia})`,
@@ -2253,7 +2316,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
       },
-      concurso: latestDraw.concurso,
+      concurso: concursoBase,
+      concursoAlvo,
       dataConcurso: latestDraw.data,
       timestamp: Date.now(),
     };

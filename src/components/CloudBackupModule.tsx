@@ -26,6 +26,8 @@ import {
   getSavedFechamentos,
   exportBackupJSON,
   restoreBackupJSON,
+  formatBackupJsonFilename,
+  resolveConcursoAlvo,
   SavedFechamentoPrognostico,
 } from '../services/savedFechamentosStorage';
 import { soundService } from '../services/soundAlert';
@@ -162,6 +164,7 @@ export const CloudBackupModule: React.FC<CloudBackupModuleProps> = ({
       // Simulação do envio para Google Drive API / Endpoint
       await new Promise((resolve) => setTimeout(resolve, 800));
 
+      const concursoAlvoSnap = resolveConcursoAlvo(latestDraw.concurso);
       const newSnapshot: CloudSnapshotItem = {
         id: `cloud-${Date.now()}`,
         timestamp: Date.now(),
@@ -170,7 +173,7 @@ export const CloudBackupModule: React.FC<CloudBackupModuleProps> = ({
         totalFechamentos: list.length,
         totalTickets: list.reduce((acc, f) => acc + (f.tickets?.length || 0), 0),
         fileSizeBytes: fileBytes,
-        cloudPath: `${config.folderName}/lotosniper_backup_${latestDraw.concurso}_${Date.now()}.json`,
+        cloudPath: `${config.folderName}/${formatBackupJsonFilename(concursoAlvoSnap)}`,
         provider: 'Google Drive API (v3)',
       };
 
@@ -208,7 +211,7 @@ export const CloudBackupModule: React.FC<CloudBackupModuleProps> = ({
   // Download forçado de backup JSON local
   const handleForcedJsonDownload = () => {
     try {
-      exportBackupJSON();
+      exportBackupJSON(latestDraw.concurso);
       soundService.playGoldenZoneSuccessChime();
       showToast('success', '✓ Download forçado do arquivo JSON realizado com sucesso!');
     } catch {

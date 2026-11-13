@@ -4,16 +4,14 @@ import {
   DollarSign,
   Award,
   Calendar,
-  CheckCircle2,
-  AlertTriangle,
   RotateCcw,
-  Sparkles,
   Layers,
-  ArrowRight,
   TrendingDown,
-  Info,
   ChevronDown,
   ChevronUp,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from 'lucide-react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
@@ -190,64 +188,81 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
     };
   }, [allSavedTickets, apostaMinima, drawsToEvaluate]);
 
-  const formatBRL = (val: number) => {
-    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const brlFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    []
+  );
+
+  const formatBRL = (val: number) => brlFormatter.format(Number.isFinite(val) ? val : 0);
+
+  const formatSignedBRL = (val: number) => {
+    const safe = Number.isFinite(val) ? val : 0;
+    if (safe > 0.005) return `+${brlFormatter.format(safe)}`;
+    if (safe < -0.005) return `-${brlFormatter.format(Math.abs(safe))}`;
+    return brlFormatter.format(0);
   };
 
-  const isPositive = roiSummary.lucroLiquido > 0;
-  const isNeutral = Math.abs(roiSummary.lucroLiquido) < 0.01;
+  const isPositive = roiSummary.lucroLiquido > 0.005;
+  const isNeutral = Math.abs(roiSummary.lucroLiquido) <= 0.005;
 
   return (
-    <div className="bg-gradient-to-br from-slate-900/95 via-slate-900 to-emerald-950/20 rounded-3xl border-2 border-emerald-500/40 p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
-      {/* Decorative Glow */}
-      <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/10 blur-3xl pointer-events-none rounded-full" />
-
+    <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-5">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800 relative z-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-start gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 via-teal-500 to-emerald-600 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/25 shrink-0">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/35 flex items-center justify-center text-emerald-400 shrink-0">
+            <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-black text-white tracking-wide">
-                Análise de ROI & Retorno Financeiro dos Jogos Salvos
-              </h3>
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                AUDITORIA DE LUCRO LÍQUIDO
-              </span>
+            <div className="flex items-center gap-2 flex-wrap text-xs text-slate-400">
+              <span className="font-semibold text-emerald-400">Auditoria de Lucro Líquido</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums">{roiSummary.totalJogos} jogos avaliados</span>
             </div>
-            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Defina o valor da aposta mínima para auditar automaticamente o custo total dos seus {roiSummary.totalJogos} jogos salvos, total faturado em prêmios e o lucro líquido real obtido nos últimos concursos.
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5">
+              Análise de ROI & Retorno Financeiro dos Jogos Salvos
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+              Defina o valor da aposta mínima para auditar o custo total, o retorno bruto em prêmios e o lucro líquido real nos últimos concursos.
             </p>
           </div>
         </div>
 
-        {/* Status Badge */}
+        {/* Status Summary Indicator */}
         <div className="self-start md:self-center shrink-0">
           <div
-            className={`px-3 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 shadow-md ${
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 whitespace-nowrap ${
               isPositive
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/15'
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                 : isNeutral
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-rose-500/15'
+                ? 'bg-slate-950 text-slate-300 border-slate-700'
+                : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
             }`}
           >
             {isPositive ? (
               <>
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <span>Lucro Operacional Positivo (+{roiSummary.roiPercentual.toFixed(1)}%)</span>
+                <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                <span className="font-mono tabular-nums">
+                  Superávit (+{roiSummary.roiPercentual.toFixed(1).replace('.', ',')}%)
+                </span>
               </>
             ) : isNeutral ? (
               <>
-                <RotateCcw className="w-4 h-4 text-amber-400" />
-                <span>Ponto de Equilíbrio (0.0%)</span>
+                <Minus className="w-4 h-4 text-amber-400" />
+                <span className="font-mono tabular-nums">Equilíbrio (0,0%)</span>
               </>
             ) : (
               <>
-                <TrendingDown className="w-4 h-4 text-rose-400" />
-                <span>Ajuste de Saldo ({roiSummary.roiPercentual.toFixed(1)}%)</span>
+                <ArrowDownRight className="w-4 h-4 text-rose-400" />
+                <span className="font-mono tabular-nums">
+                  Déficit ({roiSummary.roiPercentual.toFixed(1).replace('.', ',')}%)
+                </span>
               </>
             )}
           </div>
@@ -339,104 +354,202 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
         </div>
       </div>
 
-      {/* 4 Cards Principais de Indicadores Financeiros */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* Grid Responsivo de Indicadores Financeiros (Custo Total, Retorno Bruto, Lucro Líquido e ROI) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
         {/* Card 1: Custo Total Investido */}
-        <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4 space-y-1 relative overflow-hidden">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            Custo Total dos Jogos
-          </span>
-          <div className="text-xl sm:text-2xl font-black text-white font-mono">
+        <div className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-400">
+              Custo Total
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-mono tabular-nums font-bold ${
+                roiSummary.custoTotal > 0 ? 'text-rose-400' : 'text-slate-400'
+              }`}
+            >
+              {roiSummary.custoTotal > 0 ? (
+                <ArrowDownRight className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Minus className="w-4 h-4 text-slate-500" />
+              )}
+              <span>Desembolso</span>
+            </span>
+          </div>
+
+          <div className="text-2xl font-black text-white font-mono tabular-nums tracking-tight">
             {formatBRL(roiSummary.custoTotal)}
           </div>
-          <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-900">
+
+          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
             <span>
-              {roiSummary.totalJogos} jogos × {drawsToEvaluate.length} concurso(s)
+              {roiSummary.totalJogos} jogos · {drawsToEvaluate.length} conc.
             </span>
-            <span className="font-mono text-slate-300">
+            <span className="text-slate-300 font-semibold">
               {formatBRL(roiSummary.custoPorConcurso)}/conc
             </span>
           </div>
         </div>
 
         {/* Card 2: Retorno Bruto em Prêmios */}
-        <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-4 space-y-1 relative overflow-hidden">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            Retorno Bruto Obtido
-          </span>
-          <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
+        <div className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-400">
+              Retorno Bruto (Prêmios)
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-mono tabular-nums font-bold ${
+                roiSummary.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-400'
+              }`}
+            >
+              {roiSummary.premioTotal > 0 ? (
+                <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Minus className="w-4 h-4 text-slate-500" />
+              )}
+              <span>Receita</span>
+            </span>
+          </div>
+
+          <div
+            className={`text-2xl font-black font-mono tabular-nums tracking-tight ${
+              roiSummary.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-200'
+            }`}
+          >
             {formatBRL(roiSummary.premioTotal)}
           </div>
-          <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-900">
-            <span>{roiSummary.totalBilhetesPremiados || 0} bilhetes premiados</span>
-            <span className="text-emerald-400 font-mono font-bold">
-              {roiSummary.taxaAcerto.toFixed(1)}% taxa
+
+          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
+            <span>{roiSummary.totalBilhetesPremiados || 0} premiados</span>
+            <span className="text-emerald-400 font-bold">
+              {roiSummary.taxaAcerto.toFixed(1).replace('.', ',')}% taxa
             </span>
           </div>
         </div>
 
         {/* Card 3: Lucro Líquido */}
         <div
-          className={`rounded-2xl border p-4 space-y-1 relative overflow-hidden ${
+          className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
-              ? 'bg-emerald-950/40 border-emerald-500/50'
+              ? 'bg-emerald-950/35 border-emerald-500/50'
               : isNeutral
-              ? 'bg-slate-950/80 border-slate-800'
-              : 'bg-rose-950/30 border-rose-500/40'
+              ? 'bg-slate-950/90 border-slate-800'
+              : 'bg-rose-950/30 border-rose-500/45'
           }`}
         >
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            Lucro Líquido Real
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-300">
+              Lucro Líquido
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                isPositive ? 'text-emerald-400' : isNeutral ? 'text-amber-400' : 'text-rose-400'
+              }`}
+            >
+              {isPositive ? (
+                <>
+                  <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                  <span>Lucro</span>
+                </>
+              ) : isNeutral ? (
+                <>
+                  <Minus className="w-4 h-4 text-amber-400" />
+                  <span>Neutro</span>
+                </>
+              ) : (
+                <>
+                  <ArrowDownRight className="w-4 h-4 text-rose-400" />
+                  <span>Prejuízo</span>
+                </>
+              )}
+            </span>
+          </div>
+
           <div
-            className={`text-xl sm:text-2xl font-black font-mono ${
+            className={`text-2xl font-black font-mono tabular-nums tracking-tight ${
               isPositive ? 'text-emerald-300' : isNeutral ? 'text-slate-200' : 'text-rose-400'
             }`}
           >
-            {isPositive ? '+' : ''}
-            {formatBRL(roiSummary.lucroLiquido)}
+            {formatSignedBRL(roiSummary.lucroLiquido)}
           </div>
-          <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-900">
-            <span>Prêmios − Custo Total</span>
+
+          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
+            <span>Prêmios − Custo</span>
             <span
-              className={`font-bold font-mono ${
-                isPositive ? 'text-emerald-400' : 'text-rose-400'
+              className={`font-bold ${
+                isPositive ? 'text-emerald-400' : isNeutral ? 'text-slate-300' : 'text-rose-400'
               }`}
             >
-              {isPositive ? 'Superávit' : isNeutral ? 'Neutro' : 'Déficit'}
+              {isPositive ? 'Superávit' : isNeutral ? 'Equilíbrio' : 'Déficit'}
             </span>
           </div>
         </div>
 
         {/* Card 4: ROI (%) */}
         <div
-          className={`rounded-2xl border p-4 space-y-1 relative overflow-hidden ${
+          className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
-              ? 'bg-gradient-to-br from-emerald-500/15 to-teal-500/10 border-emerald-500/40'
-              : 'bg-slate-950/80 border-slate-800'
+              ? 'bg-emerald-950/25 border-emerald-500/45'
+              : isNeutral
+              ? 'bg-slate-950/90 border-slate-800'
+              : 'bg-rose-950/20 border-rose-500/40'
           }`}
         >
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            ROI (Return on Investment)
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-300">
+              ROI (Retorno sobre Capital)
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                isPositive ? 'text-emerald-400' : isNeutral ? 'text-amber-400' : 'text-rose-400'
+              }`}
+            >
+              {isPositive ? (
+                <>
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>Alta</span>
+                </>
+              ) : isNeutral ? (
+                <>
+                  <Minus className="w-4 h-4 text-amber-400" />
+                  <span>Estável</span>
+                </>
+              ) : (
+                <>
+                  <TrendingDown className="w-4 h-4 text-rose-400" />
+                  <span>Queda</span>
+                </>
+              )}
+            </span>
+          </div>
+
           <div
-            className={`text-xl sm:text-2xl font-black font-mono ${
-              isPositive ? 'text-emerald-300' : isNeutral ? 'text-slate-300' : 'text-rose-400'
+            className={`text-2xl font-black font-mono tabular-nums tracking-tight ${
+              isPositive ? 'text-emerald-300' : isNeutral ? 'text-slate-200' : 'text-rose-400'
             }`}
           >
-            {isPositive ? '+' : ''}
-            {roiSummary.roiPercentual.toFixed(1)}%
+            {roiSummary.roiPercentual > 0.05 ? '+' : ''}
+            {roiSummary.roiPercentual.toFixed(1).replace('.', ',')}%
           </div>
-          <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-900">
-            <span>Eficiência do Capital</span>
-            <span className="text-slate-300 font-bold">
+
+          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
+            <span>Multiplicador</span>
+            <span className="text-slate-200 font-bold">
               {roiSummary.custoTotal > 0
-                ? `${(roiSummary.premioTotal / roiSummary.custoTotal).toFixed(2)}x retorno`
-                : '0x'}
+                ? `${(roiSummary.premioTotal / roiSummary.custoTotal).toFixed(2).replace('.', ',')}x retorno`
+                : '0,00x'}
             </span>
           </div>
         </div>
       </div>
+
+      {allSavedTickets.length === 0 && (
+        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span>
+            Nenhum bilhete salvo ativo para auditoria. Gere ou restaure um fechamento em Meus Jogos para calcular o ROI real.
+          </span>
+          <span className="font-mono text-slate-400 tabular-nums shrink-0">0 bilhetes carregados</span>
+        </div>
+      )}
 
       {/* Gráfico de Área Recharts: Evolução Histórica Custo vs Retorno (ROI) */}
       <EvolucaoCustoRetornoAreaChart

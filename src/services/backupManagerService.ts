@@ -7,8 +7,12 @@
 
 import { GameTicket } from '../types/lotofacil';
 import {
+  formatBackupJsonFilename,
+  getBackupConcursoAlvo,
   getSavedFechamentos,
   normalizeSavedFechamento,
+  resolveConcursoAlvo,
+  resolveConcursoBase,
   SavedFechamentoPrognostico,
 } from './savedFechamentosStorage';
 import { soundService } from './soundAlert';
@@ -16,6 +20,8 @@ import { soundService } from './soundAlert';
 export interface BackupDataPayload {
   app: 'LotoSniper AI Pro';
   versao: string;
+  concursoBase?: number;
+  concursoAlvo?: number;
   timestamp: number;
   dataHoraFormatada: string;
   estatisticas: {
@@ -100,9 +106,17 @@ export function buildCompleteBackupPayload(): BackupDataPayload {
 
   const autoDownloadOnSaveEnabled = localStorage.getItem(AUTO_DOWNLOAD_CONFIG_KEY) === 'true';
 
+  const concursoBase = resolveConcursoBase(
+    fechamentosSalvos[0]?.concurso ?? activeFechamentoMeta?.concurso,
+    3824
+  );
+  const concursoAlvo = getBackupConcursoAlvo(fechamentosSalvos, concursoBase);
+
   const payload: BackupDataPayload = {
     app: 'LotoSniper AI Pro',
-    versao: '2026.4.1',
+    versao: '2026.5',
+    concursoBase,
+    concursoAlvo,
     timestamp: Date.now(),
     dataHoraFormatada: new Date().toLocaleString('pt-BR'),
     estatisticas: {
@@ -146,8 +160,8 @@ export function triggerForcedJSONDownload(customFilename?: string): { success: b
 
     const now = new Date();
     const dateStamp = now.toISOString().slice(0, 10);
-    const timeStamp = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-    const filename = customFilename || `lotosniper_backup_completo_${dateStamp}_${timeStamp}.json`;
+    const concursoAlvo = payload.concursoAlvo || getBackupConcursoAlvo(payload.meusJogos.fechamentosSalvos);
+    const filename = customFilename || formatBackupJsonFilename(concursoAlvo, dateStamp);
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -254,11 +268,46 @@ export function restoreBackupFromJSON(
 
     if (parsed.app === 'LotoSniper AI Pro' && parsed.meusJogos) {
       payload = parsed as BackupDataPayload;
+      if (Array.isArray(payload.meusJogos.fechamentosSalvos)) {
+        payload.meusJogos.fechamentosSalvos = payload.meusJogos.fechamentosSalvos.map((f, idx) =>
+          normalizeSavedFechamento(f, idx)
+        );
+      }
     } else if (Array.isArray(parsed) || Array.isArray(parsed.fechamentos)) {
-      // Legado de fechamentos
-      const fechamentos = Array.isArray(parsed) ? parsed : parsed.fechamentos;
+      // Legado de fechamentos (calcula concursoAlvo e atualiza títulos automaticamente)
+      const fechamentos = (Array.isArray(parsed) ? parsed : parsed.fechamentos).map(
+        (f: any, idx: number) => normalizeSavedFechamento(f, idx)
+      );
       payload = buildCompleteBackupPayload();
       payload.meusJogos.fechamentosSalvos = fechamentos;
+      payload.meusJogos.ticketsAtuais = fechamentos.flatMap((f: SavedFechamentoPrognostico) => f.tickets || []);
+    } else if (Array.isArray(parsed.savedTickets) && parsed.savedTickets.length > 0) {
+      const concursoBase = resolveConcursoBase(
+        parsed.concursoBase ?? parsed.concursoReferencia ?? parsed.fechamentoMeta?.concurso,
+        3824
+      );
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, parsed.concursoAlvo);
+      const universo = Array.from(
+        new Set<number>(parsed.savedTickets.flatMap((t: any) => (Array.isArray(t?.dezenas) ? t.dezenas : [])))
+      ).sort((a, b) => a - b);
+      const normalized = normalizeSavedFechamento(
+        {
+          id: `backup-${Date.now()}`,
+          timestamp: Date.now(),
+          dataCriacao: new Date().toLocaleString('pt-BR'),
+          concurso: concursoBase,
+          concursoAlvo,
+          dataConcurso: parsed.dataConcurso || '',
+          tipoFechamento: parsed.fechamentoMeta?.strategyName || parsed.fechamentoMeta?.modeName || 'Fechamento Importado',
+          modalidadeMatriz: parsed.fechamentoMeta?.modeName || `${universo.length} Dezenas (${parsed.savedTickets.length} Jogos)`,
+          universoDezenas: universo,
+          tickets: parsed.savedTickets,
+        },
+        0
+      );
+      payload = buildCompleteBackupPayload();
+      payload.meusJogos.fechamentosSalvos = [normalized];
+      payload.meusJogos.ticketsAtuais = normalized.tickets;
     } else {
       return {
         success: false,

@@ -13,6 +13,11 @@ import {
   restoreBackupJSON,
   inspectBackupJSONPreview,
   syncWithMySQLHostinger,
+  resolveConcursoBase,
+  resolveConcursoAlvo,
+  getBackupConcursoAlvo,
+  formatStandardFechamentoTitle,
+  buildStandardFilterSummary,
 } from '../services/savedFechamentosStorage';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -377,7 +382,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   // Handlers de Backup JSON (Importar com escolha Mesclar / Substituir + Exportar)
   const handleExportBackup = () => {
     try {
-      exportBackupJSON();
+      exportBackupJSON(latestDraw.concurso);
       soundService.playGoldenZoneSuccessChime();
       showFeedback('Backup completo (.json) exportado com sucesso!');
     } catch {
@@ -432,7 +437,10 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   // Consolidar / Exportar Todos (TXT / PDF)
   const handleDownloadAllConsolidatedTXT = () => {
     if (fechamentos.length === 0) return;
+    const maxConcursoAlvo = getBackupConcursoAlvo(fechamentos, latestDraw.concurso);
     const blocks = fechamentos.map((f, idx) => {
+      const concursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, f.concursoAlvo);
       const universoStr = (f.universoDezenas || []).map((n) => n.toString().padStart(2, '0')).join(' ');
       const fixasStr =
         (f.dezenasFixas || []).length > 0
@@ -440,8 +448,8 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
           : 'Nenhuma';
       return [
         '================================================================================',
-        `#${(idx + 1).toString().padStart(2, '0')} • ${f.tipoFechamento}`,
-        `Modalidade: ${f.modalidadeMatriz} | Concurso Base: #${f.concurso} (${f.dataConcurso || ''})`,
+        `#${(idx + 1).toString().padStart(2, '0')} • ${f.nomeFechamento || f.tipoFechamento}`,
+        `Concurso Alvo: #${concursoAlvo} (Ref. Base: #${concursoBase} ${f.dataConcurso || ''}) | Modalidade: ${f.modalidadeMatriz}`,
         `Criado em: ${f.dataCriacao} | Jogos: ${f.totalJogos} | Custo: R$ ${(f.custoTotal ?? f.totalJogos * VALOR_APOSTA_LOTOFACIL).toFixed(2)}`,
         `Universo (${(f.universoDezenas || []).length}): ${universoStr}`,
         `Fixas: ${fixasStr}`,
@@ -451,7 +459,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     });
 
     const content = [
-      `LOTOSNIPER AI PRO • RELAÇÃO CONSOLIDADA DE FECHAMENTOS SALVOS (${fechamentos.length})`,
+      `LOTOSNIPER AI PRO • RELAÇÃO CONSOLIDADA DE FECHAMENTOS SALVOS (${fechamentos.length}) • ALVO #${maxConcursoAlvo}`,
       `Exportado em: ${new Date().toLocaleString('pt-BR')}`,
       '',
       ...blocks,
@@ -461,14 +469,14 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_consolidado_${fechamentos.length}_fechamentos.txt`;
+    link.download = `lotosniper_consolidado_concurso_${maxConcursoAlvo}_${fechamentos.length}_fechamentos.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     setIsExportAllMenuOpen(false);
     soundService.playGoldenZoneSuccessChime();
-    showFeedback(`Arquivo TXT consolidado com ${fechamentos.length} fechamento(s) baixado com sucesso!`);
+    showFeedback(`Arquivo TXT consolidado (Concurso Alvo #${maxConcursoAlvo}) com ${fechamentos.length} fechamento(s) baixado!`);
   };
 
   const handleDownloadAllLotericaPDFDirect = () => {
@@ -479,17 +487,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         (acc, f) => acc + (f.custoTotal ?? (f.tickets?.length || 0) * VALOR_APOSTA_LOTOFACIL),
         0
       );
+      const concursoBase = resolveConcursoBase(fechamentos[0]?.concurso, latestDraw.concurso);
+      const concursoAlvo = getBackupConcursoAlvo(fechamentos, latestDraw.concurso);
       downloadProfessionalLotericaPDF({
         tickets: allTickets,
-        concurso: fechamentos[0]?.concurso || latestDraw.concurso,
-        strategyName: `Carteira Completa (${fechamentos.length} Fechamentos Salvos)`,
+        concurso: concursoBase,
+        concursoAlvo,
+        strategyName: `Carteira Completa • Concurso Alvo #${concursoAlvo} (${fechamentos.length} Fechamentos Salvos)`,
         modalidadeMatriz: `${allTickets.length} Apostas Consolidadas`,
         custoTotalEstimado: totalCost,
         watermarkText: 'LOTO SNIPER • COMPROVANTE OFICIAL DE JOGOS • USO LOTÉRICO',
       });
       setIsExportAllMenuOpen(false);
       soundService.playGoldenZoneSuccessChime();
-      showFeedback(`PDF consolidado com todos os ${allTickets.length} jogos salvos gerado com sucesso!`);
+      showFeedback(`PDF consolidado (Concurso Alvo #${concursoAlvo}) com ${allTickets.length} jogos salvos gerado!`);
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar PDF consolidado.');
@@ -601,10 +612,15 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   };
 
   const handleDownloadTXT = (f: SavedFechamentoPrognostico) => {
+    const concursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, f.concursoAlvo);
     const headerLines = [
       '================================================================================',
       'LOTOSNIPER - DOSSIÊ TÉCNICO DE FECHAMENTO & PROGNÓSTICO',
       '================================================================================',
+      `• Título Padronizado: ${f.nomeFechamento || f.tipoFechamento}`,
+      `• Concurso Alvo da Aposta: #${concursoAlvo}`,
+      `• Concurso Base (Ref. Estatística): #${concursoBase}${f.dataConcurso ? ` (${f.dataConcurso})` : ''}`,
       `• Tipo de Fechamento: ${f.tipoFechamento}`,
       `• Modalidade / Matriz: ${f.modalidadeMatriz}`,
       `• Universo de Dezenas (${(f.universoDezenas || []).length} números): ${(f.universoDezenas || []).map((n) => n.toString().padStart(2, '0')).join(' ')}`,
@@ -617,7 +633,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       `• Faixa de Soma: ${f.faixaSoma.min} a ${f.faixaSoma.max} (Zona de Ouro: ${f.faixaSoma.zonaOuro || '190 a 210'})`,
       `• Paridade: ${f.paridade.minPares} a ${f.paridade.maxPares} Pares`,
       `• Sequência Máxima Consecutiva: Até ${f.maxConsecutivas} dezenas`,
-      `• Repetidas (#${f.repetidas.concursoRef || f.concurso}): ${f.repetidas.min} a ${f.repetidas.max}`,
+      `• Repetidas (#${f.repetidas.concursoRef || concursoBase}): ${f.repetidas.min} a ${f.repetidas.max}`,
       `• Moldura: ${f.moldura.min} a ${f.moldura.max} | Primos: ${f.primos.min} a ${f.primos.max} | Fibonacci: ${f.fibonacci.min} a ${f.fibonacci.max}`,
       `• Auditoria de Anomalias: ${f.auditoriaAnomalias}`,
       '',
@@ -631,12 +647,12 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lotosniper_fechamento_${f.concurso}_${f.totalJogos}_jogos.txt`;
+    link.download = `lotosniper_concurso_${concursoAlvo}_${f.totalJogos}_jogos.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showFeedback('Arquivo TXT do fechamento baixado com sucesso!');
+    showFeedback(`Arquivo TXT (Concurso Alvo #${concursoAlvo}) baixado com sucesso!`);
   };
 
   const handleDownloadPdfDirect = (f: SavedFechamentoPrognostico) => {
@@ -652,20 +668,23 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
   const handleDownloadVolantesStyle = (f: SavedFechamentoPrognostico, style: VolanteExportStyle) => {
     try {
+      const concursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, f.concursoAlvo);
       downloadTicketsVolantePDF(f.tickets, {
-        concurso: f.concurso,
+        concurso: concursoBase,
+        concursoAlvo,
         dataConcurso: f.dataConcurso,
         titulo:
           style === 'economico'
-            ? `LOTOSNIPER • LISTA OTIMIZADA DE JOGOS (${f.tipoFechamento})`
-            : `LOTOSNIPER GOLD • VOLANTES DE APOSTA 5X5 (${f.tipoFechamento})`,
+            ? `LOTOSNIPER • LISTA OTIMIZADA • ALVO #${concursoAlvo} (${f.tipoFechamento})`
+            : `LOTOSNIPER GOLD • VOLANTES 5X5 • ALVO #${concursoAlvo} (${f.tipoFechamento})`,
         style,
       });
       soundService.playGoldenZoneSuccessChime();
       showFeedback(
         style === 'economico'
-          ? `PDF Lista Econômica gerado para "${f.tipoFechamento}".`
-          : `PDF Volantes 5×5 gerado para "${f.tipoFechamento}".`
+          ? `PDF Lista Econômica (Concurso Alvo #${concursoAlvo}) gerado.`
+          : `PDF Volantes 5×5 (Concurso Alvo #${concursoAlvo}) gerado.`
       );
     } catch (err) {
       console.error(err);
@@ -675,13 +694,21 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
   const handleDownloadCartoesOficiaisPDF = (f: SavedFechamentoPrognostico) => {
     try {
+      const concursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, f.concursoAlvo);
       exportCartoesJogosToPdf({
         tickets: f.tickets,
         latestDraw,
+        meta: {
+          concurso: concursoBase,
+          concursoAlvo,
+          dataConcurso: f.dataConcurso,
+          strategyName: f.tipoFechamento,
+        },
         fechamentoNome: f.tipoFechamento,
       });
       soundService.playGoldenZoneSuccessChime();
-      showFeedback(`Cartões de Jogos (grid 5×5) gerados para "${f.tipoFechamento}".`);
+      showFeedback(`Cartões de Jogos (Concurso Alvo #${concursoAlvo}) gerados.`);
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar cartões PDF.');
@@ -690,6 +717,8 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
   const handleDownloadCSVDirect = (f: SavedFechamentoPrognostico) => {
     try {
+      const concursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+      const concursoAlvo = resolveConcursoAlvo(concursoBase, f.concursoAlvo);
       const headers = [
         'Jogo',
         'Dezenas Formatadas',
@@ -702,6 +731,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         'Soma Total',
         'Score IA',
         'Fechamento',
+        'Concurso Alvo',
         'Concurso Base',
         'Data Criacao',
       ];
@@ -721,8 +751,9 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
           t.fibonacci ?? sorted.filter((n) => FIBONACCI_NUMBERS.includes(n)).length,
           t.soma ?? sorted.reduce((a, b) => a + b, 0),
           `"${(t.scoreIA || 92).toFixed(1)}"`,
-          `"${f.tipoFechamento}"`,
-          f.concurso,
+          `"${f.nomeFechamento || f.tipoFechamento}"`,
+          concursoAlvo,
+          concursoBase,
           `"${f.dataCriacao || ''}"`,
         ].join(';');
       });
@@ -732,13 +763,13 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `lotosniper_fechamento_${f.concurso}_${f.totalJogos}_jogos.csv`;
+      link.download = `lotosniper_concurso_${concursoAlvo}_${f.totalJogos}_jogos.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       soundService.playGoldenZoneSuccessChime();
-      showFeedback(`Arquivo CSV com ${f.totalJogos} jogos baixado com sucesso!`);
+      showFeedback(`Arquivo CSV (Concurso Alvo #${concursoAlvo}) com ${f.totalJogos} jogos baixado!`);
     } catch (err) {
       console.error(err);
       showFeedback('Erro ao gerar CSV.');
@@ -1463,53 +1494,77 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       </span>
 
                       <div className="space-y-1.5 min-w-0">
-                        {/* Cabeçalho: tipoFechamento, dataCriacao, concurso, totalJogos, custoTotal */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm sm:text-base font-black text-white">
-                            {String(f.tipoFechamento || 'Fechamento Combinatório').replace(/^⚡\s*/, '')}
-                          </h3>
-                          {premiadosCount > 0 && (
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-black tabular-nums">
-                              {premiadosCount} premiado(s) · Máx {bestHits} pts
-                            </span>
-                          )}
-                        </div>
+                        {/* Badges Prioritárias: Concurso Alvo em Destaque + Ref. Base Discreta */}
+                        {(() => {
+                          const cardConcursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+                          const cardConcursoAlvo = resolveConcursoAlvo(cardConcursoBase, f.concursoAlvo);
+                          const cardTitle =
+                            f.nomeFechamento ||
+                            formatStandardFechamentoTitle({
+                              concursoBase: cardConcursoBase,
+                              concursoAlvo: cardConcursoAlvo,
+                              tipoFechamento: f.tipoFechamento,
+                              modalidadeMatriz: f.modalidadeMatriz,
+                              universoCount: universo.length,
+                              totalJogos,
+                              filterSummary: buildStandardFilterSummary(f),
+                            });
 
-                        {/* Metadados principais em tipografia limpa tabular */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono tabular-nums text-slate-300">
-                          <span className="inline-flex items-center gap-1 text-slate-400">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>{f.dataCriacao || 'Data não registrada'}</span>
-                          </span>
-                          <span aria-hidden="true" className="text-slate-600">·</span>
-                          <span>
-                            Concurso Ref: <strong className="text-white">#{f.concurso || latestDraw.concurso}</strong>
-                            {f.dataConcurso ? ` (${f.dataConcurso})` : ''}
-                          </span>
-                          <span aria-hidden="true" className="text-slate-600">·</span>
-                          <span className="text-emerald-400 font-bold">
-                            {totalJogos} jogos
-                          </span>
-                          <span aria-hidden="true" className="text-slate-600">·</span>
-                          <span className="text-amber-300 font-bold">
-                            R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
+                          return (
+                            <>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/50 text-emerald-300 font-mono text-[11px] font-black tracking-wide tabular-nums shadow-sm">
+                                  <span>🎯 CONCURSO ALVO: #{cardConcursoAlvo}</span>
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/80 text-slate-400 font-mono text-[11px] font-medium tabular-nums">
+                                  Ref. Base: #{cardConcursoBase}
+                                  {f.dataConcurso ? ` (${f.dataConcurso})` : ''}
+                                </span>
+                                {premiadosCount > 0 && (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-black tabular-nums">
+                                    {premiadosCount} premiado(s) · Máx {bestHits} pts
+                                  </span>
+                                )}
+                              </div>
 
-                        {/* Subtítulo Técnico: modalidadeMatriz + resumo dos filtros */}
-                        <div className="text-xs text-slate-300 space-y-1">
-                          <div className="font-semibold text-emerald-400">
-                            {f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`}
-                          </div>
-                          <div className="font-mono text-[11px] text-slate-400 leading-relaxed">
-                            Soma {f.faixaSoma?.min ?? 180}–{f.faixaSoma?.max ?? 215} · Paridade{' '}
-                            {f.paridade?.minPares ?? 6}–{f.paridade?.maxPares ?? 9}P · Moldura{' '}
-                            {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} · Primos{' '}
-                            {f.primos?.min ?? 4}–{f.primos?.max ?? 7} · Fibonacci{' '}
-                            {f.fibonacci?.min ?? 3}–{f.fibonacci?.max ?? 6} · Repetidas{' '}
-                            {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}
-                          </div>
-                        </div>
+                              {/* Título Padronizado Completo */}
+                              <h3 className="text-sm sm:text-base font-black text-white leading-snug break-words">
+                                {cardTitle}
+                              </h3>
+
+                              {/* Metadados principais em tipografia limpa tabular */}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono tabular-nums text-slate-300">
+                                <span className="inline-flex items-center gap-1 text-slate-400">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  <span>{f.dataCriacao || 'Data não registrada'}</span>
+                                </span>
+                                <span aria-hidden="true" className="text-slate-600">·</span>
+                                <span className="text-emerald-400 font-bold">
+                                  {totalJogos} jogos
+                                </span>
+                                <span aria-hidden="true" className="text-slate-600">·</span>
+                                <span className="text-amber-300 font-bold">
+                                  R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+
+                              {/* Subtítulo Técnico: modalidadeMatriz + resumo dos filtros */}
+                              <div className="text-xs text-slate-300 space-y-1">
+                                <div className="font-semibold text-cyan-300">
+                                  {String(f.tipoFechamento || 'Fechamento Clássico').replace(/^⚡\s*/, '')} · {f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`}
+                                </div>
+                                <div className="font-mono text-[11px] text-slate-400 leading-relaxed">
+                                  Soma {f.faixaSoma?.min ?? 180}–{f.faixaSoma?.max ?? 215} · Paridade{' '}
+                                  {f.paridade?.minPares ?? 6}–{f.paridade?.maxPares ?? 9}P · Moldura{' '}
+                                  {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} · Primos{' '}
+                                  {f.primos?.min ?? 4}–{f.primos?.max ?? 7} · Fibonacci{' '}
+                                  {f.fibonacci?.min ?? 3}–{f.fibonacci?.max ?? 6} · Repetidas{' '}
+                                  {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
 
                         {/* Badges de Universo de Dezenas + Destaque Âmbar/Ouro para Fixas */}
                         <div className="pt-1 flex flex-wrap items-center gap-1.5">

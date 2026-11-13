@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GameTicket, FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { DEFAULT_FILTERS } from '../services/combinatorics';
+import { formatBackupJsonFilename, resolveConcursoAlvo } from '../services/savedFechamentosStorage';
 import {
   Settings,
   Wifi,
@@ -42,6 +43,7 @@ import { BackupCloudPro } from './BackupCloudPro';
 import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
+import { PushNotificationRulesPanel } from './PushNotificationRulesPanel';
 import { SecurityStatusMonitor } from './SecurityStatusMonitor';
 import { OrcamentoLimitesManager } from './OrcamentoLimitesManager';
 import { AuthAccountSecurityForms } from './AuthAccountSecurityForms';
@@ -83,7 +85,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
+    'geral' | 'regras_push' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
   >('geral');
 
   useEffect(() => {
@@ -391,11 +393,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         if (t) savedTags = JSON.parse(t);
       } catch {}
 
+      const concursoBase = Number(latestDraw.concurso) || 3824;
+      const concursoAlvo = resolveConcursoAlvo(concursoBase);
+
       const payload = {
         app: 'LotoSniper',
         versao: '2.4.0',
         exportedAt: new Date().toISOString(),
-        concursoReferencia: latestDraw.concurso,
+        concursoReferencia: concursoBase,
+        concursoBase,
+        concursoAlvo,
         dataReferencia: latestDraw.data,
         jogos: savedTickets,
         filtros: filters,
@@ -406,7 +413,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `lotosniper_backup_${latestDraw.concurso}_${Date.now()}.json`);
+      downloadAnchor.setAttribute('download', formatBackupJsonFilename(concursoAlvo));
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -490,6 +497,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }`}
           >
             Conexão & Notificações
+          </button>
+          <button
+            onClick={() => setActiveSubTab('regras_push')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'regras_push'
+                ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                : 'text-amber-300 hover:text-white'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>Regras de Push & Som</span>
           </button>
           <button
             onClick={() => setActiveSubTab('seguranca_auth')}
@@ -674,6 +692,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
         <div className="space-y-5">
+          {/* Painel Detalhado de Regras de Notificação Push & Alerta Sonoro */}
+          <PushNotificationRulesPanel
+            latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+
           {/* Configurador de Limites de Aposta & Simulador de Orçamento Mensal */}
           <OrcamentoLimitesManager />
 
@@ -1168,6 +1195,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <SecurityStatusMonitor />
         </div>
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB DEDICADA: REGRAS DE PUSH & SOM POR EVENTO                          */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'regras_push' && (
+        <div className="space-y-5">
+          <PushNotificationRulesPanel
+            latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+          <PrizeNotificationTiersCard />
+          <CycleMonitoringCard
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
       )}
 
       {/* ========================================================================= */}

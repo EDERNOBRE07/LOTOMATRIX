@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Play, RotateCw, CheckCircle2, Zap, Trophy, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { RotateCw, Zap, ShieldCheck, ArrowUpDown, X, Disc3 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
 
 interface RollingNumbersSorteioProps {
@@ -11,6 +11,7 @@ interface RollingNumbersSorteioProps {
   scoresMap?: { [num: number]: number };
   onComplete?: () => void;
   onApplyNumbers?: (numbers: number[]) => void;
+  onClose?: () => void;
   autoStart?: boolean;
 }
 
@@ -24,15 +25,18 @@ interface BallState {
 
 export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
   finalNumbers,
-  title = 'Sorteio Preditivo com Rolling Numbers',
-  subtitle = 'Animação de alta precisão baseada em redes neurais e tensores de probabilidade da Caixa',
+  title = 'Sorteio das Dezenas do Volante',
+  subtitle = 'Animação mecânica de alta precisão para conferência e fixação das dezenas selecionadas',
   cycleKeyNumbers = [17, 22],
   scoresMap = {},
   onComplete,
   onApplyNumbers,
+  onClose,
   autoStart = false,
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const [isRolling, setIsRolling] = useState<boolean>(false);
+  const [sortAscending, setSortAscending] = useState<boolean>(false);
   const [balls, setBalls] = useState<BallState[]>(() =>
     finalNumbers.map((n) => ({
       target: n,
@@ -44,9 +48,29 @@ export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
   );
   const [isFinished, setIsFinished] = useState<boolean>(true);
   const [rollProgress, setRollProgress] = useState<number>(100);
+  const timersRef = useRef<{ interval?: ReturnType<typeof setInterval>; timeouts: ReturnType<typeof setTimeout>[] }>({
+    timeouts: [],
+  });
+
+  const clearAllTimers = () => {
+    if (timersRef.current.interval) {
+      clearInterval(timersRef.current.interval);
+      timersRef.current.interval = undefined;
+    }
+    timersRef.current.timeouts.forEach((t) => clearTimeout(t));
+    timersRef.current.timeouts = [];
+  };
+
+  useEffect(() => {
+    return () => clearAllTimers();
+  }, []);
 
   // Sync if target numbers change
   useEffect(() => {
+    clearAllTimers();
+    setIsRolling(false);
+    setIsFinished(true);
+    setRollProgress(100);
     setBalls(
       finalNumbers.map((n) => ({
         target: n,
@@ -60,11 +84,30 @@ export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
 
   const startRolling = () => {
     if (isRolling || finalNumbers.length === 0) return;
+    clearAllTimers();
+
+    if (prefersReducedMotion) {
+      setBalls(
+        finalNumbers.map((n) => ({
+          target: n,
+          currentDisplay: n,
+          isLocked: true,
+          score: scoresMap[n] || 85,
+          isCycle: cycleKeyNumbers.includes(n),
+        }))
+      );
+      setIsRolling(false);
+      setIsFinished(true);
+      setRollProgress(100);
+      soundService.playGoldenZoneSuccessChime();
+      onComplete?.();
+      return;
+    }
+
     setIsRolling(true);
     setIsFinished(false);
     setRollProgress(0);
 
-    // Initial unlocked state
     setBalls(
       finalNumbers.map((n) => ({
         target: n,
@@ -75,26 +118,25 @@ export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
       }))
     );
 
-    // Tumbling interval: rapidly rotates unlocked ball values
     const tumbleInterval = setInterval(() => {
       setBalls((prev) =>
         prev.map((b) => {
           if (b.isLocked) return b;
+          const nextNum = ((b.currentDisplay + Math.floor(Math.random() * 7) + 1) % 25) + 1;
           return {
             ...b,
-            currentDisplay: Math.floor(Math.random() * 25) + 1,
+            currentDisplay: nextNum,
           };
         })
       );
-    }, 55);
+    }, 65);
+    timersRef.current.interval = tumbleInterval;
 
-    // Staggered settling sequence: each ball locks into place one by one
     const totalBalls = finalNumbers.length;
     finalNumbers.forEach((targetNum, index) => {
-      // Delay increases per ball (staggered slot machine / rolling effect)
-      const lockDelay = 400 + index * 120;
+      const lockDelay = 360 + index * 105;
 
-      setTimeout(() => {
+      const t = setTimeout(() => {
         setBalls((prev) =>
           prev.map((b, idx) => {
             if (idx === index) {
@@ -108,22 +150,19 @@ export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
           })
         );
 
-        // Sound feedback on each landed ball
         soundService.playTickCountdown();
+        setRollProgress(Math.round(((index + 1) / totalBalls) * 100));
 
-        // Update progress
-        const currentProgress = Math.round(((index + 1) / totalBalls) * 100);
-        setRollProgress(currentProgress);
-
-        // When the final ball locks
         if (index === totalBalls - 1) {
-          clearInterval(tumbleInterval);
+          clearAllTimers();
           setIsRolling(false);
           setIsFinished(true);
           soundService.playGoldenZoneSuccessChime();
-          if (onComplete) onComplete();
+          onComplete?.();
         }
       }, lockDelay);
+
+      timersRef.current.timeouts.push(t);
     });
   };
 
@@ -131,185 +170,259 @@ export const RollingNumbersSorteio: React.FC<RollingNumbersSorteioProps> = ({
     if (autoStart) {
       startRolling();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
-  return (
-    <div className="bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 rounded-2xl border border-amber-500/40 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
-      {/* Background Glow Accents */}
-      <div className="absolute -top-20 -right-20 w-64 h-64 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+  const displayedBalls = useMemo(() => {
+    const indexed = balls.map((ball, idx) => ({ ...ball, originalIndex: idx }));
+    if (sortAscending && isFinished) {
+      return [...indexed].sort((a, b) => a.target - b.target);
+    }
+    return indexed;
+  }, [balls, sortAscending, isFinished]);
 
-      {/* Header and Controls */}
-      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25 shrink-0">
-            <Sparkles className="w-6 h-6 stroke-[2.5]" />
+  const summaryStats = useMemo(() => {
+    const lockedCount = balls.filter((b) => b.isLocked).length;
+    const cycleCount = balls.filter((b) => b.isCycle).length;
+    const avgScore =
+      balls.length > 0
+        ? Math.round(balls.reduce((acc, b) => acc + b.score, 0) / balls.length)
+        : 0;
+    const sortedTargets = [...finalNumbers].sort((a, b) => a - b);
+    return { lockedCount, cycleCount, avgScore, sortedTargets };
+  }, [balls, finalNumbers]);
+
+  // Balanced grid columns for 15–21 balls (18 balls -> 3 crisp rows of 6 on desktop)
+  const gridColsClass =
+    finalNumbers.length <= 15
+      ? 'grid-cols-3 sm:grid-cols-5'
+      : finalNumbers.length === 16 || finalNumbers.length === 20
+      ? 'grid-cols-4 sm:grid-cols-5 lg:grid-cols-5'
+      : 'grid-cols-3 sm:grid-cols-6';
+
+  return (
+    <section className="bg-slate-900/95 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-5">
+      {/* Header Toolbar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="flex items-start gap-3.5 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+            <Disc3 className={`w-5 h-5 ${isRolling ? 'animate-spin' : ''}`} />
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-black text-white tracking-wide">{title}</h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase font-mono tracking-wider">
-                Framer Motion
+          <div className="min-w-0">
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight text-balance">
+              {title}
+            </h3>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 mt-0.5">
+              <span>{subtitle}</span>
+              <span aria-hidden="true" className="text-slate-600">·</span>
+              <span className="font-mono tabular-nums text-amber-300 font-semibold">
+                {finalNumbers.length} dezenas
               </span>
               {isRolling && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono animate-pulse">
-                  SORTEANDO ({rollProgress}%)
-                </span>
+                <>
+                  <span aria-hidden="true" className="text-slate-600">·</span>
+                  <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+                    {rollProgress}% travado
+                  </span>
+                </>
               )}
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Single-line Action Controls */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
-            onClick={startRolling}
+            type="button"
+            onClick={() => setSortAscending((prev) => !prev)}
             disabled={isRolling}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shadow-lg ${
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-40 ${
+              sortAscending
+                ? 'bg-slate-800 text-amber-300 border-amber-500/40'
+                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+            }`}
+            title="Alternar entre ordem de sorteio e ordem numérica crescente"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            <span>{sortAscending ? 'Ordem Crescente' : 'Ordem de Sorteio'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={startRolling}
+            disabled={isRolling || finalNumbers.length === 0}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition cursor-pointer whitespace-nowrap shrink-0 ${
               isRolling
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 shadow-amber-500/25 active:scale-95'
+                ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed'
+                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md shadow-amber-500/20 active:scale-95'
             }`}
           >
             <RotateCw className={`w-3.5 h-3.5 ${isRolling ? 'animate-spin' : ''}`} />
-            <span>{isRolling ? 'Rolando Dezenas...' : 'Sortear Rolling Numbers'}</span>
+            <span>{isRolling ? 'Sorteando...' : 'Sortear Rolling Numbers'}</span>
           </button>
 
           {onApplyNumbers && isFinished && (
             <button
+              type="button"
               onClick={() => onApplyNumbers(finalNumbers)}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Zap className="w-3.5 h-3.5 fill-current" />
+              <Zap className="w-3.5 h-3.5" />
               <span>Aplicar no Fechamento</span>
+            </button>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition cursor-pointer shrink-0"
+              title="Fechar painel de sorteio"
+              aria-label="Fechar painel de sorteio"
+            >
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Progress Bar during roll */}
-      {isRolling && (
-        <div className="w-full bg-slate-950 rounded-full h-1.5 my-3 overflow-hidden border border-slate-800 relative z-10">
-          <motion.div
-            className="bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 h-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${rollProgress}%` }}
-            transition={{ ease: 'easeOut', duration: 0.15 }}
-          />
-        </div>
-      )}
-
-      {/* Rolling Balls Grid */}
-      <div className="relative z-10 grid grid-cols-5 sm:grid-cols-6 md:grid-cols-9 gap-2.5 my-5">
-        <AnimatePresence>
-          {balls.map((ball, idx) => {
-            const isCycleKey = ball.isCycle;
-            const isLocked = ball.isLocked;
-
-            return (
-              <motion.div
-                key={`ball-${idx}`}
-                layout
-                initial={{ opacity: 0, scale: 0.5, y: -20 }}
-                animate={{
-                  opacity: 1,
-                  scale: isLocked ? 1 : 1.08,
-                  y: 0,
-                  transition: {
-                    type: 'spring',
-                    stiffness: 300,
-                    damping: 20,
-                  },
-                }}
-                className={`relative flex flex-col items-center justify-center p-2 rounded-2xl border transition-all duration-150 select-none ${
-                  !isLocked
-                    ? 'bg-slate-950/90 border-amber-400 text-amber-300 ring-2 ring-amber-400/40 shadow-xl'
-                    : isCycleKey
-                    ? 'bg-gradient-to-br from-amber-400 to-yellow-600 text-slate-950 border-amber-300 ring-2 ring-amber-400/60 shadow-lg shadow-amber-500/30 font-black'
-                    : 'bg-slate-950/90 text-white border-slate-700/80 hover:border-amber-400/40 shadow-md'
-                }`}
-              >
-                {/* Rolling Number Container */}
-                <div className="h-10 w-full flex items-center justify-center overflow-hidden">
-                  <motion.span
-                    key={`${idx}-${ball.currentDisplay}`}
-                    initial={{ y: isLocked ? 0 : -25, opacity: isLocked ? 1 : 0.6 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 25, opacity: 0 }}
-                    transition={{
-                      type: 'spring',
-                      stiffness: 450,
-                      damping: 18,
-                    }}
-                    className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
-                      !isLocked
-                        ? 'text-amber-400 animate-pulse blur-[0.3px]'
-                        : isCycleKey
-                        ? 'text-slate-950'
-                        : 'text-amber-300'
-                    }`}
-                  >
-                    {ball.currentDisplay.toString().padStart(2, '0')}
-                  </motion.span>
-                </div>
-
-                {/* Score badge / status */}
-                <div className="w-full flex items-center justify-between mt-1 pt-1 border-t border-slate-800/80 text-[10px] font-mono">
-                  <span
-                    className={
-                      isCycleKey
-                        ? 'text-slate-950 font-black'
-                        : isLocked
-                        ? 'text-emerald-400 font-bold'
-                        : 'text-slate-500'
-                    }
-                  >
-                    {isLocked ? `${ball.score}%` : '---'}
-                  </span>
-
-                  {isCycleKey && (
-                    <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded bg-slate-950 text-amber-300 border border-amber-400 font-sans">
-                      CICLO
-                    </span>
-                  )}
-
-                  {!isCycleKey && isLocked && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  )}
-                </div>
-
-                {/* Lock indicator shimmer */}
-                {isLocked && (
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: [1, 1.4, 0], opacity: [0.8, 0.4, 0] }}
-                    transition={{ duration: 0.5 }}
-                    className="absolute inset-0 rounded-2xl border-2 border-amber-300 pointer-events-none"
-                  />
-                )}
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-      </div>
-
-      {/* Footer Info */}
-      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-800 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+      {/* Mechanical Progress Track */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
           <span>
-            {isFinished
-              ? 'Predição consolidada: Dezenas âncoras calibradas para distribuição normal de 14 e 15 acertos.'
-              : 'Processando redes neurais estocásticas e desaceleração inercial de números...'}
+            {isRolling
+              ? 'Tambor mecânico em rotação sequencial'
+              : 'Todas as dezenas estabilizadas'}
+          </span>
+          <span className="text-slate-300 font-semibold">
+            {summaryStats.lockedCount}/{finalNumbers.length} travadas ({rollProgress}%)
           </span>
         </div>
-
-        <div className="flex items-center gap-2 font-mono text-[11px]">
-          <span className="text-slate-400">Total Sorteado:</span>
-          <strong className="text-amber-300">{finalNumbers.length} Dezenas</strong>
+        <div className="w-full h-1.5 rounded-full bg-slate-950 border border-slate-800 overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 origin-left"
+            initial={false}
+            animate={{ scaleX: rollProgress / 100 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          />
         </div>
       </div>
-    </div>
+
+      {/* Precision Mechanical Reel Grid */}
+      <div className={`grid ${gridColsClass} gap-3`}>
+        {displayedBalls.map((ball) => {
+          const isCycleKey = ball.isCycle;
+          const isLocked = ball.isLocked;
+          const formattedNum = ball.currentDisplay.toString().padStart(2, '0');
+          const slotLabel = `#${(ball.originalIndex + 1).toString().padStart(2, '0')}`;
+
+          return (
+            <motion.div
+              key={`reel-slot-${ball.originalIndex}`}
+              layout
+              initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.92 }}
+              animate={{
+                opacity: 1,
+                scale: isLocked ? 1 : 1.03,
+              }}
+              transition={{
+                type: 'spring',
+                stiffness: 340,
+                damping: 24,
+              }}
+              className={`relative flex flex-col justify-between rounded-xl border p-3 min-h-[88px] select-none transition-colors duration-150 ${
+                !isLocked
+                  ? 'bg-slate-950 border-amber-400 shadow-lg shadow-amber-500/15'
+                  : isCycleKey
+                  ? 'bg-amber-400 border-amber-300 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-white'
+              }`}
+            >
+              {/* Top Slot Metadata */}
+              <div className="flex items-center justify-between text-[10px] font-mono tabular-nums">
+                <span className={isCycleKey && isLocked ? 'text-slate-900 font-bold' : 'text-slate-500'}>
+                  {slotLabel}
+                </span>
+                <span
+                  className={
+                    !isLocked
+                      ? 'text-amber-400 font-semibold'
+                      : isCycleKey
+                      ? 'text-slate-950 font-black'
+                      : 'text-emerald-400 font-semibold'
+                  }
+                >
+                  {isLocked ? (isCycleKey ? 'Ciclo' : 'OK') : 'Girando'}
+                </span>
+              </div>
+
+              {/* Recessed Drum Digit Window */}
+              <div className="h-10 flex items-center justify-center overflow-hidden my-1">
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={`${ball.originalIndex}-${formattedNum}`}
+                    initial={prefersReducedMotion ? false : { y: isLocked ? -12 : -18, opacity: 0.35 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={prefersReducedMotion ? undefined : { y: 18, opacity: 0 }}
+                    transition={{
+                      duration: isLocked ? 0.22 : 0.08,
+                      ease: [0.16, 1, 0.3, 1],
+                    }}
+                    className={`font-mono tabular-nums text-2xl sm:text-[26px] font-black tracking-tight leading-none ${
+                      !isLocked
+                        ? 'text-amber-300'
+                        : isCycleKey
+                        ? 'text-slate-950'
+                        : 'text-white'
+                    }`}
+                  >
+                    {formattedNum}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+
+              {/* Bottom Score Telemetry */}
+              <div
+                className={`flex items-center justify-between pt-1.5 border-t text-[10px] font-mono tabular-nums ${
+                  isCycleKey && isLocked ? 'border-amber-500/60 text-slate-900 font-bold' : 'border-slate-800/80 text-slate-400'
+                }`}
+              >
+                <span>Score IA</span>
+                <span className={isLocked ? (isCycleKey ? 'text-slate-950 font-black' : 'text-emerald-400 font-bold') : 'text-slate-500'}>
+                  {isLocked ? `${ball.score}%` : '--'}
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Consolidated Sequence & Telemetry Footer */}
+      <div className="pt-4 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-start sm:items-center gap-2 text-slate-300 min-w-0">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
+          <div className="min-w-0">
+            <span className="text-slate-400 mr-1.5">Sequência ordenada:</span>
+            <span className="font-mono tabular-nums font-bold text-white tracking-wide break-words">
+              {summaryStats.sortedTargets.map((n) => n.toString().padStart(2, '0')).join(' · ')}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-[11px] font-mono tabular-nums text-slate-400 shrink-0">
+          <span>
+            Ciclo: <strong className="text-amber-300">{summaryStats.cycleCount}</strong>
+          </span>
+          <span aria-hidden="true" className="text-slate-700">/</span>
+          <span>
+            Score médio: <strong className="text-emerald-400">{summaryStats.avgScore}%</strong>
+          </span>
+          <span aria-hidden="true" className="text-slate-700">/</span>
+          <span>
+            Total: <strong className="text-white">{finalNumbers.length} dez.</strong>
+          </span>
+        </div>
+      </div>
+    </section>
   );
 };

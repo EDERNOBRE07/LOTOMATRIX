@@ -7,6 +7,7 @@ export interface LotericaPdfExportOptions {
   fechamento?: SavedFechamentoPrognostico | null;
   tickets: GameTicket[];
   concurso?: number;
+  concursoAlvo?: number;
   dataConcurso?: string;
   strategyName?: string;
   modalidadeMatriz?: string;
@@ -79,7 +80,8 @@ function drawHighQualityWatermark(
 export function generateProfessionalLotericaPDF({
   fechamento,
   tickets,
-  concurso = 3818,
+  concurso,
+  concursoAlvo,
   dataConcurso,
   strategyName,
   modalidadeMatriz,
@@ -99,9 +101,10 @@ export function generateProfessionalLotericaPDF({
 
   // Resolução de metadados
   const targetTickets = tickets.length > 0 ? tickets : (fechamento?.tickets || []);
-  const resolvedConcurso = concurso || fechamento?.concurso || 3818;
+  const resolvedConcursoBase = Number(concurso || fechamento?.concurso) || 3824;
+  const resolvedConcurso = Number(concursoAlvo || fechamento?.concursoAlvo) || resolvedConcursoBase + 1;
   const resolvedData = dataConcurso || fechamento?.dataConcurso || new Date().toLocaleDateString('pt-BR');
-  const resolvedStrategy = strategyName || fechamento?.tipoFechamento || 'Fechamento Lotérico Inteligente';
+  const resolvedStrategy = strategyName || fechamento?.nomeFechamento || fechamento?.tipoFechamento || 'Fechamento Lotérico Inteligente';
   const resolvedMode = modalidadeMatriz || fechamento?.modalidadeMatriz || `${targetTickets.length} Jogos • Garantia 14 Pontos`;
   const resolvedPool = universoDezenas && universoDezenas.length > 0
     ? universoDezenas
@@ -177,7 +180,7 @@ export function generateProfessionalLotericaPDF({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(203, 213, 225);
-  doc.text(`CONCURSO ALVO: #${resolvedConcurso}`, rightBoxX + 4, 14);
+  doc.text(`CONCURSO ALVO: #${resolvedConcurso} (Base #${resolvedConcursoBase})`, rightBoxX + 4, 14);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -398,8 +401,9 @@ export function generateProfessionalLotericaPDF({
  */
 export function downloadProfessionalLotericaPDF(options: LotericaPdfExportOptions): void {
   const doc = generateProfessionalLotericaPDF(options);
-  const concurso = options.concurso || options.fechamento?.concurso || 3818;
+  const concursoBase = Number(options.concurso || options.fechamento?.concurso) || 3824;
+  const concursoAlvo = Number(options.concursoAlvo || options.fechamento?.concursoAlvo) || concursoBase + 1;
   const totalJogos = options.tickets.length || options.fechamento?.totalJogos || 1;
-  const filename = `lotosniper_comprovante_loterica_concurso_${concurso}_${totalJogos}_jogos.pdf`;
+  const filename = `lotosniper_comprovante_loterica_concurso_${concursoAlvo}_${totalJogos}_jogos.pdf`;
   doc.save(filename);
 }

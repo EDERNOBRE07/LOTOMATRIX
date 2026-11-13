@@ -126,25 +126,31 @@ export function exportHistoricoRoiProbabilidadeJSON({
       bilhetesNaZonaOuro: somaZonaOuroCount,
     },
     distribuicaoProbabilidadeFaixas: distribuicaoRelatorio,
-    fechamentosCadastrados: fechamentos.map((f, idx) => ({
-      posicao: idx + 1,
-      id: f.id,
-      nomeFechamento: f.tipoFechamento,
-      modalidadeMatriz: f.modalidadeMatriz,
-      dataCriacao: f.dataCriacao,
-      concursoAlvo: f.concurso + 1,
-      totalJogos: f.totalJogos,
-      custoTotal: f.custoTotal,
-      universoDezenas: f.universoDezenas,
-      filtros: {
-        soma: f.faixaSoma,
-        paridade: f.paridade,
-        moldura: f.moldura,
-        primos: f.primos,
-        fibonacci: f.fibonacci,
-        repetidas: f.repetidas,
-      },
-    })),
+    fechamentosCadastrados: fechamentos.map((f, idx) => {
+      const concursoBase = Number(f.concurso) || latestDraw.concurso;
+      const concursoAlvo = f.concursoAlvo ?? concursoBase + 1;
+      return {
+        posicao: idx + 1,
+        id: f.id,
+        nomeFechamento: f.nomeFechamento || f.tipoFechamento,
+        tipoFechamento: f.tipoFechamento,
+        modalidadeMatriz: f.modalidadeMatriz,
+        dataCriacao: f.dataCriacao,
+        concursoBase,
+        concursoAlvo,
+        totalJogos: f.totalJogos,
+        custoTotal: f.custoTotal,
+        universoDezenas: f.universoDezenas,
+        filtros: {
+          soma: f.faixaSoma,
+          paridade: f.paridade,
+          moldura: f.moldura,
+          primos: f.primos,
+          fibonacci: f.fibonacci,
+          repetidas: f.repetidas,
+        },
+      };
+    }),
   };
 
   const jsonStr = JSON.stringify(relatorioCompleto, null, 2);
@@ -153,7 +159,8 @@ export function exportHistoricoRoiProbabilidadeJSON({
   const link = document.createElement('a');
   link.href = url;
   const dateSlug = new Date().toISOString().split('T')[0];
-  link.download = `lotosniper_relatorio_roi_probabilidade_concurso_${latestDraw.concurso}_${dateSlug}.json`;
+  const concursoAlvoDownload = Number(latestDraw.concurso) + 1;
+  link.download = `lotosniper_relatorio_roi_concurso_${concursoAlvoDownload}_${dateSlug}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

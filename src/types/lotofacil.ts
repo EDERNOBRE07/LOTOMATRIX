@@ -184,6 +184,7 @@ export interface FechamentoExportMeta {
   excludedNumbers?: number[];
   filters?: FilterCriteria;
   concurso?: number;
+  concursoAlvo?: number;
   dataConcurso?: string;
   timestamp?: number;
 }

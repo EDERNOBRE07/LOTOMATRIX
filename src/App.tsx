@@ -39,7 +39,12 @@ import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSy
 import { buildOptimal18Pool, countMatches, normalizeGameTickets } from './services/combinatorics';
 import { getSavedFechamentos } from './services/savedFechamentosStorage';
 import { soundService } from './services/soundAlert';
-import { auditAndTriggerIntelligentAlerts, auditAndTriggerHybridAlerts } from './services/notificationService';
+import {
+  auditAndTriggerIntelligentAlerts,
+  auditAndTriggerHybridAlerts,
+  getDetailedNotificationRules,
+  fireBrowserPushNotification,
+} from './services/notificationService';
 import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
 import {
   Layers,
@@ -424,10 +429,13 @@ export default function App() {
   const triggerAutomaticJackpotAlerts = (draw: LotofacilDraw, ticketsToCheck: GameTicket[]) => {
     if (!ticketsToCheck || ticketsToCheck.length === 0 || !draw?.dezenas) return;
 
-    const alertEnabled = localStorage.getItem('lotosniper_alert_14_15_enabled') !== 'false';
+    const detailed = getDetailedNotificationRules();
+    if (!detailed.masterEnabled) return;
+
+    const prizeRule = detailed.events.premiacoes13Plus;
+    const alertEnabled = localStorage.getItem('lotosniper_alert_14_15_enabled') !== 'false' && prizeRule.enabled;
     if (!alertEnabled) return;
 
-    // Padrão '13_plus' para alertar 13, 14 e 15 acertos conforme solicitado
     const threshold = (localStorage.getItem('lotosniper_alert_threshold') as '15_only' | '14_and_15' | '13_plus') || '13_plus';
 
     let maxHits = 0;
@@ -449,13 +457,15 @@ export default function App() {
       (threshold === '13_plus' && maxHits >= 13);
 
     if (isTriggered) {
-      // 1. Disparar Notificação Nativa do Navegador (funciona em 2º plano via Service Worker)
+      // 1. Disparar Notificação Nativa e Alerta Sonoro respeitando regras individuais
       sendNativeJackpotNotification({
         concurso: draw.concurso,
         maxHits,
         winningTicketsCount: winningCount,
         bestTicketIndex: bestIdx,
         dataSorteio: draw.data,
+        playAudio: !detailed.quietMode && prizeRule.soundEnabled,
+        sendPush: prizeRule.nativePushEnabled,
       });
 
       // 2. Exibir banner de premiação no topo da tela
@@ -471,30 +481,64 @@ export default function App() {
   // Auditoria passiva de Alertas de Oportunidade (Atrasos Críticos & Ciclo < 3 ausentes)
   const triggerAutomaticOpportunityAlerts = (draw: LotofacilDraw, stats: DezenaStats[], pendingCycle: number[]) => {
     try {
-      const cfgRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
-      if (!cfgRaw) return;
-      const cfg = JSON.parse(cfgRaw);
-      if (!cfg.enabled) return;
+      const detailed = getDetailedNotificationRules();
+      if (!detailed.masterEnabled) return;
 
-      const delayedNums = stats.filter((s) => {
-        const isTarget = cfg.monitorMode === 'all' || (cfg.customNumbers || []).includes(s.numero);
-        return isTarget && s.atrasoAtual >= (cfg.criticalDelayThreshold || 5);
-      });
+      const delayRule = detailed.events.atrasosCriticos;
+      const cycleRule = detailed.events.fimCiclo;
 
-      const cycleTriggered = cfg.cycleAlertEnabled && pendingCycle.length > 0 && pendingCycle.length < 3;
+      let monitorMode: 'all' | 'custom' = 'all';
+      let customNumbers: number[] = [];
+      try {
+        const cfgRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
+        if (cfgRaw) {
+          const cfg = JSON.parse(cfgRaw);
+          if (cfg.monitorMode) monitorMode = cfg.monitorMode;
+          if (Array.isArray(cfg.customNumbers)) customNumbers = cfg.customNumbers;
+        }
+      } catch {}
 
-      if (delayedNums.length > 0 || cycleTriggered) {
-        if (cfg.soundEnabled) {
+      const delayThreshold = delayRule.threshold ?? 5;
+      const cycleThreshold = cycleRule.threshold ?? 3;
+
+      const delayedNums = delayRule.enabled
+        ? stats.filter((s) => {
+            const isTarget = monitorMode === 'all' || customNumbers.includes(s.numero);
+            return isTarget && s.atrasoAtual >= delayThreshold;
+          })
+        : [];
+
+      const cycleTriggered =
+        cycleRule.enabled && pendingCycle.length > 0 && pendingCycle.length <= cycleThreshold;
+
+      if (delayedNums.length > 0) {
+        if (!detailed.quietMode && delayRule.soundEnabled) {
           soundService.playOpportunityAlert();
         }
-        if (cfg.pushEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          const body = cycleTriggered
-            ? `Ciclo das 25 Dezenas em iminência de fechar: restam apenas ${pendingCycle.join(', ')}!`
-            : `Alerta de Atraso Crítico: ${delayedNums.length} dezenas em hiato (${delayedNums.map(d => d.numero.toString().padStart(2, '0')).slice(0, 3).join(', ')}).`;
-          new Notification('🎯 LotoSniper • Alerta de Oportunidade', {
-            body,
-            icon: '/favicon.ico',
-          });
+        if (delayRule.nativePushEnabled) {
+          void fireBrowserPushNotification(
+            `LotoSniper • Atraso Crítico (#${draw.concurso})`,
+            `${delayedNums.length} dezenas atingiram hiato ≥ ${delayThreshold} concursos: ${delayedNums
+              .map((d) => d.numero.toString().padStart(2, '0'))
+              .slice(0, 5)
+              .join(', ')}.`,
+            `lotosniper-delay-${draw.concurso}`
+          );
+        }
+      }
+
+      if (cycleTriggered) {
+        if (!detailed.quietMode && cycleRule.soundEnabled) {
+          soundService.playCycleAlertSound();
+        }
+        if (cycleRule.nativePushEnabled) {
+          void fireBrowserPushNotification(
+            `LotoSniper • Reta Final do Ciclo (#${draw.concurso})`,
+            `Restam apenas ${pendingCycle.length} dezenas (${pendingCycle
+              .map((n) => n.toString().padStart(2, '0'))
+              .join(', ')}) para fechar o ciclo atual.`,
+            `lotosniper-cycle-${draw.concurso}`
+          );
         }
       }
     } catch (e) {

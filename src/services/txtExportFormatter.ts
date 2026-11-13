@@ -12,6 +12,7 @@ export interface FechamentoExportMeta {
   excludedNumbers?: number[];
   filters?: FilterCriteria;
   concurso?: number;
+  concursoAlvo?: number;
   dataConcurso?: string;
   timestamp?: number;
 }
@@ -88,11 +89,15 @@ export function generateFechamentoTxtContent({
 
   const lines: string[] = [];
 
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
+
   // 1. BANNER PRINCIPAL
   lines.push('================================================================================');
   lines.push('LOTOSNIPER - GERENCIADOR & EXPORTADOR DE JOGOS (LOTOFÁCIL CAIXA)');
   lines.push('================================================================================');
-  lines.push(`# Concurso Base: #${meta?.concurso || latestDraw.concurso} (${meta?.dataConcurso || latestDraw.data})`);
+  lines.push(`# Concurso Alvo da Aposta: #${concursoAlvo}`);
+  lines.push(`# Concurso Base (Ref. Estatística): #${concursoBase} (${meta?.dataConcurso || latestDraw.data})`);
   lines.push(`# Dezenas do Concurso Base: ${latestDraw.dezenas.map((n) => n.toString().padStart(2, '0')).join(' ')}`);
   lines.push(`# Data e Hora de Exportação: ${dataExportacao}`);
   lines.push(`# Total de Jogos Exportados: ${totalJogos} apostas de 15 dezenas`);

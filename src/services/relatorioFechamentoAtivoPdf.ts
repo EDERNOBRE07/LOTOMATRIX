@@ -305,7 +305,7 @@ export function downloadRelatorioFechamentoAtivoPDF(options: RelatorioFechamento
   }
 
   // Disparo do download
-  const safeName = (nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `Relatorio_Fechamento_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`;
+  const safeName = String(nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
+  const fileName = `Relatorio_concurso_${concursoAlvo}_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(fileName);
 }
