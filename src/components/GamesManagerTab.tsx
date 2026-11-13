@@ -10,7 +10,6 @@ import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
-import { AnaliseROISavedGames } from './AnaliseROISavedGames';
 import {
   getSavedFechamentos,
   getDuplicateFechamentosReport,
@@ -334,7 +333,6 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
-  TrendingUp,
   ShieldCheck,
   ShieldAlert,
   SlidersHorizontal,
@@ -499,8 +497,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     includeStatsFooter: true,
   });
   const [isPdfConfigOpen, setIsPdfConfigOpen] = useState<boolean>(false);
-  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais' | 'analise_roi'>(
-    tickets.length > 0 ? 'bilhetes_individuais' : 'fechamentos_salvos'
+  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais'>(
+    'fechamentos_salvos'
   );
 
   // Diagnóstico em tempo real de disponibilidade no localStorage vs prop savedTickets
@@ -522,11 +520,17 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     const handleUpdate = () => {
       setDiagRefreshNonce((n) => n + 1);
     };
+    const handleBackupRestored = () => {
+      setDiagRefreshNonce((n) => n + 1);
+      setActiveSection('fechamentos_salvos');
+    };
     window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
     window.addEventListener('lotosniper-saved-tickets-updated', handleUpdate);
+    window.addEventListener('lotosniper-backup-restored', handleBackupRestored);
     return () => {
       window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
       window.removeEventListener('lotosniper-saved-tickets-updated', handleUpdate);
+      window.removeEventListener('lotosniper-backup-restored', handleBackupRestored);
     };
   }, []);
 
@@ -1203,19 +1207,6 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               {tickets.length}
             </span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSection('analise_roi')}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-              activeSection === 'analise_roi'
-                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
-                : 'text-emerald-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span>Análise de ROI</span>
-          </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1443,12 +1434,6 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
       {/* VISÃO 2: GERENCIADOR DE BILHETES INDIVIDUAIS */}
       {activeSection === 'bilhetes_individuais' && (
         <div className="space-y-6">
-          {/* Análise de ROI (Return on Investment) com Configuração de Aposta Mínima */}
-          <AnaliseROISavedGames
-            tickets={tickets}
-            latestDraw={latestDraw}
-          />
-
           {/* Jogos Vencedores Auditados pelo Service Worker */}
           <AuditedWinningGamesList
             latestDraw={latestDraw}
@@ -2182,22 +2167,6 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           </div>
         </>
       )}
-        </div>
-      )}
-
-      {/* VISÃO 3: ANÁLISE DE ROI & LUCRO LÍQUIDO (RETORNO FINANCEIRO) */}
-      {activeSection === 'analise_roi' && (
-        <div className="space-y-6">
-          <AnaliseROISavedGames
-            tickets={tickets}
-            latestDraw={latestDraw}
-          />
-          <AuditedWinningGamesList
-            latestDraw={latestDraw}
-            onGoToConferencia={() => {
-              window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'conferencia' }));
-            }}
-          />
         </div>
       )}
 

@@ -6,7 +6,11 @@
  */
 
 import { GameTicket } from '../types/lotofacil';
-import { getSavedFechamentos, SavedFechamentoPrognostico } from './savedFechamentosStorage';
+import {
+  getSavedFechamentos,
+  normalizeSavedFechamento,
+  SavedFechamentoPrognostico,
+} from './savedFechamentosStorage';
 import { soundService } from './soundAlert';
 
 export interface BackupDataPayload {
@@ -305,15 +309,29 @@ function applyBackupPayload(payload: BackupDataPayload, mode: 'replace' | 'merge
     }
   }
 
-  // 2. Fechamentos salvos
+  // 2. Fechamentos salvos (sincronizando lotosniper_saved_prognosticos e lotosniper_saved_fechamentos)
+  let finalFechamentos: SavedFechamentoPrognostico[] = [];
   if (meusJogos.fechamentosSalvos && Array.isArray(meusJogos.fechamentosSalvos)) {
+    const normalizedIncoming = meusJogos.fechamentosSalvos.map((f, idx) =>
+      normalizeSavedFechamento(f, idx)
+    );
     if (mode === 'merge') {
       const existing = getSavedFechamentos();
-      const existingIds = new Set(existing.map((f) => f.id));
-      const merged = [...existing, ...meusJogos.fechamentosSalvos.filter((f) => !existingIds.has(f.id))];
-      localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(merged.slice(0, 50)));
+      const importedIds = new Set(normalizedIncoming.map((f) => f.id));
+      finalFechamentos = [
+        ...normalizedIncoming,
+        ...existing.filter((f) => !importedIds.has(f.id)),
+      ].slice(0, 200);
     } else {
-      localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(meusJogos.fechamentosSalvos.slice(0, 50)));
+      finalFechamentos = normalizedIncoming.slice(0, 200);
+    }
+    localStorage.setItem('lotosniper_prognosticos_initialized', 'true');
+    localStorage.setItem('lotosniper_saved_prognosticos', JSON.stringify(finalFechamentos));
+    localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(finalFechamentos));
+
+    if ((!meusJogos.ticketsAtuais || meusJogos.ticketsAtuais.length === 0) && finalFechamentos.length > 0) {
+      const flatTickets = finalFechamentos.flatMap((f) => f.tickets || []);
+      localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(flatTickets));
     }
   }
 
@@ -347,7 +365,13 @@ function applyBackupPayload(payload: BackupDataPayload, mode: 'replace' | 'merge
   // Emite evento global para que todas as abas recarreguem seu estado instantaneamente
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('lotosniper-backup-restored', { detail: payload }));
-    window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: meusJogos.fechamentosSalvos }));
+    window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: finalFechamentos }));
+    try {
+      const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
+      if (rawTickets) {
+        window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: JSON.parse(rawTickets) }));
+      }
+    } catch {}
   }
 }
 

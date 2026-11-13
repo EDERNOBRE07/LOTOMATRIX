@@ -12,6 +12,7 @@ import { ModoDuelo } from './ModoDuelo';
 import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
 import { QuickBacktestD3Area } from './QuickBacktestD3Area';
 import { MapaCalorProbabilidadeVolante10 } from './MapaCalorProbabilidadeVolante10';
+import { AnaliseROISavedGames } from './AnaliseROISavedGames';
 import {
   Play,
   RotateCcw,
@@ -54,6 +55,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   };
   const [activeSubTab, setActiveSubTab] = useState<
     | 'quick_backtest'
+    | 'auditoria_roi'
     | 'mapa_calor_volante_10'
     | 'backtest'
     | 'backtest_d3'
@@ -62,7 +64,6 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     | 'calculadora'
     | 'animacao'
     | 'espelho'
-
   >('quick_backtest');
   const [isEfficiencyModalOpen, setIsEfficiencyModalOpen] = useState(false);
   const [simulationScope, setSimulationScope] = useState<
@@ -211,6 +212,27 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               }`}
             >
               ÁREA D3
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('auditoria_roi')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition cursor-pointer ${
+              activeSubTab === 'auditoria_roi'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-black'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Auditoria de Lucro Líquido & ROI</span>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                activeSubTab === 'auditoria_roi'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-400/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              ROI REAL
             </span>
           </button>
 
@@ -372,11 +394,22 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
       {/* Render Subtab Views */}
       {activeSubTab === 'quick_backtest' ? (
-        <QuickBacktestD3Area
+        <div className="space-y-6">
+          <QuickBacktestD3Area
+            tickets={tickets}
+            latestDraw={latestDraw}
+            onGoToGenerator={onGoToGenerator}
+            onGoToGamesManager={handleGoToGamesManager}
+          />
+          <AnaliseROISavedGames
+            tickets={tickets}
+            latestDraw={latestDraw}
+          />
+        </div>
+      ) : activeSubTab === 'auditoria_roi' ? (
+        <AnaliseROISavedGames
           tickets={tickets}
           latestDraw={latestDraw}
-          onGoToGenerator={onGoToGenerator}
-          onGoToGamesManager={handleGoToGamesManager}
         />
       ) : activeSubTab === 'mapa_calor_volante_10' ? (
         <MapaCalorProbabilidadeVolante10 latestDraw={latestDraw} />

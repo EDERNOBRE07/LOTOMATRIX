@@ -159,6 +159,7 @@ export function normalizeSavedFechamento(
       maxConsecutivas: typeof t?.maxConsecutivas === 'number' ? t.maxConsecutivas : 4,
       scoreIA: typeof t?.scoreIA === 'number' ? t.scoreIA : 92,
       auditoriaAnomalias: t?.auditoriaAnomalias || 'Conforme filtros',
+      ...(Array.isArray(t?.tags) ? { tags: t.tags.map((tag: any) => String(tag)) } : {}),
     };
   });
 
@@ -307,7 +308,8 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
       } catch {}
     }
 
-    return normalized;
+    const sorted = [...normalized].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    return sorted;
   } catch (err) {
     console.warn('[LotoSniper] Erro ao carregar fechamentos salvos:', err);
     return [];
@@ -504,7 +506,8 @@ export function saveFechamentoPrognostico(
     // Prepend new prognostic
     unmarkDeletedFechamentoId(fechamento.id);
     const updated = [fechamento, ...list.filter((f) => f.id !== fechamento.id)];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 50))); // Keep last 50
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.slice(0, 200))); // Keep up to 200
+    localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(updated.slice(0, 200)));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: updated }));
       window.dispatchEvent(
@@ -1038,34 +1041,140 @@ import { sanitizarFechamentosSalvos } from './sanitizer';
 export { sanitizarFechamentosSalvos };
 export type { SanitizerReport } from './sanitizer';
 
-export function restoreBackupJSON(jsonString: string): { success: boolean; count: number; sanitizedCount?: number; error?: string } {
+export function inspectBackupJSONPreview(jsonString: string): {
+  valid: boolean;
+  app?: string;
+  versao?: string;
+  dataExportacao?: string;
+  totalFechamentos: number;
+  totalTickets: number;
+  error?: string;
+} {
+  try {
+    const parsed = JSON.parse(jsonString);
+    const list = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.fechamentos)
+      ? parsed.fechamentos
+      : Array.isArray(parsed?.meusJogos?.fechamentosSalvos)
+      ? parsed.meusJogos.fechamentosSalvos
+      : null;
+
+    if (!list || list.length === 0) {
+      return {
+        valid: false,
+        totalFechamentos: 0,
+        totalTickets: 0,
+        error: 'Nenhum fechamento válido encontrado no arquivo JSON.',
+      };
+    }
+
+    const totalTickets = list.reduce(
+      (acc: number, item: any) =>
+        acc + (Array.isArray(item?.tickets) ? item.tickets.length : Array.isArray(item?.jogos) ? item.jogos.length : Array.isArray(item?.dezenas) ? 1 : 0),
+      0
+    );
+
+    return {
+      valid: true,
+      app: parsed?.app ? String(parsed.app) : 'LotoSniper AI Pro',
+      versao: parsed?.versao ? String(parsed.versao) : undefined,
+      dataExportacao: parsed?.dataExportacao || parsed?.dataHoraFormatada || undefined,
+      totalFechamentos: list.length,
+      totalTickets,
+    };
+  } catch {
+    return {
+      valid: false,
+      totalFechamentos: 0,
+      totalTickets: 0,
+      error: 'Arquivo JSON inválido ou corrompido.',
+    };
+  }
+}
+
+export function restoreBackupJSON(
+  jsonString: string,
+  mode: 'merge' | 'replace' = 'merge'
+): {
+  success: boolean;
+  count: number;
+  totalAfter?: number;
+  totalTickets?: number;
+  sanitizedCount?: number;
+  error?: string;
+} {
   try {
     const parsed = JSON.parse(jsonString);
     const fechamentosToRestore = Array.isArray(parsed)
       ? parsed
-      : Array.isArray(parsed.fechamentos)
+      : Array.isArray(parsed?.fechamentos)
       ? parsed.fechamentos
+      : Array.isArray(parsed?.meusJogos?.fechamentosSalvos)
+      ? parsed.meusJogos.fechamentosSalvos
       : null;
 
     if (!fechamentosToRestore || fechamentosToRestore.length === 0) {
       return { success: false, count: 0, error: 'Nenhum fechamento válido encontrado no arquivo.' };
     }
 
-    // Aplica sanitização forense estrita aos fechamentos antes de persistir
-    const { fechamentos: sanitizedFechamentos, sanitizedCount } = sanitizarFechamentosSalvos(fechamentosToRestore);
+    // Lê os registros atuais ANTES de sanitizar para preservar mesclagem real
+    const current = mode === 'merge' ? getSavedFechamentos() : [];
 
-    const current = getSavedFechamentos();
-    const currentIds = new Set(current.map((f) => f.id));
-    const merged = [...sanitizedFechamentos.filter((f: SavedFechamentoPrognostico) => !currentIds.has(f.id)), ...current];
+    // Aplica sanitização forense estrita em memória sem sobrescrever o localStorage prematuramente
+    const { fechamentos: sanitizedFechamentos, sanitizedCount } = sanitizarFechamentosSalvos(
+      fechamentosToRestore,
+      { persist: false }
+    );
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged.slice(0, 50)));
+    // Garante que IDs restaurados sejam removidos da lista de tombstones
+    sanitizedFechamentos.forEach((f) => unmarkDeletedFechamentoId(f.id));
+
+    let finalList: SavedFechamentoPrognostico[];
+    if (mode === 'replace') {
+      finalList = sanitizedFechamentos;
+    } else {
+      const importedIds = new Set(sanitizedFechamentos.map((f) => f.id));
+      finalList = [
+        ...sanitizedFechamentos,
+        ...current.filter((f) => !importedIds.has(f.id)),
+      ];
+    }
+
+    // Ordena do mais recente para o mais antigo e persiste até 200 fechamentos
+    finalList = finalList
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 200);
+
+    const allTickets = finalList.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : []));
+
+    localStorage.setItem(INITIALIZED_KEY, 'true');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
+    localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(finalList));
+    localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(allTickets));
+
+    // Também restaura tags se presentes no formato completo v2
+    if (parsed?.meusJogos?.ticketTags && typeof parsed.meusJogos.ticketTags === 'object') {
+      try {
+        localStorage.setItem('lotosniper_ticket_tags', JSON.stringify(parsed.meusJogos.ticketTags));
+      } catch {}
+    }
+
     triggerAutoBackupSnapshot();
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: merged }));
+      window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: finalList }));
+      window.dispatchEvent(new CustomEvent('lotosniper-saved-tickets-updated', { detail: allTickets }));
+      window.dispatchEvent(new CustomEvent('lotosniper-backup-restored', { detail: { fechamentos: finalList } }));
     }
 
-    return { success: true, count: sanitizedFechamentos.length, sanitizedCount };
+    return {
+      success: true,
+      count: sanitizedFechamentos.length,
+      totalAfter: finalList.length,
+      totalTickets: allTickets.length,
+      sanitizedCount,
+    };
   } catch (e) {
     return { success: false, count: 0, error: 'Arquivo JSON inválido ou corrompido.' };
   }

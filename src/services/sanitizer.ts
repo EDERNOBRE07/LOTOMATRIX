@@ -20,7 +20,10 @@ export type SanitizerReport = any[] & {
  * 4. Salva apenas Fechamentos válidos em 'lotosniper_saved_prognosticos' e 'lotosniper_saved_fechamentos'.
  * 5. Salva os bilhetes individuais limpos em 'lotosniper_saved_tickets'.
  */
-export function sanitizarFechamentosSalvos(customStorageOrData?: any): SanitizerReport {
+export function sanitizarFechamentosSalvos(
+  customStorageOrData?: any,
+  options: { persist?: boolean } = { persist: true }
+): SanitizerReport {
   const TICKETS_KEY = 'lotosniper_saved_tickets';
   const PROGNOSTICOS_KEY = 'lotosniper_saved_prognosticos';
   const FECHAMENTOS_KEY = 'lotosniper_saved_fechamentos';
@@ -66,6 +69,8 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
   } else if (rawData && typeof rawData === 'object') {
     if (Array.isArray(rawData.fechamentos)) {
       rawList = rawData.fechamentos;
+    } else if (Array.isArray(rawData.meusJogos?.fechamentosSalvos)) {
+      rawList = rawData.meusJogos.fechamentosSalvos;
     } else if (Array.isArray(rawData.tickets)) {
       rawList = rawData.tickets;
     } else {
@@ -147,12 +152,12 @@ export function sanitizarFechamentosSalvos(customStorageOrData?: any): Sanitizer
   // Extrai todos os bilhetes limpos
   const allTickets: GameTicket[] = sanitizedFechamentos.flatMap((f) => f.tickets);
 
-  // Persistência segura e segmentada no localStorage
-  if (typeof localStorage !== 'undefined') {
+  // Persistência segura e segmentada no localStorage (quando options.persist !== false)
+  if (options.persist !== false && typeof localStorage !== 'undefined') {
     try {
       // 1. Fechamentos em lotosniper_saved_prognosticos e lotosniper_saved_fechamentos
-      localStorage.setItem(PROGNOSTICOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 50)));
-      localStorage.setItem(FECHAMENTOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 50)));
+      localStorage.setItem(PROGNOSTICOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 200)));
+      localStorage.setItem(FECHAMENTOS_KEY, JSON.stringify(sanitizedFechamentos.slice(0, 200)));
 
       // 2. Bilhetes limpos em lotosniper_saved_tickets
       localStorage.setItem(TICKETS_KEY, JSON.stringify(allTickets));
