@@ -31,6 +31,67 @@ const ai = apiKey
     })
   : null;
 
+const GEMINI_TEXT_MODELS = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'] as const;
+const geminiModelCooldownUntil: Record<string, number> = {};
+const aiOptimizeCache = new Map<string, { data: any; source: string; expiresAt: number }>();
+const aiEfficiencyCache = new Map<string, { report: any; source: string; expiresAt: number }>();
+const AI_CACHE_TTL_MS = 15 * 60 * 1000;
+
+function isQuotaOrRateLimitError(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  return (
+    err?.status === 429 ||
+    err?.code === 429 ||
+    msg.includes('429') ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.toLowerCase().includes('quota')
+  );
+}
+
+async function generateJsonWithGeminiFallback(
+  contents: string,
+  responseSchema: any,
+  timeoutMs = 8000
+): Promise<{ text: string; model: string } | null> {
+  if (!ai) return null;
+  const now = Date.now();
+
+  for (const modelName of GEMINI_TEXT_MODELS) {
+    const cooldownUntil = geminiModelCooldownUntil[modelName] || 0;
+    if (now < cooldownUntil) {
+      continue;
+    }
+
+    try {
+      const aiCall = ai.models.generateContent({
+        model: modelName,
+        contents,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema,
+        },
+      });
+      const response = await withTimeout(aiCall, timeoutMs, `Gemini ${modelName} timeout`);
+      if (response?.text) {
+        return { text: response.text, model: modelName };
+      }
+    } catch (aiError: any) {
+      if (isQuotaOrRateLimitError(aiError)) {
+        geminiModelCooldownUntil[modelName] = Date.now() + 15 * 60 * 1000;
+        console.info(
+          `[LotoSniper AI] Cota/rate-limit atingida no modelo ${modelName}; alternando para fallback estatístico por 15 min.`
+        );
+      } else {
+        console.info(
+          `[LotoSniper AI] Modelo ${modelName} indisponível no momento (${aiError?.message || 'timeout'}); utilizando fallback.`
+        );
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Utility to execute an async operation with a strict timeout guard,
  * ensuring timeouts don't hang and timers are promptly cleared.
@@ -374,6 +435,17 @@ app.post('/api/ai/optimize', async (req: Request, res: Response) => {
     // Dynamic Cycle status
     const faltantesCiclo = LATEST_DRAW.cicloAtual.dezenasFaltantesParaFechar;
 
+    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${dezenasFixas.join(',')}:${dezenasExcluidas.join(',')}:${metaGarantia}`;
+    const cachedOptimize = aiOptimizeCache.get(optimizeCacheKey);
+    if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
+      return res.json({
+        success: true,
+        source: cachedOptimize.source,
+        cached: true,
+        data: cachedOptimize.data,
+      });
+    }
+
     // If Gemini API client is available, run deep mathematical prompt with structured output
     if (ai) {
       try {
@@ -406,76 +478,76 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 - dezenasChave: array com as 5 dezenas de maior peso estratégico.
 - padroesSugeridos: { paresImpares: string, primos: string, moldura: string, somaFaixa: string, repetidas: string, fibonacci: string }.`;
 
-        const aiCall = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                scores: {
-                  type: Type.ARRAY,
-                  items: { type: Type.NUMBER },
-                  description: 'Pontuação de 1 a 100 para cada dezena de 1 a 25',
-                },
-                dezenasRecomendadas18: {
-                  type: Type.ARRAY,
-                  items: { type: Type.INTEGER },
-                  description: 'Conjunto das 18 dezenas mais prováveis',
-                },
-                dezenasRecomendadas15_Ouro: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.ARRAY,
-                    items: { type: Type.INTEGER },
-                  },
-                  description: 'Apostas ouro de 15 dezenas',
-                },
-                taxaConfianca: { type: Type.NUMBER },
-                justificativaTecnica: { type: Type.STRING },
-                dezenasChave: {
+        const geminiResult = await generateJsonWithGeminiFallback(
+          prompt,
+          {
+            type: Type.OBJECT,
+            properties: {
+              scores: {
+                type: Type.ARRAY,
+                items: { type: Type.NUMBER },
+                description: 'Pontuação de 1 a 100 para cada dezena de 1 a 25',
+              },
+              dezenasRecomendadas18: {
+                type: Type.ARRAY,
+                items: { type: Type.INTEGER },
+                description: 'Conjunto das 18 dezenas mais prováveis',
+              },
+              dezenasRecomendadas15_Ouro: {
+                type: Type.ARRAY,
+                items: {
                   type: Type.ARRAY,
                   items: { type: Type.INTEGER },
                 },
-                padroesSugeridos: {
-                  type: Type.OBJECT,
-                  properties: {
-                    paresImpares: { type: Type.STRING },
-                    primos: { type: Type.STRING },
-                    moldura: { type: Type.STRING },
-                    somaFaixa: { type: Type.STRING },
-                    repetidas: { type: Type.STRING },
-                    fibonacci: { type: Type.STRING },
-                  },
+                description: 'Apostas ouro de 15 dezenas',
+              },
+              taxaConfianca: { type: Type.NUMBER },
+              justificativaTecnica: { type: Type.STRING },
+              dezenasChave: {
+                type: Type.ARRAY,
+                items: { type: Type.INTEGER },
+              },
+              padroesSugeridos: {
+                type: Type.OBJECT,
+                properties: {
+                  paresImpares: { type: Type.STRING },
+                  primos: { type: Type.STRING },
+                  moldura: { type: Type.STRING },
+                  somaFaixa: { type: Type.STRING },
+                  repetidas: { type: Type.STRING },
+                  fibonacci: { type: Type.STRING },
                 },
               },
-              required: [
-                'scores',
-                'dezenasRecomendadas18',
-                'dezenasRecomendadas15_Ouro',
-                'taxaConfianca',
-                'justificativaTecnica',
-                'dezenasChave',
-              ],
             },
+            required: [
+              'scores',
+              'dezenasRecomendadas18',
+              'dezenasRecomendadas15_Ouro',
+              'taxaConfianca',
+              'justificativaTecnica',
+              'dezenasChave',
+            ],
           },
-        });
+          8000
+        );
 
-        const response = await withTimeout(aiCall, 8000, 'Gemini AI optimize timeout');
-        const text = response?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
+        if (geminiResult?.text) {
+          const parsed = JSON.parse(geminiResult.text);
           if (parsed && Array.isArray(parsed.scores) && Array.isArray(parsed.dezenasRecomendadas18) && parsed.dezenasRecomendadas18.length === 18) {
+            aiOptimizeCache.set(optimizeCacheKey, {
+              data: parsed,
+              source: geminiResult.model,
+              expiresAt: Date.now() + AI_CACHE_TTL_MS,
+            });
             return res.json({
               success: true,
-              source: 'gemini-3.8-flash',
+              source: geminiResult.model,
               data: parsed,
             });
           }
         }
       } catch (aiError: any) {
-        console.warn('[LotoSniper AI Optimize] Chamada ao Gemini indisponível ou timeout (' + (aiError?.message || aiError) + '). Ativando motor estatístico heurístico determinístico...');
+        console.info('[LotoSniper AI Optimize] Alternando para motor estatístico heurístico determinístico:', aiError?.message || 'indisponível');
       }
     }
 
@@ -605,6 +677,17 @@ app.post('/api/ai/efficiency-report', async (req: Request, res: Response) => {
     const quentes50 = topQuentes50.slice(0, 7).map((x) => x.num);
     const frias50 = topQuentes50.slice(-7).map((x) => x.num);
 
+    const effCacheKey = `${latestDraw?.concurso || 3824}:${totalJogos}`;
+    const cachedEff = aiEfficiencyCache.get(effCacheKey);
+    if (cachedEff && cachedEff.expiresAt > Date.now()) {
+      return res.json({
+        success: true,
+        source: cachedEff.source,
+        cached: true,
+        report: cachedEff.report,
+      });
+    }
+
     if (ai) {
       try {
         const prompt = `Você é o auditor estatístico e estrategista de inteligência artificial do LotoSniper.
@@ -627,120 +710,120 @@ INSTRUÇÕES DO LAUDO:
 4. Forneça pontuação de eficiência (0 a 100), classificação, pontos fortes, vulnerabilidades críticas e ajustes recomendados específicos (quais dezenas fixar e quais alternar).
 5. Forneça uma análise detalhada de AJUSTE FINO (fine-tuning) para as próximas apostas: calibração de paridade, faixa de soma ideal, moldura, primos, repetidas do concurso anterior, dezenas em transição de ignição e dicas práticas.`;
 
-        const aiCall = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                scoreEficiencia: { type: Type.NUMBER, description: 'Score de 0 a 100' },
-                classificacao: { type: Type.STRING, description: 'Excelente, Alta Eficiência, Moderada ou Vulnerável' },
-                diagnosticoGeral: { type: Type.STRING },
-                pontosFortes: { type: Type.ARRAY, items: { type: Type.STRING } },
-                vulnerabilidades: { type: Type.ARRAY, items: { type: Type.STRING } },
-                tendencias50Concursos: {
-                  type: Type.OBJECT,
-                  properties: {
-                    dezenasSuperQuentes: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                    dezenasFrias: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                    mediaSoma: { type: Type.NUMBER },
-                    padraoDominante: { type: Type.STRING },
-                  },
-                  required: ['dezenasSuperQuentes', 'dezenasFrias', 'mediaSoma', 'padraoDominante'],
+        const geminiResult = await generateJsonWithGeminiFallback(
+          prompt,
+          {
+            type: Type.OBJECT,
+            properties: {
+              scoreEficiencia: { type: Type.NUMBER, description: 'Score de 0 a 100' },
+              classificacao: { type: Type.STRING, description: 'Excelente, Alta Eficiência, Moderada ou Vulnerável' },
+              diagnosticoGeral: { type: Type.STRING },
+              pontosFortes: { type: Type.ARRAY, items: { type: Type.STRING } },
+              vulnerabilidades: { type: Type.ARRAY, items: { type: Type.STRING } },
+              tendencias50Concursos: {
+                type: Type.OBJECT,
+                properties: {
+                  dezenasSuperQuentes: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                  dezenasFrias: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                  mediaSoma: { type: Type.NUMBER },
+                  padraoDominante: { type: Type.STRING },
                 },
-                ajustesRecomendados: { type: Type.ARRAY, items: { type: Type.STRING } },
-                dezenasSugeridasFixar: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                dezenasSugeridasAlternar: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                potencialOtimizacaoPercent: { type: Type.NUMBER },
-                ajusteFino: {
-                  type: Type.OBJECT,
-                  properties: {
-                    calibracaoParidade: {
-                      type: Type.OBJECT,
-                      properties: {
-                        sugerido: { type: Type.STRING },
-                        justificativa: { type: Type.STRING },
-                      },
-                      required: ['sugerido', 'justificativa'],
-                    },
-                    calibracaoSoma: {
-                      type: Type.OBJECT,
-                      properties: {
-                        faixaOtima: { type: Type.STRING },
-                        justificativa: { type: Type.STRING },
-                      },
-                      required: ['faixaOtima', 'justificativa'],
-                    },
-                    calibracaoMoldura: {
-                      type: Type.OBJECT,
-                      properties: {
-                        faixaOtima: { type: Type.STRING },
-                        justificativa: { type: Type.STRING },
-                      },
-                      required: ['faixaOtima', 'justificativa'],
-                    },
-                    calibracaoPrimos: {
-                      type: Type.OBJECT,
-                      properties: {
-                        faixaOtima: { type: Type.STRING },
-                        justificativa: { type: Type.STRING },
-                      },
-                      required: ['faixaOtima', 'justificativa'],
-                    },
-                    calibracaoRepetidasAnterior: {
-                      type: Type.OBJECT,
-                      properties: {
-                        faixaIdeal: { type: Type.STRING },
-                        dezenasPrioritarias: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                      },
-                      required: ['faixaIdeal', 'dezenasPrioritarias'],
-                    },
-                    dezenasTransicaoIgnicao: { type: Type.ARRAY, items: { type: Type.INTEGER } },
-                    dicasFineTuningProximasApostas: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  },
-                  required: [
-                    'calibracaoParidade',
-                    'calibracaoSoma',
-                    'calibracaoMoldura',
-                    'calibracaoPrimos',
-                    'calibracaoRepetidasAnterior',
-                    'dezenasTransicaoIgnicao',
-                    'dicasFineTuningProximasApostas',
-                  ],
-                },
+                required: ['dezenasSuperQuentes', 'dezenasFrias', 'mediaSoma', 'padraoDominante'],
               },
-              required: [
-                'scoreEficiencia',
-                'classificacao',
-                'diagnosticoGeral',
-                'pontosFortes',
-                'vulnerabilidades',
-                'tendencias50Concursos',
-                'ajustesRecomendados',
-                'dezenasSugeridasFixar',
-                'dezenasSugeridasAlternar',
-                'ajusteFino',
-              ],
+              ajustesRecomendados: { type: Type.ARRAY, items: { type: Type.STRING } },
+              dezenasSugeridasFixar: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+              dezenasSugeridasAlternar: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+              potencialOtimizacaoPercent: { type: Type.NUMBER },
+              ajusteFino: {
+                type: Type.OBJECT,
+                properties: {
+                  calibracaoParidade: {
+                    type: Type.OBJECT,
+                    properties: {
+                      sugerido: { type: Type.STRING },
+                      justificativa: { type: Type.STRING },
+                    },
+                    required: ['sugerido', 'justificativa'],
+                  },
+                  calibracaoSoma: {
+                    type: Type.OBJECT,
+                    properties: {
+                      faixaOtima: { type: Type.STRING },
+                      justificativa: { type: Type.STRING },
+                    },
+                    required: ['faixaOtima', 'justificativa'],
+                  },
+                  calibracaoMoldura: {
+                    type: Type.OBJECT,
+                    properties: {
+                      faixaOtima: { type: Type.STRING },
+                      justificativa: { type: Type.STRING },
+                    },
+                    required: ['faixaOtima', 'justificativa'],
+                  },
+                  calibracaoPrimos: {
+                    type: Type.OBJECT,
+                    properties: {
+                      faixaOtima: { type: Type.STRING },
+                      justificativa: { type: Type.STRING },
+                    },
+                    required: ['faixaOtima', 'justificativa'],
+                  },
+                  calibracaoRepetidasAnterior: {
+                    type: Type.OBJECT,
+                    properties: {
+                      faixaIdeal: { type: Type.STRING },
+                      dezenasPrioritarias: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                    },
+                    required: ['faixaIdeal', 'dezenasPrioritarias'],
+                  },
+                  dezenasTransicaoIgnicao: { type: Type.ARRAY, items: { type: Type.INTEGER } },
+                  dicasFineTuningProximasApostas: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: [
+                  'calibracaoParidade',
+                  'calibracaoSoma',
+                  'calibracaoMoldura',
+                  'calibracaoPrimos',
+                  'calibracaoRepetidasAnterior',
+                  'dezenasTransicaoIgnicao',
+                  'dicasFineTuningProximasApostas',
+                ],
+              },
             },
+            required: [
+              'scoreEficiencia',
+              'classificacao',
+              'diagnosticoGeral',
+              'pontosFortes',
+              'vulnerabilidades',
+              'tendencias50Concursos',
+              'ajustesRecomendados',
+              'dezenasSugeridasFixar',
+              'dezenasSugeridasAlternar',
+              'ajusteFino',
+            ],
           },
-        });
+          8000
+        );
 
-        const response = await withTimeout(aiCall, 8000, 'Gemini AI efficiency-report timeout');
-        const text = response?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
+        if (geminiResult?.text) {
+          const parsed = JSON.parse(geminiResult.text);
           if (parsed && typeof parsed.scoreEficiencia === 'number') {
+            aiEfficiencyCache.set(effCacheKey, {
+              report: parsed,
+              source: geminiResult.model,
+              expiresAt: Date.now() + AI_CACHE_TTL_MS,
+            });
             return res.json({
               success: true,
-              source: 'gemini-3.8-flash',
+              source: geminiResult.model,
               report: parsed,
             });
           }
         }
       } catch (aiError: any) {
-        console.warn('[LotoSniper AI Efficiency Report] Chamada ao Gemini indisponível ou timeout (' + (aiError?.message || aiError) + '). Ativando motor de auditoria heurístico...');
+        console.info('[LotoSniper AI Efficiency Report] Alternando para motor de auditoria heurístico:', aiError?.message || 'indisponível');
       }
     }
 

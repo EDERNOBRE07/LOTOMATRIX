@@ -197,9 +197,9 @@ export default function App() {
 
       localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(savedTickets));
       if (savedTickets.length > 0) {
-        saveLocalSnapshot('auto');
+        saveLocalSnapshot('auto', latestDraw?.concurso);
         if (isAutoDownloadOnSaveEnabled()) {
-          triggerForcedJSONDownload();
+          triggerForcedJSONDownload(undefined, latestDraw?.concurso);
         }
       }
     } catch {}
@@ -591,8 +591,10 @@ export default function App() {
       triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending);
       auditAndTriggerIntelligentAlerts(result.draw, newStats, newCicloNum);
 
-      // After updating latest draw, trigger AI prediction optimization with the newly loaded draw
-      fetchAIPrediction(result.draw);
+      // After updating latest draw, trigger AI prediction optimization only if contest changed
+      if (lastPredictedConcursoRef.current !== result.draw.concurso) {
+        fetchAIPrediction(result.draw);
+      }
       return result;
     } catch (err) {
       console.error('Falha na sincronização:', err);
@@ -628,8 +630,14 @@ export default function App() {
     }
   };
 
+  const lastPredictedConcursoRef = React.useRef<number | null>(null);
+
   // Fetch AI prediction based on the target contest
-  const fetchAIPrediction = async (draw: LotofacilDraw = latestDraw) => {
+  const fetchAIPrediction = async (draw: LotofacilDraw = latestDraw, force: boolean = false) => {
+    if (!force && lastPredictedConcursoRef.current === draw.concurso && aiPrediction) {
+      return;
+    }
+    lastPredictedConcursoRef.current = draw.concurso;
     setIsAILoading(true);
     try {
       const response = await fetch('/api/ai/optimize', {
@@ -1057,7 +1065,7 @@ export default function App() {
               cyclePendingNumbers={dezenasPendentesCiclo}
               prediction={aiPrediction}
               isLoading={isAILoading}
-              onRefreshPrediction={() => fetchAIPrediction(latestDraw)}
+              onRefreshPrediction={() => fetchAIPrediction(latestDraw, true)}
               onApplyRecommendation={handleApplyAIRecsToFechamento}
               onFixAnchors={(anchors) => {
                 setPendingFixedNumbers(anchors);

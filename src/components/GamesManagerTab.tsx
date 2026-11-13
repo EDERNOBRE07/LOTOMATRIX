@@ -21,6 +21,7 @@ import {
   resolveConcursoAlvo,
   resolveConcursoBase,
 } from '../services/savedFechamentosStorage';
+import { saveLocalSnapshot } from '../services/backupManagerService';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import {
@@ -1155,10 +1156,9 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         fechamentoMeta?.concurso ?? selectedConcurso ?? latestDraw.concurso,
         3824
       );
-      const concursoAlvo =
-        savedFechamentosList.length > 0
-          ? getBackupConcursoAlvo(savedFechamentosList, concursoBase)
-          : resolveConcursoAlvo(concursoBase, fechamentoMeta?.concursoAlvo);
+      const concursoAlvo = Number(concursoBase) + 1;
+      const dataFormatada = new Date().toISOString().slice(0, 10);
+      const fileName = formatBackupJsonFilename(concursoAlvo, dataFormatada);
 
       const backupPayload = {
         app: 'LotoSniper AI Pro',
@@ -1168,6 +1168,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         concursoAlvo,
         concursoReferencia: concursoBase,
         dataConcurso: latestDraw.data,
+        nomeArquivo: fileName,
         totalBilhetes: sourceTickets.length,
         totalFechamentos: savedFechamentosList.length,
         fechamentoMeta: fechamentoMeta
@@ -1183,12 +1184,14 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         savedTickets: sourceTickets,
       };
 
+      try {
+        localStorage.setItem('lotosniper_last_backup_filename', fileName);
+        saveLocalSnapshot('manual', concursoBase);
+      } catch {}
+
       const jsonContent = JSON.stringify(backupPayload, null, 2);
       const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8' });
       const url = URL.createObjectURL(blob);
-
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      const fileName = formatBackupJsonFilename(concursoAlvo, dateStamp);
 
       const link = document.createElement('a');
       link.href = url;
@@ -2280,7 +2283,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         fechamentoMeta={fechamentoMeta}
         estrategia={fechamentoMeta?.strategyName || fechamentoMeta?.modeName || 'Estratégia Pro LotoSniper'}
         title={`Exportação CSV Profissional (${csvExportGames.length} Jogos)`}
-        defaultFilename={`lotosniper_concurso_${selectedConcurso}_${csvExportGames.length}_jogos.csv`}
+        defaultFilename={`lotosniper_concurso_${Number(resolveConcursoBase(fechamentoMeta?.concurso ?? selectedConcurso ?? latestDraw.concurso, 3824)) + 1}_${csvExportGames.length}_jogos.csv`}
       />
 
       {/* Modal de Exportação em PDF Formatado para Volantes da Lotofácil */}

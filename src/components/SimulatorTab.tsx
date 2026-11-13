@@ -17,6 +17,8 @@ import {
   Play,
   RotateCcw,
   TrendingUp,
+  TrendingDown,
+  Minus,
   DollarSign,
   Award,
   Layers,
@@ -590,70 +592,198 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           </div>
 
           {/* Results Display */}
-          {results && (
+          {results && (() => {
+            const roiPercentual =
+              results.custoTotal > 0 ? (results.saldoLiquido / results.custoTotal) * 100 : 0;
+            const isLucroPositivo = results.saldoLiquido > 0.005;
+            const isLucroNeutro = Math.abs(results.saldoLiquido) <= 0.005;
+
+            return (
             <div className="space-y-6">
-              {/* Scorecard Financial & Hits */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[11px] text-slate-400">Total Investido</span>
-                    <DollarSign className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              {/* Grid Responsivo de Auditoria Financeira: Custo Total, Retorno Bruto, Lucro Líquido e ROI */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
+                {/* Card 1: Custo Total */}
+                <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-2.5 shadow-lg">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-400">Custo Total</span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                        results.custoTotal > 0 ? 'text-rose-400' : 'text-slate-400'
+                      }`}
+                    >
+                      {results.custoTotal > 0 ? (
+                        <ArrowDownRight className="w-4 h-4 text-rose-400 shrink-0" />
+                      ) : (
+                        <Minus className="w-4 h-4 text-slate-500 shrink-0" />
+                      )}
+                      <span>Investido</span>
+                    </span>
                   </div>
-                  <strong className="text-white font-mono tabular-nums text-base font-bold">
+                  <strong className="text-white font-mono tabular-nums text-xl sm:text-2xl font-black tracking-tight">
                     {formatBRLScorecard(results.custoTotal)}
                   </strong>
-                </div>
-
-                <div className="bg-slate-900 p-4 rounded-xl border border-emerald-500/20">
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[11px] text-slate-400">Total Premiado</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span>{tickets.length} bilhete(s)</span>
+                    <span className="text-slate-300">Base simulação</span>
                   </div>
-                  <strong className="text-emerald-400 font-mono tabular-nums text-base font-bold">
-                    {formatBRLScorecard(results.premioTotal)}
-                  </strong>
                 </div>
 
-                <div
-                  className={`bg-slate-900 p-4 rounded-xl border ${
-                    results.saldoLiquido >= 0 ? 'border-emerald-500/30' : 'border-rose-500/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-[11px] text-slate-400">Saldo Líquido</span>
-                    {results.saldoLiquido >= 0 ? (
-                      <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    ) : (
-                      <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                    )}
+                {/* Card 2: Retorno Bruto */}
+                <div className="bg-slate-900 rounded-2xl border border-emerald-500/25 p-4 flex flex-col justify-between gap-2.5 shadow-lg">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-400">Retorno Bruto (Prêmios)</span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                        results.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-400'
+                      }`}
+                    >
+                      {results.premioTotal > 0 ? (
+                        <ArrowUpRight className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Minus className="w-4 h-4 text-slate-500 shrink-0" />
+                      )}
+                      <span>Premiação</span>
+                    </span>
                   </div>
                   <strong
-                    className={`font-mono tabular-nums text-base font-bold ${
-                      results.saldoLiquido >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    className={`font-mono tabular-nums text-xl sm:text-2xl font-black tracking-tight ${
+                      results.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-200'
                     }`}
                   >
-                    {results.saldoLiquido >= 0 ? '+' : ''}
-                    {formatBRLScorecard(results.saldoLiquido)}
+                    {formatBRLScorecard(results.premioTotal)}
                   </strong>
+                  <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span>{results.acertos14}× 14pts</span>
+                    <span className="text-emerald-400 font-semibold">
+                      {results.acertos13 + results.acertos12 + results.acertos11} outros prêmios
+                    </span>
+                  </div>
                 </div>
 
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">14 Pontos (R$ 1.505)</span>
-                  <strong className="text-amber-400 font-mono text-base font-bold">
+                {/* Card 3: Lucro Líquido */}
+                <div
+                  className={`rounded-2xl border p-4 flex flex-col justify-between gap-2.5 shadow-lg ${
+                    isLucroPositivo
+                      ? 'bg-emerald-950/35 border-emerald-500/50'
+                      : isLucroNeutro
+                      ? 'bg-slate-900 border-slate-800'
+                      : 'bg-rose-950/30 border-rose-500/45'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-300">Lucro Líquido</span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                        isLucroPositivo ? 'text-emerald-400' : isLucroNeutro ? 'text-amber-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {isLucroPositivo ? (
+                        <>
+                          <ArrowUpRight className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Lucro</span>
+                        </>
+                      ) : isLucroNeutro ? (
+                        <>
+                          <Minus className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Neutro</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowDownRight className="w-4 h-4 text-rose-400 shrink-0" />
+                          <span>Déficit</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <strong
+                    className={`font-mono tabular-nums text-xl sm:text-2xl font-black tracking-tight ${
+                      isLucroPositivo ? 'text-emerald-300' : isLucroNeutro ? 'text-slate-200' : 'text-rose-400'
+                    }`}
+                  >
+                    {isLucroPositivo ? '+' : results.saldoLiquido < -0.005 ? '-' : ''}
+                    {formatBRLScorecard(Math.abs(results.saldoLiquido))}
+                  </strong>
+                  <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span>Prêmios − Custo</span>
+                    <span className={isLucroPositivo ? 'text-emerald-400 font-bold' : isLucroNeutro ? 'text-slate-300' : 'text-rose-400 font-bold'}>
+                      {isLucroPositivo ? 'Superávit' : isLucroNeutro ? 'Equilíbrio' : 'Negativo'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 4: ROI (%) */}
+                <div
+                  className={`rounded-2xl border p-4 flex flex-col justify-between gap-2.5 shadow-lg ${
+                    isLucroPositivo
+                      ? 'bg-emerald-950/25 border-emerald-500/45'
+                      : isLucroNeutro
+                      ? 'bg-slate-900 border-slate-800'
+                      : 'bg-rose-950/20 border-rose-500/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-300">ROI (Retorno)</span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold ${
+                        isLucroPositivo ? 'text-emerald-400' : isLucroNeutro ? 'text-amber-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {isLucroPositivo ? (
+                        <>
+                          <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Alta</span>
+                        </>
+                      ) : isLucroNeutro ? (
+                        <>
+                          <Minus className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Estável</span>
+                        </>
+                      ) : (
+                        <>
+                          <TrendingDown className="w-4 h-4 text-rose-400 shrink-0" />
+                          <span>Queda</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <strong
+                    className={`font-mono tabular-nums text-xl sm:text-2xl font-black tracking-tight ${
+                      isLucroPositivo ? 'text-emerald-300' : isLucroNeutro ? 'text-slate-200' : 'text-rose-400'
+                    }`}
+                  >
+                    {roiPercentual > 0.05 ? '+' : ''}
+                    {roiPercentual.toFixed(1).replace('.', ',')}%
+                  </strong>
+                  <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span>Multiplicador</span>
+                    <span className="text-slate-200 font-bold">
+                      {results.custoTotal > 0
+                        ? `${(results.premioTotal / results.custoTotal).toFixed(2).replace('.', ',')}x`
+                        : '0,00x'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resumo de Faixas de Acertos */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">14 Pontos (R$ 1.505)</span>
+                  <strong className="text-amber-400 font-mono tabular-nums text-sm font-bold">
                     {results.acertos14} acertos
                   </strong>
                 </div>
 
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">13 Pontos (R$ 35)</span>
-                  <strong className="text-teal-400 font-mono text-base font-bold">
+                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">13 Pontos (R$ 35)</span>
+                  <strong className="text-teal-400 font-mono tabular-nums text-sm font-bold">
                     {results.acertos13} acertos
                   </strong>
                 </div>
 
-                <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[11px] text-slate-400 block">11 e 12 Pontos</span>
-                  <strong className="text-slate-300 font-mono text-base font-bold">
+                <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span className="text-xs text-slate-400">11 e 12 Pontos</span>
+                  <strong className="text-slate-300 font-mono tabular-nums text-sm font-bold">
                     {results.acertos11 + results.acertos12} acertos
                   </strong>
                 </div>
@@ -733,7 +863,8 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               );
             })()}
             </div>
-          )}
+            );
+          })()}
 
           {/* Componente Visual 'Evolução do Saldo' Recharts (Últimos 50 Concursos) */}
           <EvolucaoSaldoChart tickets={tickets} latestDraw={latestDraw} />

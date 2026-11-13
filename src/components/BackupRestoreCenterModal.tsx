@@ -537,6 +537,11 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                         <p className="text-[11px] text-slate-400">
                           {meta.totalTickets} bilhetes salvos • {meta.totalFechamentos} fechamentos • {meta.tamanhoKB} KB
                         </p>
+                        {meta.filename && (
+                          <p className="text-[10px] font-mono text-emerald-400/90 truncate max-w-xs sm:max-w-md">
+                            {meta.filename}
+                          </p>
+                        )}
                       </div>
 
                       <button

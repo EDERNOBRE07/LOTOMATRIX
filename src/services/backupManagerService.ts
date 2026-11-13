@@ -55,6 +55,9 @@ export interface LocalSnapshotMeta {
   id: string;
   timestamp: number;
   dataHora: string;
+  concursoBase?: number;
+  concursoAlvo?: number;
+  filename?: string;
   totalTickets: number;
   totalFechamentos: number;
   tamanhoKB: number;
@@ -68,7 +71,7 @@ const LAST_BACKUP_TIME_KEY = 'lotosniper_last_backup_timestamp';
 /**
  * Coleta o estado completo de 'Meus Jogos' e 'Configurações' do LocalStorage
  */
-export function buildCompleteBackupPayload(): BackupDataPayload {
+export function buildCompleteBackupPayload(concursoBaseOverride?: number): BackupDataPayload {
   let ticketsAtuais: GameTicket[] = [];
   try {
     const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
@@ -107,10 +110,10 @@ export function buildCompleteBackupPayload(): BackupDataPayload {
   const autoDownloadOnSaveEnabled = localStorage.getItem(AUTO_DOWNLOAD_CONFIG_KEY) === 'true';
 
   const concursoBase = resolveConcursoBase(
-    fechamentosSalvos[0]?.concurso ?? activeFechamentoMeta?.concurso,
+    concursoBaseOverride ?? activeFechamentoMeta?.concurso ?? fechamentosSalvos[0]?.concurso,
     3824
   );
-  const concursoAlvo = getBackupConcursoAlvo(fechamentosSalvos, concursoBase);
+  const concursoAlvo = Number(concursoBase) + 1;
 
   const payload: BackupDataPayload = {
     app: 'LotoSniper AI Pro',
@@ -151,16 +154,23 @@ export function buildCompleteBackupPayload(): BackupDataPayload {
 /**
  * Dispara o Download Forçado do arquivo JSON no navegador
  */
-export function triggerForcedJSONDownload(customFilename?: string): { success: boolean; filename: string; sizeKB: number } {
+export function triggerForcedJSONDownload(
+  customFilename?: string,
+  concursoBaseOverride?: number
+): { success: boolean; filename: string; sizeKB: number } {
   try {
-    const payload = buildCompleteBackupPayload();
+    const payload = buildCompleteBackupPayload(concursoBaseOverride);
     const jsonString = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
     const sizeKB = Math.round(blob.size / 1024);
 
     const now = new Date();
     const dateStamp = now.toISOString().slice(0, 10);
-    const concursoAlvo = payload.concursoAlvo || getBackupConcursoAlvo(payload.meusJogos.fechamentosSalvos);
+    const concursoBase = resolveConcursoBase(
+      concursoBaseOverride ?? payload.concursoBase,
+      3824
+    );
+    const concursoAlvo = Number(concursoBase) + 1;
     const filename = customFilename || formatBackupJsonFilename(concursoAlvo, dateStamp);
 
     const url = URL.createObjectURL(blob);
@@ -172,12 +182,13 @@ export function triggerForcedJSONDownload(customFilename?: string): { success: b
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    // Registra carimbo do último backup
+    // Registra carimbo do último backup e nome padronizado
     localStorage.setItem(LAST_BACKUP_TIME_KEY, String(Date.now()));
+    localStorage.setItem('lotosniper_last_backup_filename', filename);
     soundService.playSuccess();
 
     // Salva snapshot local
-    saveLocalSnapshot('manual');
+    saveLocalSnapshot('manual', concursoBase);
 
     // Emite evento para que componentes na UI atualizem
     if (typeof window !== 'undefined') {
@@ -192,18 +203,32 @@ export function triggerForcedJSONDownload(customFilename?: string): { success: b
 }
 
 /**
- * Salva um snapshot local de emergência no LocalStorage (Ring buffer dos últimos 10 snapshots)
+ * Salva um snapshot local de emergência no LocalStorage (Ring buffer dos últimos 8 snapshots)
  */
-export function saveLocalSnapshot(origem: 'auto' | 'manual' | 'pre_fechamento' | 'recuperacao' = 'auto'): LocalSnapshotMeta | null {
+export function saveLocalSnapshot(
+  origem: 'auto' | 'manual' | 'pre_fechamento' | 'recuperacao' = 'auto',
+  concursoBaseOverride?: number
+): LocalSnapshotMeta | null {
   try {
-    const payload = buildCompleteBackupPayload();
+    const payload = buildCompleteBackupPayload(concursoBaseOverride);
     const jsonString = JSON.stringify(payload);
     const sizeKB = Math.round(new Blob([jsonString]).size / 1024);
+
+    const concursoBase = resolveConcursoBase(
+      concursoBaseOverride ?? payload.concursoBase,
+      3824
+    );
+    const concursoAlvo = Number(concursoBase) + 1;
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = formatBackupJsonFilename(concursoAlvo, dateStamp);
 
     const meta: LocalSnapshotMeta = {
       id: `snap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
       dataHora: new Date().toLocaleString('pt-BR'),
+      concursoBase,
+      concursoAlvo,
+      filename,
       totalTickets: payload.meusJogos.ticketsAtuais.length,
       totalFechamentos: payload.meusJogos.fechamentosSalvos.length,
       tamanhoKB: sizeKB,
@@ -216,6 +241,7 @@ export function saveLocalSnapshot(origem: 'auto' | 'manual' | 'pre_fechamento' |
     // Mantém os 8 mais recentes
     list = [{ meta, payload }, ...list.slice(0, 7)];
     localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(list));
+    localStorage.setItem('lotosniper_last_backup_filename', filename);
 
     return meta;
   } catch (err) {

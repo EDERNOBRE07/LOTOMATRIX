@@ -1200,20 +1200,31 @@ export interface BackupSnapshot {
   id: string;
   data: string;
   timestamp: number;
+  concursoBase?: number;
+  concursoAlvo?: number;
+  nomeArquivo?: string;
   totalFechamentos: number;
   fechamentos: SavedFechamentoPrognostico[];
 }
 
-export function triggerAutoBackupSnapshot(): void {
+export function triggerAutoBackupSnapshot(concursoBaseFallback?: number): void {
   try {
     const list = getSavedFechamentos();
     const snapshotsRaw = localStorage.getItem(BACKUP_SNAPSHOTS_KEY);
     const snapshots: BackupSnapshot[] = snapshotsRaw ? JSON.parse(snapshotsRaw) : [];
 
+    const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, 3824);
+    const concursoAlvo = Number(concursoBase) + 1;
+    const dataFormatada = new Date().toISOString().slice(0, 10);
+    const nomeArquivo = formatBackupJsonFilename(concursoAlvo, dataFormatada);
+
     const newSnapshot: BackupSnapshot = {
       id: `snap-${Date.now()}`,
       data: new Date().toLocaleString('pt-BR'),
       timestamp: Date.now(),
+      concursoBase,
+      concursoAlvo,
+      nomeArquivo,
       totalFechamentos: list.length,
       fechamentos: list,
     };
@@ -1221,6 +1232,7 @@ export function triggerAutoBackupSnapshot(): void {
     // Mantém os 5 snapshots mais recentes
     const updated = [newSnapshot, ...snapshots.slice(0, 4)];
     localStorage.setItem(BACKUP_SNAPSHOTS_KEY, JSON.stringify(updated));
+    localStorage.setItem('lotosniper_last_backup_filename', nomeArquivo);
   } catch (err) {
     console.warn('Erro ao salvar snapshot de backup automático:', err);
   }
@@ -1237,23 +1249,31 @@ export function getBackupSnapshots(): BackupSnapshot[] {
 
 export function exportBackupJSON(concursoBaseFallback?: number): void {
   const list = getSavedFechamentos();
-  const concursoAlvo = getBackupConcursoAlvo(list, concursoBaseFallback ?? 3824);
+  const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, 3824);
+  const concursoAlvo = Number(concursoBase) + 1;
   const dataFormatada = new Date().toISOString().slice(0, 10);
+  const fileName = formatBackupJsonFilename(concursoAlvo, dataFormatada);
 
   const backupData = {
     app: 'LotoSniper AI Pro',
     versao: '2026.5',
+    concursoBase,
     concursoAlvo,
+    nomeArquivo: fileName,
     dataExportacao: new Date().toISOString(),
     totalFechamentos: list.length,
     fechamentos: list,
   };
 
+  try {
+    localStorage.setItem('lotosniper_last_backup_filename', fileName);
+  } catch {}
+
   const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = formatBackupJsonFilename(concursoAlvo, dataFormatada);
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
