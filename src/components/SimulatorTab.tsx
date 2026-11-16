@@ -14,6 +14,8 @@ import { SimulacaoBacktestD3Component } from './SimulacaoBacktestD3Component';
 import { QuickBacktestD3Area } from './QuickBacktestD3Area';
 import { MapaCalorProbabilidadeVolante10 } from './MapaCalorProbabilidadeVolante10';
 import { AnaliseROISavedGames } from './AnaliseROISavedGames';
+import { EstatisticasPerformanceGlobal } from './EstatisticasPerformanceGlobal';
+import { exportAuditoriaSimuladorPDF } from '../services/auditoriaPdfGenerator';
 import {
   Play,
   RotateCcw,
@@ -35,6 +37,7 @@ import {
   ArrowDownRight,
   Swords,
   Zap,
+  FileDown,
 } from 'lucide-react';
 
 const formatBRLScorecard = (val: number) =>
@@ -84,6 +87,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   >('concurso_3803');
   const [results, setResults] = useState<SimulationResult | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [pdfExportSuccess, setPdfExportSuccess] = useState<string | null>(null);
 
   // Generate synthetic random draws according to historical distribution for 1,000 simulation runs
   const generateMonteCarloDraws = (count: number): LotofacilDraw[] => {
@@ -131,6 +135,39 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
     }, 200);
   };
 
+  const handleExportAuditoriaPDF = () => {
+    try {
+      let apostaMinima = VALOR_APOSTA_LOTOFACIL;
+      try {
+        const saved = localStorage.getItem('lotosniper_roi_aposta_minima');
+        const parsed = saved ? parseFloat(saved) : VALOR_APOSTA_LOTOFACIL;
+        if (Number.isFinite(parsed) && parsed > 0) apostaMinima = parsed;
+      } catch {}
+
+      const scopeLabels: Record<typeof simulationScope, string> = {
+        concurso_3803: 'Simulação Concurso #3803',
+        concurso_3802: 'Simulação Concurso #3802',
+        concurso_3801: 'Simulação Concurso #3801',
+        ultimos_15: 'Simulação Últimos 15 Concursos',
+        monte_carlo_1000: 'Monte Carlo (1.000 Sorteios)',
+      };
+
+      const fileName = exportAuditoriaSimuladorPDF({
+        tickets,
+        latestDraw,
+        simulationResult: results,
+        simulationScopeLabel: scopeLabels[simulationScope],
+        apostaMinima,
+        auditWindow: 20,
+      });
+
+      setPdfExportSuccess(`Relatório PDF "${fileName}" gerado e baixado com sucesso!`);
+      setTimeout(() => setPdfExportSuccess(null), 4500);
+    } catch (err) {
+      console.error('Erro ao exportar PDF de Auditoria & Simulador:', err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Banner */}
@@ -147,6 +184,16 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportAuditoriaPDF}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-sm active:scale-95"
+            title="Exportar relatório profissional em PDF (branding LotoSniper, grade de resultados, dezenas premiadas e métricas ROI)"
+          >
+            <FileDown className="w-4 h-4 text-slate-950" />
+            <span>Exportar PDF</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsEfficiencyModalOpen(true)}
@@ -203,6 +250,14 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
           )}
         </div>
       </div>
+
+      {/* Topo da Aba Auditoria & Simulador: Estatísticas de Performance Global (ROI Acumulado, Premiados Recentes & Recharts 5 Rodadas) */}
+      <EstatisticasPerformanceGlobal
+        tickets={tickets}
+        latestDraw={latestDraw}
+        onExportPDF={handleExportAuditoriaPDF}
+        pdfExportSuccess={pdfExportSuccess}
+      />
 
       {/* Subtab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 shadow-xl">
