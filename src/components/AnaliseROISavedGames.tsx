@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp,
   DollarSign,
@@ -21,6 +20,7 @@ import { getHistorical100Draws } from '../services/historical100Draws';
 import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { EvolucaoCustoRetornoAreaChart } from './EvolucaoCustoRetornoAreaChart';
 import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
+import { AnimatedRoiCard } from './AnimatedRoiCard';
 
 interface AnaliseROISavedGamesProps {
   tickets?: GameTicket[];
@@ -33,7 +33,20 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
   tickets = [],
   latestDraw = CONCURSO_ATUAL,
 }) => {
-  const shouldReduceMotion = useReducedMotion();
+  const [storageVersion, setStorageVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setStorageVersion((v) => v + 1);
+    window.addEventListener('lotosniper-saved-fechamentos-updated', refresh);
+    window.addEventListener('lotosniper-saved-tickets-updated', refresh);
+    window.addEventListener('lotosniper-backup-restored', refresh);
+    return () => {
+      window.removeEventListener('lotosniper-saved-fechamentos-updated', refresh);
+      window.removeEventListener('lotosniper-saved-tickets-updated', refresh);
+      window.removeEventListener('lotosniper-backup-restored', refresh);
+    };
+  }, []);
+
   // 1. Valor da Aposta Mínima (personalizável pelo usuário, default R$ 3,50)
   const [apostaMinima, setApostaMinima] = useState<number>(() => {
     try {
@@ -77,7 +90,8 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
         jogoLabel: `Jogo #${(t.index ?? idx + 1).toString().padStart(2, '0')}`,
       }))
     );
-  }, [tickets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickets, storageVersion]);
 
   const allSavedTickets = useMemo(
     () => allSavedTicketsWithOrigin.map((item) => item.ticket),
@@ -552,13 +566,14 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
       </div>
 
       {/* Grid Responsivo de Indicadores Financeiros (Custo Total, Retorno Bruto, Lucro Líquido e ROI) */}
+      {(() => {
+        const roiRefreshKey = `${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}-${roiSummary.lucroLiquido.toFixed(2)}-${storageVersion}`;
+        return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
         {/* Card 1: Custo Total Investido */}
-        <motion.div
-          key="roi-custo"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0, ease: [0.16, 1, 0.3, 1] }}
+        <AnimatedRoiCard
+          refreshKey={roiRefreshKey}
+          delay={0}
           className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3"
         >
           <div className="flex items-center justify-between gap-2">
@@ -591,14 +606,12 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               <AnimatedCurrencyValue value={roiSummary.custoPorConcurso} suffix="/conc" />
             </span>
           </div>
-        </motion.div>
+        </AnimatedRoiCard>
 
         {/* Card 2: Retorno Bruto em Prêmios */}
-        <motion.div
-          key="roi-retorno"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+        <AnimatedRoiCard
+          refreshKey={roiRefreshKey}
+          delay={0.06}
           className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3"
         >
           <div className="flex items-center justify-between gap-2">
@@ -633,14 +646,12 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               <AnimatedNumberValue value={roiSummary.taxaAcerto} decimals={1} suffix="% taxa" />
             </span>
           </div>
-        </motion.div>
+        </AnimatedRoiCard>
 
         {/* Card 3: Lucro Líquido */}
-        <motion.div
-          key="roi-lucro"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+        <AnimatedRoiCard
+          refreshKey={roiRefreshKey}
+          delay={0.12}
           className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
               ? 'bg-emerald-950/35 border-emerald-500/50'
@@ -695,14 +706,12 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               {isPositive ? 'Superávit' : isNeutral ? 'Equilíbrio' : 'Déficit'}
             </span>
           </div>
-        </motion.div>
+        </AnimatedRoiCard>
 
         {/* Card 4: ROI (%) */}
-        <motion.div
-          key="roi-percent"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        <AnimatedRoiCard
+          refreshKey={roiRefreshKey}
+          delay={0.18}
           className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
               ? 'bg-emerald-950/25 border-emerald-500/45'
@@ -757,8 +766,10 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               />
             </span>
           </div>
-        </motion.div>
+        </AnimatedRoiCard>
       </div>
+        );
+      })()}
 
       {allSavedTickets.length === 0 && (
         <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs text-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">

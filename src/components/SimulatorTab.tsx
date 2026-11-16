@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import { GameTicket, SimulationResult, LotofacilDraw } from '../types/lotofacil';
 import { RECENT_DRAWS, CONCURSO_ATUAL } from '../data/lotofacilData';
 import { runSimulation, countMatches, VALOR_APOSTA_LOTOFACIL, FECHAMENTO_PRESETS } from '../services/combinatorics';
@@ -17,6 +16,7 @@ import { AnaliseROISavedGames } from './AnaliseROISavedGames';
 import { EstatisticasPerformanceGlobal } from './EstatisticasPerformanceGlobal';
 import { exportAuditoriaSimuladorPDF } from '../services/auditoriaPdfGenerator';
 import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
+import { AnimatedRoiCard } from './AnimatedRoiCard';
 import {
   Play,
   RotateCcw,
@@ -62,7 +62,6 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
   onGoToGenerator,
   onGoToGamesManager,
 }) => {
-  const shouldReduceMotion = useReducedMotion();
   const handleGoToGamesManager = () => {
     if (onGoToGamesManager) {
       onGoToGamesManager();
@@ -659,17 +658,16 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               results.custoTotal > 0 ? (results.saldoLiquido / results.custoTotal) * 100 : 0;
             const isLucroPositivo = results.saldoLiquido > 0.005;
             const isLucroNeutro = Math.abs(results.saldoLiquido) <= 0.005;
+            const simRefreshKey = `${simulationScope}-${tickets.length}-${results.custoTotal.toFixed(2)}-${results.premioTotal.toFixed(2)}`;
 
             return (
             <div className="space-y-6">
               {/* Grid Responsivo de Auditoria Financeira: Custo Total, Retorno Bruto, Lucro Líquido e ROI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
                 {/* Card 1: Custo Total */}
-                <motion.div
-                  key="sim-custo"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0, ease: [0.16, 1, 0.3, 1] }}
+                <AnimatedRoiCard
+                  refreshKey={simRefreshKey}
+                  delay={0}
                   className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-2.5 shadow-lg"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -694,14 +692,12 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                     <span>{tickets.length} bilhete(s)</span>
                     <span className="text-slate-300">Base simulação</span>
                   </div>
-                </motion.div>
+                </AnimatedRoiCard>
 
                 {/* Card 2: Retorno Bruto */}
-                <motion.div
-                  key="sim-retorno"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+                <AnimatedRoiCard
+                  refreshKey={simRefreshKey}
+                  delay={0.06}
                   className="bg-slate-900 rounded-2xl border border-emerald-500/25 p-4 flex flex-col justify-between gap-2.5 shadow-lg"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -732,14 +728,12 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       {results.acertos13 + results.acertos12 + results.acertos11} outros prêmios
                     </span>
                   </div>
-                </motion.div>
+                </AnimatedRoiCard>
 
                 {/* Card 3: Lucro Líquido */}
-                <motion.div
-                  key="sim-lucro"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                <AnimatedRoiCard
+                  refreshKey={simRefreshKey}
+                  delay={0.12}
                   className={`rounded-2xl border p-4 flex flex-col justify-between gap-2.5 shadow-lg ${
                     isLucroPositivo
                       ? 'bg-emerald-950/35 border-emerald-500/50'
@@ -786,14 +780,12 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       {isLucroPositivo ? 'Superávit' : isLucroNeutro ? 'Equilíbrio' : 'Negativo'}
                     </span>
                   </div>
-                </motion.div>
+                </AnimatedRoiCard>
 
                 {/* Card 4: ROI (%) */}
-                <motion.div
-                  key="sim-roi"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                <AnimatedRoiCard
+                  refreshKey={simRefreshKey}
+                  delay={0.18}
                   className={`rounded-2xl border p-4 flex flex-col justify-between gap-2.5 shadow-lg ${
                     isLucroPositivo
                       ? 'bg-emerald-950/25 border-emerald-500/45'
@@ -844,7 +836,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       />
                     </span>
                   </div>
-                </motion.div>
+                </AnimatedRoiCard>
               </div>
 
               {/* Resumo de Faixas de Acertos */}

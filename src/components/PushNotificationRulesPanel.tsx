@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   Bell,
+  BellOff,
   Volume2,
   VolumeX,
   Monitor,
@@ -180,7 +182,7 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
   const eventDefinitions: EventMeta[] = [
     {
       key: 'premiacoes13Plus',
-      title: 'Premiações 13+ Pontos (13, 14 e 15 Acertos)',
+      title: 'Premiações 13+ (13, 14 e 15 Acertos)',
       description: 'Dispara imediatamente ao auditar seus bilhetes salvos e detectar pontuações principais.',
       category: 'Premiação Principal',
       icon: <Trophy className="w-4 h-4 text-amber-400" />,
@@ -208,7 +210,7 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
     },
     {
       key: 'fimCiclo',
-      title: 'Fechamento de Ciclo (e Reta Final)',
+      title: 'Fechamentos de Ciclo (e Reta Final)',
       description: 'Dispara quando o ciclo das 25 dezenas se fecha ou atinge a reta final configurada.',
       category: 'Ciclos',
       icon: <Sparkles className="w-4 h-4 text-amber-300" />,
@@ -348,10 +350,10 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
               </span>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-white font-sans tracking-tight mt-0.5">
-              Personalização de Alertas Sonoros & Notificações Nativas (Push)
+              Gerenciador Visual de Alertas Push & Sonoros
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Defina quais eventos (atrasos críticos, fechamento de ciclo ou premiações 13+) disparam alertas sonoros e quais disparam notificações push nativas.
+              Ative ou desative notificações individuais para <strong>Atrasos Críticos</strong>, <strong>Fechamentos de Ciclo</strong> e <strong>Premiações 13+</strong> com persistência automática no <code className="font-mono text-emerald-300">localStorage</code>.
             </p>
           </div>
         </div>
@@ -504,91 +506,238 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
         </div>
       )}
 
-      {/* Resumo Rápido dos 3 Eventos Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {(
-          [
-            {
-              key: 'atrasosCriticos' as NotificationEventKey,
-              label: 'Atrasos Críticos',
-              sub: `Hiato ≥ ${rules.events.atrasosCriticos.threshold ?? 5} conc.`,
-              icon: <Clock className="w-4 h-4 text-rose-400 shrink-0" />,
-            },
-            {
-              key: 'fimCiclo' as NotificationEventKey,
-              label: 'Fechamento de Ciclo',
-              sub:
-                (rules.events.fimCiclo.threshold ?? 3) === 0
-                  ? 'Ciclo fechado (0 aus.)'
-                  : `≤ ${rules.events.fimCiclo.threshold ?? 3} aus. / fechou`,
-              icon: <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />,
-            },
-            {
-              key: 'premiacoes13Plus' as NotificationEventKey,
-              label: 'Premiações 13+',
-              sub: `${rules.events.premiacoes13Plus.threshold ?? 13}+ acertos`,
-              icon: <Trophy className="w-4 h-4 text-amber-400 shrink-0" />,
-            },
-          ]
-        ).map((item) => {
-          const r = rules.events[item.key];
-          const active = rules.masterEnabled && r.enabled;
-          return (
-            <div
-              key={item.key}
-              className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 transition ${
-                active ? 'bg-slate-950/95 border-slate-800' : 'bg-slate-950/50 border-slate-800/60 opacity-60'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  {item.icon}
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white block truncate">{item.label}</span>
-                    <span className="text-[10px] font-mono text-slate-400">{item.sub}</span>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={r.enabled}
-                  disabled={!rules.masterEnabled}
-                  onChange={(e) => updateEventRule(item.key, { enabled: e.target.checked })}
-                  className="w-4 h-4 accent-emerald-500 rounded cursor-pointer shrink-0"
-                  aria-label={`Habilitar ${item.label}`}
-                />
-              </div>
+      {/* Painel Visual Individual de Alertas Push: Atrasos Críticos, Fechamentos de Ciclo e Premiações 13+ */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-bold text-slate-200 font-sans">
+            Controles Individuais de Alertas Push
+          </span>
+          <span className="text-[11px] font-mono text-slate-400">
+            Preferências sincronizadas automaticamente no localStorage
+          </span>
+        </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  disabled={!active || rules.quietMode}
-                  onClick={() => updateEventRule(item.key, { soundEnabled: !r.soundEnabled })}
-                  className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer disabled:opacity-40 ${
-                    r.soundEnabled && !rules.quietMode
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                      : 'bg-slate-900 text-slate-400 border-slate-800'
-                  }`}
-                >
-                  {r.soundEnabled && !rules.quietMode ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
-                  <span>{r.soundEnabled && !rules.quietMode ? 'Som ON' : 'Som OFF'}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!active}
-                  onClick={() => updateEventRule(item.key, { nativePushEnabled: !r.nativePushEnabled })}
-                  className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer disabled:opacity-40 ${
-                    r.nativePushEnabled
-                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-900 text-slate-400 border-slate-800'
-                  }`}
-                >
-                  <Bell className="w-3 h-3" />
-                  <span>{r.nativePushEnabled ? 'Push ON' : 'Push OFF'}</span>
-                </button>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {(
+            [
+              {
+                key: 'atrasosCriticos' as NotificationEventKey,
+                label: 'Atrasos Críticos',
+                description: 'Alerta quando dezenas atingem hiato igual ou superior ao limite.',
+                sub: `Hiato ≥ ${rules.events.atrasosCriticos.threshold ?? 5} conc.`,
+                icon: <Clock className="w-4 h-4 text-rose-400 shrink-0" />,
+                accentRing: 'border-rose-500/45 bg-rose-950/15',
+                options: [
+                  { value: 3, label: '≥ 3 conc.' },
+                  { value: 4, label: '≥ 4 conc.' },
+                  { value: 5, label: '≥ 5 conc.' },
+                  { value: 6, label: '≥ 6 conc.' },
+                ],
+                playSound: () => soundService.playOpportunityAlert(),
+                testTitle: (th?: number) => `Alerta de Atraso Crítico (≥ ${th ?? 5} conc.)`,
+                testBody: (th?: number) =>
+                  `Dezenas com hiato ≥ ${th ?? 5} concursos detectadas após o Concurso #${latestDraw.concurso}.`,
+              },
+              {
+                key: 'fimCiclo' as NotificationEventKey,
+                label: 'Fechamentos de Ciclo',
+                description: 'Notifica o fechamento do ciclo das 25 dezenas ou reta final.',
+                sub:
+                  (rules.events.fimCiclo.threshold ?? 3) === 0
+                    ? 'Ciclo fechado (0 aus.)'
+                    : `≤ ${rules.events.fimCiclo.threshold ?? 3} aus. / fechou`,
+                icon: <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />,
+                accentRing: 'border-amber-500/45 bg-amber-950/15',
+                options: [
+                  { value: 0, label: 'Ciclo fechado (0)' },
+                  { value: 1, label: '≤ 1 dez. / fechou' },
+                  { value: 2, label: '≤ 2 dez. / fechou' },
+                  { value: 3, label: '≤ 3 dez. / fechou' },
+                ],
+                playSound: () => soundService.playCycleAlertSound(),
+                testTitle: () => `Fechamento de Ciclo (#${latestDraw.concurso})`,
+                testBody: (th?: number) =>
+                  (th ?? 3) === 0
+                    ? `Ciclo das 25 dezenas fechado no Concurso #${latestDraw.concurso}.`
+                    : `Faltam ${th ?? 3} ou menos dezenas para fechar o ciclo no Concurso #${latestDraw.concurso}.`,
+              },
+              {
+                key: 'premiacoes13Plus' as NotificationEventKey,
+                label: 'Premiações 13+',
+                description: 'Avisa na hora quando seus jogos atingem 13, 14 ou 15 pontos.',
+                sub: `${rules.events.premiacoes13Plus.threshold ?? 13}+ acertos`,
+                icon: <Trophy className="w-4 h-4 text-emerald-400 shrink-0" />,
+                accentRing: 'border-emerald-500/45 bg-emerald-950/15',
+                options: [
+                  { value: 13, label: '13+ pts' },
+                  { value: 14, label: '14+ pts' },
+                  { value: 15, label: '15 pts' },
+                ],
+                playSound: () => soundService.play13PlusAlert(),
+                testTitle: (th?: number) => `Premiação ${th ?? 13}+ Pontos (#${latestDraw.concurso})`,
+                testBody: (th?: number) =>
+                  `Conferência automática detectou premiação de ${th ?? 13}+ acertos no Concurso #${latestDraw.concurso}.`,
+              },
+            ]
+          ).map((item) => {
+            const r = rules.events[item.key];
+            const isCardActive = rules.masterEnabled && r.enabled && r.nativePushEnabled;
+            const isEventEnabled = rules.masterEnabled && r.enabled;
+
+            const handleTogglePushCard = async () => {
+              const nextPushState = !isCardActive;
+              await updateEventRule(item.key, {
+                enabled: nextPushState ? true : r.soundEnabled,
+                nativePushEnabled: nextPushState,
+              });
+              showFeedback(
+                nextPushState
+                  ? `Alerta Push "${item.label}" ativado e salvo no localStorage.`
+                  : `Alerta Push "${item.label}" desativado e salvo no localStorage.`,
+                nextPushState ? 'ok' : 'warn'
+              );
+            };
+
+            return (
+              <div
+                key={item.key}
+                className={`rounded-xl border p-4 flex flex-col justify-between gap-3 transition ${
+                  isCardActive
+                    ? item.accentRing
+                    : 'bg-slate-950/75 border-slate-800/80 opacity-85'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                      {item.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-sm font-bold text-white block leading-snug">
+                        {item.label}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400 block mt-0.5">
+                        {item.sub}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Visual Switch Toggle */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isCardActive}
+                    aria-label={`Alternar alertas push para ${item.label}`}
+                    disabled={!rules.masterEnabled}
+                    onClick={handleTogglePushCard}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 ${
+                      isCardActive ? 'bg-emerald-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <motion.span
+                      initial={false}
+                      animate={{ x: isCardActive ? 20 : 0 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="inline-block h-5 w-5 rounded-full bg-white shadow-md"
+                    />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {item.description}
+                </p>
+
+                {/* Status Badge + Threshold */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/70">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
+                      isCardActive
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : 'bg-slate-900 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    {isCardActive ? (
+                      <>
+                        <Bell className="w-3 h-3" />
+                        <span>Push Ativo</span>
+                      </>
+                    ) : (
+                      <>
+                        <BellOff className="w-3 h-3" />
+                        <span>Desativado</span>
+                      </>
+                    )}
+                  </span>
+
+                  <select
+                    value={r.threshold ?? item.options[0].value}
+                    disabled={!rules.masterEnabled}
+                    onChange={(e) =>
+                      updateEventRule(item.key, { threshold: Number(e.target.value) })
+                    }
+                    className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-mono tabular-nums text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    aria-label={`Parâmetro de disparo para ${item.label}`}
+                  >
+                    {item.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Audio Toggle + Quick Test */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!rules.masterEnabled || rules.quietMode}
+                    onClick={() =>
+                      updateEventRule(item.key, {
+                        enabled: true,
+                        soundEnabled: !r.soundEnabled,
+                      })
+                    }
+                    className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition cursor-pointer disabled:opacity-40 ${
+                      isEventEnabled && r.soundEnabled && !rules.quietMode
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {isEventEnabled && r.soundEnabled && !rules.quietMode ? (
+                      <Volume2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <VolumeX className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {isEventEnabled && r.soundEnabled && !rules.quietMode ? 'Som ON' : 'Som OFF'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!rules.masterEnabled}
+                    onClick={() =>
+                      handleTestEvent({
+                        key: item.key,
+                        title: item.label,
+                        description: item.description,
+                        category: 'Push',
+                        icon: item.icon,
+                        testTitle: (th) => item.testTitle(th),
+                        testBody: (th) => item.testBody(th),
+                        playSound: item.playSound,
+                      })
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition cursor-pointer disabled:opacity-40"
+                  >
+                    <Play className="w-3 h-3 text-emerald-400" />
+                    <span>Testar Push</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* Detailed Rules Matrix */}

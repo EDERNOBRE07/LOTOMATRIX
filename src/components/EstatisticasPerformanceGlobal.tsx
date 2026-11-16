@@ -1,5 +1,4 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 import {
   ResponsiveContainer,
   LineChart,
@@ -31,6 +30,7 @@ import { getHistorical100Draws } from '../services/historical100Draws';
 import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { formatCurrencyBRL } from '../services/ticketRoiAudit';
 import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
+import { AnimatedRoiCard } from './AnimatedRoiCard';
 
 interface EstatisticasPerformanceGlobalProps {
   tickets?: GameTicket[];
@@ -76,7 +76,6 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
   onExportPDF,
   pdfExportSuccess,
 }) => {
-  const shouldReduceMotion = useReducedMotion();
   const [storageVersion, setStorageVersion] = useState(0);
   const [monthlyChartMode, setMonthlyChartMode] = useState<'mensal' | 'acumulado'>('mensal');
 
@@ -461,13 +460,14 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
       {/* Grid Principal: 3 KPIs + Gráfico de Linha Recharts (5 rodadas) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* Coluna Esquerda: KPIs Consolidados */}
+        {(() => {
+          const globalRefreshKey = `${latestDraw.concurso}-${metrics.totalJogos}-${metrics.roiAcumuladoPercent.toFixed(1)}-${metrics.latestPremiadosCount}-${storageVersion}`;
+          return (
         <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
           {/* Card 1: ROI Acumulado de Todos os Jogos */}
-          <motion.div
-            key="global-roi"
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          <AnimatedRoiCard
+            refreshKey={globalRefreshKey}
+            delay={0}
             className={`rounded-xl border p-4 flex flex-col justify-between gap-2 ${
               isRoiPositive
                 ? 'bg-emerald-950/25 border-emerald-500/45'
@@ -512,14 +512,12 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
               <span>Custo: <AnimatedCurrencyValue value={metrics.custoAcumulado} /></span>
               <span>Retorno: <AnimatedCurrencyValue value={metrics.retornoAcumulado} /></span>
             </div>
-          </motion.div>
+          </AnimatedRoiCard>
 
           {/* Card 2: Total de Bilhetes Premiados no Concurso Mais Recente */}
-          <motion.div
-            key="global-premiados"
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.28, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+          <AnimatedRoiCard
+            refreshKey={globalRefreshKey}
+            delay={0.07}
             className="bg-slate-950/90 rounded-xl border border-slate-800 p-4 flex flex-col justify-between gap-2"
           >
             <div className="flex items-center justify-between text-xs">
@@ -554,8 +552,10 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
                 <span>Nenhuma premiação 11+ no último sorteio</span>
               )}
             </div>
-          </motion.div>
+          </AnimatedRoiCard>
         </div>
+          );
+        })()}
 
         {/* Coluna Direita: Gráfico de Linha Recharts (Saldo Líquido nas Últimas 5 Rodadas) */}
         <div className="lg:col-span-7 bg-slate-950/90 rounded-xl border border-slate-800 p-4 flex flex-col justify-between gap-3">

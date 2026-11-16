@@ -98,10 +98,39 @@ export const DEFAULT_DETAILED_NOTIFICATION_RULES: DetailedNotificationRules = {
 };
 
 const DETAILED_RULES_KEY = 'lotosniper_detailed_notification_rules';
+const PUSH_ALERTS_PREFS_KEY = 'lotosniper_push_alerts_preferences';
 const HYBRID_RULES_KEY = 'lotosniper_hybrid_alert_rules';
 
 const CONFIG_KEY = 'lotosniper_push_notification_config';
 const ALERTS_KEY = 'lotosniper_push_alerts_history';
+
+export interface IndividualPushAlertPreferences {
+  atrasosCriticos: boolean;
+  fechamentosCiclo: boolean;
+  premiacoes13Plus: boolean;
+  updatedAt?: string;
+}
+
+export function getIndividualPushAlertPreferences(): IndividualPushAlertPreferences {
+  try {
+    const raw = localStorage.getItem(PUSH_ALERTS_PREFS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        atrasosCriticos: parsed?.atrasosCriticos !== undefined ? Boolean(parsed.atrasosCriticos) : true,
+        fechamentosCiclo: parsed?.fechamentosCiclo !== undefined ? Boolean(parsed.fechamentosCiclo) : true,
+        premiacoes13Plus: parsed?.premiacoes13Plus !== undefined ? Boolean(parsed.premiacoes13Plus) : true,
+        updatedAt: parsed?.updatedAt,
+      };
+    }
+  } catch {}
+  const rules = getDetailedNotificationRules();
+  return {
+    atrasosCriticos: rules.masterEnabled && rules.events.atrasosCriticos.enabled && rules.events.atrasosCriticos.nativePushEnabled,
+    fechamentosCiclo: rules.masterEnabled && rules.events.fimCiclo.enabled && rules.events.fimCiclo.nativePushEnabled,
+    premiacoes13Plus: rules.masterEnabled && rules.events.premiacoes13Plus.enabled && rules.events.premiacoes13Plus.nativePushEnabled,
+  };
+}
 
 export function getDetailedNotificationRules(): DetailedNotificationRules {
   try {
@@ -135,6 +164,24 @@ export function getDetailedNotificationRules(): DetailedNotificationRules {
 export function saveDetailedNotificationRules(rules: DetailedNotificationRules): void {
   try {
     localStorage.setItem(DETAILED_RULES_KEY, JSON.stringify(rules));
+
+    // Persiste preferências individuais de alertas push em chave dedicada no localStorage
+    const pushPrefs: IndividualPushAlertPreferences = {
+      atrasosCriticos:
+        rules.masterEnabled &&
+        rules.events.atrasosCriticos.enabled &&
+        rules.events.atrasosCriticos.nativePushEnabled,
+      fechamentosCiclo:
+        rules.masterEnabled &&
+        rules.events.fimCiclo.enabled &&
+        rules.events.fimCiclo.nativePushEnabled,
+      premiacoes13Plus:
+        rules.masterEnabled &&
+        rules.events.premiacoes13Plus.enabled &&
+        rules.events.premiacoes13Plus.nativePushEnabled,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(PUSH_ALERTS_PREFS_KEY, JSON.stringify(pushPrefs));
 
     // Sincroniza chaves legadas para manter compatibilidade total com auditores existentes
     const legacyCfg: PushNotificationConfig = {
