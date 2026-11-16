@@ -4,6 +4,9 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,6 +22,7 @@ import {
   CheckCircle2,
   Trophy,
   Layers,
+  BarChart3,
 } from 'lucide-react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
@@ -35,6 +39,37 @@ interface EstatisticasPerformanceGlobalProps {
   pdfExportSuccess?: string | null;
 }
 
+const MONTH_NAMES_PT = [
+  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+  'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+];
+
+function parseDrawMonth(dateStr: string): { sortKey: string; label: string } {
+  const parts = String(dateStr || '').trim().split('/');
+  if (parts.length === 3) {
+    const monthNum = parseInt(parts[1], 10);
+    const yearNum = parseInt(parts[2], 10);
+    if (monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+      return {
+        sortKey: `${yearNum}-${String(monthNum).padStart(2, '0')}`,
+        label: `${MONTH_NAMES_PT[monthNum - 1]}/${String(yearNum).slice(-2)}`,
+      };
+    }
+  }
+  const isoParts = String(dateStr || '').trim().split('-');
+  if (isoParts.length === 3) {
+    const yearNum = parseInt(isoParts[0], 10);
+    const monthNum = parseInt(isoParts[1], 10);
+    if (monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+      return {
+        sortKey: `${yearNum}-${String(monthNum).padStart(2, '0')}`,
+        label: `${MONTH_NAMES_PT[monthNum - 1]}/${String(yearNum).slice(-2)}`,
+      };
+    }
+  }
+  return { sortKey: '2026-11', label: 'Nov/26' };
+}
+
 export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlobalProps> = ({
   tickets = [],
   latestDraw = CONCURSO_ATUAL,
@@ -43,6 +78,7 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [storageVersion, setStorageVersion] = useState(0);
+  const [monthlyChartMode, setMonthlyChartMode] = useState<'mensal' | 'acumulado'>('mensal');
 
   useEffect(() => {
     const refresh = () => setStorageVersion((v) => v + 1);
@@ -191,6 +227,95 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
     const roiAcumuladoPercent =
       custoAcumulado > 0 ? (saldoLiquidoTotal / custoAcumulado) * 100 : 0;
 
+    // 3. Comparativo Mês a Mês: Custo Acumulado de Apostas vs Prêmio Bruto Recebido (100 concursos)
+    const all100Chronological = [...getHistorical100Draws(latestDraw)].reverse();
+    const monthBuckets = new Map<
+      string,
+      {
+        sortKey: string;
+        mes: string;
+        concursos: number;
+        custoMes: number;
+        premioBrutoMes: number;
+        premiadosMes: number;
+      }
+    >();
+
+    all100Chronological.forEach((draw) => {
+      const { sortKey, label } = parseDrawMonth(draw.data);
+      const existing = monthBuckets.get(sortKey) || {
+        sortKey,
+        mes: label,
+        concursos: 0,
+        custoMes: 0,
+        premioBrutoMes: 0,
+        premiadosMes: 0,
+      };
+
+      let premioRodada = 0;
+      let premiadosRodada = 0;
+      const p15 = draw.premiacoes?.faixa15?.valor || 1800000;
+      const p14 = draw.premiacoes?.faixa14?.valor || 1500;
+      const p13 = draw.premiacoes?.faixa13?.valor || 35;
+      const p12 = draw.premiacoes?.faixa12?.valor || 14;
+      const p11 = draw.premiacoes?.faixa11?.valor || 7;
+
+      consolidatedTickets.forEach((t) => {
+        const hits = countMatches(t.dezenas || [], draw.dezenas || []);
+        if (hits >= 11) {
+          premiadosRodada++;
+          if (hits === 15) premioRodada += p15;
+          else if (hits === 14) premioRodada += p14;
+          else if (hits === 13) premioRodada += p13;
+          else if (hits === 12) premioRodada += p12;
+          else premioRodada += p11;
+        }
+      });
+
+      existing.concursos += 1;
+      existing.custoMes += custoPorRodada;
+      existing.premioBrutoMes += premioRodada;
+      existing.premiadosMes += premiadosRodada;
+      monthBuckets.set(sortKey, existing);
+    });
+
+    const sortedMonths = Array.from(monthBuckets.values()).sort((a, b) =>
+      a.sortKey.localeCompare(b.sortKey)
+    );
+
+    let runningCustoAcum = 0;
+    let runningPremioAcum = 0;
+    let peakMonthLabel = '';
+    let peakPremioBruto = 0;
+
+    sortedMonths.forEach((m) => {
+      if (m.premioBrutoMes > peakPremioBruto) {
+        peakPremioBruto = m.premioBrutoMes;
+        peakMonthLabel = m.mes;
+      }
+    });
+
+    const monthlySeries = sortedMonths.map((m) => {
+      runningCustoAcum += m.custoMes;
+      runningPremioAcum += m.premioBrutoMes;
+      const custoMesRound = Math.round(m.custoMes * 100) / 100;
+      const premioMesRound = Math.round(m.premioBrutoMes * 100) / 100;
+      const custoAcumRound = Math.round(runningCustoAcum * 100) / 100;
+      const premioAcumRound = Math.round(runningPremioAcum * 100) / 100;
+      const roiMesPercent =
+        m.custoMes > 0 ? ((m.premioBrutoMes - m.custoMes) / m.custoMes) * 100 : 0;
+
+      return {
+        ...m,
+        custoMes: custoMesRound,
+        premioBrutoMes: premioMesRound,
+        custoAcumulado: custoAcumRound,
+        premioAcumulado: premioAcumRound,
+        roiMesPercent,
+        isPeak: peakPremioBruto > 0 && m.mes === peakMonthLabel,
+      };
+    });
+
     return {
       totalJogos: consolidatedTickets.length,
       custoAcumulado,
@@ -202,6 +327,9 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
       bestLatestHits,
       latestFaixas,
       chartSeries,
+      monthlySeries,
+      peakMonthLabel,
+      peakPremioBruto,
     };
   }, [consolidatedTickets, latestDraw, apostaMinima]);
 
@@ -235,6 +363,45 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
             {positive ? '+' : ''}
             {formatCurrencyBRL(pt.saldoLiquidoAcumulado)}
           </strong>
+        </div>
+      </div>
+    );
+  };
+
+  const MonthlyBarTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    const pt = payload[0]?.payload;
+    if (!pt) return null;
+    return (
+      <div className="bg-slate-950/95 border border-slate-700 rounded-xl p-3 shadow-2xl text-xs space-y-1.5 min-w-[235px]">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 gap-2">
+          <strong className="font-mono text-white">{pt.mes}</strong>
+          <span className="font-mono text-[10px] text-slate-400">
+            {pt.concursos} conc. · {pt.premiadosMes} premiado(s)
+          </span>
+        </div>
+        {pt.isPeak && (
+          <div className="text-[10px] font-bold text-amber-300 font-sans">
+            ★ Pico de Retorno no Histórico
+          </div>
+        )}
+        <div className="flex items-center justify-between font-mono text-[11px] tabular-nums">
+          <span className="text-slate-400">Custo no Mês:</span>
+          <strong className="text-rose-400">{formatCurrencyBRL(pt.custoMes)}</strong>
+        </div>
+        <div className="flex items-center justify-between font-mono text-[11px] tabular-nums">
+          <span className="text-slate-400">Prêmio Bruto no Mês:</span>
+          <strong className={pt.isPeak ? 'text-amber-300' : 'text-emerald-400'}>
+            {formatCurrencyBRL(pt.premioBrutoMes)}
+          </strong>
+        </div>
+        <div className="flex items-center justify-between font-mono text-[11px] tabular-nums pt-1 border-t border-slate-800">
+          <span className="text-slate-400">Custo Acumulado:</span>
+          <strong className="text-slate-200">{formatCurrencyBRL(pt.custoAcumulado)}</strong>
+        </div>
+        <div className="flex items-center justify-between font-mono text-[11px] tabular-nums">
+          <span className="text-slate-400">Prêmio Acumulado:</span>
+          <strong className="text-emerald-300">{formatCurrencyBRL(pt.premioAcumulado)}</strong>
         </div>
       </div>
     );
@@ -463,6 +630,124 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
             </div>
           )}
         </div>
+      </div>
+
+      {/* Gráfico de Barras: Custo Acumulado de Apostas vs Prêmio Bruto Recebido Mês a Mês */}
+      <div className="bg-slate-950/90 rounded-xl border border-slate-800 p-4 space-y-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs sm:text-sm font-bold text-white font-sans flex items-center gap-1.5">
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                <span>Custo de Apostas vs Prêmio Bruto Recebido (Mês a Mês)</span>
+              </h4>
+              {metrics.totalJogos > 0 && metrics.peakPremioBruto > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold tabular-nums">
+                  ★ Pico: {metrics.peakMonthLabel} ({formatCurrencyBRL(metrics.peakPremioBruto)})
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+              Histórico mensal dos últimos 100 concursos · Destaque âmbar identifica o pico máximo de retorno bruto
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 text-[11px] font-mono">
+              <span className="inline-flex items-center gap-1.5 text-rose-300">
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
+                Custo Apostas
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-emerald-300">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+                Prêmio Bruto
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-amber-300">
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
+                Pico Retorno
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-lg border border-slate-800 text-[11px] font-sans">
+              <button
+                type="button"
+                onClick={() => setMonthlyChartMode('mensal')}
+                className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer whitespace-nowrap ${
+                  monthlyChartMode === 'mensal'
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Por Mês (Picos)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonthlyChartMode('acumulado')}
+                className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer whitespace-nowrap ${
+                  monthlyChartMode === 'acumulado'
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Acumulado Progressivo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {metrics.totalJogos === 0 ? (
+          <div className="h-44 flex flex-col items-center justify-center text-center text-xs text-slate-400 gap-2 border border-dashed border-slate-800 rounded-xl">
+            <BarChart3 className="w-6 h-6 text-slate-600" />
+            <span>Salve jogos ou fechamentos para comparar custo acumulado vs prêmio bruto mês a mês.</span>
+          </div>
+        ) : (
+          <div className="w-full h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={metrics.monthlySeries}
+                margin={{ top: 10, right: 16, left: 4, bottom: 0 }}
+                barGap={4}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis
+                  dataKey="mes"
+                  stroke="#64748b"
+                  tick={{ fill: '#94a3b8', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                  tickLine={{ stroke: '#334155' }}
+                />
+                <YAxis
+                  stroke="#64748b"
+                  tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                  tickLine={{ stroke: '#334155' }}
+                  tickFormatter={(val) =>
+                    Math.abs(val) >= 1000 ? `R$${(val / 1000).toFixed(1)}k` : `R$${val}`
+                  }
+                />
+                <Tooltip content={<MonthlyBarTooltip />} cursor={{ fill: 'rgba(30, 41, 59, 0.45)' }} />
+                <Bar
+                  dataKey={monthlyChartMode === 'mensal' ? 'custoMes' : 'custoAcumulado'}
+                  name={monthlyChartMode === 'mensal' ? 'Custo do Mês' : 'Custo Acumulado'}
+                  fill="#f43f5e"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={28}
+                />
+                <Bar
+                  dataKey={monthlyChartMode === 'mensal' ? 'premioBrutoMes' : 'premioAcumulado'}
+                  name={monthlyChartMode === 'mensal' ? 'Prêmio Bruto do Mês' : 'Prêmio Acumulado'}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={28}
+                >
+                  {metrics.monthlySeries.map((entry) => (
+                    <Cell
+                      key={`bar-${entry.sortKey}`}
+                      fill={entry.isPeak ? '#fbbf24' : '#10b981'}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
     </section>
   );

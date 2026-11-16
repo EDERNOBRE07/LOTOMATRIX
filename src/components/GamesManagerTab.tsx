@@ -26,6 +26,10 @@ import {
   formatCurrencyBRL,
   TicketRoiAuditItem,
 } from '../services/ticketRoiAudit';
+import {
+  ScoreDeEficienciaBadge,
+  evaluateTicketConferenceEfficiency,
+} from './ScoreDeEficienciaBadge';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import {
@@ -2328,6 +2332,11 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                   t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
                 const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
                 const roiAudit = roiByTicketId.get(id);
+                const ticketEfficiency = evaluateTicketConferenceEfficiency(
+                  t,
+                  conferirDezenas,
+                  activeCompareDraw.premiacoes
+                );
 
                 return (
                   <div
@@ -2344,8 +2353,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                         : ''
                     }`}
                   >
-                    {/* Top Row: Selection Checkbox, Game Title & Hit Badge */}
-                    <div className="flex items-center justify-between text-xs gap-2">
+                    {/* Top Row: Selection Checkbox, Game Title, Score de Eficiência & Hit Badge */}
+                    <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
                       <div className="flex items-center gap-2 flex-wrap">
                         <input
                           type="checkbox"
@@ -2356,6 +2365,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                         <span className="font-mono font-black text-white text-sm tabular-nums">
                           Jogo #{t.index.toString().padStart(2, '0')}
                         </span>
+
+                        <ScoreDeEficienciaBadge efficiency={ticketEfficiency} compact />
 
                         {isExtremidadesFora && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
@@ -2386,13 +2397,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                               <TrendingDown className="w-3 h-3 shrink-0" />
                             )}
                             <span>
-                              ROI {roiAudit.roiPercent > 0 ? '+' : ''}
-                              {roiAudit.roiPercent.toFixed(0)}% ·{' '}
-                              {roiAudit.statusMargem === 'aprovado'
-                                ? 'OK'
-                                : roiAudit.statusMargem === 'alerta'
-                                ? 'Abaixo'
-                                : 'Falha Sist.'}
+                              ROI Hist. {roiAudit.roiPercent > 0 ? '+' : ''}
+                              {roiAudit.roiPercent.toFixed(0)}%
                             </span>
                           </span>
                         )}

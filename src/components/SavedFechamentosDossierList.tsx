@@ -74,6 +74,12 @@ import {
   BatchRoiAuditSummary,
   formatCurrencyBRL,
 } from '../services/ticketRoiAudit';
+import {
+  ScoreDeEficienciaBadge,
+  ConferenceEfficiencyResult,
+  evaluateBatchConferenceEfficiency,
+  evaluateTicketConferenceEfficiency,
+} from './ScoreDeEficienciaBadge';
 
 interface SavedFechamentosDossierListProps {
   latestDraw: LotofacilDraw;
@@ -91,6 +97,7 @@ interface EvaluatedFechamento {
   counts: { 15: number; 14: number; 13: number; 12: number; 11: number };
   ticketHitsMap: Map<string, number>;
   roiAudit: BatchRoiAuditSummary;
+  conferenceEfficiency: ConferenceEfficiencyResult;
   gamesAtOrAbove50Roi: number;
 }
 
@@ -304,6 +311,11 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         windowSize: 20,
         suggestedMarginPercent: suggestedRoiMargin,
       });
+      const conferenceEfficiency = evaluateBatchConferenceEfficiency(
+        tickets,
+        conferirDezenas,
+        selectedOfficialDraw.premiacoes
+      );
       const gamesAtOrAbove50Roi = roiAudit.items.filter((it) => it.roiPercent >= 50).length;
 
       return {
@@ -314,6 +326,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         counts,
         ticketHitsMap,
         roiAudit,
+        conferenceEfficiency,
         gamesAtOrAbove50Roi,
       };
     });
@@ -331,7 +344,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         totalPremiados: c15 + c14 + c13 + c12 + c11,
       },
     };
-  }, [fechamentos, conferirDezenas, conferirDezenasSet, latestDraw, suggestedRoiMargin]);
+  }, [fechamentos, conferirDezenas, conferirDezenasSet, latestDraw, selectedOfficialDraw.premiacoes, suggestedRoiMargin]);
 
   // Contagem global de jogos individuais com ROI < 50% vs >= 50%
   const globalRoi50Stats = useMemo(() => {
@@ -1563,7 +1576,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       ) : (
         <div className="space-y-4">
           {filteredEvaluatedList.map((item, idx) => {
-            const { fechamento: f, bestHits, premiadosCount, counts, ticketHitsMap, roiAudit } = item;
+            const { fechamento: f, bestHits, premiadosCount, counts, ticketHitsMap, roiAudit, conferenceEfficiency } = item;
             const isDossierExpanded = expandedDossierId === f.id;
             const isTicketsExpanded = expandedTicketsCardId === f.id;
             const isSelected = selectedFechamentoIds.has(f.id);
@@ -1795,8 +1808,10 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       </span>
                     </div>
 
-                    {/* Resumo de Auditoria ROI por Jogo (Custo vs Retorno Histórico Médio) */}
+                    {/* Score de Eficiência (Última Conferência) + Resumo de Auditoria ROI */}
                     <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-[11px]">
+                      <ScoreDeEficienciaBadge efficiency={conferenceEfficiency} />
+
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-bold ${
                           roiAudit.roiMedioGeralPercent >= suggestedRoiMargin
@@ -1813,7 +1828,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                           <TrendingDown className="w-3 h-3 text-rose-400" />
                         )}
                         <span>
-                          ROI/Jogo: {roiAudit.roiMedioGeralPercent > 0 ? '+' : ''}
+                          ROI Hist.: {roiAudit.roiMedioGeralPercent > 0 ? '+' : ''}
                           {roiAudit.roiMedioGeralPercent.toFixed(1).replace('.', ',')}%
                         </span>
                       </span>
@@ -2115,6 +2130,11 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                             new Set([...(t.tags || []), ...(storedTicketTags[ticketId] || [])])
                           );
                           const isMarginFail = ticketRoi && !ticketRoi.atingeMargemSugerida;
+                          const ticketEfficiency = evaluateTicketConferenceEfficiency(
+                            t,
+                            conferirDezenas,
+                            selectedOfficialDraw.premiacoes
+                          );
 
                           return (
                             <div
@@ -2129,37 +2149,14 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                                   : 'bg-slate-900/90 border-slate-800'
                               }`}
                             >
-                              {/* Linha Superior: Identificação + Acertos + Status ROI */}
-                              <div className="flex items-center justify-between gap-2 text-xs">
+                              {/* Linha Superior: Identificação + Score de Eficiência (Última Conferência) + Acertos */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <span className="font-mono font-bold text-white tabular-nums">
                                   Jogo #{(t.index ?? tIdx + 1).toString().padStart(2, '0')}
                                 </span>
 
-                                <div className="flex items-center gap-1.5 font-mono tabular-nums">
-                                  {ticketRoi && (
-                                    <span
-                                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                                        ticketRoi.atingeMargemSugerida
-                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
-                                          : ticketRoi.statusMargem === 'falha_sistematica'
-                                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                                          : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
-                                      }`}
-                                      title={`Retorno histórico médio ${formatCurrencyBRL(
-                                        ticketRoi.retornoMedioConcurso
-                                      )} vs Custo ${formatCurrencyBRL(ticketRoi.custoAposta)}`}
-                                    >
-                                      {ticketRoi.atingeMargemSugerida ? (
-                                        <TrendingUp className="w-2.5 h-2.5" />
-                                      ) : (
-                                        <TrendingDown className="w-2.5 h-2.5" />
-                                      )}
-                                      <span>
-                                        {ticketRoi.roiPercent > 0 ? '+' : ''}
-                                        {ticketRoi.roiPercent.toFixed(0)}%
-                                      </span>
-                                    </span>
-                                  )}
+                                <div className="flex flex-wrap items-center gap-1.5 font-mono tabular-nums">
+                                  <ScoreDeEficienciaBadge efficiency={ticketEfficiency} compact />
 
                                   <span
                                     className={`px-2 py-0.5 rounded font-bold text-[11px] shrink-0 ${
