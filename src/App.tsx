@@ -22,6 +22,7 @@ import {
   saveLocalSnapshot,
   isAutoDownloadOnSaveEnabled,
   triggerForcedJSONDownload,
+  checkAndRunScheduledDailyBackup,
 } from './services/backupManagerService';
 import { useActiveFilterConfig } from './hooks/useActiveFilterConfig';
 import {
@@ -204,6 +205,20 @@ export default function App() {
       }
     } catch {}
   }, [savedTickets]);
+
+  // Agendador diário em segundo plano para download automático JSON via triggerForcedJSONDownload
+  useEffect(() => {
+    const runScheduleCheck = () => {
+      checkAndRunScheduledDailyBackup(latestDraw?.concurso);
+    };
+    runScheduleCheck();
+    const intervalId = window.setInterval(runScheduleCheck, 15000);
+    window.addEventListener('lotosniper-daily-backup-schedule-updated', runScheduleCheck);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('lotosniper-daily-backup-schedule-updated', runScheduleCheck);
+    };
+  }, [latestDraw?.concurso]);
 
   const [jackpotHitNotice, setJackpotHitNotice] = useState<{
     concurso: number;

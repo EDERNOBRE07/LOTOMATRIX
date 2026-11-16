@@ -639,16 +639,16 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-xs sm:text-sm font-bold text-white font-sans flex items-center gap-1.5">
                 <BarChart3 className="w-4 h-4 text-amber-400" />
-                <span>Custo de Apostas vs Prêmio Bruto Recebido (Mês a Mês)</span>
+                <span>Custo Acumulado de Apostas vs Prêmio Bruto Recebido (Mês a Mês)</span>
               </h4>
               {metrics.totalJogos > 0 && metrics.peakPremioBruto > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold tabular-nums">
-                  ★ Pico: {metrics.peakMonthLabel} ({formatCurrencyBRL(metrics.peakPremioBruto)})
+                  ★ Pico de Retorno: {metrics.peakMonthLabel} ({formatCurrencyBRL(metrics.peakPremioBruto)})
                 </span>
               )}
             </div>
             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-              Histórico mensal dos últimos 100 concursos · Destaque âmbar identifica o pico máximo de retorno bruto
+              Comparativo mensal nos últimos 100 concursos · Barras âmbar sinalizam os picos de retorno bruto no histórico
             </p>
           </div>
 
@@ -656,15 +656,15 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
             <div className="flex items-center gap-3 text-[11px] font-mono">
               <span className="inline-flex items-center gap-1.5 text-rose-300">
                 <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
-                Custo Apostas
+                {monthlyChartMode === 'mensal' ? 'Custo no Mês' : 'Custo Acumulado'}
               </span>
               <span className="inline-flex items-center gap-1.5 text-emerald-300">
                 <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
-                Prêmio Bruto
+                {monthlyChartMode === 'mensal' ? 'Prêmio Bruto' : 'Prêmio Acumulado'}
               </span>
               <span className="inline-flex items-center gap-1.5 text-amber-300">
                 <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
-                Pico Retorno
+                Pico de Retorno
               </span>
             </div>
 
@@ -726,14 +726,14 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
                 <Tooltip content={<MonthlyBarTooltip />} cursor={{ fill: 'rgba(30, 41, 59, 0.45)' }} />
                 <Bar
                   dataKey={monthlyChartMode === 'mensal' ? 'custoMes' : 'custoAcumulado'}
-                  name={monthlyChartMode === 'mensal' ? 'Custo do Mês' : 'Custo Acumulado'}
+                  name={monthlyChartMode === 'mensal' ? 'Custo no Mês' : 'Custo Acumulado'}
                   fill="#f43f5e"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                 />
                 <Bar
                   dataKey={monthlyChartMode === 'mensal' ? 'premioBrutoMes' : 'premioAcumulado'}
-                  name={monthlyChartMode === 'mensal' ? 'Prêmio Bruto do Mês' : 'Prêmio Acumulado'}
+                  name={monthlyChartMode === 'mensal' ? 'Prêmio Bruto Recebido' : 'Prêmio Acumulado'}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={28}
                 >

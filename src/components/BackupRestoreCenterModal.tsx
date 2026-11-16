@@ -11,11 +11,11 @@ import {
   AlertTriangle,
   X,
   FileJson,
-  Layers,
-  Sparkles,
   ExternalLink,
   Save,
   Check,
+  CalendarClock,
+  Play,
 } from 'lucide-react';
 import {
   buildCompleteBackupPayload,
@@ -27,6 +27,11 @@ import {
   isAutoDownloadOnSaveEnabled,
   setAutoDownloadOnSave,
   getLastBackupTimestamp,
+  getDailyBackupSchedule,
+  saveDailyBackupSchedule,
+  getNextScheduledBackupLabel,
+  checkAndRunScheduledDailyBackup,
+  DailyBackupSchedule,
   LocalSnapshotMeta,
   BackupDataPayload,
 } from '../services/backupManagerService';
@@ -43,9 +48,10 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
   onClose,
   onSuccessNotification,
 }) => {
-  const [activeTab, setActiveTab] = useState<'exportar' | 'restaurar' | 'snapshots' | 'drive'>('exportar');
+  const [activeTab, setActiveTab] = useState<'exportar' | 'agendamento' | 'drive' | 'snapshots' | 'restaurar'>('exportar');
   const [autoDownload, setAutoDownload] = useState<boolean>(isAutoDownloadOnSaveEnabled());
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupTimestamp());
+  const [dailySchedule, setDailySchedule] = useState<DailyBackupSchedule>(() => getDailyBackupSchedule());
   const [snapshots, setSnapshots] = useState<{ meta: LocalSnapshotMeta; payload: BackupDataPayload }[]>([]);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -72,6 +78,7 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
       setSnapshots(getLocalSnapshots());
       setLastBackup(getLastBackupTimestamp());
       setAutoDownload(isAutoDownloadOnSaveEnabled());
+      setDailySchedule(getDailyBackupSchedule());
     } catch {}
   };
 
@@ -84,6 +91,21 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
       setFilePreview(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    const onScheduledExecuted = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      loadData();
+      if (detail?.filename) {
+        setStatusMessage({
+          type: 'success',
+          text: `Backup diário agendado (${detail.time}) executado: ${detail.filename} (${detail.sizeKB} KB).`,
+        });
+      }
+    };
+    window.addEventListener('lotosniper-daily-backup-executed', onScheduledExecuted);
+    return () => window.removeEventListener('lotosniper-daily-backup-executed', onScheduledExecuted);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -115,6 +137,40 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
     if (checked) {
       saveLocalSnapshot('auto');
       setSnapshots(getLocalSnapshots());
+    }
+  };
+
+  const updateDailySchedule = (patch: Partial<DailyBackupSchedule>, feedback?: string) => {
+    const next: DailyBackupSchedule = {
+      ...dailySchedule,
+      ...patch,
+    };
+    setDailySchedule(next);
+    saveDailyBackupSchedule(next);
+    if (feedback) {
+      setStatusMessage({
+        type: 'success',
+        text: feedback,
+      });
+    }
+  };
+
+  const handleRunScheduledBackupNow = () => {
+    setIsProcessing(true);
+    const res = checkAndRunScheduledDailyBackup(undefined, true);
+    setIsProcessing(false);
+    if (res.triggered && res.filename) {
+      loadData();
+      setStatusMessage({
+        type: 'success',
+        text: `Download agendado executado com sucesso via triggerForcedJSONDownload: ${res.filename} (${res.sizeKB} KB).`,
+      });
+      onSuccessNotification?.(`Backup agendado salvo: ${res.filename}`);
+    } else {
+      setStatusMessage({
+        type: 'error',
+        text: 'Falha ao disparar o backup agendado.',
+      });
     }
   };
 
@@ -277,7 +333,7 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
         <div className="px-6 pt-3 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
           <button
             onClick={() => setActiveTab('exportar')}
-            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'exportar'
                 ? 'border-emerald-500 text-emerald-400'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -288,8 +344,29 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
           </button>
 
           <button
+            onClick={() => setActiveTab('agendamento')}
+            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'agendamento'
+                ? 'border-amber-400 text-amber-300'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>Agendamento Diário</span>
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.2 rounded ${
+                dailySchedule.enabled
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {dailySchedule.enabled ? dailySchedule.time : 'OFF'}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('drive')}
-            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'drive'
                 ? 'border-sky-500 text-sky-400'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -301,7 +378,7 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
 
           <button
             onClick={() => setActiveTab('snapshots')}
-            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'snapshots'
                 ? 'border-amber-500 text-amber-400'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -313,7 +390,7 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
 
           <button
             onClick={() => setActiveTab('restaurar')}
-            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 font-bold transition border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'restaurar'
                 ? 'border-purple-500 text-purple-400'
                 : 'border-transparent text-slate-400 hover:text-white'
@@ -413,7 +490,7 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                 </button>
               </div>
 
-              {/* Opção de Download Automático */}
+              {/* Opção de Download Automático ao Salvar */}
               <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <span className="text-xs font-bold text-white block">
@@ -434,6 +511,198 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                   />
                   <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
+              </div>
+
+              {/* Resumo Rápido do Agendamento Diário */}
+              <div className="bg-slate-950/75 p-4 rounded-xl border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <CalendarClock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <span className="font-bold text-white block">
+                      Agendamento Diário de Backup ({dailySchedule.enabled ? `Ativo às ${dailySchedule.time}` : 'Desativado'})
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      Próxima execução: {getNextScheduledBackupLabel(dailySchedule)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('agendamento')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-xs font-bold transition cursor-pointer whitespace-nowrap self-start sm:self-center"
+                >
+                  Configurar Horário Diário
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 1.5: AGENDAMENTO DIÁRIO DE BACKUP */}
+          {activeTab === 'agendamento' && (
+            <div className="space-y-4">
+              <div className="bg-slate-950/85 p-5 rounded-2xl border border-amber-500/35 space-y-4">
+                <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div className="flex items-start gap-3">
+                    <div className="p-3 bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-xl shrink-0">
+                      <CalendarClock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">
+                        Agendamento Diário Automático (Download JSON)
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                        Defina um horário diário fixo para o LotoSniper disparar automaticamente o download dos seus dados via{' '}
+                        <code className="font-mono text-emerald-300">triggerForcedJSONDownload</code>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Switch Ativar / Desativar */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={dailySchedule.enabled}
+                    aria-label="Ativar ou desativar agendamento diário de backup"
+                    onClick={() =>
+                      updateDailySchedule(
+                        { enabled: !dailySchedule.enabled },
+                        !dailySchedule.enabled
+                          ? `Backup diário ativado para as ${dailySchedule.time}!`
+                          : 'Agendamento diário de backup pausado.'
+                      )
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      dailySchedule.enabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                    }`}
+                  >
+                    <span className="inline-block h-5 w-5 rounded-full bg-white shadow-md" />
+                  </button>
+                </div>
+
+                {/* Seleção do Horário Diário */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="daily-backup-time-input"
+                      className="text-xs font-bold text-slate-200 flex items-center gap-1.5"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Horário Diário Programado:</span>
+                    </label>
+                    <input
+                      id="daily-backup-time-input"
+                      type="time"
+                      step={60}
+                      value={dailySchedule.time}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^\d{2}:\d{2}$/.test(val)) {
+                          updateDailySchedule(
+                            { time: val, enabled: true },
+                            `Horário diário atualizado e salvo para as ${val}.`
+                          );
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-400"
+                    />
+
+                    {/* Atalhos Rápidos de Horário */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10px] text-slate-400 font-sans mr-1">Sugestões:</span>
+                      {[
+                        { time: '12:00', label: '12:00' },
+                        { time: '18:00', label: '18:00' },
+                        { time: '21:30', label: '21:30 (Pós-Sorteio)' },
+                        { time: '23:00', label: '23:00' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.time}
+                          type="button"
+                          onClick={() =>
+                            updateDailySchedule(
+                              { time: preset.time, enabled: true },
+                              `Horário diário configurado para as ${preset.time}.`
+                            )
+                          }
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition cursor-pointer ${
+                            dailySchedule.time === preset.time && dailySchedule.enabled
+                              ? 'bg-amber-400 text-slate-950 border-amber-300'
+                              : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Painel de Status da Execução */}
+                  <div className="bg-slate-900/90 rounded-xl border border-slate-800 p-3.5 space-y-2 text-xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-sans">Status do Agendador:</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          dailySchedule.enabled
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                            : 'bg-slate-950 text-slate-400 border-slate-800'
+                        }`}
+                      >
+                        {dailySchedule.enabled ? 'ATIVO DIARIAMENTE' : 'PAUSADO'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-sans">Próximo Download:</span>
+                      <strong className="text-amber-300 tabular-nums">
+                        {getNextScheduledBackupLabel(dailySchedule)}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80">
+                      <span className="text-slate-400 font-sans">Última Execução Auto:</span>
+                      <strong className="text-slate-200 tabular-nums">
+                        {dailySchedule.lastRunAt
+                          ? new Date(dailySchedule.lastRunAt).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'Ainda não executado'}
+                      </strong>
+                    </div>
+                    {dailySchedule.lastRunFilename && (
+                      <div className="text-[10px] text-emerald-400 truncate pt-1">
+                        Arquivo: {dailySchedule.lastRunFilename}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ações */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateDailySchedule(
+                        { enabled: true },
+                        `Preferência salva no localStorage: backup diário às ${dailySchedule.time}.`
+                      )
+                    }
+                    className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Salvar Horário ({dailySchedule.time})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRunScheduledBackupNow}
+                    disabled={isProcessing}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/45 text-emerald-300 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Testar Download Agendado Agora</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

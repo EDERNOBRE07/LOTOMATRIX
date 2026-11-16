@@ -482,6 +482,140 @@ export function getLastBackupTimestamp(): number | null {
   }
 }
 
+export interface DailyBackupSchedule {
+  enabled: boolean;
+  time: string; // HH:MM (24h)
+  lastRunDate?: string; // YYYY-MM-DD local
+  lastRunAt?: number;
+  lastRunFilename?: string;
+}
+
+const DAILY_BACKUP_SCHEDULE_KEY = 'lotosniper_daily_backup_schedule';
+
+export function getLocalDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getDailyBackupSchedule(): DailyBackupSchedule {
+  try {
+    const raw = localStorage.getItem(DAILY_BACKUP_SCHEDULE_KEY);
+    if (!raw) {
+      return { enabled: false, time: '21:30' };
+    }
+    const parsed = JSON.parse(raw);
+    const timeValid = typeof parsed?.time === 'string' && /^\d{2}:\d{2}$/.test(parsed.time);
+    return {
+      enabled: Boolean(parsed?.enabled),
+      time: timeValid ? parsed.time : '21:30',
+      lastRunDate: typeof parsed?.lastRunDate === 'string' ? parsed.lastRunDate : undefined,
+      lastRunAt: typeof parsed?.lastRunAt === 'number' ? parsed.lastRunAt : undefined,
+      lastRunFilename: typeof parsed?.lastRunFilename === 'string' ? parsed.lastRunFilename : undefined,
+    };
+  } catch {
+    return { enabled: false, time: '21:30' };
+  }
+}
+
+export function saveDailyBackupSchedule(schedule: DailyBackupSchedule): void {
+  try {
+    localStorage.setItem(DAILY_BACKUP_SCHEDULE_KEY, JSON.stringify(schedule));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-daily-backup-schedule-updated', { detail: schedule })
+      );
+    }
+  } catch (err) {
+    console.warn('[BackupManager] Falha ao salvar agendamento diário:', err);
+  }
+}
+
+export function getNextScheduledBackupLabel(schedule: DailyBackupSchedule): string {
+  if (!schedule.enabled) return 'Agendamento pausado';
+  const [hhStr, mmStr] = (schedule.time || '21:30').split(':');
+  const targetH = parseInt(hhStr, 10);
+  const targetM = parseInt(mmStr, 10);
+  if (!Number.isFinite(targetH) || !Number.isFinite(targetM)) return 'Horário inválido';
+
+  const now = new Date();
+  const todayKey = getLocalDateKey(now);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const targetMinutes = targetH * 60 + targetM;
+
+  if (schedule.lastRunDate === todayKey || currentMinutes >= targetMinutes) {
+    return `Amanhã às ${schedule.time}`;
+  }
+  return `Hoje às ${schedule.time}`;
+}
+
+/**
+ * Verifica se o horário diário agendado foi atingido e dispara `triggerForcedJSONDownload`
+ * uma única vez por dia civil.
+ */
+export function checkAndRunScheduledDailyBackup(
+  concursoBaseOverride?: number,
+  forceRunNow: boolean = false
+): { triggered: boolean; filename?: string; sizeKB?: number } {
+  const schedule = getDailyBackupSchedule();
+  if (!forceRunNow && !schedule.enabled) {
+    return { triggered: false };
+  }
+
+  const now = new Date();
+  const todayKey = getLocalDateKey(now);
+
+  if (!forceRunNow) {
+    if (schedule.lastRunDate === todayKey) {
+      return { triggered: false };
+    }
+    const [hhStr, mmStr] = (schedule.time || '21:30').split(':');
+    const targetH = parseInt(hhStr, 10);
+    const targetM = parseInt(mmStr, 10);
+    if (!Number.isFinite(targetH) || !Number.isFinite(targetM)) {
+      return { triggered: false };
+    }
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const targetMinutes = targetH * 60 + targetM;
+    if (currentMinutes < targetMinutes) {
+      return { triggered: false };
+    }
+  }
+
+  // Marca execução antes do download para evitar disparo duplicado em múltiplos listeners
+  const pendingUpdate: DailyBackupSchedule = {
+    ...schedule,
+    lastRunDate: todayKey,
+    lastRunAt: Date.now(),
+  };
+  saveDailyBackupSchedule(pendingUpdate);
+
+  const res = triggerForcedJSONDownload(undefined, concursoBaseOverride);
+  if (res.success) {
+    const completedUpdate: DailyBackupSchedule = {
+      ...pendingUpdate,
+      lastRunFilename: res.filename,
+    };
+    saveDailyBackupSchedule(completedUpdate);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-daily-backup-executed', {
+          detail: {
+            filename: res.filename,
+            sizeKB: res.sizeKB,
+            time: schedule.time,
+            timestamp: completedUpdate.lastRunAt,
+          },
+        })
+      );
+    }
+    return { triggered: true, filename: res.filename, sizeKB: res.sizeKB };
+  }
+
+  return { triggered: false };
+}
+
 /**
  * Abre o Google Drive na web para que o usuário possa armazenar o arquivo JSON
  */
@@ -491,3 +625,4 @@ export function openGoogleDriveForUpload(): void {
   // Abre o Google Drive para que o usuário solte o arquivo baixado
   window.open('https://drive.google.com/drive/u/0/my-drive', '_blank');
 }
+
