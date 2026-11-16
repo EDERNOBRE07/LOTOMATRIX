@@ -353,6 +353,8 @@ import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
+  ArrowUpDown,
+  EyeOff,
 } from 'lucide-react';
 
 interface LocalStorageKeyDiagnostic {
@@ -634,6 +636,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [somaFilter, setSomaFilter] = useState<SomaFilterOption>('all');
   const [suggestedRoiMargin, setSuggestedRoiMargin] = useState<number>(0);
   const [showOnlyMarginFailures, setShowOnlyMarginFailures] = useState<boolean>(false);
+  const [roiPerformanceSort, setRoiPerformanceSort] = useState<'default' | 'roi_desc' | 'roi_asc'>('default');
+  const [hideLowRoiUnder50, setHideLowRoiUnder50] = useState<boolean>(false);
 
   // Seleção de múltiplos jogos para exportação em lote
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(() => {
@@ -728,6 +732,11 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     return map;
   }, [tickets, ticketsRoiAudit]);
 
+  const lowRoiUnder50Count = useMemo(
+    () => ticketsRoiAudit.items.filter((it) => it.roiPercent < 50).length,
+    [ticketsRoiAudit]
+  );
+
   const handleResetAllFilters = () => {
     setSelectedFilterDezenas([]);
     setDezenaMatchMode('and');
@@ -736,11 +745,13 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     setActiveTagFilter('all');
     setSearchQuery('');
     setShowOnlyMarginFailures(false);
+    setHideLowRoiUnder50(false);
+    setRoiPerformanceSort('default');
   };
 
-  // Jogos filtrados por Tag, Busca e Menu de Filtros Dinâmicos
+  // Jogos filtrados por Tag, Busca, Menu de Filtros Dinâmicos e Performance ROI
   const filteredTickets = React.useMemo(() => {
-    return tickets.filter((t) => {
+    const filtered = tickets.filter((t) => {
       const id = t.id || `ticket-${t.index}`;
       const tags = ticketTags[id] || [];
 
@@ -791,8 +802,30 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         if (roiItem && roiItem.atingeMargemSugerida) return false;
       }
 
+      // 7. Filtro de Performance ROI: ocultar jogos com ROI histórico abaixo de 50%
+      if (hideLowRoiUnder50) {
+        const roiItem = roiByTicketId.get(id);
+        if (!roiItem || roiItem.roiPercent < 50) return false;
+      }
+
       return true;
     });
+
+    if (roiPerformanceSort === 'roi_desc') {
+      return [...filtered].sort((a, b) => {
+        const roiA = roiByTicketId.get(a.id || `ticket-${a.index}`)?.roiPercent ?? -999;
+        const roiB = roiByTicketId.get(b.id || `ticket-${b.index}`)?.roiPercent ?? -999;
+        return roiB - roiA;
+      });
+    }
+    if (roiPerformanceSort === 'roi_asc') {
+      return [...filtered].sort((a, b) => {
+        const roiA = roiByTicketId.get(a.id || `ticket-${a.index}`)?.roiPercent ?? -999;
+        const roiB = roiByTicketId.get(b.id || `ticket-${b.index}`)?.roiPercent ?? -999;
+        return roiA - roiB;
+      });
+    }
+    return filtered;
   }, [
     tickets,
     ticketTags,
@@ -803,6 +836,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     primosFilter,
     somaFilter,
     showOnlyMarginFailures,
+    hideLowRoiUnder50,
+    roiPerformanceSort,
     roiByTicketId,
   ]);
 
@@ -2165,6 +2200,50 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                         {showOnlyMarginFailures ? 'Mostrar Todos' : `Abaixo da Margem (${ticketsRoiAudit.jogosAbaixoMargem})`}
                       </span>
                     </button>
+
+                    {/* Filtro e Ordenação por Performance ROI */}
+                    <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-2 sm:border-l sm:border-slate-800">
+                      <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
+                        <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Performance ROI:</span>
+                      </span>
+
+                      <select
+                        value={roiPerformanceSort}
+                        onChange={(e) =>
+                          setRoiPerformanceSort(e.target.value as 'default' | 'roi_desc' | 'roi_asc')
+                        }
+                        className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-[11px] font-sans font-semibold cursor-pointer focus:outline-none focus:border-emerald-500"
+                        title="Ordenar jogos pela Performance ROI histórica"
+                      >
+                        <option value="default">Ordem Original</option>
+                        <option value="roi_desc">Maior ROI ↓</option>
+                        <option value="roi_asc">Menor ROI ↑</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => setHideLowRoiUnder50((v) => !v)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer flex items-center gap-1.5 ${
+                          hideLowRoiUnder50
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                            : 'bg-slate-900 text-slate-200 border-slate-700 hover:border-slate-600'
+                        }`}
+                        title="Ocultar visualmente jogos com ROI histórico abaixo de 50%"
+                      >
+                        <EyeOff className="w-3.5 h-3.5 shrink-0" />
+                        <span>Ocultar ROI &lt; 50%</span>
+                        <span
+                          className={`font-mono tabular-nums px-1.5 py-0.2 rounded text-[10px] ${
+                            hideLowRoiUnder50
+                              ? 'bg-slate-950/20 text-slate-950'
+                              : 'bg-slate-800 text-rose-300'
+                          }`}
+                        >
+                          {lowRoiUnder50Count}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 

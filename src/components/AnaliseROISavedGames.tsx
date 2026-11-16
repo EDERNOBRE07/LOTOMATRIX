@@ -11,6 +11,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
@@ -46,6 +48,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
 
   // 3. Exibir detalhamento por concurso
   const [isDetailsExpanded, setIsDetailsExpanded] = useState<boolean>(false);
+  const [csvExportFeedback, setCsvExportFeedback] = useState<string | null>(null);
 
   // Salva preferência da aposta mínima
   const handleApostaMinimaChange = (valor: number) => {
@@ -56,15 +59,29 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
     } catch {}
   };
 
-  // Coleta todos os jogos salvos para análise (tickets atuais ou fechamentos arquivados)
-  const allSavedTickets = useMemo(() => {
+  // Coleta todos os jogos salvos para análise (tickets atuais ou fechamentos arquivados) com identificação de origem
+  const allSavedTicketsWithOrigin = useMemo(() => {
     if (tickets && tickets.length > 0) {
-      return tickets;
+      return tickets.map((t, idx) => ({
+        ticket: t,
+        fechamentoNome: t.tags?.[0] || 'Fechamento Ativo',
+        jogoLabel: `Jogo #${(t.index ?? idx + 1).toString().padStart(2, '0')}`,
+      }));
     }
     const saved = getSavedFechamentos();
-    const flat = saved.flatMap((f) => f.tickets);
-    return flat.length > 0 ? flat : [];
+    return saved.flatMap((f) =>
+      (Array.isArray(f.tickets) ? f.tickets : []).map((t, idx) => ({
+        ticket: t,
+        fechamentoNome: f.tipoFechamento || f.nomeFechamento || 'Fechamento Salvo',
+        jogoLabel: `Jogo #${(t.index ?? idx + 1).toString().padStart(2, '0')}`,
+      }))
+    );
   }, [tickets]);
+
+  const allSavedTickets = useMemo(
+    () => allSavedTicketsWithOrigin.map((item) => item.ticket),
+    [allSavedTicketsWithOrigin]
+  );
 
   // Lista dos concursos do histórico para o intervalo selecionado
   const drawsToEvaluate = useMemo(() => {
@@ -211,6 +228,150 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
   const isPositive = roiSummary.lucroLiquido > 0.005;
   const isNeutral = Math.abs(roiSummary.lucroLiquido) <= 0.005;
 
+  // Exporta auditoria detalhada em CSV (custo total e retorno histórico de cada jogo salvo)
+  const handleExportAuditoriaROICsv = () => {
+    if (allSavedTicketsWithOrigin.length === 0) return;
+
+    const formatCsvDecimal = (num: number) =>
+      (Number.isFinite(num) ? num : 0).toFixed(2).replace('.', ',');
+
+    const headers = [
+      'Jogo',
+      'Origem / Fechamento',
+      'Dezenas',
+      'Qtd Dezenas',
+      'Concursos Auditados',
+      'Aposta Unitaria (R$)',
+      'Custo Total (R$)',
+      'Retorno Historico Total (R$)',
+      'Retorno Medio / Concurso (R$)',
+      'Lucro Liquido (R$)',
+      'ROI (%)',
+      'Premiacoes no Periodo',
+      'Melhor Pontuacao',
+      '15 Pontos',
+      '14 Pontos',
+      '13 Pontos',
+      '12 Pontos',
+      '11 Pontos',
+    ];
+
+    const drawCount = Math.max(1, drawsToEvaluate.length);
+    const rows = allSavedTicketsWithOrigin.map(({ ticket, fechamentoNome, jogoLabel }) => {
+      const dezenas = Array.isArray(ticket.dezenas)
+        ? [...ticket.dezenas].sort((a, b) => a - b)
+        : [];
+      const dezCount = dezenas.length;
+      const custoUnitario =
+        dezCount === 16
+          ? apostaMinima * 16
+          : dezCount === 17
+          ? apostaMinima * 136
+          : dezCount === 18
+          ? apostaMinima * 816
+          : apostaMinima;
+      const custoTotalJogo = custoUnitario * drawCount;
+
+      let retornoHistoricoJogo = 0;
+      let premiacoesJogo = 0;
+      let melhorPontuacao = 0;
+      let f15 = 0;
+      let f14 = 0;
+      let f13 = 0;
+      let f12 = 0;
+      let f11 = 0;
+
+      drawsToEvaluate.forEach((draw) => {
+        const hits = countMatches(dezenas, draw.dezenas);
+        if (hits > melhorPontuacao) melhorPontuacao = hits;
+        if (hits >= 11) {
+          premiacoesJogo++;
+          if (hits === 15) {
+            f15++;
+            retornoHistoricoJogo += draw.premiacoes?.faixa15?.valor || 1800000;
+          } else if (hits === 14) {
+            f14++;
+            retornoHistoricoJogo += draw.premiacoes?.faixa14?.valor || 1500;
+          } else if (hits === 13) {
+            f13++;
+            retornoHistoricoJogo += draw.premiacoes?.faixa13?.valor || 35.0;
+          } else if (hits === 12) {
+            f12++;
+            retornoHistoricoJogo += draw.premiacoes?.faixa12?.valor || 14.0;
+          } else {
+            f11++;
+            retornoHistoricoJogo += draw.premiacoes?.faixa11?.valor || 7.0;
+          }
+        }
+      });
+
+      const retornoMedioJogo = retornoHistoricoJogo / drawCount;
+      const lucroLiquidoJogo = retornoHistoricoJogo - custoTotalJogo;
+      const roiJogoPercent = custoTotalJogo > 0 ? (lucroLiquidoJogo / custoTotalJogo) * 100 : 0;
+
+      return [
+        `"${jogoLabel}"`,
+        `"${String(fechamentoNome).replace(/"/g, '""')}"`,
+        `"${dezenas.map((n) => n.toString().padStart(2, '0')).join(' ')}"`,
+        dezCount,
+        drawCount,
+        `"${formatCsvDecimal(custoUnitario)}"`,
+        `"${formatCsvDecimal(custoTotalJogo)}"`,
+        `"${formatCsvDecimal(retornoHistoricoJogo)}"`,
+        `"${formatCsvDecimal(retornoMedioJogo)}"`,
+        `"${formatCsvDecimal(lucroLiquidoJogo)}"`,
+        `"${roiJogoPercent.toFixed(1).replace('.', ',')}%"`,
+        premiacoesJogo,
+        melhorPontuacao,
+        f15,
+        f14,
+        f13,
+        f12,
+        f11,
+      ].join(';');
+    });
+
+    const summaryRow = [
+      `"TOTAL CONSOLIDADO (${roiSummary.totalJogos} jogos)"`,
+      `"Periodo #${drawsToEvaluate[drawsToEvaluate.length - 1]?.concurso ?? latestDraw.concurso} a #${drawsToEvaluate[0]?.concurso ?? latestDraw.concurso}"`,
+      '""',
+      '-',
+      drawCount,
+      `"${formatCsvDecimal(roiSummary.custoPorConcurso)}"`,
+      `"${formatCsvDecimal(roiSummary.custoTotal)}"`,
+      `"${formatCsvDecimal(roiSummary.premioTotal)}"`,
+      `"${formatCsvDecimal(roiSummary.premioTotal / drawCount)}"`,
+      `"${formatCsvDecimal(roiSummary.lucroLiquido)}"`,
+      `"${roiSummary.roiPercentual.toFixed(1).replace('.', ',')}%"`,
+      roiSummary.totalBilhetesPremiados || 0,
+      '-',
+      roiSummary.faixas[15],
+      roiSummary.faixas[14],
+      roiSummary.faixas[13],
+      roiSummary.faixas[12],
+      roiSummary.faixas[11],
+    ].join(';');
+
+    const csvContent = '\uFEFF' + headers.join(';') + '\n' + rows.join('\n') + '\n' + summaryRow;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const concursoAlvo = Number(latestDraw.concurso) + 1;
+    const fileName = `lotosniper_auditoria_roi_concurso_${concursoAlvo}_${drawCount}_sorteios.csv`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setCsvExportFeedback(
+      `CSV "${fileName}" exportado com ${allSavedTicketsWithOrigin.length} jogo(s) auditado(s).`
+    );
+    setTimeout(() => setCsvExportFeedback(null), 4500);
+  };
+
   return (
     <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-2xl space-y-5">
       {/* Header */}
@@ -234,8 +395,27 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
           </div>
         </div>
 
-        {/* Status Summary Indicator */}
-        <div className="self-start md:self-center shrink-0">
+        {/* Status Summary Indicator + Botão Exportar Auditoria ROI (CSV) */}
+        <div className="self-start md:self-center shrink-0 flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleExportAuditoriaROICsv}
+            disabled={allSavedTickets.length === 0}
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 whitespace-nowrap transition ${
+              allSavedTickets.length === 0
+                ? 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/45 cursor-pointer active:scale-95 shadow-sm'
+            }`}
+            title={
+              allSavedTickets.length === 0
+                ? 'Gere ou salve jogos para exportar a auditoria ROI em CSV'
+                : 'Gerar arquivo CSV com custo total e retorno histórico de cada jogo salvo'
+            }
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>Exportar Auditoria ROI</span>
+          </button>
+
           <div
             className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 whitespace-nowrap ${
               isPositive
@@ -268,6 +448,22 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
           </div>
         </div>
       </div>
+
+      {csvExportFeedback && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 text-xs px-4 py-2.5 rounded-xl flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-medium">{csvExportFeedback}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCsvExportFeedback(null)}
+            className="text-emerald-300 hover:text-white font-bold px-1.5 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Controles Interativos: Valor da Aposta Mínima & Intervalo de Concursos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950/80 p-4 rounded-2xl border border-slate-800">

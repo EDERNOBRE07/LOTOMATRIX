@@ -59,6 +59,8 @@ import {
   TrendingUp,
   TrendingDown,
   AlertTriangle,
+  ArrowUpDown,
+  EyeOff,
 } from 'lucide-react';
 import {
   auditAndNotifySavedGames,
@@ -69,6 +71,7 @@ import {
 } from '../services/savedGamesAuditorService';
 import {
   auditBatchTicketsROI,
+  BatchRoiAuditSummary,
   formatCurrencyBRL,
 } from '../services/ticketRoiAudit';
 
@@ -87,6 +90,8 @@ interface EvaluatedFechamento {
   premiadosCount: number;
   counts: { 15: number; 14: number; 13: number; 12: number; 11: number };
   ticketHitsMap: Map<string, number>;
+  roiAudit: BatchRoiAuditSummary;
+  gamesAtOrAbove50Roi: number;
 }
 
 export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListProps> = ({
@@ -136,9 +141,11 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   const [quickFilter, setQuickFilter] = useState<QuickListFilter>('todos');
   const [modalidadeDezenasFilter, setModalidadeDezenasFilter] = useState<number | 'all'>('all');
 
-  // Auditoria Visual de ROI por Jogo (Margem de lucro sugerida e filtro de falha sistemática)
+  // Auditoria Visual de ROI por Jogo (Margem de lucro sugerida, ordenação e filtro de ROI < 50%)
   const [suggestedRoiMargin, setSuggestedRoiMargin] = useState<number>(0);
   const [showOnlyMarginFailures, setShowOnlyMarginFailures] = useState<boolean>(false);
+  const [roiPerformanceSort, setRoiPerformanceSort] = useState<'default' | 'roi_desc' | 'roi_asc'>('default');
+  const [hideLowRoiUnder50, setHideLowRoiUnder50] = useState<boolean>(false);
 
   // Tags salvas de bilhetes
   const [storedTicketTags, setStoredTicketTags] = useState<Record<string, string[]>>(() => {
@@ -293,6 +300,12 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         }
       });
 
+      const roiAudit = auditBatchTicketsROI(tickets, latestDraw, {
+        windowSize: 20,
+        suggestedMarginPercent: suggestedRoiMargin,
+      });
+      const gamesAtOrAbove50Roi = roiAudit.items.filter((it) => it.roiPercent >= 50).length;
+
       return {
         fechamento: f,
         universoCount: Array.isArray(f.universoDezenas) ? f.universoDezenas.length : 15,
@@ -300,6 +313,8 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         premiadosCount,
         counts,
         ticketHitsMap,
+        roiAudit,
+        gamesAtOrAbove50Roi,
       };
     });
 
@@ -316,23 +331,56 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         totalPremiados: c15 + c14 + c13 + c12 + c11,
       },
     };
-  }, [fechamentos, conferirDezenas, conferirDezenasSet]);
+  }, [fechamentos, conferirDezenas, conferirDezenasSet, latestDraw, suggestedRoiMargin]);
 
-  // Fechamentos filtrados pelo filtro rápido do topo
+  // Contagem global de jogos individuais com ROI < 50% vs >= 50%
+  const globalRoi50Stats = useMemo(() => {
+    let totalGames = 0;
+    let above50 = 0;
+    evaluatedList.forEach((item) => {
+      totalGames += item.roiAudit.totalJogos;
+      above50 += item.gamesAtOrAbove50Roi;
+    });
+    return {
+      totalGames,
+      above50,
+      below50: Math.max(0, totalGames - above50),
+    };
+  }, [evaluatedList]);
+
+  // Fechamentos filtrados pelo filtro rápido do topo + Performance ROI (ocultar < 50% e ordenar)
   const filteredEvaluatedList = useMemo(() => {
-    return evaluatedList.filter((item) => {
+    const base = evaluatedList.filter((item) => {
       if (quickFilter === 'premiados' && item.premiadosCount === 0) {
         return false;
       }
       if (quickFilter === 'modalidade') {
         if (modalidadeDezenasFilter === 'all') {
-          return item.universoCount >= 16 && item.universoCount <= 21;
+          if (item.universoCount < 16 || item.universoCount > 21) return false;
+        } else if (item.universoCount !== modalidadeDezenasFilter) {
+          return false;
         }
-        return item.universoCount === modalidadeDezenasFilter;
+      }
+      if (hideLowRoiUnder50) {
+        if (item.gamesAtOrAbove50Roi === 0 && item.roiAudit.roiMedioGeralPercent < 50) {
+          return false;
+        }
       }
       return true;
     });
-  }, [evaluatedList, quickFilter, modalidadeDezenasFilter]);
+
+    if (roiPerformanceSort === 'roi_desc') {
+      return [...base].sort(
+        (a, b) => b.roiAudit.roiMedioGeralPercent - a.roiAudit.roiMedioGeralPercent
+      );
+    }
+    if (roiPerformanceSort === 'roi_asc') {
+      return [...base].sort(
+        (a, b) => a.roiAudit.roiMedioGeralPercent - b.roiAudit.roiMedioGeralPercent
+      );
+    }
+    return base;
+  }, [evaluatedList, quickFilter, modalidadeDezenasFilter, hideLowRoiUnder50, roiPerformanceSort]);
 
   const modalidadeCounts = useMemo(() => {
     const map: Record<number, number> = {};
@@ -1307,6 +1355,50 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
               >
                 Por Modalidade (16 a 21 Dezenas)
               </button>
+
+              {/* Filtro e Ordenação por Performance ROI */}
+              <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-2 sm:border-l sm:border-slate-800">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Performance ROI:</span>
+                </span>
+
+                <select
+                  value={roiPerformanceSort}
+                  onChange={(e) =>
+                    setRoiPerformanceSort(e.target.value as 'default' | 'roi_desc' | 'roi_asc')
+                  }
+                  className="bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-sans font-semibold cursor-pointer focus:outline-none focus:border-emerald-500"
+                  title="Ordenar jogos e fechamentos pela Performance ROI histórica"
+                >
+                  <option value="default">Ordem Recente</option>
+                  <option value="roi_desc">Maior ROI ↓</option>
+                  <option value="roi_asc">Menor ROI ↑</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => setHideLowRoiUnder50((prev) => !prev)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                    hideLowRoiUnder50
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                  title="Ocultar visualmente jogos com ROI histórico abaixo de 50%"
+                >
+                  <EyeOff className="w-3.5 h-3.5 shrink-0" />
+                  <span>Ocultar ROI &lt; 50%</span>
+                  <span
+                    className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${
+                      hideLowRoiUnder50
+                        ? 'bg-slate-950/20 text-slate-950'
+                        : 'bg-slate-900 text-rose-300'
+                    }`}
+                  >
+                    {globalRoi50Stats.below50}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Seleção e Exclusão em Massa */}
@@ -1446,13 +1538,22 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
         <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
           <Award className="w-8 h-8 text-amber-400 mx-auto" />
           <h3 className="text-sm font-bold text-white">
-            Nenhum fechamento encontrado para o filtro selecionado
+            {hideLowRoiUnder50
+              ? 'Nenhum fechamento possui jogos com ROI histórico ≥ 50% no filtro ativo'
+              : 'Nenhum fechamento encontrado para o filtro selecionado'}
           </h3>
+          {hideLowRoiUnder50 && (
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Todos os {globalRoi50Stats.below50} jogo(s) avaliado(s) estão com ROI histórico abaixo de 50%.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
               setQuickFilter('todos');
               setModalidadeDezenasFilter('all');
+              setHideLowRoiUnder50(false);
+              setRoiPerformanceSort('default');
             }}
             className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition cursor-pointer"
           >
@@ -1462,7 +1563,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
       ) : (
         <div className="space-y-4">
           {filteredEvaluatedList.map((item, idx) => {
-            const { fechamento: f, bestHits, premiadosCount, counts, ticketHitsMap } = item;
+            const { fechamento: f, bestHits, premiadosCount, counts, ticketHitsMap, roiAudit } = item;
             const isDossierExpanded = expandedDossierId === f.id;
             const isTicketsExpanded = expandedTicketsCardId === f.id;
             const isSelected = selectedFechamentoIds.has(f.id);
@@ -1483,22 +1584,34 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             const cleanModalidade =
               String(f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`).trim();
 
-            const roiAudit = auditBatchTicketsROI(tickets, latestDraw, {
-              windowSize: 20,
-              suggestedMarginPercent: suggestedRoiMargin,
-            });
             const hasMarginFailures = roiAudit.jogosAbaixoMargem > 0;
             const approvedRatio =
               roiAudit.totalJogos > 0
                 ? Math.round((roiAudit.jogosAprovados / roiAudit.totalJogos) * 100)
                 : 0;
-            const displayedTickets = showOnlyMarginFailures
-              ? tickets.filter((t, tIdx) => {
-                  const key = `${t.id || 't'}-${tIdx}`;
-                  const itemAudit = roiAudit.itemsByKey.get(key);
-                  return itemAudit ? !itemAudit.atingeMargemSugerida : false;
-                })
-              : tickets;
+
+            const indexedTickets = tickets.map((t, tIdx) => {
+              const hitsKey = `${t.id || 't'}-${tIdx}`;
+              const ticketRoi = roiAudit.itemsByKey.get(hitsKey);
+              return { t, tIdx, hitsKey, ticketRoi };
+            });
+
+            const filteredTicketsWithMeta = indexedTickets.filter(({ ticketRoi }) => {
+              if (showOnlyMarginFailures && ticketRoi?.atingeMargemSugerida) return false;
+              if (hideLowRoiUnder50 && (!ticketRoi || ticketRoi.roiPercent < 50)) return false;
+              return true;
+            });
+
+            const displayedTicketsWithMeta =
+              roiPerformanceSort === 'roi_desc'
+                ? [...filteredTicketsWithMeta].sort(
+                    (a, b) => (b.ticketRoi?.roiPercent ?? -999) - (a.ticketRoi?.roiPercent ?? -999)
+                  )
+                : roiPerformanceSort === 'roi_asc'
+                ? [...filteredTicketsWithMeta].sort(
+                    (a, b) => (a.ticketRoi?.roiPercent ?? -999) - (b.ticketRoi?.roiPercent ?? -999)
+                  )
+                : filteredTicketsWithMeta;
 
             return (
               <article
@@ -1950,20 +2063,32 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
 
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="font-sans font-semibold text-slate-300">
-                        Exibindo <strong className="font-mono text-white">{displayedTickets.length}</strong> de{' '}
+                        Exibindo <strong className="font-mono text-white">{displayedTicketsWithMeta.length}</strong> de{' '}
                         <strong className="font-mono text-white">{tickets.length}</strong> bilhete(s)
+                        {hideLowRoiUnder50 && (
+                          <span className="text-emerald-400 font-mono text-[11px] ml-2">
+                            (Filtro ativo: ROI ≥ 50%)
+                          </span>
+                        )}
                       </span>
                       <span className="font-sans text-slate-400">
                         Esfera verde = dezena pontuada no concurso conferido
                       </span>
                     </div>
 
-                    {displayedTickets.length === 0 ? (
+                    {displayedTicketsWithMeta.length === 0 ? (
                       <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-5 text-center text-xs text-slate-300 space-y-2">
-                        <p>Todos os bilhetes deste fechamento atingiram a margem sugerida de ROI ({suggestedRoiMargin}%).</p>
+                        <p>
+                          {hideLowRoiUnder50
+                            ? 'Nenhum bilhete deste fechamento possui ROI histórico ≥ 50%.'
+                            : `Todos os bilhetes deste fechamento atingiram a margem sugerida de ROI (${suggestedRoiMargin}%).`}
+                        </p>
                         <button
                           type="button"
-                          onClick={() => setShowOnlyMarginFailures(false)}
+                          onClick={() => {
+                            setShowOnlyMarginFailures(false);
+                            setHideLowRoiUnder50(false);
+                          }}
                           className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold cursor-pointer"
                         >
                           Exibir Todos os Bilhetes
@@ -1971,12 +2096,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-                        {tickets.map((t, tIdx) => {
-                          const hitsKey = `${t.id || 't'}-${tIdx}`;
-                          const ticketRoi = roiAudit.itemsByKey.get(hitsKey);
-                          if (showOnlyMarginFailures && ticketRoi?.atingeMargemSugerida) {
-                            return null;
-                          }
+                        {displayedTicketsWithMeta.map(({ t, tIdx, hitsKey, ticketRoi }) => {
 
                           const dezenas = Array.isArray(t.dezenas)
                             ? [...t.dezenas].sort((a, b) => a - b)
