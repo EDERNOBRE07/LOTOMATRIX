@@ -26,6 +26,7 @@ import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics'
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { formatCurrencyBRL } from '../services/ticketRoiAudit';
+import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
 
 interface EstatisticasPerformanceGlobalProps {
   tickets?: GameTicket[];
@@ -296,7 +297,7 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
         <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
           {/* Card 1: ROI Acumulado de Todos os Jogos */}
           <motion.div
-            key={`global-roi-${metrics.totalJogos}-${latestDraw.concurso}`}
+            key="global-roi"
             initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
@@ -330,27 +331,25 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
                   isRoiPositive ? 'text-emerald-300' : 'text-rose-400'
                 }`}
               >
-                {metrics.roiAcumuladoPercent > 0 ? '+' : ''}
-                {metrics.roiAcumuladoPercent.toFixed(1).replace('.', ',')}%
+                <AnimatedNumberValue value={metrics.roiAcumuladoPercent} decimals={1} signed suffix="%" />
               </strong>
               <span className="text-xs font-mono tabular-nums text-slate-300">
                 Saldo:{' '}
                 <strong className={metrics.saldoLiquidoTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                  {metrics.saldoLiquidoTotal >= 0 ? '+' : ''}
-                  {formatCurrencyBRL(metrics.saldoLiquidoTotal)}
+                  <AnimatedCurrencyValue value={metrics.saldoLiquidoTotal} signed />
                 </strong>
               </span>
             </div>
 
             <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
-              <span>Custo: {formatCurrencyBRL(metrics.custoAcumulado)}</span>
-              <span>Retorno: {formatCurrencyBRL(metrics.retornoAcumulado)}</span>
+              <span>Custo: <AnimatedCurrencyValue value={metrics.custoAcumulado} /></span>
+              <span>Retorno: <AnimatedCurrencyValue value={metrics.retornoAcumulado} /></span>
             </div>
           </motion.div>
 
           {/* Card 2: Total de Bilhetes Premiados no Concurso Mais Recente */}
           <motion.div
-            key={`global-premiados-${metrics.latestPremiadosCount}-${latestDraw.concurso}`}
+            key="global-premiados"
             initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.28, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
@@ -368,13 +367,13 @@ export const EstatisticasPerformanceGlobal: React.FC<EstatisticasPerformanceGlob
 
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <strong className="text-2xl font-black font-mono tabular-nums text-white">
-                {metrics.latestPremiadosCount}{' '}
+                <AnimatedNumberValue value={metrics.latestPremiadosCount} decimals={0} />{' '}
                 <span className="text-xs font-sans font-semibold text-slate-400">
                   bilhete(s) premiado(s)
                 </span>
               </strong>
               <span className="text-xs font-mono tabular-nums font-bold text-emerald-400">
-                {formatCurrencyBRL(metrics.latestRetornoBruto)}
+                <AnimatedCurrencyValue value={metrics.latestRetornoBruto} />
               </span>
             </div>
 

@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Award,
   Sparkles,
+  HardDrive,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
@@ -63,6 +64,7 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
     soundService.get13PlusSoundType()
   );
   const [statusFeedback, setStatusFeedback] = useState<{ type: 'ok' | 'warn'; text: string } | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     const syncPerm = () => {
@@ -83,6 +85,7 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
   const commitRules = (next: DetailedNotificationRules) => {
     setRules(next);
     saveDetailedNotificationRules(next);
+    setLastSavedAt(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
   };
 
   const handleRequestPermission = async () => {
@@ -205,19 +208,23 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
     },
     {
       key: 'fimCiclo',
-      title: 'Reta Final / Fechamento de Ciclo',
-      description: 'Alerta de alta probabilidade quando restarem poucas dezenas para encerrar o ciclo atual.',
+      title: 'Fechamento de Ciclo (e Reta Final)',
+      description: 'Dispara quando o ciclo das 25 dezenas se fecha ou atinge a reta final configurada.',
       category: 'Ciclos',
       icon: <Sparkles className="w-4 h-4 text-amber-300" />,
-      thresholdLabel: 'Ausentes ≤',
+      thresholdLabel: 'Gatilho',
       thresholdOptions: [
-        { value: 1, label: '≤ 1 dez.' },
-        { value: 2, label: '≤ 2 dez.' },
-        { value: 3, label: '≤ 3 dez.' },
+        { value: 0, label: 'Ciclo fechado (0)' },
+        { value: 1, label: '≤ 1 dez. / fechou' },
+        { value: 2, label: '≤ 2 dez. / fechou' },
+        { value: 3, label: '≤ 3 dez. / fechou' },
       ],
-      testTitle: (th, c) => `Reta Final do Ciclo (#${c})`,
+      testTitle: (th, c) =>
+        (th ?? 3) === 0 ? `Ciclo das 25 Dezenas Fechado (#${c})` : `Fechamento / Reta Final do Ciclo (#${c})`,
       testBody: (th, c) =>
-        `Faltam ${th ?? 3} ou menos dezenas para fechar o ciclo no Concurso #${c}. Alta propensão de retorno.`,
+        (th ?? 3) === 0
+          ? `Todas as 25 dezenas completaram o ciclo no Concurso #${c}. Novo ciclo iniciando na próxima rodada.`
+          : `Faltam ${th ?? 3} ou menos dezenas para fechar o ciclo no Concurso #${c}. Alta propensão de retorno.`,
       playSound: () => soundService.playCycleAlertSound(),
     },
     {
@@ -330,16 +337,21 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
             <Bell className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div className="flex items-center gap-2 text-xs text-slate-400 flex-wrap">
               <span className="font-semibold text-amber-300">Central de Regras de Notificação</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">{activeCount}/7 eventos ativos</span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 font-mono text-[11px] text-emerald-400">
+                <HardDrive className="w-3 h-3" />
+                {lastSavedAt ? `Salvo no localStorage às ${lastSavedAt}` : 'Persistido automaticamente no localStorage'}
+              </span>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5">
+            <h3 className="text-base sm:text-lg font-bold text-white font-sans tracking-tight mt-0.5">
               Personalização de Alertas Sonoros & Notificações Nativas (Push)
             </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Escolha exatamente quais eventos devem disparar alerta sonoro no navegador e/ou notificação nativa do sistema operacional.
+              Defina quais eventos (atrasos críticos, fechamento de ciclo ou premiações 13+) disparam alertas sonoros e quais disparam notificações push nativas.
             </p>
           </div>
         </div>
@@ -491,6 +503,93 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
           <span>{statusFeedback.text}</span>
         </div>
       )}
+
+      {/* Resumo Rápido dos 3 Eventos Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {(
+          [
+            {
+              key: 'atrasosCriticos' as NotificationEventKey,
+              label: 'Atrasos Críticos',
+              sub: `Hiato ≥ ${rules.events.atrasosCriticos.threshold ?? 5} conc.`,
+              icon: <Clock className="w-4 h-4 text-rose-400 shrink-0" />,
+            },
+            {
+              key: 'fimCiclo' as NotificationEventKey,
+              label: 'Fechamento de Ciclo',
+              sub:
+                (rules.events.fimCiclo.threshold ?? 3) === 0
+                  ? 'Ciclo fechado (0 aus.)'
+                  : `≤ ${rules.events.fimCiclo.threshold ?? 3} aus. / fechou`,
+              icon: <Sparkles className="w-4 h-4 text-amber-300 shrink-0" />,
+            },
+            {
+              key: 'premiacoes13Plus' as NotificationEventKey,
+              label: 'Premiações 13+',
+              sub: `${rules.events.premiacoes13Plus.threshold ?? 13}+ acertos`,
+              icon: <Trophy className="w-4 h-4 text-amber-400 shrink-0" />,
+            },
+          ]
+        ).map((item) => {
+          const r = rules.events[item.key];
+          const active = rules.masterEnabled && r.enabled;
+          return (
+            <div
+              key={item.key}
+              className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 transition ${
+                active ? 'bg-slate-950/95 border-slate-800' : 'bg-slate-950/50 border-slate-800/60 opacity-60'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {item.icon}
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-white block truncate">{item.label}</span>
+                    <span className="text-[10px] font-mono text-slate-400">{item.sub}</span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={r.enabled}
+                  disabled={!rules.masterEnabled}
+                  onChange={(e) => updateEventRule(item.key, { enabled: e.target.checked })}
+                  className="w-4 h-4 accent-emerald-500 rounded cursor-pointer shrink-0"
+                  aria-label={`Habilitar ${item.label}`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  disabled={!active || rules.quietMode}
+                  onClick={() => updateEventRule(item.key, { soundEnabled: !r.soundEnabled })}
+                  className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer disabled:opacity-40 ${
+                    r.soundEnabled && !rules.quietMode
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-900 text-slate-400 border-slate-800'
+                  }`}
+                >
+                  {r.soundEnabled && !rules.quietMode ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+                  <span>{r.soundEnabled && !rules.quietMode ? 'Som ON' : 'Som OFF'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!active}
+                  onClick={() => updateEventRule(item.key, { nativePushEnabled: !r.nativePushEnabled })}
+                  className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer disabled:opacity-40 ${
+                    r.nativePushEnabled
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-900 text-slate-400 border-slate-800'
+                  }`}
+                >
+                  <Bell className="w-3 h-3" />
+                  <span>{r.nativePushEnabled ? 'Push ON' : 'Push OFF'}</span>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Detailed Rules Matrix */}
       <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/70">

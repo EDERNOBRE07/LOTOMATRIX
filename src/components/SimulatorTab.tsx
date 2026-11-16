@@ -16,6 +16,7 @@ import { MapaCalorProbabilidadeVolante10 } from './MapaCalorProbabilidadeVolante
 import { AnaliseROISavedGames } from './AnaliseROISavedGames';
 import { EstatisticasPerformanceGlobal } from './EstatisticasPerformanceGlobal';
 import { exportAuditoriaSimuladorPDF } from '../services/auditoriaPdfGenerator';
+import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
 import {
   Play,
   RotateCcw,
@@ -665,7 +666,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
                 {/* Card 1: Custo Total */}
                 <motion.div
-                  key={`sim-custo-${results.custoTotal}-${tickets.length}-${simulationScope}`}
+                  key="sim-custo"
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0, ease: [0.16, 1, 0.3, 1] }}
@@ -687,7 +688,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                     </span>
                   </div>
                   <strong className="text-white font-mono tabular-nums text-xl sm:text-2xl font-black tracking-tight">
-                    {formatBRLScorecard(results.custoTotal)}
+                    <AnimatedCurrencyValue value={results.custoTotal} />
                   </strong>
                   <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
                     <span>{tickets.length} bilhete(s)</span>
@@ -697,7 +698,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
                 {/* Card 2: Retorno Bruto */}
                 <motion.div
-                  key={`sim-retorno-${results.premioTotal}-${tickets.length}-${simulationScope}`}
+                  key="sim-retorno"
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
@@ -723,7 +724,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       results.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-200'
                     }`}
                   >
-                    {formatBRLScorecard(results.premioTotal)}
+                    <AnimatedCurrencyValue value={results.premioTotal} />
                   </strong>
                   <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
                     <span>{results.acertos14}× 14pts</span>
@@ -735,7 +736,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
                 {/* Card 3: Lucro Líquido */}
                 <motion.div
-                  key={`sim-lucro-${results.saldoLiquido}-${tickets.length}-${simulationScope}`}
+                  key="sim-lucro"
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
@@ -777,8 +778,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       isLucroPositivo ? 'text-emerald-300' : isLucroNeutro ? 'text-slate-200' : 'text-rose-400'
                     }`}
                   >
-                    {isLucroPositivo ? '+' : results.saldoLiquido < -0.005 ? '-' : ''}
-                    {formatBRLScorecard(Math.abs(results.saldoLiquido))}
+                    <AnimatedCurrencyValue value={results.saldoLiquido} signed />
                   </strong>
                   <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
                     <span>Prêmios − Custo</span>
@@ -790,7 +790,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
 
                 {/* Card 4: ROI (%) */}
                 <motion.div
-                  key={`sim-roi-${roiPercentual.toFixed(2)}-${tickets.length}-${simulationScope}`}
+                  key="sim-roi"
                   initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
@@ -832,15 +832,16 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({
                       isLucroPositivo ? 'text-emerald-300' : isLucroNeutro ? 'text-slate-200' : 'text-rose-400'
                     }`}
                   >
-                    {roiPercentual > 0.05 ? '+' : ''}
-                    {roiPercentual.toFixed(1).replace('.', ',')}%
+                    <AnimatedNumberValue value={roiPercentual} decimals={1} signed suffix="%" />
                   </strong>
                   <div className="text-[11px] text-slate-400 font-mono tabular-nums pt-2 border-t border-slate-800/80 flex items-center justify-between">
                     <span>Multiplicador</span>
                     <span className="text-slate-200 font-bold">
-                      {results.custoTotal > 0
-                        ? `${(results.premioTotal / results.custoTotal).toFixed(2).replace('.', ',')}x`
-                        : '0,00x'}
+                      <AnimatedNumberValue
+                        value={results.custoTotal > 0 ? results.premioTotal / results.custoTotal : 0}
+                        decimals={2}
+                        suffix="x"
+                      />
                     </span>
                   </div>
                 </motion.div>

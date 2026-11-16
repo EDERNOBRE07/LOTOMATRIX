@@ -20,6 +20,7 @@ import { countMatches } from '../services/combinatorics';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { getSavedFechamentos } from '../services/savedFechamentosStorage';
 import { EvolucaoCustoRetornoAreaChart } from './EvolucaoCustoRetornoAreaChart';
+import { AnimatedCurrencyValue, AnimatedNumberValue } from './AnimatedCurrencyValue';
 
 interface AnaliseROISavedGamesProps {
   tickets?: GameTicket[];
@@ -554,7 +555,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
         {/* Card 1: Custo Total Investido */}
         <motion.div
-          key={`roi-custo-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          key="roi-custo"
           initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0, ease: [0.16, 1, 0.3, 1] }}
@@ -579,7 +580,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
           </div>
 
           <div className="text-2xl font-black text-white font-mono tabular-nums tracking-tight">
-            {formatBRL(roiSummary.custoTotal)}
+            <AnimatedCurrencyValue value={roiSummary.custoTotal} />
           </div>
 
           <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
@@ -587,14 +588,14 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               {roiSummary.totalJogos} jogos · {drawsToEvaluate.length} conc.
             </span>
             <span className="text-slate-300 font-semibold">
-              {formatBRL(roiSummary.custoPorConcurso)}/conc
+              <AnimatedCurrencyValue value={roiSummary.custoPorConcurso} suffix="/conc" />
             </span>
           </div>
         </motion.div>
 
         {/* Card 2: Retorno Bruto em Prêmios */}
         <motion.div
-          key={`roi-retorno-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          key="roi-retorno"
           initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
@@ -623,20 +624,20 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               roiSummary.premioTotal > 0 ? 'text-emerald-400' : 'text-slate-200'
             }`}
           >
-            {formatBRL(roiSummary.premioTotal)}
+            <AnimatedCurrencyValue value={roiSummary.premioTotal} />
           </div>
 
           <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
             <span>{roiSummary.totalBilhetesPremiados || 0} premiados</span>
             <span className="text-emerald-400 font-bold">
-              {roiSummary.taxaAcerto.toFixed(1).replace('.', ',')}% taxa
+              <AnimatedNumberValue value={roiSummary.taxaAcerto} decimals={1} suffix="% taxa" />
             </span>
           </div>
         </motion.div>
 
         {/* Card 3: Lucro Líquido */}
         <motion.div
-          key={`roi-lucro-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          key="roi-lucro"
           initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
@@ -681,7 +682,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               isPositive ? 'text-emerald-300' : isNeutral ? 'text-slate-200' : 'text-rose-400'
             }`}
           >
-            {formatSignedBRL(roiSummary.lucroLiquido)}
+            <AnimatedCurrencyValue value={roiSummary.lucroLiquido} signed />
           </div>
 
           <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
@@ -698,7 +699,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
 
         {/* Card 4: ROI (%) */}
         <motion.div
-          key={`roi-percent-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          key="roi-percent"
           initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
@@ -743,16 +744,17 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               isPositive ? 'text-emerald-300' : isNeutral ? 'text-slate-200' : 'text-rose-400'
             }`}
           >
-            {roiSummary.roiPercentual > 0.05 ? '+' : ''}
-            {roiSummary.roiPercentual.toFixed(1).replace('.', ',')}%
+            <AnimatedNumberValue value={roiSummary.roiPercentual} decimals={1} signed suffix="%" />
           </div>
 
           <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2.5 border-t border-slate-800/80 font-mono tabular-nums">
             <span>Multiplicador</span>
             <span className="text-slate-200 font-bold">
-              {roiSummary.custoTotal > 0
-                ? `${(roiSummary.premioTotal / roiSummary.custoTotal).toFixed(2).replace('.', ',')}x retorno`
-                : '0,00x'}
+              <AnimatedNumberValue
+                value={roiSummary.custoTotal > 0 ? roiSummary.premioTotal / roiSummary.custoTotal : 0}
+                decimals={2}
+                suffix={roiSummary.custoTotal > 0 ? 'x retorno' : 'x'}
+              />
             </span>
           </div>
         </motion.div>
@@ -782,7 +784,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
             <span>Distribuição de Premiações por Faixa de Acertos ({drawsToEvaluate.length} Concursos)</span>
           </span>
           <span className="text-[10px] text-slate-400 font-mono">
-            Total Premiado: <strong className="text-emerald-400">{formatBRL(roiSummary.premioTotal)}</strong>
+            Total Premiado: <strong className="text-emerald-400"><AnimatedCurrencyValue value={roiSummary.premioTotal} /></strong>
           </span>
         </div>
 

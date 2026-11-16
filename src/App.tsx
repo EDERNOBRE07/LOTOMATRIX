@@ -478,8 +478,13 @@ export default function App() {
     }
   };
 
-  // Auditoria passiva de Alertas de Oportunidade (Atrasos Críticos & Ciclo < 3 ausentes)
-  const triggerAutomaticOpportunityAlerts = (draw: LotofacilDraw, stats: DezenaStats[], pendingCycle: number[]) => {
+  // Auditoria passiva de Alertas de Oportunidade (Atrasos Críticos & Fechamento de Ciclo)
+  const triggerAutomaticOpportunityAlerts = (
+    draw: LotofacilDraw,
+    stats: DezenaStats[],
+    pendingCycle: number[],
+    concursosNoCiclo?: number
+  ) => {
     try {
       const detailed = getDetailedNotificationRules();
       if (!detailed.masterEnabled) return;
@@ -508,8 +513,12 @@ export default function App() {
           })
         : [];
 
+      const isCycleJustClosed = pendingCycle.length === 0 || concursosNoCiclo === 1;
       const cycleTriggered =
-        cycleRule.enabled && pendingCycle.length > 0 && pendingCycle.length <= cycleThreshold;
+        cycleRule.enabled &&
+        (cycleThreshold === 0
+          ? isCycleJustClosed
+          : isCycleJustClosed || (pendingCycle.length > 0 && pendingCycle.length <= cycleThreshold));
 
       if (delayedNums.length > 0) {
         if (!detailed.quietMode && delayRule.soundEnabled) {
@@ -532,11 +541,17 @@ export default function App() {
           soundService.playCycleAlertSound();
         }
         if (cycleRule.nativePushEnabled) {
+          const title = isCycleJustClosed
+            ? `LotoSniper • Fechamento de Ciclo (#${draw.concurso})`
+            : `LotoSniper • Reta Final do Ciclo (#${draw.concurso})`;
+          const body = isCycleJustClosed
+            ? `O Concurso #${draw.concurso} concluiu o fechamento do ciclo das 25 dezenas! Novo ciclo iniciado.`
+            : `Restam apenas ${pendingCycle.length} dezenas (${pendingCycle
+                .map((n) => n.toString().padStart(2, '0'))
+                .join(', ')}) para fechar o ciclo atual.`;
           void fireBrowserPushNotification(
-            `LotoSniper • Reta Final do Ciclo (#${draw.concurso})`,
-            `Restam apenas ${pendingCycle.length} dezenas (${pendingCycle
-              .map((n) => n.toString().padStart(2, '0'))
-              .join(', ')}) para fechar o ciclo atual.`,
+            title,
+            body,
             `lotosniper-cycle-${draw.concurso}`
           );
         }
@@ -586,9 +601,9 @@ export default function App() {
         console.warn('Erro ao auditar Top 5 de tendências para push:', e);
       }
 
-      // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Ciclo < 3)
+      // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Fechamento de Ciclo)
       const { stats: newStats, dezenasPendentesCiclo: newPending, concursosNoCiclo: newCicloNum } = computeDynamicStats(result.draw, RECENT_DRAWS);
-      triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending);
+      triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending, newCicloNum);
       auditAndTriggerIntelligentAlerts(result.draw, newStats, newCicloNum);
 
       // After updating latest draw, trigger AI prediction optimization only if contest changed
