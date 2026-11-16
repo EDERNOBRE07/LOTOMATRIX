@@ -16,6 +16,9 @@ import {
   Check,
   CalendarClock,
   Play,
+  Bell,
+  BellRing,
+  BellOff,
 } from 'lucide-react';
 import {
   buildCompleteBackupPayload,
@@ -31,6 +34,7 @@ import {
   saveDailyBackupSchedule,
   getNextScheduledBackupLabel,
   checkAndRunScheduledDailyBackup,
+  sendBackupPreNotification,
   DailyBackupSchedule,
   LocalSnapshotMeta,
   BackupDataPayload,
@@ -52,6 +56,9 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
   const [autoDownload, setAutoDownload] = useState<boolean>(isAutoDownloadOnSaveEnabled());
   const [lastBackup, setLastBackup] = useState<number | null>(getLastBackupTimestamp());
   const [dailySchedule, setDailySchedule] = useState<DailyBackupSchedule>(() => getDailyBackupSchedule());
+  const [notificationPerm, setNotificationPerm] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
   const [snapshots, setSnapshots] = useState<{ meta: LocalSnapshotMeta; payload: BackupDataPayload }[]>([]);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -79,6 +86,9 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
       setLastBackup(getLastBackupTimestamp());
       setAutoDownload(isAutoDownloadOnSaveEnabled());
       setDailySchedule(getDailyBackupSchedule());
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setNotificationPerm(Notification.permission);
+      }
     } catch {}
   };
 
@@ -103,8 +113,22 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
         });
       }
     };
+    const onPreAlert = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      loadData();
+      if (detail?.time) {
+        setStatusMessage({
+          type: 'info',
+          text: `Pré-alerta enviado via Notification API: o backup diário das ${detail.time} será disparado em ${detail.leadMinutes} min.`,
+        });
+      }
+    };
     window.addEventListener('lotosniper-daily-backup-executed', onScheduledExecuted);
-    return () => window.removeEventListener('lotosniper-daily-backup-executed', onScheduledExecuted);
+    window.addEventListener('lotosniper-daily-backup-prealert', onPreAlert);
+    return () => {
+      window.removeEventListener('lotosniper-daily-backup-executed', onScheduledExecuted);
+      window.removeEventListener('lotosniper-daily-backup-prealert', onPreAlert);
+    };
   }, []);
 
   if (!isOpen) return null;
@@ -151,6 +175,73 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
       setStatusMessage({
         type: 'success',
         text: feedback,
+      });
+    }
+  };
+
+  const handleRequestNotificationPermission = async (): Promise<NotificationPermission | 'unsupported'> => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setNotificationPerm('unsupported');
+      setStatusMessage({
+        type: 'error',
+        text: 'Este navegador não suporta a Notification API nativa.',
+      });
+      return 'unsupported';
+    }
+    try {
+      const result = await Notification.requestPermission();
+      setNotificationPerm(result);
+      if (result === 'granted') {
+        setStatusMessage({
+          type: 'success',
+          text: 'Permissão concedida! Você receberá alertas nativos antes do backup diário automático.',
+        });
+      } else {
+        setStatusMessage({
+          type: 'error',
+          text: 'Permissão de notificações não foi concedida pelo navegador. Verifique as permissões do site.',
+        });
+      }
+      return result;
+    } catch {
+      return Notification.permission;
+    }
+  };
+
+  const handleTestPreBackupNotification = async () => {
+    let perm = notificationPerm;
+    if (perm === 'default') {
+      perm = await handleRequestNotificationPermission();
+    }
+    if (perm !== 'granted') {
+      setStatusMessage({
+        type: 'error',
+        text:
+          perm === 'unsupported'
+            ? 'Notification API indisponível neste ambiente.'
+            : 'Permita as notificações do navegador para disparar o alerta nativo.',
+      });
+      return;
+    }
+    const leadText =
+      dailySchedule.notifyBeforeMinutes > 0
+        ? `em ${dailySchedule.notifyBeforeMinutes} minuto(s)`
+        : 'agora';
+    const sent = await sendBackupPreNotification(
+      `LotoSniper • Alerta de Backup (${dailySchedule.time})`,
+      `Seu backup diário automático está programado para disparar ${leadText}. Mantenha a aba aberta.`,
+      'lotosniper-backup-prealert-test'
+    );
+    if (sent) {
+      soundService.playSuccess();
+      setStatusMessage({
+        type: 'success',
+        text: `Notificação de pré-aviso disparada pela Notification API para o horário ${dailySchedule.time}.`,
+      });
+    } else {
+      setStatusMessage({
+        type: 'error',
+        text: 'Não foi possível exibir a notificação do sistema.',
       });
     }
   };
@@ -579,32 +670,79 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                   </button>
                 </div>
 
-                {/* Seleção do Horário Diário */}
+                {/* Seleção do Horário Diário (HH:MM) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <label
                       htmlFor="daily-backup-time-input"
                       className="text-xs font-bold text-slate-200 flex items-center gap-1.5"
                     >
                       <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Horário Diário Programado:</span>
+                      <span>Horário Exato de Preferência (HH:MM):</span>
                     </label>
-                    <input
-                      id="daily-backup-time-input"
-                      type="time"
-                      step={60}
-                      value={dailySchedule.time}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (/^\d{2}:\d{2}$/.test(val)) {
-                          updateDailySchedule(
-                            { time: val, enabled: true },
-                            `Horário diário atualizado e salvo para as ${val}.`
-                          );
-                        }
-                      }}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-400"
-                    />
+
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <input
+                        id="daily-backup-time-input"
+                        type="time"
+                        step={60}
+                        value={dailySchedule.time}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (/^\d{2}:\d{2}$/.test(val)) {
+                            updateDailySchedule(
+                              { time: val, enabled: true },
+                              `Horário diário atualizado e salvo para as ${val}.`
+                            );
+                          }
+                        }}
+                        className="col-span-6 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-400"
+                      />
+
+                      <div className="col-span-3">
+                        <select
+                          aria-label="Selecionar hora exata (HH)"
+                          value={dailySchedule.time.split(':')[0] || '22'}
+                          onChange={(e) => {
+                            const mm = dailySchedule.time.split(':')[1] || '00';
+                            const val = `${e.target.value}:${mm}`;
+                            updateDailySchedule(
+                              { time: val, enabled: true },
+                              `Horário diário atualizado para ${val}.`
+                            );
+                          }}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2 py-2.5 text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-400 cursor-pointer"
+                        >
+                          {Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')).map((hh) => (
+                            <option key={hh} value={hh}>
+                              {hh}h
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="col-span-3">
+                        <select
+                          aria-label="Selecionar minuto exato (MM)"
+                          value={dailySchedule.time.split(':')[1] || '00'}
+                          onChange={(e) => {
+                            const hh = dailySchedule.time.split(':')[0] || '22';
+                            const val = `${hh}:${e.target.value}`;
+                            updateDailySchedule(
+                              { time: val, enabled: true },
+                              `Horário diário atualizado para ${val}.`
+                            );
+                          }}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2 py-2.5 text-xs font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-400 cursor-pointer"
+                        >
+                          {Array.from({ length: 60 }, (_, m) => String(m).padStart(2, '0')).map((mm) => (
+                            <option key={mm} value={mm}>
+                              {mm}m
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
                     {/* Atalhos Rápidos de Horário */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -656,6 +794,16 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                         {getNextScheduledBackupLabel(dailySchedule)}
                       </strong>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-sans">Alerta Pré-Backup:</span>
+                      <strong className="text-sky-300 tabular-nums">
+                        {dailySchedule.notifyBeforeEnabled
+                          ? dailySchedule.notifyBeforeMinutes > 0
+                            ? `${dailySchedule.notifyBeforeMinutes} min antes`
+                            : 'No disparo'
+                          : 'Desativado'}
+                      </strong>
+                    </div>
                     <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80">
                       <span className="text-slate-400 font-sans">Última Execução Auto:</span>
                       <strong className="text-slate-200 tabular-nums">
@@ -674,6 +822,132 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
                         Arquivo: {dailySchedule.lastRunFilename}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Alerta via Notification API antes do disparo */}
+                <div className="bg-slate-900/85 border border-sky-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`p-2 rounded-lg border shrink-0 ${
+                          notificationPerm === 'granted' && dailySchedule.notifyBeforeEnabled
+                            ? 'bg-sky-500/15 border-sky-500/35 text-sky-300'
+                            : 'bg-slate-800 border-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {notificationPerm === 'granted' ? (
+                          <BellRing className="w-4 h-4" />
+                        ) : notificationPerm === 'denied' ? (
+                          <BellOff className="w-4 h-4 text-rose-400" />
+                        ) : (
+                          <Bell className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h5 className="text-xs font-bold text-white">
+                            Notificação de Aviso Antes do Backup (Notification API)
+                          </h5>
+                          <span
+                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                              notificationPerm === 'granted'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                                : notificationPerm === 'denied'
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                            }`}
+                          >
+                            {notificationPerm === 'granted'
+                              ? 'PERMISSÃO CONCEDIDA'
+                              : notificationPerm === 'denied'
+                              ? 'BLOQUEADA NO NAVEGADOR'
+                              : notificationPerm === 'unsupported'
+                              ? 'INDISPONÍVEL'
+                              : 'AGUARDANDO PERMISSÃO'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Envia um alerta nativo do sistema antes de iniciar o download automático diário via{' '}
+                          <code className="font-mono text-sky-300">triggerForcedJSONDownload</code>.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {notificationPerm !== 'granted' && notificationPerm !== 'unsupported' && (
+                        <button
+                          type="button"
+                          onClick={handleRequestNotificationPermission}
+                          className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-black transition cursor-pointer"
+                        >
+                          Ativar Notificações
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={dailySchedule.notifyBeforeEnabled}
+                        aria-label="Ativar notificação prévia antes do backup automático"
+                        onClick={() =>
+                          updateDailySchedule(
+                            { notifyBeforeEnabled: !dailySchedule.notifyBeforeEnabled },
+                            !dailySchedule.notifyBeforeEnabled
+                              ? 'Alerta pré-backup ativado via Notification API.'
+                              : 'Alerta pré-backup desativado.'
+                          )
+                        }
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                          dailySchedule.notifyBeforeEnabled
+                            ? 'bg-sky-500 justify-end'
+                            : 'bg-slate-700 justify-start'
+                        }`}
+                      >
+                        <span className="inline-block h-5 w-5 rounded-full bg-white shadow-md" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-800/80">
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="backup-lead-minutes"
+                        className="text-[11px] font-semibold text-slate-300 whitespace-nowrap"
+                      >
+                        Antecedência do alerta:
+                      </label>
+                      <select
+                        id="backup-lead-minutes"
+                        value={dailySchedule.notifyBeforeMinutes}
+                        disabled={!dailySchedule.notifyBeforeEnabled}
+                        onChange={(e) => {
+                          const mins = Number(e.target.value);
+                          updateDailySchedule(
+                            { notifyBeforeMinutes: mins },
+                            mins > 0
+                              ? `Você será alertado ${mins} minuto(s) antes do backup das ${dailySchedule.time}.`
+                              : `Você será alertado exatamente no momento do backup (${dailySchedule.time}).`
+                          );
+                        }}
+                        className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-sky-400 disabled:opacity-50 cursor-pointer"
+                      >
+                        <option value={1}>1 minuto antes</option>
+                        <option value={5}>5 minutos antes</option>
+                        <option value={10}>10 minutos antes</option>
+                        <option value={15}>15 minutos antes</option>
+                        <option value={0}>No momento do disparo</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestPreBackupNotification}
+                      className="px-3 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <BellRing className="w-3.5 h-3.5" />
+                      <span>Testar Alerta Push Agora</span>
+                    </button>
                   </div>
                 </div>
 

@@ -485,6 +485,9 @@ export function getLastBackupTimestamp(): number | null {
 export interface DailyBackupSchedule {
   enabled: boolean;
   time: string; // HH:MM (24h)
+  notifyBeforeEnabled: boolean;
+  notifyBeforeMinutes: number; // ex: 1, 5, 10, 15 (0 = aviso imediato no momento do disparo)
+  lastNotifiedDate?: string; // YYYY-MM-DD local
   lastRunDate?: string; // YYYY-MM-DD local
   lastRunAt?: number;
   lastRunFilename?: string;
@@ -503,19 +506,37 @@ export function getDailyBackupSchedule(): DailyBackupSchedule {
   try {
     const raw = localStorage.getItem(DAILY_BACKUP_SCHEDULE_KEY);
     if (!raw) {
-      return { enabled: false, time: '21:30' };
+      return {
+        enabled: false,
+        time: '21:30',
+        notifyBeforeEnabled: true,
+        notifyBeforeMinutes: 5,
+      };
     }
     const parsed = JSON.parse(raw);
     const timeValid = typeof parsed?.time === 'string' && /^\d{2}:\d{2}$/.test(parsed.time);
+    const parsedLead = Number(parsed?.notifyBeforeMinutes);
     return {
       enabled: Boolean(parsed?.enabled),
       time: timeValid ? parsed.time : '21:30',
+      notifyBeforeEnabled:
+        parsed?.notifyBeforeEnabled !== undefined ? Boolean(parsed.notifyBeforeEnabled) : true,
+      notifyBeforeMinutes:
+        Number.isFinite(parsedLead) && parsedLead >= 0 && parsedLead <= 60 ? parsedLead : 5,
+      lastNotifiedDate:
+        typeof parsed?.lastNotifiedDate === 'string' ? parsed.lastNotifiedDate : undefined,
       lastRunDate: typeof parsed?.lastRunDate === 'string' ? parsed.lastRunDate : undefined,
       lastRunAt: typeof parsed?.lastRunAt === 'number' ? parsed.lastRunAt : undefined,
-      lastRunFilename: typeof parsed?.lastRunFilename === 'string' ? parsed.lastRunFilename : undefined,
+      lastRunFilename:
+        typeof parsed?.lastRunFilename === 'string' ? parsed.lastRunFilename : undefined,
     };
   } catch {
-    return { enabled: false, time: '21:30' };
+    return {
+      enabled: false,
+      time: '21:30',
+      notifyBeforeEnabled: true,
+      notifyBeforeMinutes: 5,
+    };
   }
 }
 
@@ -529,6 +550,27 @@ export function saveDailyBackupSchedule(schedule: DailyBackupSchedule): void {
     }
   } catch (err) {
     console.warn('[BackupManager] Falha ao salvar agendamento diário:', err);
+  }
+}
+
+export function sendBackupPreNotification(title: string, body: string, tag: string): boolean {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return false;
+  }
+  if (Notification.permission !== 'granted') {
+    return false;
+  }
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      void navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, { body, icon: '/favicon.svg', tag }))
+        .catch(() => new Notification(title, { body, icon: '/favicon.ico', tag }));
+    } else {
+      new Notification(title, { body, icon: '/favicon.ico', tag });
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -551,39 +593,84 @@ export function getNextScheduledBackupLabel(schedule: DailyBackupSchedule): stri
 }
 
 /**
- * Verifica se o horário diário agendado foi atingido e dispara `triggerForcedJSONDownload`
- * uma única vez por dia civil.
+ * Verifica o horário diário agendado (HH:MM):
+ * 1) Envia alerta prévio pela API de Notificações antes do disparo programado;
+ * 2) Ao atingir o horário configurado, notifica e dispara `triggerForcedJSONDownload` uma vez por dia.
  */
 export function checkAndRunScheduledDailyBackup(
   concursoBaseOverride?: number,
   forceRunNow: boolean = false
-): { triggered: boolean; filename?: string; sizeKB?: number } {
-  const schedule = getDailyBackupSchedule();
+): { triggered: boolean; preAlerted?: boolean; filename?: string; sizeKB?: number } {
+  let schedule = getDailyBackupSchedule();
   if (!forceRunNow && !schedule.enabled) {
     return { triggered: false };
   }
 
   const now = new Date();
   const todayKey = getLocalDateKey(now);
+  const [hhStr, mmStr] = (schedule.time || '21:30').split(':');
+  const targetH = parseInt(hhStr, 10);
+  const targetM = parseInt(mmStr, 10);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const targetMinutes =
+    Number.isFinite(targetH) && Number.isFinite(targetM) ? targetH * 60 + targetM : -1;
 
   if (!forceRunNow) {
-    if (schedule.lastRunDate === todayKey) {
+    if (schedule.lastRunDate === todayKey || targetMinutes < 0) {
       return { triggered: false };
     }
-    const [hhStr, mmStr] = (schedule.time || '21:30').split(':');
-    const targetH = parseInt(hhStr, 10);
-    const targetM = parseInt(mmStr, 10);
-    if (!Number.isFinite(targetH) || !Number.isFinite(targetM)) {
-      return { triggered: false };
+
+    const leadMins = Math.max(0, schedule.notifyBeforeMinutes ?? 5);
+    const preAlertMinutes = Math.max(0, targetMinutes - leadMins);
+
+    // 1. Alerta prévio via API de Notificações antes do horário agendado
+    if (
+      schedule.notifyBeforeEnabled &&
+      leadMins > 0 &&
+      schedule.lastNotifiedDate !== todayKey &&
+      currentMinutes >= preAlertMinutes &&
+      currentMinutes < targetMinutes
+    ) {
+      const remaining = Math.max(1, targetMinutes - currentMinutes);
+      sendBackupPreNotification(
+        `LotoSniper • Backup Automático em ${remaining} min`,
+        `Seu backup diário (.JSON) está agendado para as ${schedule.time}. Mantenha o app aberto para concluir o download.`,
+        `lotosniper-backup-prealert-${todayKey}`
+      );
+      schedule = {
+        ...schedule,
+        lastNotifiedDate: todayKey,
+      };
+      saveDailyBackupSchedule(schedule);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('lotosniper-daily-backup-prealert', {
+            detail: { time: schedule.time, remainingMinutes: remaining },
+          })
+        );
+      }
+      return { triggered: false, preAlerted: true };
     }
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const targetMinutes = targetH * 60 + targetM;
+
     if (currentMinutes < targetMinutes) {
       return { triggered: false };
     }
   }
 
-  // Marca execução antes do download para evitar disparo duplicado em múltiplos listeners
+  // 2. Notifica imediatamente antes de disparar o backup caso ainda não tenha notificado hoje
+  if (schedule.notifyBeforeEnabled && (forceRunNow || schedule.lastNotifiedDate !== todayKey)) {
+    sendBackupPreNotification(
+      `LotoSniper • Iniciando Backup Automático (${schedule.time})`,
+      'Preparando o download automático do seu arquivo completo de backup (.JSON).',
+      `lotosniper-backup-starting-${todayKey}`
+    );
+    schedule = {
+      ...schedule,
+      lastNotifiedDate: todayKey,
+    };
+  }
+
+  // Marca execução antes do download para evitar disparo duplicado
   const pendingUpdate: DailyBackupSchedule = {
     ...schedule,
     lastRunDate: todayKey,

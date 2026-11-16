@@ -62,6 +62,7 @@ import { DistribuicaoProbabilidadeCurvaNormal } from './DistribuicaoProbabilidad
 import { CurvaDistribuicaoSomasD3 } from './CurvaDistribuicaoSomasD3';
 import { DesempenhoFiltrosUltimos10Recharts } from './DesempenhoFiltrosUltimos10Recharts';
 import { ResumoFinanceiro } from './ResumoFinanceiro';
+import { RelatorioTexto30DiasCard } from './RelatorioTexto30DiasCard';
 import { FrequenciaDezenasD3 } from './FrequenciaDezenasD3';
 import { CiclosHistoricoRecharts } from './CiclosHistoricoRecharts';
 import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificadaRecharts';
@@ -99,6 +100,7 @@ import {
   GitCompare,
   Download,
   FileJson,
+  MessageSquare,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -124,6 +126,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
+    | 'resumo_texto_30_dias'
     | 'dispersao_estratificada'
     | 'historico_5_d3'
     | 'matriz_calor_50_d3'
@@ -216,6 +219,21 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span>Resumo Financeiro & ROI</span>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               RETORNO REAL
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('resumo_texto_30_dias')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'resumo_texto_30_dias'
+                ? 'bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 text-emerald-300" />
+            <span>Resumo 30 Dias (WhatsApp)</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+              TEXTO SIMPLES
             </span>
           </button>
 
@@ -916,6 +934,20 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('resumo_texto_30_dias')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition cursor-pointer shadow-sm active:scale-95 ${
+              activeSubTab === 'resumo_texto_30_dias'
+                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                : 'bg-slate-800 hover:bg-slate-750 text-emerald-300 border-emerald-500/40'
+            }`}
+            title="Gerar Relatório Resumido em Texto Simples (Últimos 30 Dias) pronto para copiar para WhatsApp e Redes Sociais"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Resumo WhatsApp (30d)</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportRelatorioJSON}
@@ -2386,6 +2418,24 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             savedTickets={savedTickets}
             draws={RECENT_DRAWS}
             unitBetCost={VALOR_APOSTA_LOTOFACIL}
+          />
+          <RelatorioTexto30DiasCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: RELATÓRIO RESUMIDO 30 DIAS (TEXTO SIMPLES / WHATSAPP & REDES) */}
+      {activeSubTab === 'resumo_texto_30_dias' && (
+        <div className="space-y-6">
+          <RelatorioTexto30DiasCard
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
           />
         </div>
       )}
