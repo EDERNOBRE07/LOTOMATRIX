@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   TrendingUp,
   DollarSign,
@@ -29,6 +30,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
   tickets = [],
   latestDraw = CONCURSO_ATUAL,
 }) => {
+  const shouldReduceMotion = useReducedMotion();
   // 1. Valor da Aposta Mínima (personalizável pelo usuário, default R$ 3,50)
   const [apostaMinima, setApostaMinima] = useState<number>(() => {
     try {
@@ -355,7 +357,13 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
       {/* Grid Responsivo de Indicadores Financeiros (Custo Total, Retorno Bruto, Lucro Líquido e ROI) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
         {/* Card 1: Custo Total Investido */}
-        <div className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3">
+        <motion.div
+          key={`roi-custo-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0, ease: [0.16, 1, 0.3, 1] }}
+          className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3"
+        >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-400">
               Custo Total
@@ -386,10 +394,16 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               {formatBRL(roiSummary.custoPorConcurso)}/conc
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 2: Retorno Bruto em Prêmios */}
-        <div className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3">
+        <motion.div
+          key={`roi-retorno-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+          className="bg-slate-950/90 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between gap-3"
+        >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-400">
               Retorno Bruto (Prêmios)
@@ -422,10 +436,14 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               {roiSummary.taxaAcerto.toFixed(1).replace('.', ',')}% taxa
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 3: Lucro Líquido */}
-        <div
+        <motion.div
+          key={`roi-lucro-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
           className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
               ? 'bg-emerald-950/35 border-emerald-500/50'
@@ -480,10 +498,14 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
               {isPositive ? 'Superávit' : isNeutral ? 'Equilíbrio' : 'Déficit'}
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 4: ROI (%) */}
-        <div
+        <motion.div
+          key={`roi-percent-${latestDraw.concurso}-${intervaloConcursos}-${apostaMinima}-${roiSummary.totalJogos}`}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.18, ease: [0.16, 1, 0.3, 1] }}
           className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 ${
             isPositive
               ? 'bg-emerald-950/25 border-emerald-500/45'
@@ -537,7 +559,7 @@ export const AnaliseROISavedGames: React.FC<AnaliseROISavedGamesProps> = ({
                 : '0,00x'}
             </span>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {allSavedTickets.length === 0 && (

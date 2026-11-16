@@ -16,8 +16,6 @@ import {
   resolveConcursoBase,
   resolveConcursoAlvo,
   getBackupConcursoAlvo,
-  formatStandardFechamentoTitle,
-  buildStandardFilterSummary,
 } from '../services/savedFechamentosStorage';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -58,6 +56,9 @@ import {
   SlidersHorizontal,
   Tag,
   X,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   auditAndNotifySavedGames,
@@ -66,6 +67,10 @@ import {
   isPushEnabledByUser,
   setPushEnabledByUser,
 } from '../services/savedGamesAuditorService';
+import {
+  auditBatchTicketsROI,
+  formatCurrencyBRL,
+} from '../services/ticketRoiAudit';
 
 interface SavedFechamentosDossierListProps {
   latestDraw: LotofacilDraw;
@@ -130,6 +135,10 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
   // Filtros rápidos da Relação de Fechamentos
   const [quickFilter, setQuickFilter] = useState<QuickListFilter>('todos');
   const [modalidadeDezenasFilter, setModalidadeDezenasFilter] = useState<number | 'all'>('all');
+
+  // Auditoria Visual de ROI por Jogo (Margem de lucro sugerida e filtro de falha sistemática)
+  const [suggestedRoiMargin, setSuggestedRoiMargin] = useState<number>(0);
+  const [showOnlyMarginFailures, setShowOnlyMarginFailures] = useState<boolean>(false);
 
   // Tags salvas de bilhetes
   const [storedTicketTags, setStoredTicketTags] = useState<Record<string, string[]>>(() => {
@@ -1463,11 +1472,38 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
             const tickets = Array.isArray(f.tickets) ? f.tickets : [];
             const totalJogos = f.totalJogos || tickets.length;
             const custoTotal = f.custoTotal ?? totalJogos * VALOR_APOSTA_LOTOFACIL;
+            const cardConcursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
+            const cardConcursoAlvo = resolveConcursoAlvo(cardConcursoBase, f.concursoAlvo);
+            const cleanTipo =
+              String(f.tipoFechamento || 'Fechamento Clássico')
+                .replace(/^Concurso Alvo #\d+\s*\(Base #\d+\)\s*•\s*/i, '')
+                .replace(/^⚡\s*/, '')
+                .split(' • ')[0]
+                .trim() || 'Fechamento Clássico';
+            const cleanModalidade =
+              String(f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`).trim();
+
+            const roiAudit = auditBatchTicketsROI(tickets, latestDraw, {
+              windowSize: 20,
+              suggestedMarginPercent: suggestedRoiMargin,
+            });
+            const hasMarginFailures = roiAudit.jogosAbaixoMargem > 0;
+            const approvedRatio =
+              roiAudit.totalJogos > 0
+                ? Math.round((roiAudit.jogosAprovados / roiAudit.totalJogos) * 100)
+                : 0;
+            const displayedTickets = showOnlyMarginFailures
+              ? tickets.filter((t, tIdx) => {
+                  const key = `${t.id || 't'}-${tIdx}`;
+                  const itemAudit = roiAudit.itemsByKey.get(key);
+                  return itemAudit ? !itemAudit.atingeMargemSugerida : false;
+                })
+              : tickets;
 
             return (
-              <div
+              <article
                 key={f.id}
-                className={`bg-slate-900/90 rounded-2xl border transition-colors shadow-xl ${
+                className={`bg-slate-900/90 rounded-2xl border transition-colors shadow-lg overflow-hidden ${
                   isSelected
                     ? 'border-rose-500/70 bg-rose-950/15'
                     : bestHits >= 14
@@ -1477,248 +1513,319 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
-                {/* Cabeçalho Estruturado do Card */}
-                <div className="p-4 sm:p-5 space-y-3">
-                  <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleSelectOne(f.id)}
-                        className="mt-1 w-4 h-4 rounded border-slate-700 text-rose-500 cursor-pointer accent-rose-500 shrink-0"
-                        title="Selecionar fechamento"
-                      />
+                {/* Cabeçalho Unificado em Linha Flexível (Esquerda: ID & Concurso Alvo | Direita: Ações Rápidas) */}
+                <div className="px-4 py-3.5 sm:px-5 border-b border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelectOne(f.id)}
+                      className="mt-0.5 sm:mt-0 w-4 h-4 rounded border-slate-700 text-rose-500 cursor-pointer accent-rose-500 shrink-0"
+                      title="Selecionar fechamento"
+                    />
 
-                      <span className="px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-amber-300 font-mono font-black text-xs shrink-0 tabular-nums">
-                        #{(idx + 1).toString().padStart(2, '0')}
+                    <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-amber-300 font-mono font-bold text-xs shrink-0 tabular-nums">
+                      #{(idx + 1).toString().padStart(2, '0')}
+                    </span>
+
+                    <div className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <h3 className="font-mono font-bold text-sm sm:text-base text-emerald-300 tabular-nums whitespace-nowrap">
+                        Concurso Alvo #{cardConcursoAlvo}
+                      </h3>
+
+                      <span className="font-sans font-bold text-sm text-white truncate max-w-xs sm:max-w-md">
+                        {cleanTipo}
                       </span>
 
-                      <div className="space-y-1.5 min-w-0">
-                        {/* Badges Prioritárias: Concurso Alvo em Destaque + Ref. Base Discreta */}
-                        {(() => {
-                          const cardConcursoBase = resolveConcursoBase(f.concurso, latestDraw.concurso);
-                          const cardConcursoAlvo = resolveConcursoAlvo(cardConcursoBase, f.concursoAlvo);
-                          const cardTitle =
-                            f.nomeFechamento ||
-                            formatStandardFechamentoTitle({
-                              concursoBase: cardConcursoBase,
-                              concursoAlvo: cardConcursoAlvo,
-                              tipoFechamento: f.tipoFechamento,
-                              modalidadeMatriz: f.modalidadeMatriz,
-                              universoCount: universo.length,
-                              totalJogos,
-                              filterSummary: buildStandardFilterSummary(f),
-                            });
+                      <span className="font-mono text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                        Base #{cardConcursoBase}
+                        {f.dataConcurso ? ` (${f.dataConcurso})` : ''}
+                      </span>
 
-                          return (
-                            <>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-400/50 text-emerald-300 font-mono text-[11px] font-black tracking-wide tabular-nums shadow-sm">
-                                  <span>🎯 CONCURSO ALVO: #{cardConcursoAlvo}</span>
-                                </span>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/80 text-slate-400 font-mono text-[11px] font-medium tabular-nums">
-                                  Ref. Base: #{cardConcursoBase}
-                                  {f.dataConcurso ? ` (${f.dataConcurso})` : ''}
-                                </span>
-                                {premiadosCount > 0 && (
-                                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-black tabular-nums">
-                                    {premiadosCount} premiado(s) · Máx {bestHits} pts
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Título Padronizado Completo */}
-                              <h3 className="text-sm sm:text-base font-black text-white leading-snug break-words">
-                                {cardTitle}
-                              </h3>
-
-                              {/* Metadados principais em tipografia limpa tabular */}
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono tabular-nums text-slate-300">
-                                <span className="inline-flex items-center gap-1 text-slate-400">
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  <span>{f.dataCriacao || 'Data não registrada'}</span>
-                                </span>
-                                <span aria-hidden="true" className="text-slate-600">·</span>
-                                <span className="text-emerald-400 font-bold">
-                                  {totalJogos} jogos
-                                </span>
-                                <span aria-hidden="true" className="text-slate-600">·</span>
-                                <span className="text-amber-300 font-bold">
-                                  R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-
-                              {/* Subtítulo Técnico: modalidadeMatriz + resumo dos filtros */}
-                              <div className="text-xs text-slate-300 space-y-1">
-                                <div className="font-semibold text-cyan-300">
-                                  {String(f.tipoFechamento || 'Fechamento Clássico').replace(/^⚡\s*/, '')} · {f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`}
-                                </div>
-                                <div className="font-mono text-[11px] text-slate-400 leading-relaxed">
-                                  Soma {f.faixaSoma?.min ?? 180}–{f.faixaSoma?.max ?? 215} · Paridade{' '}
-                                  {f.paridade?.minPares ?? 6}–{f.paridade?.maxPares ?? 9}P · Moldura{' '}
-                                  {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} · Primos{' '}
-                                  {f.primos?.min ?? 4}–{f.primos?.max ?? 7} · Fibonacci{' '}
-                                  {f.fibonacci?.min ?? 3}–{f.fibonacci?.max ?? 6} · Repetidas{' '}
-                                  {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}
-                                </div>
-                              </div>
-                            </>
-                          );
-                        })()}
-
-                        {/* Badges de Universo de Dezenas + Destaque Âmbar/Ouro para Fixas */}
-                        <div className="pt-1 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[11px] font-mono text-slate-400 mr-1">
-                            Universo ({universo.length}):
-                          </span>
-                          {universo.map((num) => {
-                            const isFixa = fixasSet.has(num);
-                            return (
-                              <span
-                                key={num}
-                                title={isFixa ? `Dezena Fixa ${num.toString().padStart(2, '0')}` : undefined}
-                                className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-mono text-[11px] font-bold ${
-                                  isFixa
-                                    ? 'bg-amber-400 text-slate-950 font-black ring-1 ring-amber-300'
-                                    : 'bg-slate-800 text-slate-200 border border-slate-700'
-                                }`}
-                              >
-                                {num.toString().padStart(2, '0')}
-                              </span>
-                            );
-                          })}
-                          {fixas.length > 0 && (
-                            <span className="text-[11px] font-mono text-amber-300 font-bold ml-1">
-                              Fixas ({fixas.length}): {fixas.map((d) => d.toString().padStart(2, '0')).join(' ')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Ações Individuais do Fechamento */}
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedTicketsCardId(isTicketsExpanded ? null : f.id)}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                          isTicketsExpanded
-                            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                            : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
-                        }`}
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>
-                          {isTicketsExpanded
-                            ? `Recolher Bilhetes (${tickets.length})`
-                            : `Ver/Expandir Bilhetes (${tickets.length})`}
+                      {premiadosCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-bold tabular-nums whitespace-nowrap">
+                          {premiadosCount} premiado(s) · Máx {bestHits} pts
                         </span>
-                        {isTicketsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                      </button>
+                      )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleLoadInConferencia(f)}
-                        className="px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        title="Carregar todos os bilhetes deste fechamento no Conferidor Oficial"
-                      >
-                        <ClipboardCheck className="w-3.5 h-3.5" />
-                        <span>Conferir com Concurso Atual</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadTXT(f)}
-                        className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
-                        title="Exportar fechamento em TXT"
-                      >
-                        <Download className="w-3.5 h-3.5 text-sky-400" />
-                        <span>TXT</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedForLotericaPDF(f)}
-                        className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
-                        title="Exportar PDF Lotérica com marca d'água e custo estimado"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>PDF</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          soundService.playGoldenZoneSuccessChime();
-                          setSelectedForPDF(f);
-                        }}
-                        className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        title="Pré-visualizar e Imprimir Volantes Oficiais 5x5"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Imprimir Volantes</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setExpandedDossierId(isDossierExpanded ? null : f.id)}
-                        className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
-                        title="Exibir/ocultar dossiê técnico e opções extras de exportação"
-                      >
-                        {isDossierExpanded ? 'Ocultar Dossiê' : 'Dossiê'}
-                      </button>
-
-                      {confirmDeleteId === f.id ? (
-                        <div className="flex items-center gap-1 bg-rose-950/90 p-1 rounded-xl border border-rose-500/60">
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(f.id, f.tipoFechamento)}
-                            className="px-2 py-1 rounded-lg bg-rose-500 text-slate-950 font-black text-[11px] cursor-pointer"
-                          >
-                            Excluir
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 text-slate-300 text-[11px] cursor-pointer"
-                          >
-                            Não
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(f.id)}
-                          className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
-                          title="Excluir Fechamento"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      {fixas.length > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/35 font-sans text-[11px] font-semibold whitespace-nowrap">
+                          Filtros Avançados
+                        </span>
                       )}
                     </div>
                   </div>
 
+                  {/* Barra de Ações Rápidas */}
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0 font-sans">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedTicketsCardId(isTicketsExpanded ? null : f.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        isTicketsExpanded
+                          ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                          : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {isTicketsExpanded ? 'Recolher' : 'Ver/Expandir Bilhetes'}{' '}
+                        <span className="font-mono tabular-nums">({tickets.length})</span>
+                      </span>
+                      {isTicketsExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleLoadInConferencia(f)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      title="Carregar todos os bilhetes deste fechamento no Conferidor Oficial"
+                    >
+                      <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>Conferir</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTXT(f)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                      title="Exportar fechamento em TXT"
+                    >
+                      <Download className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      <span>TXT</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedForLotericaPDF(f)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                      title="Exportar PDF Lotérica com marca d'água e custo estimado"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        soundService.playGoldenZoneSuccessChime();
+                        setSelectedForPDF(f);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      title="Pré-visualizar e Imprimir Volantes Oficiais 5x5"
+                    >
+                      <Printer className="w-3.5 h-3.5 shrink-0" />
+                      <span>Imprimir Volantes</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDossierId(isDossierExpanded ? null : f.id)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                      title="Exibir/ocultar dossiê técnico e opções extras de exportação"
+                    >
+                      {isDossierExpanded ? 'Ocultar Dossiê' : 'Dossiê'}
+                    </button>
+
+                    {confirmDeleteId === f.id ? (
+                      <div className="flex items-center gap-1 bg-rose-950/90 p-0.5 rounded-lg border border-rose-500/60">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(f.id, f.tipoFechamento)}
+                          className="px-2 py-1 rounded bg-rose-500 text-slate-950 font-bold text-[11px] cursor-pointer"
+                        >
+                          Excluir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[11px] cursor-pointer"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(f.id)}
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
+                        title="Excluir Fechamento"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Corpo Estruturado do Card (Sem Redundâncias) */}
+                <div className="p-4 sm:p-5 space-y-3.5">
+                  {/* Linha 1: Modalidade + Métricas Financeiras em JetBrains Mono + Auditoria ROI Resumida */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-300">
+                      <span className="font-sans font-semibold text-cyan-300">{cleanModalidade}</span>
+                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span className="inline-flex items-center gap-1 font-mono tabular-nums text-slate-400">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{f.dataCriacao || 'Data não registrada'}</span>
+                      </span>
+                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span className="font-mono tabular-nums font-bold text-emerald-400">
+                        {totalJogos} jogos
+                      </span>
+                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span className="font-mono tabular-nums font-bold text-amber-300">
+                        {formatCurrencyBRL(custoTotal)}
+                      </span>
+                    </div>
+
+                    {/* Resumo de Auditoria ROI por Jogo (Custo vs Retorno Histórico Médio) */}
+                    <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-[11px]">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-bold ${
+                          roiAudit.roiMedioGeralPercent >= suggestedRoiMargin
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                            : 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                        }`}
+                        title={`Média dos últimos ${roiAudit.windowSize} concursos: Custo ${formatCurrencyBRL(
+                          roiAudit.custoMedioPorJogo
+                        )}/jogo vs Retorno ${formatCurrencyBRL(roiAudit.retornoMedioPorJogo)}/jogo`}
+                      >
+                        {roiAudit.roiMedioGeralPercent >= suggestedRoiMargin ? (
+                          <TrendingUp className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <TrendingDown className="w-3 h-3 text-rose-400" />
+                        )}
+                        <span>
+                          ROI/Jogo: {roiAudit.roiMedioGeralPercent > 0 ? '+' : ''}
+                          {roiAudit.roiMedioGeralPercent.toFixed(1).replace('.', ',')}%
+                        </span>
+                      </span>
+
+                      <span className="text-slate-400">
+                        Ret. Médio{' '}
+                        <strong className="text-slate-200">
+                          {formatCurrencyBRL(roiAudit.retornoMedioPorJogo)}
+                        </strong>
+                        /jogo
+                      </span>
+
+                      {hasMarginFailures ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedTicketsCardId(f.id);
+                            setShowOnlyMarginFailures(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 font-sans font-semibold cursor-pointer transition"
+                          title="Filtrar bilhetes abaixo da margem de lucro sugerida"
+                        >
+                          <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          <span className="font-mono tabular-nums">{roiAudit.jogosAbaixoMargem}</span>
+                          <span>abaixo da margem</span>
+                        </button>
+                      ) : (
+                        <span className="text-emerald-400 font-semibold">
+                          100% na margem
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Linha 2: Metadados Técnicos (Filtros) em Grid Compacto de 3 Colunas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Soma</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.faixaSoma?.min ?? 180}–{f.faixaSoma?.max ?? 215}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Paridade</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.paridade?.minPares ?? 6}–{f.paridade?.maxPares ?? 9}P
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Moldura</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Primos</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.primos?.min ?? 4}–{f.primos?.max ?? 7}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Fibonacci</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.fibonacci?.min ?? 3}–{f.fibonacci?.max ?? 6}
+                      </span>
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                      <span className="font-sans text-slate-400">Repetidas</span>
+                      <span className="font-mono tabular-nums font-bold text-slate-200">
+                        {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Linha 3: Universo de Dezenas + Fixas destacadas */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-xs font-sans font-semibold text-slate-400 mr-1">
+                      Universo <span className="font-mono tabular-nums">({universo.length})</span>:
+                    </span>
+                    {universo.map((num) => {
+                      const isFixa = fixasSet.has(num);
+                      return (
+                        <span
+                          key={num}
+                          title={isFixa ? `Dezena Fixa ${num.toString().padStart(2, '0')}` : undefined}
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-mono text-[11px] tabular-nums ${
+                            isFixa
+                              ? 'bg-amber-400 text-slate-950 font-bold ring-1 ring-amber-300'
+                              : 'bg-slate-800 text-slate-200 border border-slate-700 font-semibold'
+                          }`}
+                        >
+                          {num.toString().padStart(2, '0')}
+                        </span>
+                      );
+                    })}
+                    {fixas.length > 0 && (
+                      <span className="text-xs font-mono tabular-nums text-amber-300 font-semibold ml-1.5">
+                        Fixas ({fixas.length}): {fixas.map((d) => d.toString().padStart(2, '0')).join(' · ')}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Resumo de faixas deste fechamento quando houver acertos >= 11 */}
                   {premiadosCount > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono tabular-nums text-slate-300">
-                      <span className="text-emerald-400 font-bold">Desempenho no Concurso Ativo:</span>
-                      {counts[15] > 0 && <span className="text-amber-300 font-black">{counts[15]}x 15 pts</span>}
-                      {counts[14] > 0 && <span className="text-amber-300 font-bold">{counts[14]}x 14 pts</span>}
-                      {counts[13] > 0 && <span className="text-emerald-300 font-bold">{counts[13]}x 13 pts</span>}
-                      {counts[12] > 0 && <span className="text-slate-200">{counts[12]}x 12 pts</span>}
-                      {counts[11] > 0 && <span className="text-slate-300">{counts[11]}x 11 pts</span>}
+                    <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-800/80 text-xs font-mono tabular-nums text-slate-300">
+                      <span className="font-sans text-emerald-400 font-bold">Desempenho no Concurso Ativo:</span>
+                      {counts[15] > 0 && <span className="text-amber-300 font-bold">{counts[15]}× 15 pts</span>}
+                      {counts[14] > 0 && <span className="text-amber-300 font-bold">{counts[14]}× 14 pts</span>}
+                      {counts[13] > 0 && <span className="text-emerald-300 font-bold">{counts[13]}× 13 pts</span>}
+                      {counts[12] > 0 && <span className="text-slate-200">{counts[12]}× 12 pts</span>}
+                      {counts[11] > 0 && <span className="text-slate-300">{counts[11]}× 11 pts</span>}
                     </div>
                   )}
                 </div>
 
                 {/* Drawer 1: Dossiê Técnico Detalhado & Exportações Extras */}
                 {isDossierExpanded && (
-                  <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-950/60 space-y-3 text-xs font-mono">
+                  <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-950/60 space-y-3 text-xs">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-slate-300">
                       <div>
-                        <strong className="text-amber-300 block mb-1">1. Estratégia & Fixas</strong>
-                        <div>Fixas: {fixas.length > 0 ? fixas.map((d) => d.toString().padStart(2, '0')).join(' ') : 'Nenhuma'}</div>
-                        <div>
+                        <strong className="font-sans text-amber-300 block mb-1">1. Estratégia & Fixas</strong>
+                        <div className="font-mono tabular-nums">
+                          Fixas: {fixas.length > 0 ? fixas.map((d) => d.toString().padStart(2, '0')).join(' ') : 'Nenhuma'}
+                        </div>
+                        <div className="font-mono tabular-nums">
                           Excluídas:{' '}
                           {(f.dezenasExcluidas || []).length > 0
                             ? f.dezenasExcluidas.map((d) => d.toString().padStart(2, '0')).join(' ')
@@ -1726,20 +1833,20 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         </div>
                       </div>
                       <div>
-                        <strong className="text-cyan-300 block mb-1">2. Restrições Canônicas</strong>
-                        <div>Soma: {f.faixaSoma?.min ?? 180} a {f.faixaSoma?.max ?? 215}</div>
-                        <div>Paridade: {f.paridade?.minPares ?? 6} a {f.paridade?.maxPares ?? 9} Pares</div>
-                        <div>Consecutivas: até {f.maxConsecutivas ?? 5}</div>
+                        <strong className="font-sans text-cyan-300 block mb-1">2. Restrições Canônicas</strong>
+                        <div className="font-mono tabular-nums">Soma: {f.faixaSoma?.min ?? 180} a {f.faixaSoma?.max ?? 215}</div>
+                        <div className="font-mono tabular-nums">Paridade: {f.paridade?.minPares ?? 6} a {f.paridade?.maxPares ?? 9} Pares</div>
+                        <div className="font-mono tabular-nums">Consecutivas: até {f.maxConsecutivas ?? 5}</div>
                       </div>
                       <div>
-                        <strong className="text-emerald-300 block mb-1">3. Auditoria & Filtros Avançados</strong>
-                        <div>Repetidas (#{f.repetidas?.concursoRef || f.concurso}): {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}</div>
-                        <div>Moldura: {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} | Primos: {f.primos?.min ?? 4}–{f.primos?.max ?? 7}</div>
+                        <strong className="font-sans text-emerald-300 block mb-1">3. Auditoria & Filtros Avançados</strong>
+                        <div className="font-mono tabular-nums">Repetidas (#{f.repetidas?.concursoRef || f.concurso}): {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}</div>
+                        <div className="font-mono tabular-nums">Moldura: {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} | Primos: {f.primos?.min ?? 4}–{f.primos?.max ?? 7}</div>
                         <div className="text-slate-400">{f.auditoriaAnomalias}</div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800">
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800 font-sans">
                       <button
                         type="button"
                         onClick={() => handleDownloadVolantesStyle(f, 'oficial')}
@@ -1780,116 +1887,248 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                   </div>
                 )}
 
-                {/* Drawer 2: Expansão Suave dos Bilhetes (Tickets) em Grid Responsivo */}
+                {/* Drawer 2: Bilhetes Expandidos + Auditoria Visual de ROI por Jogo */}
                 {isTicketsExpanded && (
-                  <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-950/75 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
-                      <span className="text-slate-300 font-bold">
-                        Bilhetes do Fechamento ({tickets.length} apostas · 15 dezenas cada)
+                  <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-950/75 space-y-3.5">
+                    {/* Barra da Auditoria Visual de ROI por Jogo */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-sans font-bold text-white">
+                            Auditoria Visual de ROI por Jogo
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                            ({roiAudit.windowSize} últimos concursos · Custo base {formatCurrencyBRL(roiAudit.custoMedioPorJogo)}/aposta)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] font-mono tabular-nums">
+                          <span className="text-emerald-400 font-semibold">
+                            {roiAudit.jogosAprovados} na margem ({approvedRatio}%)
+                          </span>
+                          <span className="text-rose-400 font-semibold">
+                            {roiAudit.jogosFalhaSistematica} falha sistemática
+                          </span>
+                          <div className="hidden sm:flex w-28 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500"
+                              style={{ width: `${approvedRatio}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-sans">
+                        <label className="flex items-center gap-1.5 text-slate-300">
+                          <span>Margem sugerida:</span>
+                          <select
+                            value={suggestedRoiMargin}
+                            onChange={(e) => setSuggestedRoiMargin(Number(e.target.value))}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 font-mono text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            <option value={-25}>-25% (Tolerância)</option>
+                            <option value={0}>0% (Equilíbrio)</option>
+                            <option value={15}>+15% (Lucro Alvo)</option>
+                            <option value={30}>+30% (Alta Performance)</option>
+                          </select>
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowOnlyMarginFailures((prev) => !prev)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            showOnlyMarginFailures
+                              ? 'bg-rose-500 text-slate-950 border-rose-400'
+                              : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                          }`}
+                        >
+                          {showOnlyMarginFailures
+                            ? `Mostrando Abaixo da Margem (${roiAudit.jogosAbaixoMargem})`
+                            : `Filtrar Falhas na Margem (${roiAudit.jogosAbaixoMargem})`}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-sans font-semibold text-slate-300">
+                        Exibindo <strong className="font-mono text-white">{displayedTickets.length}</strong> de{' '}
+                        <strong className="font-mono text-white">{tickets.length}</strong> bilhete(s)
                       </span>
-                      <span className="text-slate-400">
-                        Verde esmeralda = dezena sorteada no concurso conferido
+                      <span className="font-sans text-slate-400">
+                        Esfera verde = dezena pontuada no concurso conferido
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                      {tickets.map((t, tIdx) => {
-                        const dezenas = Array.isArray(t.dezenas)
-                          ? [...t.dezenas].sort((a, b) => a - b)
-                          : [];
-                        const hitsKey = `${t.id || 't'}-${tIdx}`;
-                        const hits = ticketHitsMap.get(hitsKey) ?? dezenas.filter((n) => conferirDezenasSet.has(n)).length;
-                        const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
-                        const pares = t.pares ?? dezenas.filter((n) => n % 2 === 0).length;
-                        const impares = t.impares ?? 15 - pares;
-                        const primos =
-                          t.primos ??
-                          dezenas.filter((n) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length;
-                        const moldura = t.moldura ?? dezenas.filter((n) => MOLDURA.includes(n)).length;
-                        const scoreIA = t.scoreIA ?? 92;
-                        const ticketId = t.id || `ticket-${t.index ?? tIdx + 1}`;
-                        const mergedTags = Array.from(
-                          new Set([...(t.tags || []), ...(storedTicketTags[ticketId] || [])])
-                        );
+                    {displayedTickets.length === 0 ? (
+                      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-5 text-center text-xs text-slate-300 space-y-2">
+                        <p>Todos os bilhetes deste fechamento atingiram a margem sugerida de ROI ({suggestedRoiMargin}%).</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowOnlyMarginFailures(false)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold cursor-pointer"
+                        >
+                          Exibir Todos os Bilhetes
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                        {tickets.map((t, tIdx) => {
+                          const hitsKey = `${t.id || 't'}-${tIdx}`;
+                          const ticketRoi = roiAudit.itemsByKey.get(hitsKey);
+                          if (showOnlyMarginFailures && ticketRoi?.atingeMargemSugerida) {
+                            return null;
+                          }
 
-                        return (
-                          <div
-                            key={`${ticketId}-${tIdx}`}
-                            className={`p-3 rounded-xl border space-y-2.5 transition ${
-                              hits >= 14
-                                ? 'bg-amber-950/30 border-amber-400/70'
-                                : hits >= 11
-                                ? 'bg-emerald-950/25 border-emerald-500/50'
-                                : 'bg-slate-900/80 border-slate-800'
-                            }`}
-                          >
-                            {/* Linha Superior: Identificação + Badge de Acertos */}
-                            <div className="flex items-center justify-between gap-2 text-xs font-mono tabular-nums">
-                              <div className="min-w-0">
-                                <span className="font-black text-white">
+                          const dezenas = Array.isArray(t.dezenas)
+                            ? [...t.dezenas].sort((a, b) => a - b)
+                            : [];
+                          const hits = ticketHitsMap.get(hitsKey) ?? dezenas.filter((n) => conferirDezenasSet.has(n)).length;
+                          const soma = t.soma ?? dezenas.reduce((a, b) => a + b, 0);
+                          const pares = t.pares ?? dezenas.filter((n) => n % 2 === 0).length;
+                          const impares = t.impares ?? 15 - pares;
+                          const primos =
+                            t.primos ??
+                            dezenas.filter((n) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length;
+                          const moldura = t.moldura ?? dezenas.filter((n) => MOLDURA.includes(n)).length;
+                          const scoreIA = t.scoreIA ?? 92;
+                          const ticketId = t.id || `ticket-${t.index ?? tIdx + 1}`;
+                          const mergedTags = Array.from(
+                            new Set([...(t.tags || []), ...(storedTicketTags[ticketId] || [])])
+                          );
+                          const isMarginFail = ticketRoi && !ticketRoi.atingeMargemSugerida;
+
+                          return (
+                            <div
+                              key={`${ticketId}-${tIdx}`}
+                              className={`p-3 rounded-xl border space-y-2.5 transition ${
+                                hits >= 14
+                                  ? 'bg-amber-950/30 border-amber-400/70'
+                                  : hits >= 11
+                                  ? 'bg-emerald-950/25 border-emerald-500/50'
+                                  : isMarginFail
+                                  ? 'bg-slate-900/90 border-rose-500/35'
+                                  : 'bg-slate-900/90 border-slate-800'
+                              }`}
+                            >
+                              {/* Linha Superior: Identificação + Acertos + Status ROI */}
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="font-mono font-bold text-white tabular-nums">
                                   Jogo #{(t.index ?? tIdx + 1).toString().padStart(2, '0')}
                                 </span>
-                                {t.id && (
-                                  <span className="text-[10px] text-slate-500 ml-1.5 truncate">
-                                    {t.id}
-                                  </span>
-                                )}
-                              </div>
 
-                              <span
-                                className={`px-2 py-0.5 rounded font-black text-[11px] shrink-0 ${
-                                  hits >= 14
-                                    ? 'bg-amber-400 text-slate-950'
-                                    : hits >= 11
-                                    ? 'bg-emerald-500 text-slate-950'
-                                    : 'bg-slate-800 text-slate-300'
-                                }`}
-                              >
-                                {hits} ACERTOS
-                              </span>
-                            </div>
+                                <div className="flex items-center gap-1.5 font-mono tabular-nums">
+                                  {ticketRoi && (
+                                    <span
+                                      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                        ticketRoi.atingeMargemSugerida
+                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                                          : ticketRoi.statusMargem === 'falha_sistematica'
+                                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                          : 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                      }`}
+                                      title={`Retorno histórico médio ${formatCurrencyBRL(
+                                        ticketRoi.retornoMedioConcurso
+                                      )} vs Custo ${formatCurrencyBRL(ticketRoi.custoAposta)}`}
+                                    >
+                                      {ticketRoi.atingeMargemSugerida ? (
+                                        <TrendingUp className="w-2.5 h-2.5" />
+                                      ) : (
+                                        <TrendingDown className="w-2.5 h-2.5" />
+                                      )}
+                                      <span>
+                                        {ticketRoi.roiPercent > 0 ? '+' : ''}
+                                        {ticketRoi.roiPercent.toFixed(0)}%
+                                      </span>
+                                    </span>
+                                  )}
 
-                            {/* 15 Dezenas em Esferas / Pílulas */}
-                            <div className="flex flex-wrap gap-1 font-mono tabular-nums">
-                              {dezenas.map((num) => {
-                                const isHit = conferirDezenasSet.has(num);
-                                return (
                                   <span
-                                    key={num}
-                                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] transition ${
-                                      isHit
-                                        ? 'bg-emerald-500 text-black font-bold shadow-sm'
-                                        : 'bg-slate-800 text-slate-300 font-semibold'
+                                    className={`px-2 py-0.5 rounded font-bold text-[11px] shrink-0 ${
+                                      hits >= 14
+                                        ? 'bg-amber-400 text-slate-950'
+                                        : hits >= 11
+                                        ? 'bg-emerald-500 text-black'
+                                        : 'bg-slate-800 text-slate-300'
                                     }`}
                                   >
-                                    {num.toString().padStart(2, '0')}
+                                    {hits} PTS
                                   </span>
-                                );
-                              })}
-                            </div>
+                                </div>
+                              </div>
 
-                            {/* Métricas Rápidas + Tags */}
-                            <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono tabular-nums text-slate-400">
-                              <span>
-                                Soma <strong className="text-slate-200">{soma}</strong> ·{' '}
-                                {pares}P/{impares}I · Primos {primos} · Mold {moldura} · IA{' '}
-                                <strong className="text-emerald-400">{scoreIA.toFixed(0)}</strong>
-                              </span>
+                              {/* 15 Dezenas em Pílulas Esféricas (JetBrains Mono) */}
+                              <div className="flex flex-wrap gap-1 font-mono tabular-nums">
+                                {dezenas.map((num) => {
+                                  const isHit = conferirDezenasSet.has(num);
+                                  return (
+                                    <span
+                                      key={num}
+                                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs transition ${
+                                        isHit
+                                          ? 'bg-emerald-500 text-black font-bold shadow-sm'
+                                          : 'bg-slate-800 text-slate-300 font-medium'
+                                      }`}
+                                    >
+                                      {num.toString().padStart(2, '0')}
+                                    </span>
+                                  );
+                                })}
+                              </div>
 
-                              {mergedTags.length > 0 && (
-                                <span className="inline-flex items-center gap-1 text-amber-300">
-                                  <Tag className="w-3 h-3" />
-                                  <span>{mergedTags.join(' · ')}</span>
-                                </span>
-                              )}
+                              {/* Rodapé do Bilhete: Auditoria ROI Custo vs Retorno Médio + Métricas */}
+                              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] font-mono tabular-nums text-slate-400">
+                                {ticketRoi && (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>
+                                      Custo <strong className="text-slate-200">{formatCurrencyBRL(ticketRoi.custoAposta)}</strong> · Ret. Médio{' '}
+                                      <strong
+                                        className={
+                                          ticketRoi.atingeMargemSugerida ? 'text-emerald-400' : 'text-rose-400'
+                                        }
+                                      >
+                                        {formatCurrencyBRL(ticketRoi.retornoMedioConcurso)}
+                                      </strong>
+                                    </span>
+                                    <span
+                                      className={`font-sans text-[10px] font-bold ${
+                                        ticketRoi.atingeMargemSugerida
+                                          ? 'text-emerald-400'
+                                          : ticketRoi.statusMargem === 'falha_sistematica'
+                                          ? 'text-rose-400'
+                                          : 'text-amber-400'
+                                      }`}
+                                    >
+                                      {ticketRoi.atingeMargemSugerida
+                                        ? 'Margem OK'
+                                        : ticketRoi.statusMargem === 'falha_sistematica'
+                                        ? 'Falha Margem'
+                                        : 'Abaixo Alvo'}
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                                  <span>
+                                    Soma <strong className="text-slate-200">{soma}</strong> ·{' '}
+                                    {pares}P/{impares}I · Primos {primos} · Mold {moldura} · IA{' '}
+                                    <strong className="text-emerald-400">{scoreIA.toFixed(0)}</strong>
+                                  </span>
+
+                                  {mergedTags.length > 0 && (
+                                    <span className="inline-flex items-center gap-1 text-amber-300">
+                                      <Tag className="w-3 h-3" />
+                                      <span>{mergedTags.join(' · ')}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>

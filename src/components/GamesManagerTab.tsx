@@ -21,6 +21,11 @@ import {
   resolveConcursoBase,
 } from '../services/savedFechamentosStorage';
 import { saveLocalSnapshot } from '../services/backupManagerService';
+import {
+  auditBatchTicketsROI,
+  formatCurrencyBRL,
+  TicketRoiAuditItem,
+} from '../services/ticketRoiAudit';
 import { soundService } from '../services/soundAlert';
 import { SavedGamesFilterMenu, PrimosFilterOption, SomaFilterOption } from './SavedGamesFilterMenu';
 import {
@@ -346,6 +351,8 @@ import {
   Award,
   Terminal,
   RefreshCw,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 
 interface LocalStorageKeyDiagnostic {
@@ -625,6 +632,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   const [dezenaMatchMode, setDezenaMatchMode] = useState<'and' | 'or'>('and');
   const [primosFilter, setPrimosFilter] = useState<PrimosFilterOption>('all');
   const [somaFilter, setSomaFilter] = useState<SomaFilterOption>('all');
+  const [suggestedRoiMargin, setSuggestedRoiMargin] = useState<number>(0);
+  const [showOnlyMarginFailures, setShowOnlyMarginFailures] = useState<boolean>(false);
 
   // Seleção de múltiplos jogos para exportação em lote
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(() => {
@@ -699,6 +708,26 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     setSelectedFilterDezenas([]);
   };
 
+  const ticketsRoiAudit = useMemo(
+    () =>
+      auditBatchTicketsROI(tickets, latestDraw, {
+        windowSize: 20,
+        suggestedMarginPercent: suggestedRoiMargin,
+      }),
+    [tickets, latestDraw, suggestedRoiMargin]
+  );
+
+  const roiByTicketId = useMemo(() => {
+    const map = new Map<string, TicketRoiAuditItem>();
+    tickets.forEach((t, idx) => {
+      const auditItem = ticketsRoiAudit.items[idx];
+      if (auditItem) {
+        map.set(t.id || `ticket-${t.index}`, auditItem);
+      }
+    });
+    return map;
+  }, [tickets, ticketsRoiAudit]);
+
   const handleResetAllFilters = () => {
     setSelectedFilterDezenas([]);
     setDezenaMatchMode('and');
@@ -706,6 +735,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     setSomaFilter('all');
     setActiveTagFilter('all');
     setSearchQuery('');
+    setShowOnlyMarginFailures(false);
   };
 
   // Jogos filtrados por Tag, Busca e Menu de Filtros Dinâmicos
@@ -755,6 +785,12 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         if (t.soma < 190 || t.soma > 210) return false;
       }
 
+      // 6. Filtro de Auditoria de ROI por Jogo (falhas sistemáticas / abaixo da margem)
+      if (showOnlyMarginFailures) {
+        const roiItem = roiByTicketId.get(id);
+        if (roiItem && roiItem.atingeMargemSugerida) return false;
+      }
+
       return true;
     });
   }, [
@@ -766,6 +802,8 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     dezenaMatchMode,
     primosFilter,
     somaFilter,
+    showOnlyMarginFailures,
+    roiByTicketId,
   ]);
 
   const handleSelectOnlyFiltered = () => {
@@ -1149,13 +1187,24 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     try {
       const sourceTickets =
         Array.isArray(savedTickets) && savedTickets.length > 0 ? savedTickets : tickets;
-      const savedFechamentosList = getSavedFechamentos();
+      const savedFechamentosList = getSavedFechamentos().map((f) => {
+        const base = resolveConcursoBase(f.concurso, 3824);
+        return {
+          ...f,
+          concurso: base,
+          concursoAlvo: resolveConcursoAlvo(base, f.concursoAlvo),
+        };
+      });
 
       const concursoBase = resolveConcursoBase(
         fechamentoMeta?.concurso ?? selectedConcurso ?? latestDraw.concurso,
         3824
       );
-      const concursoAlvo = Number(concursoBase) + 1;
+      const calculatedAlvo = Number(concursoBase) + 1;
+      const concursoAlvo =
+        savedFechamentosList.length > 0
+          ? Math.max(calculatedAlvo, getBackupConcursoAlvo(savedFechamentosList, concursoBase))
+          : calculatedAlvo;
       const now = new Date();
       const dataFormatada = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const fileName = `lotosniper_concurso_${concursoAlvo}_${dataFormatada}.json`;
@@ -2062,6 +2111,107 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </div>
             </div>
 
+            {/* Auditoria Visual de ROI por Jogo (Custo vs Retorno Histórico Médio) */}
+            {tickets.length > 0 && (
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      {ticketsRoiAudit.roiMedioGeralPercent >= suggestedRoiMargin ? (
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 text-rose-400" />
+                      )}
+                      <span>Auditoria de ROI por Jogo (Últimos {ticketsRoiAudit.windowSize} Concursos)</span>
+                    </span>
+                    <span className="font-mono tabular-nums px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
+                      Custo Médio: <strong className="text-white">{formatCurrencyBRL(ticketsRoiAudit.custoMedioPorJogo)}</strong> · Retorno Médio:{' '}
+                      <strong className={ticketsRoiAudit.retornoMedioPorJogo >= ticketsRoiAudit.custoMedioPorJogo ? 'text-emerald-400' : 'text-amber-300'}>
+                        {formatCurrencyBRL(ticketsRoiAudit.retornoMedioPorJogo)}
+                      </strong>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-semibold">Margem Sugerida:</span>
+                    <div className="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-800">
+                      {[-25, 0, 15, 30].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setSuggestedRoiMargin(m)}
+                          className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition cursor-pointer ${
+                            suggestedRoiMargin === m
+                              ? 'bg-emerald-500 text-slate-950'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {m > 0 ? `+${m}%` : `${m}%`}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlyMarginFailures((v) => !v)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+                        showOnlyMarginFailures
+                          ? 'bg-rose-500/20 text-rose-200 border-rose-500/50'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="font-mono tabular-nums">
+                        {showOnlyMarginFailures ? 'Mostrar Todos' : `Abaixo da Margem (${ticketsRoiAudit.jogosAbaixoMargem})`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Barra de Proporção Aprovados vs Falha Sistemática */}
+                <div className="space-y-1">
+                  <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden flex border border-slate-800">
+                    {ticketsRoiAudit.totalJogos > 0 && (
+                      <>
+                        <div
+                          className="bg-emerald-500 transition-all duration-300"
+                          style={{
+                            width: `${(ticketsRoiAudit.jogosAprovados / ticketsRoiAudit.totalJogos) * 100}%`,
+                          }}
+                          title={`${ticketsRoiAudit.jogosAprovados} jogo(s) dentro da margem`}
+                        />
+                        <div
+                          className="bg-amber-400 transition-all duration-300"
+                          style={{
+                            width: `${((ticketsRoiAudit.jogosAbaixoMargem - ticketsRoiAudit.jogosFalhaSistematica) / ticketsRoiAudit.totalJogos) * 100}%`,
+                          }}
+                          title="Em alerta de margem"
+                        />
+                        <div
+                          className="bg-rose-500 transition-all duration-300"
+                          style={{
+                            width: `${(ticketsRoiAudit.jogosFalhaSistematica / ticketsRoiAudit.totalJogos) * 100}%`,
+                          }}
+                          title={`${ticketsRoiAudit.jogosFalhaSistematica} jogo(s) com falha sistemática`}
+                        />
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-400">
+                    <span className="text-emerald-400">
+                      ✓ {ticketsRoiAudit.jogosAprovados} aprovado(s) na margem
+                    </span>
+                    <span className="text-amber-300">
+                      ⚠ {Math.max(0, ticketsRoiAudit.jogosAbaixoMargem - ticketsRoiAudit.jogosFalhaSistematica)} alerta(s)
+                    </span>
+                    <span className="text-rose-400">
+                      ✕ {ticketsRoiAudit.jogosFalhaSistematica} falha sistemática
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* List of Tickets with Tags and Selection or Filter Empty State */}
             {filteredTickets.length === 0 ? (
               <div className="bg-slate-950 p-8 rounded-2xl border border-slate-800 text-center space-y-3">
@@ -2098,6 +2248,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                   t.cruz ??
                   t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
                 const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
+                const roiAudit = roiByTicketId.get(id);
 
                 return (
                   <div
@@ -2106,7 +2257,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                       isExtremidadesFora
                         ? 'border-rose-500/40 bg-rose-950/15'
                         : isSelected
-                        ? 'border-emerald-500/50 bg-slate-900/80'
+                        ? 'border-emerald-500/50 bg-slate-900/90'
                         : 'border-slate-800/80 bg-slate-900/50 opacity-75'
                     } ${
                       hits >= 14
@@ -2115,7 +2266,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                     }`}
                   >
                     {/* Top Row: Selection Checkbox, Game Title & Hit Badge */}
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-xs gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <input
                           type="checkbox"
@@ -2139,10 +2290,37 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                             ★ Cruz Ouro ({cruzCount})
                           </span>
                         )}
+
+                        {roiAudit && (
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border tabular-nums ${
+                              roiAudit.statusMargem === 'aprovado'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                                : roiAudit.statusMargem === 'alerta'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                                : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                            }`}
+                          >
+                            {roiAudit.roiPercent >= 0 ? (
+                              <TrendingUp className="w-3 h-3 shrink-0" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3 shrink-0" />
+                            )}
+                            <span>
+                              ROI {roiAudit.roiPercent > 0 ? '+' : ''}
+                              {roiAudit.roiPercent.toFixed(0)}% ·{' '}
+                              {roiAudit.statusMargem === 'aprovado'
+                                ? 'OK'
+                                : roiAudit.statusMargem === 'alerta'
+                                ? 'Abaixo'
+                                : 'Falha Sist.'}
+                            </span>
+                          </span>
+                        )}
                       </div>
 
                       <span
-                        className={`font-mono text-xs font-black px-2 py-0.5 rounded ${
+                        className={`font-mono text-xs font-black px-2 py-0.5 rounded shrink-0 ${
                           hits >= 14
                             ? 'bg-amber-400 text-slate-950'
                             : hits >= 11
@@ -2155,16 +2333,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                     </div>
 
                     {/* Numbers Grid */}
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {t.dezenas.map((num) => {
                         const matched = conferirDezenas.includes(num);
                         return (
                           <span
                             key={num}
-                            className={`inline-flex items-center justify-center w-7 h-7 rounded text-xs font-mono font-bold ${
+                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-mono tabular-nums ${
                               matched
-                                ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
-                                : 'bg-slate-800/80 text-slate-400'
+                                ? 'bg-emerald-500 text-black font-bold shadow-sm'
+                                : 'bg-slate-800/80 text-slate-300 font-semibold'
                             }`}
                           >
                             {num.toString().padStart(2, '0')}
@@ -2172,6 +2350,30 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                         );
                       })}
                     </div>
+
+                    {/* Custo vs Retorno Histórico Médio */}
+                    {roiAudit && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-950/75 border border-slate-800/80 text-[11px] font-mono tabular-nums">
+                        <span className="text-slate-400">
+                          Custo: <strong className="text-slate-200">{formatCurrencyBRL(roiAudit.custoAposta)}</strong>
+                        </span>
+                        <span className="text-slate-400">
+                          Ret. Médio:{' '}
+                          <strong
+                            className={
+                              roiAudit.retornoMedioConcurso >= roiAudit.custoAposta
+                                ? 'text-emerald-400'
+                                : 'text-rose-400'
+                            }
+                          >
+                            {formatCurrencyBRL(roiAudit.retornoMedioConcurso)}
+                          </strong>
+                        </span>
+                        <span className="text-slate-400">
+                          Premiações: <strong className="text-slate-200">{roiAudit.premiacoesNoPeriodo}/{ticketsRoiAudit.windowSize}</strong>
+                        </span>
+                      </div>
+                    )}
 
                     {/* Tags & Analytical Section */}
                     <div className="pt-2 border-t border-slate-850 flex flex-wrap items-center justify-between gap-1.5 text-[11px]">

@@ -1298,6 +1298,8 @@ export function inspectBackupJSONPreview(jsonString: string): {
   app?: string;
   versao?: string;
   dataExportacao?: string;
+  concursoBase?: number;
+  concursoAlvo?: number;
   totalFechamentos: number;
   totalTickets: number;
   error?: string;
@@ -1306,13 +1308,19 @@ export function inspectBackupJSONPreview(jsonString: string): {
     const parsed = JSON.parse(jsonString);
     const list = Array.isArray(parsed)
       ? parsed
-      : Array.isArray(parsed?.fechamentos)
+      : Array.isArray(parsed?.fechamentos) && parsed.fechamentos.length > 0
       ? parsed.fechamentos
-      : Array.isArray(parsed?.meusJogos?.fechamentosSalvos)
+      : Array.isArray(parsed?.meusJogos?.fechamentosSalvos) && parsed.meusJogos.fechamentosSalvos.length > 0
       ? parsed.meusJogos.fechamentosSalvos
       : null;
 
-    if (!list || list.length === 0) {
+    const fallbackSavedTickets = Array.isArray(parsed?.savedTickets)
+      ? parsed.savedTickets
+      : Array.isArray(parsed?.meusJogos?.ticketsAtuais)
+      ? parsed.meusJogos.ticketsAtuais
+      : null;
+
+    if ((!list || list.length === 0) && (!fallbackSavedTickets || fallbackSavedTickets.length === 0)) {
       return {
         valid: false,
         totalFechamentos: 0,
@@ -1321,18 +1329,37 @@ export function inspectBackupJSONPreview(jsonString: string): {
       };
     }
 
-    const totalTickets = list.reduce(
-      (acc: number, item: any) =>
-        acc + (Array.isArray(item?.tickets) ? item.tickets.length : Array.isArray(item?.jogos) ? item.jogos.length : Array.isArray(item?.dezenas) ? 1 : 0),
-      0
-    );
+    const totalFechamentos = list ? list.length : 1;
+    const totalTickets = list
+      ? list.reduce(
+          (acc: number, item: any) =>
+            acc + (Array.isArray(item?.tickets) ? item.tickets.length : Array.isArray(item?.jogos) ? item.jogos.length : Array.isArray(item?.dezenas) ? 1 : 0),
+          0
+        )
+      : fallbackSavedTickets!.length;
+
+    const firstItemConcurso = list?.[0]?.concurso ?? list?.[0]?.concursoBase;
+    const rawConcursoBase =
+      parsed?.concursoBase ??
+      parsed?.concursoReferencia ??
+      parsed?.concurso ??
+      parsed?.fechamentoMeta?.concurso ??
+      firstItemConcurso;
+    const concursoBase = resolveConcursoBase(rawConcursoBase, 3824);
+    const rawAlvo =
+      parsed?.concursoAlvo ??
+      parsed?.fechamentoMeta?.concursoAlvo ??
+      list?.[0]?.concursoAlvo;
+    const concursoAlvo = resolveConcursoAlvo(concursoBase, rawAlvo);
 
     return {
       valid: true,
       app: parsed?.app ? String(parsed.app) : 'LotoSniper AI Pro',
       versao: parsed?.versao ? String(parsed.versao) : undefined,
-      dataExportacao: parsed?.dataExportacao || parsed?.dataHoraFormatada || undefined,
-      totalFechamentos: list.length,
+      dataExportacao: parsed?.dataExportacao || parsed?.exportedAt || parsed?.dataHoraFormatada || undefined,
+      concursoBase,
+      concursoAlvo,
+      totalFechamentos,
       totalTickets,
     };
   } catch {
@@ -1358,6 +1385,15 @@ export function restoreBackupJSON(
 } {
   try {
     const parsed = JSON.parse(jsonString);
+    const rootConcursoBase = resolveConcursoBase(
+      parsed?.concursoBase ?? parsed?.concursoReferencia ?? parsed?.concurso ?? parsed?.fechamentoMeta?.concurso,
+      3824
+    );
+    const rootConcursoAlvo = resolveConcursoAlvo(
+      rootConcursoBase,
+      parsed?.concursoAlvo ?? parsed?.fechamentoMeta?.concursoAlvo
+    );
+
     let fechamentosToRestore = Array.isArray(parsed)
       ? parsed
       : Array.isArray(parsed?.fechamentos)
@@ -1366,13 +1402,22 @@ export function restoreBackupJSON(
       ? parsed.meusJogos.fechamentosSalvos
       : null;
 
+    // Fallback para backups antigos sem concursoAlvo explícito nos itens
+    if (Array.isArray(fechamentosToRestore) && fechamentosToRestore.length > 0) {
+      fechamentosToRestore = fechamentosToRestore.map((item: any) => {
+        if (!item || typeof item !== 'object') return item;
+        const itemBase = resolveConcursoBase(item.concurso ?? item.concursoBase ?? rootConcursoBase, rootConcursoBase);
+        const itemAlvo = resolveConcursoAlvo(itemBase, item.concursoAlvo ?? (item.concurso ? undefined : rootConcursoAlvo));
+        return {
+          ...item,
+          concurso: itemBase,
+          concursoAlvo: itemAlvo,
+        };
+      });
+    }
+
     // Retrocompatibilidade com backups gerados por handleExportBackup (savedTickets)
     if ((!fechamentosToRestore || fechamentosToRestore.length === 0) && Array.isArray(parsed?.savedTickets) && parsed.savedTickets.length > 0) {
-      const concursoBase = resolveConcursoBase(
-        parsed?.concursoReferencia ?? parsed?.concursoBase ?? parsed?.fechamentoMeta?.concurso,
-        3824
-      );
-      const concursoAlvo = resolveConcursoAlvo(concursoBase, parsed?.concursoAlvo);
       const universo = Array.from(
         new Set<number>(parsed.savedTickets.flatMap((t: any) => (Array.isArray(t?.dezenas) ? t.dezenas : [])))
       ).sort((a, b) => a - b);
@@ -1381,8 +1426,8 @@ export function restoreBackupJSON(
           id: `backup-${Date.now()}`,
           timestamp: parsed?.exportedAt ? new Date(parsed.exportedAt).getTime() || Date.now() : Date.now(),
           dataCriacao: new Date().toLocaleString('pt-BR'),
-          concurso: concursoBase,
-          concursoAlvo,
+          concurso: rootConcursoBase,
+          concursoAlvo: rootConcursoAlvo,
           dataConcurso: parsed?.dataConcurso || '',
           tipoFechamento: parsed?.fechamentoMeta?.strategyName || parsed?.fechamentoMeta?.modeName || 'Fechamento Importado (Backup JSON)',
           modalidadeMatriz: parsed?.fechamentoMeta?.modeName || `${universo.length} Dezenas (${parsed.savedTickets.length} Jogos)`,

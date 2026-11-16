@@ -129,9 +129,16 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
       setSelectedFileContent(content);
       try {
         const parsed = JSON.parse(content);
-        const totalTickets = parsed.meusJogos?.ticketsAtuais?.length || (Array.isArray(parsed) ? parsed.length : 0);
-        const totalFechamentos = parsed.meusJogos?.fechamentosSalvos?.length || (parsed.fechamentos?.length || 0);
-        const dataHora = parsed.dataHoraFormatada || parsed.dataExportacao || 'Data desconhecida';
+        const totalTickets =
+          parsed.meusJogos?.ticketsAtuais?.length ??
+          parsed.savedTickets?.length ??
+          (Array.isArray(parsed) ? parsed.length : 0);
+        const totalFechamentos =
+          parsed.meusJogos?.fechamentosSalvos?.length ??
+          parsed.fechamentos?.length ??
+          (Array.isArray(parsed?.savedTickets) && parsed.savedTickets.length > 0 ? 1 : 0);
+        const dataHora =
+          parsed.dataHoraFormatada || parsed.dataExportacao || parsed.exportedAt || 'Data desconhecida';
 
         setFilePreview({
           totalTickets,
