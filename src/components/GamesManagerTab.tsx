@@ -10,6 +10,7 @@ import { ExportPDFModal } from './ExportPDFModal';
 import { ExportLotericaPDFModal } from './ExportLotericaPDFModal';
 import { SavedFechamentosDossierList } from './SavedFechamentosDossierList';
 import { AuditedWinningGamesList } from './AuditedWinningGamesList';
+import { GameComparisonMode } from './GameComparisonMode';
 import {
   getSavedFechamentos,
   getDuplicateFechamentosReport,
@@ -359,6 +360,7 @@ import {
   TrendingDown,
   ArrowUpDown,
   EyeOff,
+  GitCompare,
 } from 'lucide-react';
 
 interface LocalStorageKeyDiagnostic {
@@ -515,9 +517,9 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     includeStatsFooter: true,
   });
   const [isPdfConfigOpen, setIsPdfConfigOpen] = useState<boolean>(false);
-  const [activeSection, setActiveSection] = useState<'fechamentos_salvos' | 'bilhetes_individuais'>(
-    'fechamentos_salvos'
-  );
+  const [activeSection, setActiveSection] = useState<
+    'fechamentos_salvos' | 'bilhetes_individuais' | 'comparacao_jogos'
+  >('fechamentos_salvos');
 
   // Diagnóstico em tempo real de disponibilidade no localStorage vs prop savedTickets
   const diagnosticSnapshot = useMemo(
@@ -1386,6 +1388,19 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               {tickets.length}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('comparacao_jogos')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+              activeSection === 'comparacao_jogos'
+                ? 'bg-gradient-to-r from-sky-400 to-cyan-500 text-slate-950 font-black shadow-md shadow-sky-500/20'
+                : 'text-sky-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <GitCompare className="w-4 h-4" />
+            <span>Comparar Jogos (Lado a Lado)</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1619,6 +1634,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
           onGoToConferencia={() => {
             window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'conferencia' }));
           }}
+        />
+      )}
+
+      {/* VISÃO 3: MODO DE COMPARAÇÃO DE JOGOS LADO A LADO */}
+      {activeSection === 'comparacao_jogos' && (
+        <GameComparisonMode
+          activeTickets={tickets}
+          latestDraw={latestDraw}
+          initialSelectedIds={Array.from(selectedTicketIds)}
+          onGoToGenerator={onGoToGenerator}
         />
       )}
 
@@ -1999,11 +2024,21 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="text-slate-400 font-mono text-[11px]">
                 <strong className="text-emerald-400">{selectedTicketIds.size}</strong> de{' '}
                 <strong className="text-white">{tickets.length}</strong> jogos marcados
               </span>
+              <button
+                type="button"
+                onClick={() => setActiveSection('comparacao_jogos')}
+                disabled={selectedTicketIds.size < 2}
+                className="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 disabled:opacity-40 text-sky-300 border border-sky-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                title="Comparar os bilhetes selecionados lado a lado (ROI e acertos acumulados)"
+              >
+                <GitCompare className="w-3 h-3 text-sky-400" />
+                <span>Comparar Selecionados ({Math.min(6, selectedTicketIds.size)})</span>
+              </button>
               <button
                 type="button"
                 onClick={handleExportCSV}

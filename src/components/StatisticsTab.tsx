@@ -7,8 +7,9 @@ import {
   CONCURSO_ATUAL,
   RECENT_DRAWS,
 } from '../data/lotofacilData';
-import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { LotofacilDraw, DezenaStats, AIPredictionResponse } from '../types/lotofacil';
 import { D3SimuladorHistoricoIntervaloChart } from './D3SimuladorHistoricoIntervaloChart';
+import { DashboardEficienciaPreditiva } from './DashboardEficienciaPreditiva';
 
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
@@ -112,6 +113,7 @@ interface StatisticsTabProps {
   savedTickets?: GameTicket[];
   fechamentoNome?: string;
   filters?: FilterCriteria;
+  aiPrediction?: AIPredictionResponse | null;
 }
 
 export const StatisticsTab: React.FC<StatisticsTabProps> = ({
@@ -123,6 +125,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   savedTickets = [],
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',
   filters,
+  aiPrediction,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
@@ -204,6 +207,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Dashboard de Eficiência Preditiva no topo da aba Estatísticas */}
+      <DashboardEficienciaPreditiva
+        latestDraw={latestDraw}
+        statsList={statsList}
+        aiPrediction={aiPrediction}
+        onApplyNumbers={onApplyNumbers}
+      />
+
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">

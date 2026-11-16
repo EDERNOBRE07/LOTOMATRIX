@@ -1114,6 +1114,7 @@ export default function App() {
               savedTickets={savedTickets}
               fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
               filters={activeFechamentoMeta?.filters}
+              aiPrediction={aiPrediction}
             />
           )}
 
