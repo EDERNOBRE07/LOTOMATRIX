@@ -74,8 +74,15 @@ export const PushNotificationRulesPanel: React.FC<PushNotificationRulesPanelProp
         setPermission(getNotificationPermission());
       }
     };
+    const syncRules = () => {
+      setRules(getDetailedNotificationRules());
+    };
     window.addEventListener('lotosniper-notification-perm-changed', syncPerm);
-    return () => window.removeEventListener('lotosniper-notification-perm-changed', syncPerm);
+    window.addEventListener('lotosniper-backup-restored', syncRules);
+    return () => {
+      window.removeEventListener('lotosniper-notification-perm-changed', syncPerm);
+      window.removeEventListener('lotosniper-backup-restored', syncRules);
+    };
   }, []);
 
   const showFeedback = (text: string, type: 'ok' | 'warn' = 'ok') => {
