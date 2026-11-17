@@ -45,6 +45,11 @@ import {
   auditAndTriggerHybridAlerts,
   getDetailedNotificationRules,
   fireBrowserPushNotification,
+  getCriticalDelayMonitorConfig,
+  resolveMonitoredCriticalDelayNumbers,
+  getAlertsHistory,
+  saveAlertsHistory,
+  IntelligentAlert,
 } from './services/notificationService';
 import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
 import {
@@ -507,24 +512,20 @@ export default function App() {
       const delayRule = detailed.events.atrasosCriticos;
       const cycleRule = detailed.events.fimCiclo;
 
-      let monitorMode: 'all' | 'custom' = 'all';
-      let customNumbers: number[] = [];
-      try {
-        const cfgRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
-        if (cfgRaw) {
-          const cfg = JSON.parse(cfgRaw);
-          if (cfg.monitorMode) monitorMode = cfg.monitorMode;
-          if (Array.isArray(cfg.customNumbers)) customNumbers = cfg.customNumbers;
-        }
-      } catch {}
+      // Lê a configuração visual de dezenas para Atraso Crítico (automáticas de ciclo + extras escolhidas pelo usuário)
+      const delayConfig = getCriticalDelayMonitorConfig();
+      const { cycleNumbers, extraNumbers, combinedNumbers } = resolveMonitoredCriticalDelayNumbers(
+        pendingCycle,
+        delayConfig
+      );
 
-      const delayThreshold = delayRule.threshold ?? 5;
+      const delayThreshold = delayConfig.threshold ?? delayRule.threshold ?? 5;
       const cycleThreshold = cycleRule.threshold ?? 3;
 
       const delayedNums = delayRule.enabled
         ? stats.filter((s) => {
-            const isTarget = monitorMode === 'all' || customNumbers.includes(s.numero);
-            return isTarget && s.atrasoAtual >= delayThreshold;
+            const isMonitored = combinedNumbers.includes(s.numero);
+            return isMonitored && s.atrasoAtual >= delayThreshold;
           })
         : [];
 
@@ -536,16 +537,45 @@ export default function App() {
           : isCycleJustClosed || (pendingCycle.length > 0 && pendingCycle.length <= cycleThreshold));
 
       if (delayedNums.length > 0) {
+        const triggeredFromCycle = delayedNums
+          .filter((d) => cycleNumbers.includes(d.numero))
+          .map((d) => d.numero.toString().padStart(2, '0'));
+        const triggeredFromExtra = delayedNums
+          .filter((d) => extraNumbers.includes(d.numero) && !cycleNumbers.includes(d.numero))
+          .map((d) => d.numero.toString().padStart(2, '0'));
+
+        const summaryParts: string[] = [];
+        if (triggeredFromCycle.length > 0) {
+          summaryParts.push(`Ciclo: ${triggeredFromCycle.join(', ')}`);
+        }
+        if (triggeredFromExtra.length > 0) {
+          summaryParts.push(`Extras: ${triggeredFromExtra.join(', ')}`);
+        }
+
+        const alertId = `critical_delay_${draw.concurso}`;
+        const existingHistory = getAlertsHistory();
+        if (!existingHistory.some((a) => a.id === alertId)) {
+          const newAlert: IntelligentAlert = {
+            id: alertId,
+            timestamp: Date.now(),
+            dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            type: 'critical_delay',
+            title: `Atraso Crítico (≥ ${delayThreshold} conc.) • #${draw.concurso}`,
+            body: `${delayedNums.length} dezena(s) monitorada(s) em hiato crítico (${summaryParts.join(' | ')}).`,
+            concurso: draw.concurso,
+            read: false,
+            dezenasGatilho: delayedNums.map((d) => d.numero),
+          };
+          saveAlertsHistory([newAlert, ...existingHistory]);
+        }
+
         if (!detailed.quietMode && delayRule.soundEnabled) {
           soundService.playOpportunityAlert();
         }
         if (delayRule.nativePushEnabled) {
           void fireBrowserPushNotification(
             `LotoSniper • Atraso Crítico (#${draw.concurso})`,
-            `${delayedNums.length} dezenas atingiram hiato ≥ ${delayThreshold} concursos: ${delayedNums
-              .map((d) => d.numero.toString().padStart(2, '0'))
-              .slice(0, 5)
-              .join(', ')}.`,
+            `${delayedNums.length} dezena(s) com atraso ≥ ${delayThreshold} concursos (${summaryParts.join(' | ')}).`,
             `lotosniper-delay-${draw.concurso}`
           );
         }

@@ -6,7 +6,7 @@ export interface IntelligentAlert {
   id: string;
   timestamp: number;
   dateStr: string;
-  type: 'radar_90' | 'new_cycle' | 'cycle_closed' | 'system' | 'hibrido';
+  type: 'radar_90' | 'new_cycle' | 'cycle_closed' | 'critical_delay' | 'system' | 'hibrido';
   title: string;
   body: string;
   dezena?: number;
@@ -99,10 +99,137 @@ export const DEFAULT_DETAILED_NOTIFICATION_RULES: DetailedNotificationRules = {
 
 const DETAILED_RULES_KEY = 'lotosniper_detailed_notification_rules';
 const PUSH_ALERTS_PREFS_KEY = 'lotosniper_push_alerts_preferences';
+const CRITICAL_DELAY_NUMBERS_KEY = 'lotosniper_critical_delay_numbers_config';
 const HYBRID_RULES_KEY = 'lotosniper_hybrid_alert_rules';
 
 const CONFIG_KEY = 'lotosniper_push_notification_config';
 const ALERTS_KEY = 'lotosniper_push_alerts_history';
+
+export interface CriticalDelayMonitorConfig {
+  includeCycleNumbersAutomatically: boolean;
+  extraSelectedNumbers: number[];
+  threshold: number;
+  updatedAt?: string;
+}
+
+export const DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG: CriticalDelayMonitorConfig = {
+  includeCycleNumbersAutomatically: true,
+  extraSelectedNumbers: [5, 10, 13, 20, 24],
+  threshold: 5,
+};
+
+export function getCriticalDelayMonitorConfig(): CriticalDelayMonitorConfig {
+  try {
+    const raw = localStorage.getItem(CRITICAL_DELAY_NUMBERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        includeCycleNumbersAutomatically:
+          parsed?.includeCycleNumbersAutomatically !== undefined
+            ? Boolean(parsed.includeCycleNumbersAutomatically)
+            : true,
+        extraSelectedNumbers: Array.isArray(parsed?.extraSelectedNumbers)
+          ? parsed.extraSelectedNumbers
+              .map((n: unknown) => Number(n))
+              .filter((n: number) => Number.isInteger(n) && n >= 1 && n <= 25)
+              .sort((a: number, b: number) => a - b)
+          : DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG.extraSelectedNumbers,
+        threshold:
+          typeof parsed?.threshold === 'number' && parsed.threshold >= 2 && parsed.threshold <= 15
+            ? parsed.threshold
+            : getDetailedNotificationRules().events.atrasosCriticos.threshold ?? 5,
+        updatedAt: parsed?.updatedAt,
+      };
+    }
+
+    // Fallback para configuração legada de oportunidade caso exista
+    const oppRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
+    if (oppRaw) {
+      const opp = JSON.parse(oppRaw);
+      return {
+        includeCycleNumbersAutomatically: true,
+        extraSelectedNumbers: Array.isArray(opp?.customNumbers)
+          ? opp.customNumbers
+          : DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG.extraSelectedNumbers,
+        threshold:
+          typeof opp?.criticalDelayThreshold === 'number' ? opp.criticalDelayThreshold : 5,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG };
+}
+
+export function saveCriticalDelayMonitorConfig(config: CriticalDelayMonitorConfig): void {
+  const normalized: CriticalDelayMonitorConfig = {
+    includeCycleNumbersAutomatically: Boolean(config.includeCycleNumbersAutomatically),
+    extraSelectedNumbers: Array.from(
+      new Set(
+        (config.extraSelectedNumbers || [])
+          .map((n) => Number(n))
+          .filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+      )
+    ).sort((a, b) => a - b),
+    threshold: Math.max(2, Math.min(15, Number(config.threshold) || 5)),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    localStorage.setItem(CRITICAL_DELAY_NUMBERS_KEY, JSON.stringify(normalized));
+
+    // Sincroniza também com o limiar das regras detalhadas e oportunidade
+    const detailed = getDetailedNotificationRules();
+    if (detailed.events.atrasosCriticos.threshold !== normalized.threshold) {
+      saveDetailedNotificationRules({
+        ...detailed,
+        events: {
+          ...detailed.events,
+          atrasosCriticos: {
+            ...detailed.events.atrasosCriticos,
+            threshold: normalized.threshold,
+          },
+        },
+      });
+    }
+
+    try {
+      const oppRaw = localStorage.getItem('lotosniper_opportunity_alerts_config');
+      const oppPrev = oppRaw ? JSON.parse(oppRaw) : {};
+      localStorage.setItem(
+        'lotosniper_opportunity_alerts_config',
+        JSON.stringify({
+          ...oppPrev,
+          criticalDelayThreshold: normalized.threshold,
+          customNumbers: normalized.extraSelectedNumbers,
+          monitorMode: normalized.extraSelectedNumbers.length > 0 ? 'custom' : oppPrev.monitorMode || 'all',
+        })
+      );
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-critical-delay-config-updated', { detail: normalized })
+      );
+    }
+  } catch (e) {
+    console.error('Erro ao salvar configuração de dezenas de atraso crítico:', e);
+  }
+}
+
+export function resolveMonitoredCriticalDelayNumbers(
+  cyclePendingNumbers: number[],
+  config: CriticalDelayMonitorConfig = getCriticalDelayMonitorConfig()
+): {
+  cycleNumbers: number[];
+  extraNumbers: number[];
+  combinedNumbers: number[];
+} {
+  const cycleNumbers = config.includeCycleNumbersAutomatically
+    ? Array.from(new Set(cyclePendingNumbers)).sort((a, b) => a - b)
+    : [];
+  const extraNumbers = Array.from(new Set(config.extraSelectedNumbers)).sort((a, b) => a - b);
+  const combinedNumbers = Array.from(new Set([...cycleNumbers, ...extraNumbers])).sort((a, b) => a - b);
+  return { cycleNumbers, extraNumbers, combinedNumbers };
+}
 
 export interface IndividualPushAlertPreferences {
   atrasosCriticos: boolean;

@@ -32,6 +32,7 @@ interface DashboardEficienciaPreditivaProps {
   statsList?: DezenaStats[];
   aiPrediction?: AIPredictionResponse | null;
   onApplyNumbers?: (numbers: number[]) => void;
+  contestInterval?: 10 | 50 | 100;
 }
 
 type EvaluationMode = 'pool18' | 'top15';
@@ -114,6 +115,7 @@ export const DashboardEficienciaPreditiva: React.FC<DashboardEficienciaPreditiva
   statsList = DEZENAS_STATS,
   aiPrediction,
   onApplyNumbers,
+  contestInterval = 50,
 }) => {
   const [mode, setMode] = useState<EvaluationMode>('pool18');
   const [isTableExpanded, setIsTableExpanded] = useState<boolean>(true);
@@ -123,17 +125,18 @@ export const DashboardEficienciaPreditiva: React.FC<DashboardEficienciaPreditiva
 
   // Walk-forward backtest sobre os últimos 10 concursos reais:
   // Para cada concurso k (dos últimos 10), gera a recomendação da IA usando exclusivamente
-  // os dados anteriores a k (k-1 e janela histórica anterior) e cruza com o resultado real de k.
+  // a janela configurada pelo seletor (10, 50 ou 100 concursos anteriores) e cruza com o resultado real de k.
   const crossData = useMemo<DrawCrossPoint[]>(() => {
     const allDraws = getHistorical100Draws(latestDraw);
     const recent10 = allDraws.slice(0, 10);
+    const lookbackWindow = Math.max(10, Math.min(100, contestInterval));
 
     const chronological = [...recent10].reverse(); // mais antigo -> mais recente
 
     const rawPoints: Omit<DrawCrossPoint, 'movingAvgRate' | 'activeHits' | 'activeRate' | 'deltaVsBaseline' | 'statusLabel'>[] =
       chronological.map((draw) => {
         const drawIdxInAll = allDraws.findIndex((d) => d.concurso === draw.concurso);
-        const priorDraws = allDraws.slice(drawIdxInAll + 1, drawIdxInAll + 26);
+        const priorDraws = allDraws.slice(drawIdxInAll + 1, drawIdxInAll + 1 + lookbackWindow);
         const prevDraw = priorDraws[0] || draw;
 
         const rollingStats = buildRollingStatsForWindow(priorDraws, statsList);
@@ -202,15 +205,19 @@ export const DashboardEficienciaPreditiva: React.FC<DashboardEficienciaPreditiva
     }
 
     return withActive;
-  }, [latestDraw, statsList, mode, baselinePercent, targetHits]);
+  }, [latestDraw, statsList, mode, baselinePercent, targetHits, contestInterval]);
 
-  // Recomendação atual da IA para o próximo concurso
+  // Recomendação atual da IA recalculada para a janela selecionada
   const currentOptimal18 = useMemo(() => {
-    if (aiPrediction?.dezenasRecomendadas18 && aiPrediction.dezenasRecomendadas18.length === 18) {
+    if (
+      contestInterval === 100 &&
+      aiPrediction?.dezenasRecomendadas18 &&
+      aiPrediction.dezenasRecomendadas18.length === 18
+    ) {
       return [...aiPrediction.dezenasRecomendadas18].sort((a, b) => a - b);
     }
     return buildOptimal18Pool(latestDraw, statsList, [], 9, 9).dezenas18;
-  }, [aiPrediction, latestDraw, statsList]);
+  }, [aiPrediction, latestDraw, statsList, contestInterval]);
 
   const summary = useMemo(() => {
     if (crossData.length === 0) {
@@ -295,12 +302,16 @@ export const DashboardEficienciaPreditiva: React.FC<DashboardEficienciaPreditiva
             <span className="font-mono tabular-nums">
               Últimos 10 Concursos (#{crossData[0]?.concurso ?? '—'} a #{crossData[crossData.length - 1]?.concurso ?? '—'})
             </span>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+              Janela Estatística: {contestInterval} Concursos
+            </span>
           </div>
           <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
             Dashboard de Eficiência Preditiva (IA vs. Resultados Reais)
           </h2>
           <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
-            Cruza as recomendações geradas pelo motor preditivo da IA (antes de cada sorteio) com as 15 dezenas oficiais sorteadas nos últimos 10 concursos.
+            Cruza as recomendações geradas pelo motor preditivo da IA (calibradas pelos últimos {contestInterval} concursos de atraso e frequência) com as 15 dezenas oficiais sorteadas nos últimos 10 concursos.
           </p>
         </div>
 

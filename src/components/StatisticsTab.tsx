@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   DEZENAS_STATS,
   TOP_DUPLAS,
@@ -6,10 +6,16 @@ import {
   PRIMOS_HISTORICA,
   CONCURSO_ATUAL,
   RECENT_DRAWS,
+  PRIMOS,
+  MOLDURA,
+  FIBONACCI,
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats, AIPredictionResponse } from '../types/lotofacil';
 import { D3SimuladorHistoricoIntervaloChart } from './D3SimuladorHistoricoIntervaloChart';
 import { DashboardEficienciaPreditiva } from './DashboardEficienciaPreditiva';
+import { HistoricoAcertosAcumuladosChart } from './HistoricoAcertosAcumuladosChart';
+import { ResumoPerformanceMensal } from './ResumoPerformanceMensal';
+import { getHistoricalNDraws } from '../services/historical100Draws';
 
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
@@ -102,6 +108,7 @@ import {
   Download,
   FileJson,
   MessageSquare,
+  FileText,
 } from 'lucide-react';
 
 interface StatisticsTabProps {
@@ -129,6 +136,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
+    | 'resumo_performance_mensal'
+    | 'acertos_acumulados_30'
     | 'resumo_texto_30_dias'
     | 'dispersao_estratificada'
     | 'historico_5_d3'
@@ -180,6 +189,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     | 'ciclos'
     | 'padroes'
   >('dispersao_estratificada');
+  const [contestInterval, setContestInterval] = useState<10 | 50 | 100>(50);
+  const [showWindowGrid, setShowWindowGrid] = useState<boolean>(true);
   const [atrasoSortOrder, setAtrasoSortOrder] = useState<
     'dezena' | 'atraso_desc' | 'vezes_desc'
   >('atraso_desc');
@@ -198,8 +209,94 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
     }
   };
 
-  // Sorted views of the 25 numbers
-  const sortedDezenas = [...statsList].sort((a, b) => {
+  // Recalcula dinamicamente Atrasos e Frequência para o intervalo selecionado (10, 50 ou 100 concursos)
+  const dynamicWindowStats = useMemo<DezenaStats[]>(() => {
+    const windowDraws = getHistoricalNDraws(contestInterval, latestDraw);
+    if (!windowDraws || windowDraws.length === 0) return statsList;
+
+    const total = windowDraws.length;
+    return Array.from({ length: 25 }, (_, i) => {
+      const numero = i + 1;
+      const base = statsList.find((s) => s.numero === numero) || DEZENAS_STATS.find((s) => s.numero === numero);
+
+      let vezes = 0;
+      let atrasoAtual = total;
+      let foundFirst = false;
+      let atrasoUltimo = 0;
+      let foundSecond = false;
+      let currentGap = 0;
+      let maiorAtraso = 0;
+      const gaps: number[] = [];
+
+      windowDraws.forEach((draw, idx) => {
+        const hit = draw.dezenas.includes(numero);
+        if (hit) {
+          vezes++;
+          if (!foundFirst) {
+            atrasoAtual = idx;
+            foundFirst = true;
+          } else if (!foundSecond) {
+            atrasoUltimo = currentGap;
+            foundSecond = true;
+          }
+          gaps.push(currentGap);
+          if (currentGap > maiorAtraso) maiorAtraso = currentGap;
+          currentGap = 0;
+        } else {
+          currentGap++;
+          if (currentGap > maiorAtraso) maiorAtraso = currentGap;
+        }
+      });
+
+      if (!foundSecond) {
+        atrasoUltimo = atrasoAtual;
+      }
+
+      const atrasoMedio =
+        gaps.length > 0
+          ? Number((gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(2))
+          : base?.atrasoMedio ?? 1.67;
+
+      const freqRel = (vezes / total) * 100;
+      const status: DezenaStats['status'] =
+        atrasoAtual >= 2 ? 'atrasada' : freqRel >= 64 ? 'frequente' : 'neutra';
+
+      return {
+        numero,
+        vezes,
+        atrasoAtual,
+        atrasoUltimo,
+        maiorAtraso,
+        atrasoMedio,
+        atrasoAcimaDaMedia: atrasoAtual > atrasoMedio,
+        status,
+        ePrimo: base?.ePrimo ?? PRIMOS.includes(numero),
+        eMoldura: base?.eMoldura ?? MOLDURA.includes(numero),
+        eFibonacci: base?.eFibonacci ?? FIBONACCI.includes(numero),
+        presenteUltimoConcurso: atrasoAtual === 0,
+        pendenteNoCiclo: cyclePendingNumbers.includes(numero),
+      };
+    });
+  }, [contestInterval, latestDraw, statsList, cyclePendingNumbers]);
+
+  const topDelayedWindow = useMemo(
+    () =>
+      [...dynamicWindowStats]
+        .sort((a, b) => b.atrasoAtual - a.atrasoAtual || a.vezes - b.vezes)
+        .slice(0, 5),
+    [dynamicWindowStats]
+  );
+
+  const topFrequentWindow = useMemo(
+    () =>
+      [...dynamicWindowStats]
+        .sort((a, b) => b.vezes - a.vezes || a.atrasoAtual - b.atrasoAtual)
+        .slice(0, 5),
+    [dynamicWindowStats]
+  );
+
+  // Sorted views of the 25 numbers based on dynamicWindowStats
+  const sortedDezenas = [...dynamicWindowStats].sort((a, b) => {
     if (atrasoSortOrder === 'atraso_desc') return b.atrasoAtual - a.atrasoAtual;
     if (atrasoSortOrder === 'vezes_desc') return b.vezes - a.vezes;
     return a.numero - b.numero;
@@ -207,12 +304,142 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Seletor Global de Intervalo de Concursos (10, 50, 100) + Resumo Dinâmico de Atrasos & Frequência */}
+      <section
+        aria-label="Seletor de Intervalo de Concursos"
+        className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Janela Amostral Dinâmica</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums text-emerald-400 font-semibold">
+                Últimos {contestInterval} Concursos
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              Intervalo de Cálculo: Atrasos, Frequência & Eficiência Preditiva
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div
+              role="group"
+              aria-label="Selecionar intervalo de concursos"
+              className="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl"
+            >
+              {([10, 50, 100] as const).map((interval) => (
+                <button
+                  key={interval}
+                  type="button"
+                  onClick={() => setContestInterval(interval)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
+                    contestInterval === interval
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {interval} Concursos
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowWindowGrid((v) => !v)}
+              className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              {showWindowGrid ? 'Ocultar Grade (25 Dez.)' : 'Ver Grade (25 Dez.)'}
+            </button>
+          </div>
+        </div>
+
+        {/* Destaques dinâmicos da janela selecionada */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
+              Maiores Atrasos ({contestInterval} conc.):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {topDelayedWindow.map((item) => (
+                <span
+                  key={item.numero}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-mono tabular-nums"
+                >
+                  <strong>{item.numero.toString().padStart(2, '0')}</strong>
+                  <span className="text-rose-400/80">({item.atrasoAtual}c)</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
+              Maior Frequência ({contestInterval} conc.):
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {topFrequentWindow.map((item) => (
+                <span
+                  key={item.numero}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-mono tabular-nums"
+                >
+                  <strong>{item.numero.toString().padStart(2, '0')}</strong>
+                  <span className="text-emerald-400/80">
+                    ({item.vezes}/{contestInterval})
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {showWindowGrid && (
+          <div className="grid grid-cols-5 sm:grid-cols-9 lg:grid-cols-[repeat(13,minmax(0,1fr))] gap-1.5 pt-1">
+            {dynamicWindowStats.map((dez) => {
+              const pct = Math.round((dez.vezes / contestInterval) * 100);
+              const isHighDelay = dez.atrasoAtual >= 3;
+              const isHot = pct >= 68;
+              return (
+                <div
+                  key={dez.numero}
+                  className={`rounded-lg border p-1.5 text-center transition ${
+                    isHighDelay
+                      ? 'bg-rose-950/35 border-rose-500/40'
+                      : isHot
+                      ? 'bg-emerald-950/35 border-emerald-500/40'
+                      : 'bg-slate-950/70 border-slate-800'
+                  }`}
+                  title={`Dezena ${dez.numero.toString().padStart(2, '0')}: ${dez.vezes}/${contestInterval} aparições (${pct}%), atraso atual de ${dez.atrasoAtual} concurso(s)`}
+                >
+                  <div className="font-mono font-bold text-xs text-white tabular-nums">
+                    {dez.numero.toString().padStart(2, '0')}
+                  </div>
+                  <div className="font-mono text-[10px] text-emerald-400 tabular-nums">
+                    {dez.vezes}/{contestInterval}
+                  </div>
+                  <div
+                    className={`font-mono text-[10px] tabular-nums ${
+                      isHighDelay ? 'text-rose-400 font-bold' : 'text-slate-400'
+                    }`}
+                  >
+                    {dez.atrasoAtual}c atr.
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Dashboard de Eficiência Preditiva no topo da aba Estatísticas */}
       <DashboardEficienciaPreditiva
         latestDraw={latestDraw}
-        statsList={statsList}
+        statsList={dynamicWindowStats}
         aiPrediction={aiPrediction}
         onApplyNumbers={onApplyNumbers}
+        contestInterval={contestInterval}
       />
 
       {/* Subtab Selector */}
@@ -231,6 +458,30 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
               RETORNO REAL
             </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('resumo_performance_mensal')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'resumo_performance_mensal'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>Resumo Performance Mensal</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('acertos_acumulados_30')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'acertos_acumulados_30'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
+                : 'text-cyan-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>Acertos Acumulados (30 Conc.)</span>
           </button>
 
           <button
@@ -1006,7 +1257,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           {/* Linha do Tempo Horizontal Navegável dos Últimos 100 Concursos com Atrasos Dinâmicos */}
           <LinhaDoTempo100ConcursosComponent
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             onSelectConcurso={(draw: LotofacilDraw) => {
               console.log('Concurso selecionado na linha do tempo:', draw.concurso);
             }}
@@ -1015,7 +1266,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           {/* Comparativo Visual do Comportamento das Dezenas entre Dois Concursos */}
           <ComparadorDoisConcursosComponent
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
@@ -1027,14 +1278,14 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           {/* Mapa de Calor (Heatmap) de Frequência Histórica das 25 Dezenas (Gradiente Azul ao Vermelho) */}
           <MapaCalorFrequenciaHistorica
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             onApplyNumbers={onApplyNumbers}
           />
 
-          {/* Dashboard Oficial: Frequência nos Últimos 100 Concursos & Curva de Atraso (Recharts + Framer Motion) */}
+          {/* Dashboard Oficial: Frequência & Curva de Atraso (Recharts + Framer Motion) */}
           <DashboardFrequenciaAtrasosRecharts
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             cyclePendingNumbers={cyclePendingNumbers}
             onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
@@ -1044,18 +1295,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }}
           />
 
-          {/* Dashboard Recharts: Frequência nos Últimos 50 Concursos (Análise Rápida de Quentes e Frias) */}
+          {/* Dashboard Recharts: Frequência na Janela Selecionada */}
           <DashboardFrequencia50ConcursosRecharts
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             cyclePendingNumbers={cyclePendingNumbers}
             onApplyNumbers={onApplyNumbers}
           />
 
-          {/* Widget de Tendências: 5 Dezenas Mais Sorteadas nos Últimos 20 Concursos (Recharts) */}
+          {/* Widget de Tendências: 5 Dezenas Mais Sorteadas */}
           <WidgetTendenciasTop5Recharts
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             onFixNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
@@ -1064,10 +1315,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }}
           />
 
-          {/* Comparador de Frequência entre Intervalos Distintos (100 vs 500 Concursos - Recharts Barras Empilhadas) */}
+          {/* Comparador de Frequência entre Intervalos Distintos */}
           <ComparadorFrequenciaPeriodosRecharts
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
               if (typeof window !== 'undefined') {
@@ -1076,10 +1327,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             }}
           />
 
-          {/* Módulo Oficial: Espelho do Concurso Atual (10 Dezenas Ausentes & Tendência nos Últimos 5 Ciclos) */}
+          {/* Módulo Oficial: Espelho do Concurso Atual */}
           <EspelhoConcursoAtualModule
             latestDraw={latestDraw}
-            statsList={statsList}
+            statsList={dynamicWindowStats}
             cyclePendingNumbers={cyclePendingNumbers}
             onApplyNumbers={onApplyNumbers}
             onNavigateToFechamento={() => {
@@ -2425,6 +2676,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: RESUMO FINANCEIRO & ROI */}
       {activeSubTab === 'resumo_financeiro' && (
         <div className="space-y-6">
+          <ResumoPerformanceMensal
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
           <ResumoFinanceiro
             savedTickets={savedTickets}
             draws={RECENT_DRAWS}
@@ -2435,6 +2690,27 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
             savedTickets={savedTickets}
             cyclePendingNumbers={cyclePendingNumbers}
             concursosNoCiclo={concursosNoCiclo}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: RESUMO DE PERFORMANCE MENSAL (ROI vs CUSTO ACUMULADO 30 DIAS + MARKDOWN) */}
+      {activeSubTab === 'resumo_performance_mensal' && (
+        <div className="space-y-6">
+          <ResumoPerformanceMensal
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: HISTÓRICO DE ACERTOS ACUMULADOS DOS ÚLTIMOS 30 CONCURSOS (RECHARTS) */}
+      {activeSubTab === 'acertos_acumulados_30' && (
+        <div className="space-y-6">
+          <HistoricoAcertosAcumuladosChart
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            statsList={dynamicWindowStats}
           />
         </div>
       )}
@@ -2454,6 +2730,15 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: DISPERSÃO SOMAS DA MATRIZ ESTRATIFICADA (RECHARTS 75/15/10%) */}
       {activeSubTab === 'dispersao_estratificada' && (
         <div className="space-y-6">
+          <HistoricoAcertosAcumuladosChart
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+            statsList={dynamicWindowStats}
+          />
+          <ResumoPerformanceMensal
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
           <GoldenZoneChart
             savedTickets={savedTickets}
             title="Golden Zone & Dispersão Estratificada de Somas"
@@ -2495,7 +2780,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         onClose={() => setIsPerformanceModalOpen(false)}
         latestDraw={latestDraw}
         savedTickets={savedTickets}
-        dynamicStats={statsList}
+        dynamicStats={dynamicWindowStats}
       />
     </div>
   );

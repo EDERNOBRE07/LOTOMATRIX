@@ -44,6 +44,7 @@ import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
 import { PushNotificationRulesPanel } from './PushNotificationRulesPanel';
+import { CriticalDelayNumbersConfigPanel } from './CriticalDelayNumbersConfigPanel';
 import { SecurityStatusMonitor } from './SecurityStatusMonitor';
 import { OrcamentoLimitesManager } from './OrcamentoLimitesManager';
 import { AuthAccountSecurityForms } from './AuthAccountSecurityForms';
@@ -701,6 +702,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }}
           />
 
+          {/* Painel Visual de Dezenas para Alerta de Atraso Crítico (Ciclo + Extras) */}
+          <CriticalDelayNumbersConfigPanel
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+
           {/* Configurador de Limites de Aposta & Simulador de Orçamento Mensal */}
           <OrcamentoLimitesManager />
 
@@ -1204,6 +1216,15 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="space-y-5">
           <PushNotificationRulesPanel
             latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+          <CriticalDelayNumbersConfigPanel
+            latestDraw={latestDraw}
+            statsList={statsList}
+            cyclePendingNumbers={cyclePendingNumbers}
             onNotice={(msg) => {
               setNotificationSuccessNotice(msg);
               setTimeout(() => setNotificationSuccessNotice(null), 4500);
