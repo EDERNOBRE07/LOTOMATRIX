@@ -2,7 +2,12 @@ import { LotofacilDraw, GameTicket } from '../types/lotofacil';
 import { getSavedFechamentos, SavedFechamentoPrognostico } from './savedFechamentosStorage';
 import { countMatches } from './combinatorics';
 import { soundService } from './soundAlert';
-import { saveAlertsHistory, getAlertsHistory, IntelligentAlert } from './notificationService';
+import {
+  saveAlertsHistory,
+  getAlertsHistory,
+  IntelligentAlert,
+  shouldMuteBackgroundAudio,
+} from './notificationService';
 
 export interface AuditedWinningGame {
   id: string;
@@ -285,16 +290,18 @@ export async function auditAndNotifySavedGames(
     localStorage.setItem(STORAGE_LAST_AUDITED_CONCURSO, draw.concurso.toString());
   } catch {}
 
-  // 4. Play auditory celebration if appropriate
-  try {
-    if (maxHits >= 15) {
-      soundService.play15PontosJackpotSound();
-    } else if (maxHits >= 14) {
-      soundService.play14PontosCelebrationSound();
-    } else if (totalWinningTickets > 0) {
-      soundService.playGoldenZoneSuccessChime();
-    }
-  } catch {}
+  // 4. Play auditory celebration if appropriate (respecting Quiet Hours)
+  if (!shouldMuteBackgroundAudio()) {
+    try {
+      if (maxHits >= 15) {
+        soundService.play15PontosJackpotSound();
+      } else if (maxHits >= 14) {
+        soundService.play14PontosCelebrationSound();
+      } else if (totalWinningTickets > 0) {
+        soundService.playGoldenZoneSuccessChime();
+      }
+    } catch {}
+  }
 
   // 5. Construct High-Impact Push Title and Body
   let title = '';

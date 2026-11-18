@@ -1,5 +1,6 @@
 import { soundService } from './soundAlert';
 import { isNotificationSupported } from './nativeNotificationService';
+import { shouldMuteBackgroundAudio } from './notificationService';
 
 export interface ScheduledAlertReminder {
   id: string;
@@ -130,8 +131,8 @@ export function toggleScheduledAlert(id: string, active: boolean): void {
 export async function triggerScheduledAlertPush(
   alert: ScheduledAlertReminder
 ): Promise<boolean> {
-  // 1. Toca o alerta sonoro se habilitado
-  if (alert.notifySound) {
+  // 1. Toca o alerta sonoro se habilitado e fora do modo Não Perturbe
+  if (alert.notifySound && !shouldMuteBackgroundAudio()) {
     try {
       soundService.playGoldenZoneSuccessChime();
     } catch {}

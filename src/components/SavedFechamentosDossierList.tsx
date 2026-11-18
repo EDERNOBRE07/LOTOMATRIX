@@ -1594,8 +1594,17 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                 .replace(/^⚡\s*/, '')
                 .split(' • ')[0]
                 .trim() || 'Fechamento Clássico';
-            const cleanModalidade =
-              String(f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`).trim();
+            const rawModalidade = String(
+              f.modalidadeMatriz || `${universo.length} Dezenas • Matriz Pro`
+            ).trim();
+            const cleanModalidade = rawModalidade
+              .replace(/^Concurso Alvo #\d+\s*\(Base #\d+\)\s*•\s*/i, '')
+              .replace(/^⚡\s*/, '')
+              .trim();
+            const isModalidadeRedundant =
+              !cleanModalidade ||
+              cleanTipo.toLowerCase().includes(cleanModalidade.toLowerCase()) ||
+              cleanModalidade.toLowerCase().includes(cleanTipo.toLowerCase());
 
             const hasMarginFailures = roiAudit.jogosAbaixoMargem > 0;
             const approvedRatio =
@@ -1639,8 +1648,8 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
-                {/* Cabeçalho Unificado em Linha Flexível (Esquerda: ID & Concurso Alvo | Direita: Ações Rápidas) */}
-                <div className="px-4 py-3.5 sm:px-5 border-b border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* Cabeçalho em Linha Flexível Única (Esquerda: Concurso Alvo & Status | Direita: Ações Rápidas) */}
+                <div className="px-4 py-3 sm:px-5 border-b border-slate-800/80 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                   <div className="flex items-start sm:items-center gap-2.5 min-w-0">
                     <input
                       type="checkbox"
@@ -1654,7 +1663,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       #{(idx + 1).toString().padStart(2, '0')}
                     </span>
 
-                    <div className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <h3 className="font-mono font-bold text-sm sm:text-base text-emerald-300 tabular-nums whitespace-nowrap">
                         Concurso Alvo #{cardConcursoAlvo}
                       </h3>
@@ -1662,6 +1671,12 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       <span className="font-sans font-bold text-sm text-white truncate max-w-xs sm:max-w-md">
                         {cleanTipo}
                       </span>
+
+                      {!isModalidadeRedundant && (
+                        <span className="font-sans text-xs font-medium text-cyan-300 truncate max-w-xs">
+                          · {cleanModalidade}
+                        </span>
+                      )}
 
                       <span className="font-mono text-xs text-slate-400 tabular-nums whitespace-nowrap">
                         Base #{cardConcursoBase}
@@ -1687,7 +1702,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     <button
                       type="button"
                       onClick={() => setExpandedTicketsCardId(isTicketsExpanded ? null : f.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                         isTicketsExpanded
                           ? 'bg-emerald-500 text-slate-950 shadow-sm'
                           : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
@@ -1708,7 +1723,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     <button
                       type="button"
                       onClick={() => handleLoadInConferencia(f)}
-                      className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/40 text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
                       title="Carregar todos os bilhetes deste fechamento no Conferidor Oficial"
                     >
                       <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
@@ -1718,7 +1733,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     <button
                       type="button"
                       onClick={() => handleDownloadTXT(f)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0"
                       title="Exportar fechamento em TXT"
                     >
                       <Download className="w-3.5 h-3.5 text-sky-400 shrink-0" />
@@ -1728,7 +1743,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     <button
                       type="button"
                       onClick={() => setSelectedForLotericaPDF(f)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0"
                       title="Exportar PDF Lotérica com marca d'água e custo estimado"
                     >
                       <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -1741,7 +1756,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         soundService.playGoldenZoneSuccessChime();
                         setSelectedForPDF(f);
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0"
                       title="Pré-visualizar e Imprimir Volantes Oficiais 5x5"
                     >
                       <Printer className="w-3.5 h-3.5 shrink-0" />
@@ -1751,25 +1766,25 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                     <button
                       type="button"
                       onClick={() => setExpandedDossierId(isDossierExpanded ? null : f.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
                       title="Exibir/ocultar dossiê técnico e opções extras de exportação"
                     >
                       {isDossierExpanded ? 'Ocultar Dossiê' : 'Dossiê'}
                     </button>
 
                     {confirmDeleteId === f.id ? (
-                      <div className="flex items-center gap-1 bg-rose-950/90 p-0.5 rounded-lg border border-rose-500/60">
+                      <div className="flex items-center gap-1 bg-rose-950/90 p-0.5 rounded-lg border border-rose-500/60 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleDelete(f.id, f.tipoFechamento)}
-                          className="px-2 py-1 rounded bg-rose-500 text-slate-950 font-bold text-[11px] cursor-pointer"
+                          className="px-2 py-1 rounded bg-rose-500 text-slate-950 font-bold text-[11px] cursor-pointer whitespace-nowrap"
                         >
                           Excluir
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(null)}
-                          className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[11px] cursor-pointer"
+                          className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[11px] cursor-pointer whitespace-nowrap"
                         >
                           Não
                         </button>
@@ -1778,7 +1793,7 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(f.id)}
-                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer shrink-0"
                         title="Excluir Fechamento"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1787,15 +1802,13 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                   </div>
                 </div>
 
-                {/* Corpo Estruturado do Card (Sem Redundâncias) */}
-                <div className="p-4 sm:p-5 space-y-3.5">
-                  {/* Linha 1: Modalidade + Métricas Financeiras em JetBrains Mono + Auditoria ROI Resumida */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+                {/* Corpo Estruturado do Card (Bloco Único Sem Redundâncias) */}
+                <div className="p-4 sm:p-5 space-y-3">
+                  {/* Linha 1: Métricas Financeiras em JetBrains Mono + Score de Eficiência & Auditoria ROI */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-300">
-                      <span className="font-sans font-semibold text-cyan-300">{cleanModalidade}</span>
-                      <span aria-hidden="true" className="text-slate-600">·</span>
                       <span className="inline-flex items-center gap-1 font-mono tabular-nums text-slate-400">
-                        <Calendar className="w-3.5 h-3.5" />
+                        <Calendar className="w-3.5 h-3.5 shrink-0" />
                         <span>{f.dataCriacao || 'Data não registrada'}</span>
                       </span>
                       <span aria-hidden="true" className="text-slate-600">·</span>
@@ -1806,9 +1819,12 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                       <span className="font-mono tabular-nums font-bold text-amber-300">
                         {formatCurrencyBRL(custoTotal)}
                       </span>
+                      <span aria-hidden="true" className="text-slate-600">·</span>
+                      <span className="font-mono tabular-nums text-slate-400">
+                        Universo {universo.length} dez.
+                      </span>
                     </div>
 
-                    {/* Score de Eficiência (Última Conferência) + Resumo de Auditoria ROI */}
                     <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-[11px]">
                       <ScoreDeEficienciaBadge efficiency={conferenceEfficiency} />
 
@@ -1823,9 +1839,9 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         )}/jogo vs Retorno ${formatCurrencyBRL(roiAudit.retornoMedioPorJogo)}/jogo`}
                       >
                         {roiAudit.roiMedioGeralPercent >= suggestedRoiMargin ? (
-                          <TrendingUp className="w-3 h-3 text-emerald-400" />
+                          <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" />
                         ) : (
-                          <TrendingDown className="w-3 h-3 text-rose-400" />
+                          <TrendingDown className="w-3 h-3 text-rose-400 shrink-0" />
                         )}
                         <span>
                           ROI Hist.: {roiAudit.roiMedioGeralPercent > 0 ? '+' : ''}
@@ -1848,65 +1864,85 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                             setExpandedTicketsCardId(f.id);
                             setShowOnlyMarginFailures(true);
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 font-sans font-semibold cursor-pointer transition"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 font-sans font-semibold cursor-pointer transition whitespace-nowrap"
                           title="Filtrar bilhetes abaixo da margem de lucro sugerida"
                         >
-                          <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
                           <span className="font-mono tabular-nums">{roiAudit.jogosAbaixoMargem}</span>
                           <span>abaixo da margem</span>
                         </button>
                       ) : (
-                        <span className="text-emerald-400 font-semibold">
+                        <span className="font-sans text-emerald-400 font-semibold whitespace-nowrap">
                           100% na margem
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Linha 2: Metadados Técnicos (Filtros) em Grid Compacto de 3 Colunas */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                  {/* Linha 2: Metadados Técnicos (Soma, Paridade, Moldura, Primos, Fibonacci, Repetidas e Fixas) em Grid Compacto de 2-3 Colunas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Soma</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.faixaSoma?.min ?? 180}–{f.faixaSoma?.max ?? 215}
                       </span>
                     </div>
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Paridade</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.paridade?.minPares ?? 6}–{f.paridade?.maxPares ?? 9}P
                       </span>
                     </div>
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Moldura</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11}
                       </span>
                     </div>
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Primos</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.primos?.min ?? 4}–{f.primos?.max ?? 7}
                       </span>
                     </div>
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Fibonacci</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.fibonacci?.min ?? 3}–{f.fibonacci?.max ?? 6}
                       </span>
                     </div>
-                    <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
+                    <div className="bg-slate-950/75 border border-slate-800/80 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2">
                       <span className="font-sans text-slate-400">Repetidas</span>
                       <span className="font-mono tabular-nums font-bold text-slate-200">
                         {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}
                       </span>
                     </div>
+                    <div
+                      className={`col-span-2 sm:col-span-3 rounded-lg px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-2 border ${
+                        fixas.length > 0
+                          ? 'bg-amber-500/10 border-amber-500/30'
+                          : 'bg-slate-950/75 border-slate-800/80'
+                      }`}
+                    >
+                      <span className="font-sans text-slate-400">
+                        Fixas <span className="font-mono tabular-nums">({fixas.length})</span>
+                      </span>
+                      <span
+                        className={`font-mono tabular-nums font-bold ${
+                          fixas.length > 0 ? 'text-amber-300' : 'text-slate-500'
+                        }`}
+                      >
+                        {fixas.length > 0
+                          ? fixas.map((d) => d.toString().padStart(2, '0')).join(' · ')
+                          : 'Nenhuma'}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Linha 3: Universo de Dezenas + Fixas destacadas */}
+                  {/* Linha 3: Universo de Dezenas (Pílulas compactas sem texto duplicado de Fixas) */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     <span className="text-xs font-sans font-semibold text-slate-400 mr-1">
-                      Universo <span className="font-mono tabular-nums">({universo.length})</span>:
+                      Universo:
                     </span>
                     {universo.map((num) => {
                       const isFixa = fixasSet.has(num);
@@ -1924,11 +1960,6 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                         </span>
                       );
                     })}
-                    {fixas.length > 0 && (
-                      <span className="text-xs font-mono tabular-nums text-amber-300 font-semibold ml-1.5">
-                        Fixas ({fixas.length}): {fixas.map((d) => d.toString().padStart(2, '0')).join(' · ')}
-                      </span>
-                    )}
                   </div>
 
                   {/* Resumo de faixas deste fechamento quando houver acertos >= 11 */}
@@ -1949,28 +1980,29 @@ export const SavedFechamentosDossierList: React.FC<SavedFechamentosDossierListPr
                   <div className="px-4 sm:px-5 py-4 border-t border-slate-800 bg-slate-950/60 space-y-3 text-xs">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-slate-300">
                       <div>
-                        <strong className="font-sans text-amber-300 block mb-1">1. Estratégia & Fixas</strong>
-                        <div className="font-mono tabular-nums">
-                          Fixas: {fixas.length > 0 ? fixas.map((d) => d.toString().padStart(2, '0')).join(' ') : 'Nenhuma'}
-                        </div>
+                        <strong className="font-sans text-amber-300 block mb-1">1. Exclusões & Base</strong>
                         <div className="font-mono tabular-nums">
                           Excluídas:{' '}
                           {(f.dezenasExcluidas || []).length > 0
                             ? f.dezenasExcluidas.map((d) => d.toString().padStart(2, '0')).join(' ')
                             : 'Nenhuma'}
                         </div>
+                        <div className="font-mono tabular-nums text-slate-400">
+                          Ref. Repetidas: #{f.repetidas?.concursoRef || cardConcursoBase}
+                        </div>
                       </div>
                       <div>
-                        <strong className="font-sans text-cyan-300 block mb-1">2. Restrições Canônicas</strong>
-                        <div className="font-mono tabular-nums">Soma: {f.faixaSoma?.min ?? 180} a {f.faixaSoma?.max ?? 215}</div>
-                        <div className="font-mono tabular-nums">Paridade: {f.paridade?.minPares ?? 6} a {f.paridade?.maxPares ?? 9} Pares</div>
-                        <div className="font-mono tabular-nums">Consecutivas: até {f.maxConsecutivas ?? 5}</div>
+                        <strong className="font-sans text-cyan-300 block mb-1">2. Limites Adicionais</strong>
+                        <div className="font-mono tabular-nums">Consecutivas Máx.: {f.maxConsecutivas ?? 5}</div>
+                        <div className="font-mono tabular-nums text-slate-400">
+                          Matriz: {cleanModalidade}
+                        </div>
                       </div>
                       <div>
-                        <strong className="font-sans text-emerald-300 block mb-1">3. Auditoria & Filtros Avançados</strong>
-                        <div className="font-mono tabular-nums">Repetidas (#{f.repetidas?.concursoRef || f.concurso}): {f.repetidas?.min ?? 8}–{f.repetidas?.max ?? 10}</div>
-                        <div className="font-mono tabular-nums">Moldura: {f.moldura?.min ?? 8}–{f.moldura?.max ?? 11} | Primos: {f.primos?.min ?? 4}–{f.primos?.max ?? 7}</div>
-                        <div className="text-slate-400">{f.auditoriaAnomalias}</div>
+                        <strong className="font-sans text-emerald-300 block mb-1">3. Auditoria de Anomalias</strong>
+                        <div className="font-sans text-slate-400 leading-relaxed">
+                          {f.auditoriaAnomalias || 'Sem anomalias registradas na geração.'}
+                        </div>
                       </div>
                     </div>
 

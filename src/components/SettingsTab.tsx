@@ -44,6 +44,7 @@ import { ExportExecutivePdfCard } from './ExportExecutivePdfCard';
 import { ScheduledAlertsTab } from './ScheduledAlertsTab';
 import { PrizeNotificationTiersCard } from './PrizeNotificationTiersCard';
 import { PushNotificationRulesPanel } from './PushNotificationRulesPanel';
+import { PreferenciasNotificacaoQuietPanel } from './PreferenciasNotificacaoQuietPanel';
 import { CriticalDelayNumbersConfigPanel } from './CriticalDelayNumbersConfigPanel';
 import { SecurityStatusMonitor } from './SecurityStatusMonitor';
 import { OrcamentoLimitesManager } from './OrcamentoLimitesManager';
@@ -702,6 +703,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             }}
           />
 
+          {/* Painel de Preferências de Notificação: Horários de Não Perturbe (Quiet Mode) */}
+          <PreferenciasNotificacaoQuietPanel
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+
           {/* Painel Visual de Dezenas para Alerta de Atraso Crítico (Ciclo + Extras) */}
           <CriticalDelayNumbersConfigPanel
             latestDraw={latestDraw}
@@ -1216,6 +1225,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="space-y-5">
           <PushNotificationRulesPanel
             latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+          <PreferenciasNotificacaoQuietPanel
             onNotice={(msg) => {
               setNotificationSuccessNotice(msg);
               setTimeout(() => setNotificationSuccessNotice(null), 4500);

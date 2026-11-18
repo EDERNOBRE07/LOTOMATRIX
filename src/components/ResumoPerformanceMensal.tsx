@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, Check, TrendingUp, TrendingDown, Calendar, FileText } from 'lucide-react';
+import { Copy, Check, TrendingUp, TrendingDown, Calendar, FileText, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
@@ -40,6 +42,7 @@ export const ResumoPerformanceMensal: React.FC<ResumoPerformanceMensalProps> = (
   savedTickets = [],
 }) => {
   const [copied, setCopied] = useState<boolean>(false);
+  const [pdfExported, setPdfExported] = useState<boolean>(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = useState<number>(0);
 
@@ -208,6 +211,218 @@ export const ResumoPerformanceMensal: React.FC<ResumoPerformanceMensalProps> = (
     }
   };
 
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      const emittedAt = new Date().toLocaleString('pt-BR');
+
+      // Cabeçalho executivo com branding LotoSniper
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 34, 'F');
+      doc.setFillColor(16, 185, 129); // emerald-500
+      doc.rect(0, 0, pageWidth, 2.5, 'F');
+
+      // Alvo concêntrico LotoSniper
+      const logoCx = margin + 7;
+      const logoCy = 18;
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.9);
+      doc.circle(logoCx, logoCy, 6, 'S');
+      doc.setDrawColor(245, 158, 11);
+      doc.setLineWidth(0.5);
+      doc.circle(logoCx, logoCy, 3.2, 'S');
+      doc.setFillColor(16, 185, 129);
+      doc.circle(logoCx, logoCy, 1.2, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text('LOTOSNIPER AI PRO', margin + 17, 15);
+
+      doc.setFontSize(9);
+      doc.setTextColor(52, 211, 153);
+      doc.text('RESUMO DE PERFORMANCE MENSAL (ÚLTIMOS 30 DIAS)', margin + 17, 21.5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Período: #${totals.primeiroConcurso} a #${totals.ultimoConcurso} (${totals.concursos} concursos)  |  Jogos Auditados: ${totals.jogos}  |  Emissão: ${emittedAt}`,
+        margin + 17,
+        27.5
+      );
+
+      // Seção 1: Consolidado Financeiro (KPIs)
+      let y = 43;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('1. Consolidado Financeiro (ROI vs. Custo Acumulado)', margin, y);
+
+      y += 4;
+      const cardGap = 4;
+      const cardWidth = (pageWidth - margin * 2 - cardGap * 3) / 4;
+      const cardHeight = 19;
+      const sinalLucro = totals.lucroAcumulado > 0 ? '+' : '';
+      const sinalRoi = totals.roiAcumuladoPercent > 0 ? '+' : '';
+
+      const kpis = [
+        {
+          label: 'Custo Acumulado (30d)',
+          value: formatCurrencyBRL(totals.custoAcumulado),
+          color: [15, 23, 42] as [number, number, number],
+        },
+        {
+          label: 'Retorno Bruto Acum.',
+          value: formatCurrencyBRL(totals.retornoAcumulado),
+          color: [5, 150, 105] as [number, number, number],
+        },
+        {
+          label: 'Lucro Líquido Mensal',
+          value: `${sinalLucro}${formatCurrencyBRL(totals.lucroAcumulado)}`,
+          color: totals.lucroAcumulado >= 0
+            ? ([5, 150, 105] as [number, number, number])
+            : ([225, 29, 72] as [number, number, number]),
+        },
+        {
+          label: 'ROI Acumulado (30d)',
+          value: `${sinalRoi}${totals.roiAcumuladoPercent.toFixed(1)}%`,
+          color: totals.roiAcumuladoPercent >= 0
+            ? ([5, 150, 105] as [number, number, number])
+            : ([225, 29, 72] as [number, number, number]),
+        },
+      ];
+
+      kpis.forEach((kpi, idx) => {
+        const x = margin + idx * (cardWidth + cardGap);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(203, 213, 225);
+        doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'FD');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(kpi.label, x + 3, y + 6.5);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
+        doc.text(kpi.value, x + 3, y + 14.5);
+      });
+
+      y += cardHeight + 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        `Total de bilhetes premiados (11+ acertos) no período: ${totals.totalPremiados}  |  Melhor marca atingida: ${totals.melhorGeral} pontos`,
+        margin,
+        y
+      );
+
+      // Seção 2: Tabela comparativa concurso a concurso
+      y += 8;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('2. Tabela Comparativa por Concurso (Últimos 30 Dias)', margin, y);
+
+      const tableRows = [...monthlyRows].reverse().map((r) => {
+        const sr = r.roiAcumuladoPercent > 0 ? '+' : '';
+        const sl = r.lucroAcumulado > 0 ? '+' : '';
+        return [
+          `#${r.concurso}`,
+          r.data,
+          formatCurrencyBRL(r.custoRodada),
+          formatCurrencyBRL(r.custoAcumulado),
+          formatCurrencyBRL(r.retornoAcumulado),
+          `${sl}${formatCurrencyBRL(r.lucroAcumulado)}`,
+          `${sr}${r.roiAcumuladoPercent.toFixed(1)}%`,
+          `${r.melhorAcerto} pts`,
+        ];
+      });
+
+      autoTable(doc, {
+        startY: y + 3,
+        margin: { left: margin, right: margin },
+        head: [[
+          'Concurso',
+          'Data',
+          'Custo Rodada',
+          'Custo Acum.',
+          'Retorno Acum.',
+          'Lucro Acum.',
+          'ROI Acum.',
+          'Melhor',
+        ]],
+        body: tableRows,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2.4,
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.15,
+        },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [248, 250, 252],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', halign: 'left' },
+          1: { halign: 'left' },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right', textColor: [5, 150, 105] },
+          5: { halign: 'right', fontStyle: 'bold' },
+          6: { halign: 'right', fontStyle: 'bold' },
+          7: { halign: 'right' },
+        },
+        didParseCell: (hookData) => {
+          if (hookData.section === 'body' && (hookData.column.index === 5 || hookData.column.index === 6)) {
+            const raw = String(hookData.cell.raw || '');
+            if (raw.startsWith('-')) {
+              hookData.cell.styles.textColor = [225, 29, 72];
+            } else {
+              hookData.cell.styles.textColor = [5, 150, 105];
+            }
+          }
+        },
+      });
+
+      const pageCount = doc.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(
+          'LotoSniper AI Pro · Relatório Analítico de Performance Mensal & ROI',
+          margin,
+          pageHeight - 7
+        );
+        doc.text(`Página ${p} de ${pageCount}`, pageWidth - margin, pageHeight - 7, {
+          align: 'right',
+        });
+      }
+
+      doc.save(`LotoSniper_Performance_Mensal_30d_${totals.ultimoConcurso}.pdf`);
+      setPdfExported(true);
+      setTimeout(() => setPdfExported(false), 3000);
+    } catch (e) {
+      console.error('Erro ao exportar Resumo de Performance Mensal em PDF:', e);
+    }
+  };
+
   return (
     <section
       aria-label="Resumo de Performance Mensal"
@@ -257,6 +472,27 @@ export const ResumoPerformanceMensal: React.FC<ResumoPerformanceMensalProps> = (
             <span>
               {copied ? 'Markdown Copiado!' : 'Copiar Relatório (Markdown / WhatsApp)'}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            disabled={consolidatedTickets.length === 0}
+            title={
+              consolidatedTickets.length === 0
+                ? 'Salve ao menos um jogo para gerar o relatório PDF'
+                : 'Baixar Resumo de Performance Mensal (ROI e Desempenho) em PDF via jsPDF'
+            }
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              consolidatedTickets.length === 0
+                ? 'bg-slate-800 text-slate-500 border border-slate-800 cursor-not-allowed'
+                : pdfExported
+                ? 'bg-amber-400 text-slate-950 cursor-pointer'
+                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 cursor-pointer shadow-sm'
+            }`}
+          >
+            {pdfExported ? <Check className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+            <span>{pdfExported ? 'PDF Gerado!' : 'Exportar PDF'}</span>
           </button>
         </div>
       </div>

@@ -2351,7 +2351,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 max-h-[600px] overflow-y-auto pr-1">
                 {filteredTickets.map((t) => {
                 const id = t.id || `ticket-${t.index}`;
                 const hits = countMatches(t.dezenas, conferirDezenas);
@@ -2376,16 +2376,16 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 return (
                   <div
                     key={id}
-                    className={`p-3.5 rounded-2xl border transition space-y-2.5 font-mono ${
-                      isExtremidadesFora
-                        ? 'border-rose-500/40 bg-rose-950/15'
-                        : isSelected
-                        ? 'border-emerald-500/50 bg-slate-900/90'
-                        : 'border-slate-800/80 bg-slate-900/50 opacity-75'
-                    } ${
+                    className={`p-3.5 rounded-2xl border transition space-y-2.5 bg-slate-900/90 ${
                       hits >= 14
-                        ? 'ring-1 ring-amber-400/50 bg-amber-500/5'
-                        : ''
+                        ? 'border-amber-400/70'
+                        : isAwarded
+                        ? 'border-emerald-500/50'
+                        : isExtremidadesFora
+                        ? 'border-rose-500/40'
+                        : isSelected
+                        ? 'border-slate-700'
+                        : 'border-slate-800 opacity-75'
                     }`}
                   >
                     {/* Top Row: Selection Checkbox, Game Title, Score de Eficiência & Hit Badge */}
@@ -2397,22 +2397,22 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                           onChange={() => handleToggleSelectTicket(id)}
                           className="w-4 h-4 rounded text-emerald-500 accent-emerald-500 cursor-pointer"
                         />
-                        <span className="font-mono font-black text-white text-sm tabular-nums">
+                        <span className="font-mono font-bold text-white text-sm tabular-nums">
                           Jogo #{t.index.toString().padStart(2, '0')}
                         </span>
 
                         <ScoreDeEficienciaBadge efficiency={ticketEfficiency} compact />
 
                         {isExtremidadesFora && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-sans font-semibold px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/40">
                             <AlertTriangle className="w-3 h-3 text-rose-400" />
                             <span>Fora do Padrão</span>
                           </span>
                         )}
 
                         {isZonaOuroCruz && (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                            ★ Cruz Ouro ({cruzCount})
+                          <span className="text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                            Cruz Ouro (<span className="font-mono tabular-nums">{cruzCount}</span>)
                           </span>
                         )}
 
@@ -2432,7 +2432,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                               <TrendingDown className="w-3 h-3 shrink-0" />
                             )}
                             <span>
-                              ROI Hist. {roiAudit.roiPercent > 0 ? '+' : ''}
+                              ROI {roiAudit.roiPercent > 0 ? '+' : ''}
                               {roiAudit.roiPercent.toFixed(0)}%
                             </span>
                           </span>
@@ -2440,20 +2440,20 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                       </div>
 
                       <span
-                        className={`font-mono text-xs font-black px-2 py-0.5 rounded shrink-0 ${
+                        className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 tabular-nums ${
                           hits >= 14
                             ? 'bg-amber-400 text-slate-950'
                             : hits >= 11
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-800 text-slate-500'
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-slate-800 text-slate-400'
                         }`}
                       >
-                        {hits} ACERTOS {hits >= 11 ? '★ PREMIADO' : ''}
+                        {hits} PTS {hits >= 11 ? '· PREMIADO' : ''}
                       </span>
                     </div>
 
                     {/* Numbers Grid */}
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                       {t.dezenas.map((num) => {
                         const matched = conferirDezenas.includes(num);
                         return (
@@ -2462,7 +2462,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                             className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-mono tabular-nums ${
                               matched
                                 ? 'bg-emerald-500 text-black font-bold shadow-sm'
-                                : 'bg-slate-800/80 text-slate-300 font-semibold'
+                                : 'bg-slate-800 text-slate-300 font-medium'
                             }`}
                           >
                             {num.toString().padStart(2, '0')}

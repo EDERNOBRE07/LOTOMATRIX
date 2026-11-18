@@ -1,5 +1,11 @@
 import { soundService } from './soundAlert';
-import { saveAlertsHistory, getAlertsHistory, IntelligentAlert } from './notificationService';
+import {
+  saveAlertsHistory,
+  getAlertsHistory,
+  IntelligentAlert,
+  shouldMuteBackgroundAudio,
+  shouldMuteBackgroundPush,
+} from './notificationService';
 import { LotofacilDraw } from '../types/lotofacil';
 import { getHistorical100Draws } from './historical100Draws';
 
@@ -133,8 +139,8 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
     return false;
   }
 
-  // 1. Play auditory celebration based on hit tier (honoring user sound preference)
-  if (playAudio) {
+  // 1. Play auditory celebration based on hit tier (honoring user sound preference & Quiet Hours)
+  if (playAudio && !shouldMuteBackgroundAudio()) {
     try {
       if (maxHits >= 15) {
         soundService.play15PontosJackpotSound();
@@ -191,7 +197,7 @@ export async function sendNativeJackpotNotification(payload: NativeJackpotPayloa
   } catch {}
 
   // 4. Native Browser Notification (Foreground & Background Tab Support)
-  if (!sendPush || !isNotificationSupported() || Notification.permission !== 'granted') {
+  if (!sendPush || shouldMuteBackgroundPush() || !isNotificationSupported() || Notification.permission !== 'granted') {
     return false;
   }
 
@@ -492,8 +498,8 @@ export async function sendNativeCycleAlertNotification(
 ): Promise<boolean> {
   const { ausentesCount, dezenasAusentes, concurso, concursosNoCiclo, threshold, playAudio = true } = payload;
 
-  // 1. Play auditory alarm
-  if (playAudio) {
+  // 1. Play auditory alarm (honoring Quiet Hours)
+  if (playAudio && !shouldMuteBackgroundAudio()) {
     try {
       soundService.playCycleAlertSound();
     } catch {}

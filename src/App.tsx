@@ -50,6 +50,8 @@ import {
   getAlertsHistory,
   saveAlertsHistory,
   IntelligentAlert,
+  shouldMuteBackgroundAudio,
+  shouldMuteBackgroundPush,
 } from './services/notificationService';
 import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
 import {
@@ -484,8 +486,8 @@ export default function App() {
         winningTicketsCount: winningCount,
         bestTicketIndex: bestIdx,
         dataSorteio: draw.data,
-        playAudio: !detailed.quietMode && prizeRule.soundEnabled,
-        sendPush: prizeRule.nativePushEnabled,
+        playAudio: !shouldMuteBackgroundAudio() && prizeRule.soundEnabled,
+        sendPush: !shouldMuteBackgroundPush() && prizeRule.nativePushEnabled,
       });
 
       // 2. Exibir banner de premiação no topo da tela
@@ -569,10 +571,10 @@ export default function App() {
           saveAlertsHistory([newAlert, ...existingHistory]);
         }
 
-        if (!detailed.quietMode && delayRule.soundEnabled) {
+        if (!shouldMuteBackgroundAudio() && delayRule.soundEnabled) {
           soundService.playOpportunityAlert();
         }
-        if (delayRule.nativePushEnabled) {
+        if (delayRule.nativePushEnabled && !shouldMuteBackgroundPush()) {
           void fireBrowserPushNotification(
             `LotoSniper • Atraso Crítico (#${draw.concurso})`,
             `${delayedNums.length} dezena(s) com atraso ≥ ${delayThreshold} concursos (${summaryParts.join(' | ')}).`,
@@ -582,10 +584,10 @@ export default function App() {
       }
 
       if (cycleTriggered) {
-        if (!detailed.quietMode && cycleRule.soundEnabled) {
+        if (!shouldMuteBackgroundAudio() && cycleRule.soundEnabled) {
           soundService.playCycleAlertSound();
         }
-        if (cycleRule.nativePushEnabled) {
+        if (cycleRule.nativePushEnabled && !shouldMuteBackgroundPush()) {
           const title = isCycleJustClosed
             ? `LotoSniper • Fechamento de Ciclo (#${draw.concurso})`
             : `LotoSniper • Reta Final do Ciclo (#${draw.concurso})`;

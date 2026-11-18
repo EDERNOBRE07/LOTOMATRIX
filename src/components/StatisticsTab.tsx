@@ -15,6 +15,8 @@ import { D3SimuladorHistoricoIntervaloChart } from './D3SimuladorHistoricoInterv
 import { DashboardEficienciaPreditiva } from './DashboardEficienciaPreditiva';
 import { HistoricoAcertosAcumuladosChart } from './HistoricoAcertosAcumuladosChart';
 import { ResumoPerformanceMensal } from './ResumoPerformanceMensal';
+import { CorrelacaoCustoRetornoScatterRecharts } from './CorrelacaoCustoRetornoScatterRecharts';
+import { MapaCalorDezenas100Card } from './MapaCalorDezenas100Card';
 import { getHistoricalNDraws } from '../services/historical100Draws';
 
 import { FrequencyDelayChart } from './FrequencyDelayChart';
@@ -136,6 +138,8 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
     | 'resumo_financeiro'
+    | 'mapa_calor_dezenas'
+    | 'correlacao_custo_retorno'
     | 'resumo_performance_mensal'
     | 'acertos_acumulados_30'
     | 'resumo_texto_30_dias'
@@ -461,6 +465,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('mapa_calor_dezenas')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'mapa_calor_dezenas'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
+                : 'text-rose-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Flame className="w-4 h-4" />
+            <span>Mapa de Calor 5×5 (100 Conc.)</span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('resumo_performance_mensal')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
               activeSubTab === 'resumo_performance_mensal'
@@ -470,6 +486,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           >
             <FileText className="w-4 h-4" />
             <span>Resumo Performance Mensal</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('correlacao_custo_retorno')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              activeSubTab === 'correlacao_custo_retorno'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            <span>Dispersão Custo × Retorno</span>
           </button>
 
           <button
@@ -2076,6 +2104,11 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB DEDICADA: MAPA DE CALOR (HEATMAP) FREQUÊNCIA HISTÓRICA 25 DEZENAS (AZUL AO VERMELHO) */}
       {activeSubTab === 'mapa_calor_frequencia' && (
         <div className="space-y-6">
+          <MapaCalorDezenas100Card
+            latestDraw={latestDraw}
+            statsList={dynamicWindowStats}
+            onApplyNumbers={onApplyNumbers}
+          />
           <MatrizCalor50ConcursosD3
             latestDraw={latestDraw}
             statsList={statsList}
@@ -2676,6 +2709,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: RESUMO FINANCEIRO & ROI */}
       {activeSubTab === 'resumo_financeiro' && (
         <div className="space-y-6">
+          <CorrelacaoCustoRetornoScatterRecharts
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
           <ResumoPerformanceMensal
             latestDraw={latestDraw}
             savedTickets={savedTickets}
@@ -2694,7 +2731,17 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
-      {/* SUBTAB: RESUMO DE PERFORMANCE MENSAL (ROI vs CUSTO ACUMULADO 30 DIAS + MARKDOWN) */}
+      {/* SUBTAB: DISPERSÃO CUSTO ACUMULADO VS RETORNO REAL (RECHARTS 7/15/30 DIAS) */}
+      {activeSubTab === 'correlacao_custo_retorno' && (
+        <div className="space-y-6">
+          <CorrelacaoCustoRetornoScatterRecharts
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
+        </div>
+      )}
+
+      {/* SUBTAB: RESUMO DE PERFORMANCE MENSAL (ROI vs CUSTO ACUMULADO 30 DIAS + MARKDOWN + PDF) */}
       {activeSubTab === 'resumo_performance_mensal' && (
         <div className="space-y-6">
           <ResumoPerformanceMensal
@@ -2727,9 +2774,29 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
         </div>
       )}
 
+      {/* SUBTAB: MAPA DE CALOR DE DEZENAS 5×5 (100 CONCURSOS) */}
+      {activeSubTab === 'mapa_calor_dezenas' && (
+        <div className="space-y-6">
+          <MapaCalorDezenas100Card
+            latestDraw={latestDraw}
+            statsList={dynamicWindowStats}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
+      )}
+
       {/* SUBTAB: DISPERSÃO SOMAS DA MATRIZ ESTRATIFICADA (RECHARTS 75/15/10%) */}
       {activeSubTab === 'dispersao_estratificada' && (
         <div className="space-y-6">
+          <MapaCalorDezenas100Card
+            latestDraw={latestDraw}
+            statsList={dynamicWindowStats}
+            onApplyNumbers={onApplyNumbers}
+          />
+          <CorrelacaoCustoRetornoScatterRecharts
+            latestDraw={latestDraw}
+            savedTickets={savedTickets}
+          />
           <HistoricoAcertosAcumuladosChart
             latestDraw={latestDraw}
             savedTickets={savedTickets}

@@ -99,11 +99,173 @@ export const DEFAULT_DETAILED_NOTIFICATION_RULES: DetailedNotificationRules = {
 
 const DETAILED_RULES_KEY = 'lotosniper_detailed_notification_rules';
 const PUSH_ALERTS_PREFS_KEY = 'lotosniper_push_alerts_preferences';
+const QUIET_HOURS_PREFS_KEY = 'lotosniper_quiet_hours_preferences';
 const CRITICAL_DELAY_NUMBERS_KEY = 'lotosniper_critical_delay_numbers_config';
 const HYBRID_RULES_KEY = 'lotosniper_hybrid_alert_rules';
 
 const CONFIG_KEY = 'lotosniper_push_notification_config';
 const ALERTS_KEY = 'lotosniper_push_alerts_history';
+
+export interface QuietHoursPreferences {
+  enabled: boolean;
+  alwaysMute: boolean;
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
+  daysOfWeek: number[]; // 0=Dom ... 6=Sáb
+  mutePushInQuietHours: boolean;
+  updatedAt?: string;
+}
+
+export const DEFAULT_QUIET_HOURS_PREFERENCES: QuietHoursPreferences = {
+  enabled: false,
+  alwaysMute: false,
+  startTime: '22:00',
+  endTime: '08:00',
+  daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+  mutePushInQuietHours: false,
+};
+
+function parseTimeToMinutes(hhmm: string, fallbackMinutes: number): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((hhmm || '').trim());
+  if (!match) return fallbackMinutes;
+  const h = Math.max(0, Math.min(23, Number(match[1])));
+  const m = Math.max(0, Math.min(59, Number(match[2])));
+  return h * 60 + m;
+}
+
+export function getQuietHoursPreferences(): QuietHoursPreferences {
+  try {
+    const raw = localStorage.getItem(QUIET_HOURS_PREFS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const days: number[] = Array.isArray(parsed?.daysOfWeek)
+        ? Array.from(
+            new Set<number>(
+              parsed.daysOfWeek
+                .map((d: unknown) => Number(d))
+                .filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
+            )
+          ).sort((a, b) => a - b)
+        : DEFAULT_QUIET_HOURS_PREFERENCES.daysOfWeek;
+
+      return {
+        enabled: Boolean(parsed?.enabled),
+        alwaysMute: Boolean(parsed?.alwaysMute),
+        startTime:
+          typeof parsed?.startTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.startTime)
+            ? parsed.startTime
+            : DEFAULT_QUIET_HOURS_PREFERENCES.startTime,
+        endTime:
+          typeof parsed?.endTime === 'string' && /^\d{2}:\d{2}$/.test(parsed.endTime)
+            ? parsed.endTime
+            : DEFAULT_QUIET_HOURS_PREFERENCES.endTime,
+        daysOfWeek: days,
+        mutePushInQuietHours: Boolean(parsed?.mutePushInQuietHours),
+        updatedAt: parsed?.updatedAt,
+      };
+    }
+
+    // Sincroniza estado inicial caso quietMode legado já estivesse ativado
+    const rawDetailed = localStorage.getItem(DETAILED_RULES_KEY);
+    if (rawDetailed) {
+      const parsedDetailed = JSON.parse(rawDetailed);
+      if (parsedDetailed?.quietMode) {
+        return {
+          ...DEFAULT_QUIET_HOURS_PREFERENCES,
+          alwaysMute: true,
+        };
+      }
+    }
+  } catch {}
+  return { ...DEFAULT_QUIET_HOURS_PREFERENCES };
+}
+
+export function saveQuietHoursPreferences(
+  prefs: QuietHoursPreferences,
+  syncDetailedRules: boolean = true
+): QuietHoursPreferences {
+  const normalized: QuietHoursPreferences = {
+    enabled: Boolean(prefs.enabled),
+    alwaysMute: Boolean(prefs.alwaysMute),
+    startTime: /^\d{2}:\d{2}$/.test(prefs.startTime || '')
+      ? prefs.startTime
+      : DEFAULT_QUIET_HOURS_PREFERENCES.startTime,
+    endTime: /^\d{2}:\d{2}$/.test(prefs.endTime || '')
+      ? prefs.endTime
+      : DEFAULT_QUIET_HOURS_PREFERENCES.endTime,
+    daysOfWeek: Array.from(
+      new Set(
+        (prefs.daysOfWeek || [])
+          .map((d) => Number(d))
+          .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      )
+    ).sort((a, b) => a - b),
+    mutePushInQuietHours: Boolean(prefs.mutePushInQuietHours),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    localStorage.setItem(QUIET_HOURS_PREFS_KEY, JSON.stringify(normalized));
+
+    if (syncDetailedRules) {
+      const detailed = getDetailedNotificationRules();
+      if (detailed.quietMode !== normalized.alwaysMute) {
+        saveDetailedNotificationRules({
+          ...detailed,
+          quietMode: normalized.alwaysMute,
+        });
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-quiet-hours-updated', { detail: normalized })
+      );
+    }
+  } catch (e) {
+    console.error('Erro ao salvar preferências de Não Perturbe:', e);
+  }
+
+  return normalized;
+}
+
+export function isCurrentlyInQuietHours(
+  now: Date = new Date(),
+  prefs: QuietHoursPreferences = getQuietHoursPreferences()
+): boolean {
+  if (!prefs.enabled || prefs.daysOfWeek.length === 0) return false;
+
+  const startMin = parseTimeToMinutes(prefs.startTime, 22 * 60);
+  const endMin = parseTimeToMinutes(prefs.endTime, 8 * 60);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const today = now.getDay();
+
+  if (startMin === endMin) {
+    return prefs.daysOfWeek.includes(today);
+  }
+
+  if (startMin < endMin) {
+    return prefs.daysOfWeek.includes(today) && nowMin >= startMin && nowMin < endMin;
+  }
+
+  // Janela noturna que cruza a meia-noite (ex: 22:00 às 08:00)
+  const yesterday = (today + 6) % 7;
+  return (
+    (nowMin >= startMin && prefs.daysOfWeek.includes(today)) ||
+    (nowMin < endMin && prefs.daysOfWeek.includes(yesterday))
+  );
+}
+
+export function shouldMuteBackgroundAudio(now: Date = new Date()): boolean {
+  const detailed = getDetailedNotificationRules();
+  const quietPrefs = getQuietHoursPreferences();
+  return detailed.quietMode || quietPrefs.alwaysMute || isCurrentlyInQuietHours(now, quietPrefs);
+}
+
+export function shouldMuteBackgroundPush(now: Date = new Date()): boolean {
+  const quietPrefs = getQuietHoursPreferences();
+  return quietPrefs.mutePushInQuietHours && isCurrentlyInQuietHours(now, quietPrefs);
+}
 
 export interface CriticalDelayMonitorConfig {
   includeCycleNumbersAutomatically: boolean;
@@ -309,6 +471,20 @@ export function saveDetailedNotificationRules(rules: DetailedNotificationRules):
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(PUSH_ALERTS_PREFS_KEY, JSON.stringify(pushPrefs));
+
+    // Sincroniza estado de alwaysMute com a preferência de Não Perturbe sem criar recursão
+    try {
+      const currentQuiet = getQuietHoursPreferences();
+      if (currentQuiet.alwaysMute !== Boolean(rules.quietMode)) {
+        saveQuietHoursPreferences(
+          {
+            ...currentQuiet,
+            alwaysMute: Boolean(rules.quietMode),
+          },
+          false
+        );
+      }
+    } catch {}
 
     // Sincroniza chaves legadas para manter compatibilidade total com auditores existentes
     const legacyCfg: PushNotificationConfig = {
@@ -593,10 +769,10 @@ export function auditAndTriggerIntelligentAlerts(
           read: false,
         });
 
-        if (config.pushEnabled && radarRule.nativePushEnabled) {
+        if (config.pushEnabled && radarRule.nativePushEnabled && !shouldMuteBackgroundPush()) {
           void fireBrowserPushNotification(title, body, alertId);
         }
-        if (config.soundEnabled && !detailed.quietMode && radarRule.soundEnabled) {
+        if (config.soundEnabled && !shouldMuteBackgroundAudio() && radarRule.soundEnabled) {
           soundService.playGoldenZoneSuccessChime();
         }
       }
@@ -624,10 +800,10 @@ export function auditAndTriggerIntelligentAlerts(
         read: false,
       });
 
-      if (cycleRule.nativePushEnabled) {
+      if (cycleRule.nativePushEnabled && !shouldMuteBackgroundPush()) {
         void fireBrowserPushNotification(title, body, alertId);
       }
-      if (!detailed.quietMode && cycleRule.soundEnabled) {
+      if (!shouldMuteBackgroundAudio() && cycleRule.soundEnabled) {
         soundService.playOpportunityAlert();
       }
     }
@@ -926,10 +1102,10 @@ export function auditAndTriggerHybridAlerts(
           regraNome: rule.nome,
         });
 
-        if (config.pushEnabled) {
+        if (config.pushEnabled && !shouldMuteBackgroundPush()) {
           fireBrowserPushNotification(title, body);
         }
-        if (config.soundEnabled) {
+        if (config.soundEnabled && !shouldMuteBackgroundAudio()) {
           soundService.playGoldenZoneSuccessChime();
         }
       }
