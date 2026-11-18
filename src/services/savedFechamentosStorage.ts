@@ -418,6 +418,7 @@ export function normalizeSavedFechamento(
 }
 
 export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
+  if (typeof localStorage === 'undefined') return [];
   try {
     const isInitialized = localStorage.getItem(INITIALIZED_KEY) === 'true';
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -782,6 +783,7 @@ export function deleteMultipleSavedFechamentos(ids: string[]): SavedFechamentoPr
  */
 export function getAllSavedTicketsSet(): Set<string> {
   const set = new Set<string>();
+  if (typeof localStorage === 'undefined') return set;
   try {
     const list = getSavedFechamentos();
     for (const f of list) {
