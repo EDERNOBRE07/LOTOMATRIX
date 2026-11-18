@@ -419,9 +419,176 @@ export function gerarComFixas(
   });
 }
 
+export interface PodaDinamicaFiltros {
+  somaMin?: number;
+  somaMax?: number;
+  paresMin?: number;
+  paresMax?: number;
+  posicionalAtivo?: boolean;
+  multiplosAtivo?: boolean;
+  somaAlgarismosAtiva?: boolean;
+  somaAlgarismosMin?: number;
+  somaAlgarismosMax?: number;
+  cruzAtiva?: boolean;
+  cruzMin?: number;
+  cruzMax?: number;
+  strictValidation?: boolean;
+  validacaoEstritaCruz?: boolean;
+  rankingHistoricoAtivo?: boolean;
+  rankingMasks?: {
+    maskTop5: number;
+    maskTop10: number;
+    maskTop15: number;
+    maskTop20: number;
+  };
+  onBranchPruned?: () => void;
+}
+
+export interface PodaDinamicaContext {
+  sufCruz: Int8Array;
+  sufM3: Int8Array;
+  sufM4: Int8Array;
+  sufM5: Int8Array;
+  sufM6: Int8Array;
+  sufM7: Int8Array;
+  sufM8: Int8Array;
+  sufT5: Int8Array;
+  sufT10: Int8Array;
+  sufT15: Int8Array;
+  sufT20: Int8Array;
+  minAlgTable: Int16Array[];
+  maxAlgTable: Int16Array[];
+  fixasSorted: number[];
+  cruzAtual: number;
+  algAtual: number;
+  m3Atual: number;
+  m4Atual: number;
+  m5Atual: number;
+  m6Atual: number;
+  m7Atual: number;
+  m8Atual: number;
+  t5Atual: number;
+  t10Atual: number;
+  t15Atual: number;
+  t20Atual: number;
+  cruzMin: number;
+  cruzMax: number;
+  algMin: number;
+  algMax: number;
+}
+
+export function buildPodaDinamicaContext(
+  variaveisValores: number[],
+  variaveisBits: number[],
+  filtros: PodaDinamicaFiltros,
+  fixasMask: number
+): PodaDinamicaContext {
+  const n = variaveisValores.length;
+  const sufCruz = new Int8Array(n + 1);
+  const sufM3 = new Int8Array(n + 1);
+  const sufM4 = new Int8Array(n + 1);
+  const sufM5 = new Int8Array(n + 1);
+  const sufM6 = new Int8Array(n + 1);
+  const sufM7 = new Int8Array(n + 1);
+  const sufM8 = new Int8Array(n + 1);
+  const sufT5 = new Int8Array(n + 1);
+  const sufT10 = new Int8Array(n + 1);
+  const sufT15 = new Int8Array(n + 1);
+  const sufT20 = new Int8Array(n + 1);
+
+  const rm = filtros.rankingMasks;
+
+  for (let i = n - 1; i >= 0; i--) {
+    const bit = variaveisBits[i];
+    sufCruz[i] = sufCruz[i + 1] + ((bit & MASK_CRUZ) !== 0 ? 1 : 0);
+    sufM3[i] = sufM3[i + 1] + ((bit & MASK_M3) !== 0 ? 1 : 0);
+    sufM4[i] = sufM4[i + 1] + ((bit & MASK_M4) !== 0 ? 1 : 0);
+    sufM5[i] = sufM5[i + 1] + ((bit & MASK_M5) !== 0 ? 1 : 0);
+    sufM6[i] = sufM6[i + 1] + ((bit & MASK_M6) !== 0 ? 1 : 0);
+    sufM7[i] = sufM7[i + 1] + ((bit & MASK_M7) !== 0 ? 1 : 0);
+    sufM8[i] = sufM8[i + 1] + ((bit & MASK_M8) !== 0 ? 1 : 0);
+    if (rm) {
+      sufT5[i] = sufT5[i + 1] + ((bit & rm.maskTop5) !== 0 ? 1 : 0);
+      sufT10[i] = sufT10[i + 1] + ((bit & rm.maskTop10) !== 0 ? 1 : 0);
+      sufT15[i] = sufT15[i + 1] + ((bit & rm.maskTop15) !== 0 ? 1 : 0);
+      sufT20[i] = sufT20[i + 1] + ((bit & rm.maskTop20) !== 0 ? 1 : 0);
+    }
+  }
+
+  // Tabelas exatas de soma mínima e máxima dos algarismos para quaisquer k itens em variaveisValores[i..n-1]
+  const minAlgTable: Int16Array[] = new Array(n + 1);
+  const maxAlgTable: Int16Array[] = new Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    const remLen = n - i;
+    const weights: number[] = new Array(remLen);
+    for (let j = 0; j < remLen; j++) {
+      weights[j] = PESO_DIGITOS[variaveisValores[i + j]] ?? 0;
+    }
+    weights.sort((a, b) => a - b);
+    const maxK = Math.min(15, remLen);
+    const minP = new Int16Array(16);
+    const maxP = new Int16Array(16);
+    for (let k = 1; k <= maxK; k++) {
+      minP[k] = minP[k - 1] + weights[k - 1];
+      maxP[k] = maxP[k - 1] + weights[remLen - k];
+    }
+    for (let k = maxK + 1; k <= 15; k++) {
+      minP[k] = 999;
+      maxP[k] = -999;
+    }
+    minAlgTable[i] = minP;
+    maxAlgTable[i] = maxP;
+  }
+
+  const fixasSorted = fixasMask !== 0 ? mascaraParaDezenas(fixasMask) : [];
+  const algFixas = calcularSomaAlgarismos(fixasSorted);
+  const isStrictCruz = filtros.strictValidation === true || filtros.validacaoEstritaCruz === true;
+  const cruzMin = isStrictCruz ? 5 : (filtros.cruzMin ?? 4);
+  const cruzMax = isStrictCruz ? 6 : (filtros.cruzMax ?? 7);
+
+  return {
+    sufCruz,
+    sufM3,
+    sufM4,
+    sufM5,
+    sufM6,
+    sufM7,
+    sufM8,
+    sufT5,
+    sufT10,
+    sufT15,
+    sufT20,
+    minAlgTable,
+    maxAlgTable,
+    fixasSorted,
+    cruzAtual: popcount(fixasMask & MASK_CRUZ),
+    algAtual: algFixas,
+    m3Atual: popcount(fixasMask & MASK_M3),
+    m4Atual: popcount(fixasMask & MASK_M4),
+    m5Atual: popcount(fixasMask & MASK_M5),
+    m6Atual: popcount(fixasMask & MASK_M6),
+    m7Atual: popcount(fixasMask & MASK_M7),
+    m8Atual: popcount(fixasMask & MASK_M8),
+    t5Atual: rm ? popcount(fixasMask & rm.maskTop5) : 0,
+    t10Atual: rm ? popcount(fixasMask & rm.maskTop10) : 0,
+    t15Atual: rm ? popcount(fixasMask & rm.maskTop15) : 0,
+    t20Atual: rm ? popcount(fixasMask & rm.maskTop20) : 0,
+    cruzMin,
+    cruzMax,
+    algMin: filtros.somaAlgarismosMin ?? 63,
+    algMax: filtros.somaAlgarismosMax ?? 87,
+  };
+}
+
 /**
  * Gerador Combinatório com Poda Dinâmica de Ramo (Branch and Bound)
- * Poda ramos impossíveis de soma, paridade e extremos durante a recursão.
+ * Executa poda antecipada (early-exit) durante a recursão para:
+ * - Soma e Paridade
+ * - Intervalos Posicionais D1–D15
+ * - Múltiplos Bitwise M(3)–M(8)
+ * - Soma dos Algarismos Individuais (63–87)
+ * - Geometria da Cruz (9 dezenas centrais)
+ * - Equilíbrio de Ranking Histórico (Top 5, 10, 15, 20)
  */
 export function combinarComPodaDinamica(
   idx: number,
@@ -432,72 +599,195 @@ export function combinarComPodaDinamica(
   vagasRestantes: number,
   variaveisValores: number[],
   variaveisBits: number[],
-  filtros: {
-    somaMin?: number;
-    somaMax?: number;
-    paresMin?: number;
-    paresMax?: number;
-    posicionalAtivo?: boolean;
-  },
+  filtros: PodaDinamicaFiltros,
   fixasMask: number,
-  callbackValido: (jogoCompletoMask: number) => void
+  callbackValido: (jogoCompletoMask: number) => void,
+  _ctx?: PodaDinamicaContext
 ): void {
+  const ctx = _ctx ?? buildPodaDinamicaContext(variaveisValores, variaveisBits, filtros, fixasMask);
+
   // Caso base: completou as dezenas variáveis necessárias
   if (vagasRestantes === 0) {
     const jogoCompletoMask = maskAtual | fixasMask;
+    if (filtros.posicionalAtivo && ctx.fixasSorted.length > 0) {
+      const sorted = mascaraParaDezenas(jogoCompletoMask);
+      if (!validarPosicionalSorted(sorted).valido) {
+        filtros.onBranchPruned?.();
+        return;
+      }
+    }
     callbackValido(jogoCompletoMask);
     return;
   }
 
   const n = variaveisValores.length;
+  const isStrictCruz = filtros.strictValidation === true || filtros.validacaoEstritaCruz === true;
+  const checkCruz = isStrictCruz || (filtros.cruzAtiva !== false && filtros.cruzMin !== undefined);
+  const checkMultiplos = Boolean(filtros.multiplosAtivo);
+  const checkAlg = Boolean(filtros.somaAlgarismosAtiva);
+  const checkRanking = Boolean(filtros.rankingHistoricoAtivo && filtros.rankingMasks);
+  const rm = filtros.rankingMasks;
 
   for (let i = idx; i <= n - vagasRestantes; i++) {
     const val = variaveisValores[i];
     const bit = variaveisBits[i];
+    const novasVagas = vagasRestantes - 1;
 
-    // --- PODA POSICIONAL ANTECIPADA (Branch & Bound D1..D15) ---
-    if (filtros.posicionalAtivo && fixasMask === 0 && profundidade < 15) {
-      const [minPos, maxPos] = POSITIONAL_BOUNDS[profundidade];
-      if (val < minPos) continue;
-      if (val > maxPos) break;
+    // --- 1. PODA POSICIONAL ANTECIPADA (Branch & Bound D1..D15) ---
+    if (filtros.posicionalAtivo) {
+      let exactPos = profundidade;
+      if (ctx.fixasSorted.length > 0) {
+        for (let f = 0; f < ctx.fixasSorted.length; f++) {
+          if (ctx.fixasSorted[f] < val) exactPos++;
+          else break;
+        }
+      }
+      if (exactPos < 15) {
+        const [minPos, maxPos] = POSITIONAL_BOUNDS[exactPos];
+        if (val < minPos) {
+          filtros.onBranchPruned?.();
+          continue;
+        }
+        if (val > maxPos) {
+          filtros.onBranchPruned?.();
+          if (ctx.fixasSorted.length === 0) break;
+          continue;
+        }
+      }
     }
 
     const novaSoma = somaAtual + val;
     const novosPares = paresAtual + (val % 2 === 0 ? 1 : 0);
-    const novasVagas = vagasRestantes - 1;
 
-    // --- PODA DE SOMA MÍNIMA ---
-    // Soma mínima possível adicionando os menores elementos subsequentes
+    // --- PODA DE SOMA MÍNIMA / MÁXIMA ---
     let minSomaPossivel = novaSoma;
     for (let k = 1; k <= novasVagas; k++) {
       minSomaPossivel += variaveisValores[i + k];
     }
     if (filtros.somaMax !== undefined && minSomaPossivel > filtros.somaMax) {
-      // Se a menor soma possível já estourou o teto, interrompe o loop (vetor ordenado)
+      filtros.onBranchPruned?.();
       break;
     }
 
-    // --- PODA DE SOMA MÁXIMA ---
-    // Soma máxima possível adicionando os maiores elementos disponíveis no final
     let maxSomaPossivel = novaSoma;
     for (let k = 0; k < novasVagas; k++) {
       maxSomaPossivel += variaveisValores[n - 1 - k];
     }
     if (filtros.somaMin !== undefined && maxSomaPossivel < filtros.somaMin) {
-      // Mesmo escolhendo os maiores valores, não atinge a soma mínima
+      filtros.onBranchPruned?.();
       continue;
     }
 
     // --- PODA DE PARES ---
     if (filtros.paresMax !== undefined && novosPares > filtros.paresMax) {
+      filtros.onBranchPruned?.();
       continue;
     }
-    const maxParesPossiveis = novosPares + novasVagas;
-    if (filtros.paresMin !== undefined && maxParesPossiveis < filtros.paresMin) {
+    if (filtros.paresMin !== undefined && novosPares + novasVagas < filtros.paresMin) {
+      filtros.onBranchPruned?.();
       continue;
     }
 
-    // Ramo viável: desce na recursão
+    // --- 2. PODA ANTECIPADA DA GEOMETRIA DA CRUZ (9 dezenas centrais) ---
+    let novoCruz = ctx.cruzAtual;
+    if (checkCruz) {
+      novoCruz += (bit & MASK_CRUZ) !== 0 ? 1 : 0;
+      if (novoCruz > ctx.cruzMax) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+      const maxCruzPossivel = novoCruz + Math.min(novasVagas, ctx.sufCruz[i + 1]);
+      if (maxCruzPossivel < ctx.cruzMin) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+
+    // --- 3. PODA ANTECIPADA DE SOMA DOS DÍGITOS / ALGARISMOS (63–87) ---
+    let novaAlg = ctx.algAtual;
+    if (checkAlg) {
+      novaAlg += PESO_DIGITOS[val] ?? 0;
+      const minAlgPossivel = novaAlg + ctx.minAlgTable[i + 1][novasVagas];
+      const maxAlgPossivel = novaAlg + ctx.maxAlgTable[i + 1][novasVagas];
+      if (minAlgPossivel > ctx.algMax || maxAlgPossivel < ctx.algMin) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+
+    // --- 4. PODA ANTECIPADA DE MÚLTIPLOS M(3)–M(8) ---
+    let nm3 = ctx.m3Atual;
+    let nm4 = ctx.m4Atual;
+    let nm5 = ctx.m5Atual;
+    let nm6 = ctx.m6Atual;
+    let nm7 = ctx.m7Atual;
+    let nm8 = ctx.m8Atual;
+    if (checkMultiplos) {
+      nm3 += (bit & MASK_M3) !== 0 ? 1 : 0;
+      nm4 += (bit & MASK_M4) !== 0 ? 1 : 0;
+      nm5 += (bit & MASK_M5) !== 0 ? 1 : 0;
+      nm6 += (bit & MASK_M6) !== 0 ? 1 : 0;
+      nm7 += (bit & MASK_M7) !== 0 ? 1 : 0;
+      nm8 += (bit & MASK_M8) !== 0 ? 1 : 0;
+
+      if (
+        nm3 > 7 ||
+        nm3 + Math.min(novasVagas, ctx.sufM3[i + 1]) < 4 ||
+        nm4 > 5 ||
+        nm4 + Math.min(novasVagas, ctx.sufM4[i + 1]) < 2 ||
+        nm5 + Math.min(novasVagas, ctx.sufM5[i + 1]) < 1 ||
+        nm6 + Math.min(novasVagas, ctx.sufM6[i + 1]) < 1 ||
+        nm7 + Math.min(novasVagas, ctx.sufM7[i + 1]) < 1 ||
+        nm8 + Math.min(novasVagas, ctx.sufM8[i + 1]) < 1
+      ) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+
+    // --- 5. PODA ANTECIPADA DE RANKING HISTÓRICO (Top 5, 10, 15, 20) ---
+    let nt5 = ctx.t5Atual;
+    let nt10 = ctx.t10Atual;
+    let nt15 = ctx.t15Atual;
+    let nt20 = ctx.t20Atual;
+    if (checkRanking && rm) {
+      nt5 += (bit & rm.maskTop5) !== 0 ? 1 : 0;
+      nt10 += (bit & rm.maskTop10) !== 0 ? 1 : 0;
+      nt15 += (bit & rm.maskTop15) !== 0 ? 1 : 0;
+      nt20 += (bit & rm.maskTop20) !== 0 ? 1 : 0;
+
+      if (
+        nt5 > 4 ||
+        nt5 + Math.min(novasVagas, ctx.sufT5[i + 1]) < 2 ||
+        nt10 > 8 ||
+        nt10 + Math.min(novasVagas, ctx.sufT10[i + 1]) < 4 ||
+        nt15 > 11 ||
+        nt15 + Math.min(novasVagas, ctx.sufT15[i + 1]) < 7 ||
+        nt20 > 14 ||
+        nt20 + Math.min(novasVagas, ctx.sufT20[i + 1]) < 11
+      ) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+
+    // Ramo viável: desce na recursão atualizando os contadores incrementais no contexto filho
+    const nextCtx: PodaDinamicaContext = {
+      ...ctx,
+      cruzAtual: novoCruz,
+      algAtual: novaAlg,
+      m3Atual: nm3,
+      m4Atual: nm4,
+      m5Atual: nm5,
+      m6Atual: nm6,
+      m7Atual: nm7,
+      m8Atual: nm8,
+      t5Atual: nt5,
+      t10Atual: nt10,
+      t15Atual: nt15,
+      t20Atual: nt20,
+    };
+
     combinarComPodaDinamica(
       i + 1,
       profundidade + 1,
@@ -509,7 +799,8 @@ export function combinarComPodaDinamica(
       variaveisBits,
       filtros,
       fixasMask,
-      callbackValido
+      callbackValido,
+      nextCtx
     );
   }
 }

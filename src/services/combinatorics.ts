@@ -27,6 +27,7 @@ import {
 import { getAllSavedTicketsSet } from './savedFechamentosStorage';
 import {
   criarMascara as _criarMascara,
+  mascaraParaDezenas as _mascaraParaDezenas,
   popcount as _popcount,
   POSITIONAL_BOUNDS,
   PIVOT_9_DEZENAS,
@@ -36,6 +37,9 @@ import {
   validarContagemDigitosMask,
   validarLinhasColunasMask,
   buildHistoricalMasksSet,
+  combinarComPodaDinamica as _combinarComPodaDinamica,
+  PodaDinamicaFiltros,
+  MASK_CRUZ as _MASK_CRUZ,
 } from './tabelasCoberturaLJCR';
 import {
   calculateIndicePerformance,
@@ -466,6 +470,10 @@ export function resolveCentralSumBounds(
  * Validador Bitwise de Distância Simétrica (Hamming):
  * dezenasDiferentes = 15 - popcount(novoCartaoMask & cartaoExistenteMask)
  */
+export function hammingDistanceBitwise(maskA: number, maskB: number): number {
+  return 15 - _popcount(maskA & maskB);
+}
+
 export function minHammingDistanceToMatrix(
   candMask: number,
   selectedMasks: number[]
@@ -473,7 +481,7 @@ export function minHammingDistanceToMatrix(
   if (selectedMasks.length === 0) return 15;
   let minDiff = 15;
   for (let i = 0; i < selectedMasks.length; i++) {
-    const dezenasDiferentes = 15 - _popcount(candMask & selectedMasks[i]);
+    const dezenasDiferentes = hammingDistanceBitwise(candMask, selectedMasks[i]);
     if (dezenasDiferentes < minDiff) {
       minDiff = dezenasDiferentes;
       if (minDiff === 0) return 0;
@@ -488,13 +496,15 @@ export function passesHammingDistance(
   minDiff: number
 ): boolean {
   for (let i = 0; i < selectedMasks.length; i++) {
-    const dezenasDiferentes = 15 - _popcount(candMask & selectedMasks[i]);
+    const dezenasDiferentes = hammingDistanceBitwise(candMask, selectedMasks[i]);
     if (dezenasDiferentes < minDiff) {
       return false;
     }
   }
   return true;
 }
+
+export const passesHammingSpreadBitwise = passesHammingDistance;
 
 /**
  * Calcula metas equilibradas de frequência para dezenas variáveis e fixas rotativas:
@@ -1515,20 +1525,139 @@ export function generateMinimumSetCoverFechamento({
     return true;
   };
 
-  // 4. Criação dos pools de candidatos estratificados
+  // 4. Criação dos pools de candidatos estratificados com PODA ANTECIPADA (Branch & Bound) nos 5 filtros matemáticos
   const coreCombos: number[][] = [];
   const lowerTailCombos: number[][] = [];
   const upperTailCombos: number[][] = [];
 
-  for (const combo of universeSubsets) {
-    if (isCandidateValid(combo)) {
-      coreCombos.push(combo);
-    } else if (enableStratification) {
-      if (isLowerTailCandidate(combo)) {
-        lowerTailCombos.push(combo);
-      } else if (isUpperTailCandidate(combo)) {
-        upperTailCombos.push(combo);
+  const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
+  const nonFixedBits = nonFixedPool.map((d) => 1 << (d - 1));
+  const fixedSubsets: number[][] = [];
+  if (effectiveFixas.length === 0) {
+    fixedSubsets.push([]);
+  } else if (fixedBounds.modo === 'rotativas') {
+    for (let k = fixedBounds.minK; k <= fixedBounds.maxK; k++) {
+      fixedSubsets.push(...getCombinations(effectiveFixas, k));
+    }
+  } else {
+    fixedSubsets.push([...effectiveFixas]);
+  }
+
+  const rankingMasks = getHistoricalRankingMasks();
+  const coreSeenMasks = new Set<number>();
+
+  const coreBranchFilters: PodaDinamicaFiltros = {
+    somaMin: centralMin,
+    somaMax: centralMax,
+    paresMin: effectiveCoreFilters?.paresMin ?? 5,
+    paresMax: effectiveCoreFilters?.paresMax ?? 10,
+    posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+    multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+    somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+    somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+    somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+    cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+    cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+    cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+    strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+    validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+    rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+    rankingMasks,
+  };
+
+  for (const fSubset of fixedSubsets) {
+    const fMask = _criarMascara(fSubset);
+    const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+    const fPares = fSubset.filter((v) => v % 2 === 0).length;
+    const vagas = 15 - fSubset.length;
+    if (vagas < 0 || vagas > nonFixedPool.length) continue;
+
+    _combinarComPodaDinamica(
+      0,
+      0,
+      0,
+      fSum,
+      fPares,
+      vagas,
+      nonFixedPool,
+      nonFixedBits,
+      coreBranchFilters,
+      fMask,
+      (fullMask) => {
+        if (coreSeenMasks.has(fullMask)) return;
+        const combo = _mascaraParaDezenas(fullMask);
+        if (isCandidateValid(combo)) {
+          coreSeenMasks.add(fullMask);
+          coreCombos.push(combo);
+        }
       }
+    );
+  }
+
+  if (enableStratification) {
+    const lowerTailFilters: PodaDinamicaFiltros = {
+      somaMin: 155,
+      somaMax: lowerTailMax,
+      paresMin: 4,
+      paresMax: 11,
+      posicionalAtivo: false,
+    };
+    const upperTailFilters: PodaDinamicaFiltros = {
+      somaMin: upperTailMin,
+      somaMax: 235,
+      paresMin: 4,
+      paresMax: 11,
+      posicionalAtivo: false,
+    };
+
+    for (const fSubset of fixedSubsets) {
+      const fMask = _criarMascara(fSubset);
+      const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+      const fPares = fSubset.filter((v) => v % 2 === 0).length;
+      const vagas = 15 - fSubset.length;
+      if (vagas < 0 || vagas > nonFixedPool.length) continue;
+
+      _combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        lowerTailFilters,
+        fMask,
+        (fullMask) => {
+          if (coreSeenMasks.has(fullMask)) return;
+          const combo = _mascaraParaDezenas(fullMask);
+          if (isLowerTailCandidate(combo)) {
+            coreSeenMasks.add(fullMask);
+            lowerTailCombos.push(combo);
+          }
+        }
+      );
+
+      _combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        upperTailFilters,
+        fMask,
+        (fullMask) => {
+          if (coreSeenMasks.has(fullMask)) return;
+          const combo = _mascaraParaDezenas(fullMask);
+          if (isUpperTailCandidate(combo)) {
+            coreSeenMasks.add(fullMask);
+            upperTailCombos.push(combo);
+          }
+        }
+      );
     }
   }
 
@@ -2009,77 +2138,174 @@ export function generateFechamentoCovering(
   const maxCorePool = n <= 17 ? 2000 : 3500;
   const maxTailPool = 600;
 
-  const branchMinSum = enableStratification ? Math.min(155, centralMin) : centralMin;
-  const branchMaxSum = enableStratification ? Math.max(235, centralMax) : centralMax;
-
-  // Para pools pequenos (n <= 17), enumera deterministicamente com poda de ramo
-  if (n <= 17) {
-    let evalCount = 0;
-    const MAX_RECURSION_EVALS = 25000;
-    const collectSmall = (start: number, current: number[]) => {
-      if (evalCount++ > MAX_RECURSION_EVALS) return;
-      if (current.length === 15) {
-        const key = current.join('-');
-        if (candidateSeen.has(key)) return;
-        if (isCandidateValid(current) && coreCandidates.length < maxCorePool) {
-          candidateSeen.add(key);
-          coreCandidates.push([...current]);
-        } else if (isLowerTailCandidate(current) && lowerTailCandidates.length < maxTailPool) {
-          candidateSeen.add(key);
-          lowerTailCandidates.push([...current]);
-        } else if (isUpperTailCandidate(current) && upperTailCandidates.length < maxTailPool) {
-          candidateSeen.add(key);
-          upperTailCandidates.push([...current]);
-        }
-        return;
-      }
-      const needed = 15 - current.length;
-      if (sortedPool.length - start < needed) return;
-      if (current.length > 0) {
-        let currentSum = 0;
-        for (let k = 0; k < current.length; k++) currentSum += current[k];
-        let minSomaPossivel = currentSum;
-        for (let k = 0; k < needed; k++) minSomaPossivel += sortedPool[start + k];
-        if (minSomaPossivel > branchMaxSum) return;
-        let maxSomaPossivel = currentSum;
-        for (let k = 0; k < needed; k++) maxSomaPossivel += sortedPool[sortedPool.length - 1 - k];
-        if (maxSomaPossivel < branchMinSum) return;
-      }
-      const pos = current.length;
-      const usePosPruning = Boolean(effectiveCoreFilters?.posicionalAtivo) && !enableStratification && pos < 15;
-      const posMin = usePosPruning ? POSITIONAL_BOUNDS[pos][0] : 1;
-      const posMax = usePosPruning ? POSITIONAL_BOUNDS[pos][1] : 25;
-
-      for (let i = start; i < sortedPool.length; i++) {
-        const val = sortedPool[i];
-        if (usePosPruning) {
-          if (val < posMin) continue;
-          if (val > posMax) break;
-        }
-        current.push(val);
-        collectSmall(i + 1, current);
-        current.pop();
-        if (evalCount > MAX_RECURSION_EVALS) break;
-      }
-    };
-    collectSmall(0, []);
+  // Prepara subconjuntos K-de-N de fixas rotativas (ou fixas rígidas)
+  const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
+  const nonFixedBits = nonFixedPool.map((d) => 1 << (d - 1));
+  const fixedSubsets: number[][] = [];
+  if (effectiveFixas.length === 0) {
+    fixedSubsets.push([]);
+  } else if (fixedBounds.modo === 'rotativas') {
+    for (let k = fixedBounds.minK; k <= fixedBounds.maxK; k++) {
+      fixedSubsets.push(...getCombinations(effectiveFixas, k));
+    }
   } else {
-    // Para n >= 20 (ex: 54.264 combinações em 21 dezenas), amostragem estratificada + rotação uniforme de fixas
-    const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
-    const fixedSubsets: number[][] = [];
-    if (effectiveFixas.length === 0) {
-      fixedSubsets.push([]);
-    } else if (fixedBounds.modo === 'rotativas') {
-      for (let k = fixedBounds.minK; k <= fixedBounds.maxK; k++) {
-        fixedSubsets.push(...getCombinations(effectiveFixas, k));
-      }
-    } else {
-      fixedSubsets.push([...effectiveFixas]);
+    fixedSubsets.push([...effectiveFixas]);
+  }
+
+  const rankingMasks = getHistoricalRankingMasks();
+
+  // Para pools pequenos (n <= 17), enumera deterministicamente com Branch & Bound (early-exit) nos 5 filtros matemáticos
+  if (n <= 17) {
+    const coreBranchFilters: PodaDinamicaFiltros = {
+      somaMin: centralMin,
+      somaMax: centralMax,
+      paresMin: effectiveCoreFilters?.paresMin ?? 5,
+      paresMax: effectiveCoreFilters?.paresMax ?? 10,
+      posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+      multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+      somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+      somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+      somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+      cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+      cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+      cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+      strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+      validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+      rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+      rankingMasks,
+    };
+
+    for (const fSubset of fixedSubsets) {
+      const fMask = _criarMascara(fSubset);
+      const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+      const fPares = fSubset.filter((v) => v % 2 === 0).length;
+      const vagas = 15 - fSubset.length;
+      if (vagas < 0 || vagas > nonFixedPool.length) continue;
+
+      _combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        coreBranchFilters,
+        fMask,
+        (fullMask) => {
+          if (coreCandidates.length >= maxCorePool) return;
+          const combo = _mascaraParaDezenas(fullMask);
+          const key = combo.join('-');
+          if (candidateSeen.has(key)) return;
+          if (isCandidateValid(combo)) {
+            candidateSeen.add(key);
+            coreCandidates.push(combo);
+          }
+        }
+      );
     }
 
+    if (enableStratification) {
+      const lowerTailFilters: PodaDinamicaFiltros = {
+        somaMin: 155,
+        somaMax: lowerTailMax,
+        paresMin: 4,
+        paresMax: 11,
+        posicionalAtivo: false,
+      };
+      const upperTailFilters: PodaDinamicaFiltros = {
+        somaMin: upperTailMin,
+        somaMax: 235,
+        paresMin: 4,
+        paresMax: 11,
+        posicionalAtivo: false,
+      };
+
+      for (const fSubset of fixedSubsets) {
+        const fMask = _criarMascara(fSubset);
+        const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+        const fPares = fSubset.filter((v) => v % 2 === 0).length;
+        const vagas = 15 - fSubset.length;
+        if (vagas < 0 || vagas > nonFixedPool.length) continue;
+
+        _combinarComPodaDinamica(
+          0,
+          0,
+          0,
+          fSum,
+          fPares,
+          vagas,
+          nonFixedPool,
+          nonFixedBits,
+          lowerTailFilters,
+          fMask,
+          (fullMask) => {
+            if (lowerTailCandidates.length >= maxTailPool) return;
+            const combo = _mascaraParaDezenas(fullMask);
+            const key = combo.join('-');
+            if (candidateSeen.has(key)) return;
+            if (isLowerTailCandidate(combo)) {
+              candidateSeen.add(key);
+              lowerTailCandidates.push(combo);
+            }
+          }
+        );
+
+        _combinarComPodaDinamica(
+          0,
+          0,
+          0,
+          fSum,
+          fPares,
+          vagas,
+          nonFixedPool,
+          nonFixedBits,
+          upperTailFilters,
+          fMask,
+          (fullMask) => {
+            if (upperTailCandidates.length >= maxTailPool) return;
+            const combo = _mascaraParaDezenas(fullMask);
+            const key = combo.join('-');
+            if (candidateSeen.has(key)) return;
+            if (isUpperTailCandidate(combo)) {
+              candidateSeen.add(key);
+              upperTailCandidates.push(combo);
+            }
+          }
+        );
+      }
+    }
+  } else {
+    // Para n >= 20 (ex: 54.264 combinações em 21 dezenas), amostragem estratificada + poda bitwise early-exit + rotação uniforme de fixas
     const totalAttempts = 16000;
     const workingNonFixed = [...nonFixedPool];
     const nfLen = workingNonFixed.length;
+
+    const fastEarlyExitCoreCheck = (combo: number[]): boolean => {
+      const soma = combo.reduce((a, b) => a + b, 0);
+      if (soma < centralMin || soma > centralMax) return false;
+      const mask = _criarMascara(combo);
+      if (effectiveCoreFilters?.posicionalAtivo && !validarPosicionalSorted(combo).valido) return false;
+      if (effectiveCoreFilters?.multiplosAtivo && !validarMultiplosMask(mask).valido) return false;
+      if (effectiveCoreFilters?.somaAlgarismosAtiva) {
+        const alg = calcularSomaAlgarismos(combo);
+        const aMin = effectiveCoreFilters.somaAlgarismosMin ?? 63;
+        const aMax = effectiveCoreFilters.somaAlgarismosMax ?? 87;
+        if (alg < aMin || alg > aMax) return false;
+      }
+      if (effectiveCoreFilters?.cruzAtiva !== false) {
+        const isStrict = effectiveCoreFilters?.strictValidation || effectiveCoreFilters?.validacaoEstritaCruz;
+        const cMin = isStrict ? 5 : (effectiveCoreFilters?.cruzMin ?? 4);
+        const cMax = isStrict ? 6 : (effectiveCoreFilters?.cruzMax ?? 7);
+        const cruzCnt = _popcount(mask & _MASK_CRUZ);
+        if (cruzCnt < cMin || cruzCnt > cMax) return false;
+      }
+      if (effectiveCoreFilters?.rankingHistoricoAtivo && !validarRankingHistoricoMask(mask).valido) {
+        return false;
+      }
+      return true;
+    };
 
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       if (
@@ -2096,15 +2322,12 @@ export function generateFechamentoCovering(
       // Bias periódica para extremos baixos/altos para garantir amostragem rápida de caudas 155-179 e 216-235
       let chosenVars: number[];
       if (enableStratification && attempt % 7 === 0 && lowerTailCandidates.length < maxTailPool) {
-        // Puxar preferencialmente para dezenas menores do pool
         const biased = [...workingNonFixed].sort((a, b) => a - b + (Math.random() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else if (enableStratification && attempt % 7 === 1 && upperTailCandidates.length < maxTailPool) {
-        // Puxar preferencialmente para dezenas maiores do pool
         const biased = [...workingNonFixed].sort((a, b) => b - a + (Math.random() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else {
-        // Fisher-Yates parcial uniforme
         for (let i = 0; i < needVar; i++) {
           const r = i + Math.floor(Math.random() * (nfLen - i));
           const tmp = workingNonFixed[i];
@@ -2118,7 +2341,7 @@ export function generateFechamentoCovering(
       const key = combo.join('-');
       if (candidateSeen.has(key)) continue;
 
-      if (isCandidateValid(combo) && coreCandidates.length < maxCorePool) {
+      if (coreCandidates.length < maxCorePool && fastEarlyExitCoreCheck(combo) && isCandidateValid(combo)) {
         candidateSeen.add(key);
         coreCandidates.push(combo);
       } else if (isLowerTailCandidate(combo) && lowerTailCandidates.length < maxTailPool) {
@@ -3644,7 +3867,7 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   linhasColunasAtivo: true,
   maxLinhasCheias: 1,
   maxColunasCheias: 1,
-  rankingHistoricoAtivo: false,
+  rankingHistoricoAtivo: true,
   palpiteIneditoAtivo: true,
 };
 
@@ -4412,4 +4635,189 @@ export function generateFibonacciOptimizedGames(
     };
   });
 }
+
+export interface WorkerDelegationProgress {
+  percent: number;
+  message: string;
+}
+
+/**
+ * Delega tarefas pesadas de geração combinatória para o Web Worker dedicado (`src/workers/generator.worker.ts`),
+ * evitando bloqueio da thread principal. Em ambientes sem Web Worker (ex: SSR/Node), executa fallback seguro.
+ */
+export function delegateGenerationToWorker<T>(options: {
+  type: 'START_COVERING' | 'START_PONDERADO' | 'START_SPECIAL_MATRIX';
+  payload: Record<string, any>;
+  onProgress?: (progress: WorkerDelegationProgress) => void;
+  timeoutMs?: number;
+  fallbackSync: () => T;
+}): Promise<T> {
+  const { type, payload, onProgress, timeoutMs = 15000, fallbackSync } = options;
+
+  return new Promise<T>((resolve, reject) => {
+    if (typeof Worker === 'undefined') {
+      try {
+        resolve(fallbackSync());
+      } catch (err) {
+        reject(err);
+      }
+      return;
+    }
+
+    const jobId = `comb-job-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    let worker: Worker | null = null;
+    let settled = false;
+    let timer: any = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+    };
+
+    timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        try {
+          resolve(fallbackSync());
+        } catch (err) {
+          reject(err);
+        }
+      }
+    }, timeoutMs);
+
+    try {
+      worker = new Worker(
+        new URL('../workers/generator.worker.ts', import.meta.url),
+        { type: 'module' }
+      );
+
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+        if (!msg || msg.jobId !== jobId) return;
+
+        if (msg.type === 'PROGRESS') {
+          onProgress?.({ percent: msg.percent, message: msg.message });
+        } else if (msg.type === 'DONE_COVERING') {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            resolve(msg.payload.tickets as T);
+          }
+        } else if (msg.type === 'DONE_PONDERADO') {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            resolve(msg.payload as T);
+          }
+        } else if (msg.type === 'ERROR') {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            reject(new Error(msg.error || 'Erro no Web Worker generator.worker.ts'));
+          }
+        }
+      };
+
+      worker.onerror = () => {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          try {
+            resolve(fallbackSync());
+          } catch (err) {
+            reject(err);
+          }
+        }
+      };
+
+      worker.postMessage({
+        type,
+        jobId,
+        ...payload,
+      });
+    } catch {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        try {
+          resolve(fallbackSync());
+        } catch (err) {
+          reject(err);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Versão assíncrona que delega o fechamento completo para `src/workers/generator.worker.ts`.
+ */
+export function generateFechamentoCoveringAsync(
+  selectedNumbers: number[],
+  targetHits: number = 14,
+  maxTickets: number = 32,
+  filters?: FilterCriteria,
+  concursoAnterior: number[] = CONCURSO_ATUAL.dezenas,
+  aiScores?: number[],
+  onProgress?: (progress: WorkerDelegationProgress) => void
+): Promise<GameTicket[]> {
+  return delegateGenerationToWorker<GameTicket[]>({
+    type: 'START_COVERING',
+    payload: {
+      selectedNumbers,
+      targetHits,
+      maxTickets,
+      filters: filters || DEFAULT_FILTERS,
+      drawDezenas: concursoAnterior,
+      aiScores,
+    },
+    onProgress,
+    fallbackSync: () =>
+      generateFechamentoCovering(
+        selectedNumbers,
+        targetHits,
+        maxTickets,
+        filters,
+        concursoAnterior,
+        aiScores
+      ),
+  });
+}
+
+/**
+ * Versão assíncrona do Fechamento Inteligente Ponderado executada em `src/workers/generator.worker.ts`.
+ */
+export function generateFechamentoInteligentePonderadoAsync(params: {
+  selectedNumbers: number[];
+  targetHits?: number;
+  maxTickets?: number;
+  filters?: FilterCriteria;
+  dynamicStats?: DezenaStats[];
+  latestDraw?: LotofacilDraw;
+  aiScores?: number[];
+  onProgress?: (progress: WorkerDelegationProgress) => void;
+}) {
+  return delegateGenerationToWorker({
+    type: 'START_PONDERADO',
+    payload: {
+      selectedNumbers: params.selectedNumbers,
+      targetHits: params.targetHits ?? 14,
+      maxTickets: params.maxTickets ?? 24,
+      filters: params.filters || DEFAULT_FILTERS,
+      dynamicStats: params.dynamicStats,
+      latestDraw: params.latestDraw,
+      aiScores: params.aiScores,
+    },
+    onProgress: params.onProgress,
+    fallbackSync: () => generateFechamentoInteligentePonderado(params),
+  });
+}
+
 

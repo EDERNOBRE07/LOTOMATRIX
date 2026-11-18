@@ -1,13 +1,87 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FilterCriteria } from '../types/lotofacil';
-import { DEFAULT_FILTERS } from '../services/combinatorics';
+import { DEFAULT_FILTERS, sanitizeDezenasFixas } from '../services/combinatorics';
 
 const STORAGE_KEY = 'lotosniper_active_filter_config';
 
 /**
+ * Normaliza e garante a presença explícita dos 5 novos filtros matemáticos
+ * (Intervalos D1–D15, Múltiplos M3–M8, Soma dos Dígitos 63–87, Geometria da Cruz
+ * e Equilíbrio de Ranking Histórico), além das regras canônicas de fixas e exclusões.
+ */
+export function normalizeActiveFilterConfig(
+  partialConfig?: Partial<FilterCriteria>,
+  baseConfig: FilterCriteria = DEFAULT_FILTERS
+): FilterCriteria {
+  const merged = {
+    ...DEFAULT_FILTERS,
+    ...baseConfig,
+    ...(partialConfig || {}),
+  };
+
+  const isStrictCruz =
+    partialConfig?.strictValidation ??
+    partialConfig?.validacaoEstritaCruz ??
+    merged.strictValidation ??
+    merged.validacaoEstritaCruz ??
+    false;
+
+  const fixedSanitized = sanitizeDezenasFixas(merged.dezenasFixas || []);
+  const modoFixasResolved: 'rotativas' | 'rigidas' =
+    fixedSanitized.length >= 3 && merged.modoFixas !== 'rigidas'
+      ? 'rotativas'
+      : merged.modoFixas ?? 'rotativas';
+
+  const algMin = Math.max(15, Math.min(135, merged.somaAlgarismosMin ?? 63));
+  const algMax = Math.max(algMin, Math.min(135, merged.somaAlgarismosMax ?? 87));
+
+  return {
+    ...merged,
+    // 1. Intervalos Posicionais por Bola (D1 a D15)
+    posicionalAtivo: merged.posicionalAtivo ?? true,
+    // 2. Múltiplos M(3) a M(8) via Máscaras Bitwise
+    multiplosAtivo: merged.multiplosAtivo ?? true,
+    // 3. Soma dos Dígitos / Algarismos (63 a 87) + Contagem de Dígitos (22 a 27)
+    somaAlgarismosAtiva: merged.somaAlgarismosAtiva ?? true,
+    somaAlgarismosMin: algMin,
+    somaAlgarismosMax: algMax,
+    contagemDigitosAtiva: merged.contagemDigitosAtiva ?? true,
+    digitosMin: merged.digitosMin ?? 22,
+    digitosMax: merged.digitosMax ?? 27,
+    umDigitoMin: merged.umDigitoMin ?? 3,
+    umDigitoMax: merged.umDigitoMax ?? 8,
+    // 4. Geometria da Cruz (9 dezenas centrais: Linha 3 + Coluna 3)
+    cruzAtiva: merged.cruzAtiva ?? true,
+    cruzMin: isStrictCruz ? 5 : (merged.cruzMin ?? 4),
+    cruzMax: isStrictCruz ? 6 : (merged.cruzMax ?? 7),
+    strictValidation: isStrictCruz,
+    validacaoEstritaCruz: isStrictCruz,
+    // 5. Equilíbrio de Ranking Histórico (Caps Top 5 / Top 10 / Top 15 / Top 20)
+    rankingHistoricoAtivo: merged.rankingHistoricoAtivo ?? true,
+    // Complementares: Bolas Extremas, Matriz 5x5, Anti-Colisão e Fixas Rotativas K de N
+    extremidadesAtiva: merged.extremidadesAtiva ?? true,
+    bola1Min: merged.bola1Min ?? 1,
+    bola1Max: merged.bola1Max ?? 4,
+    bola15Min: merged.bola15Min ?? 22,
+    bola15Max: merged.bola15Max ?? 25,
+    linhasColunasAtivo: merged.linhasColunasAtivo ?? true,
+    maxLinhasCheias: merged.maxLinhasCheias ?? 1,
+    maxColunasCheias: merged.maxColunasCheias ?? 1,
+    palpiteIneditoAtivo: merged.palpiteIneditoAtivo ?? true,
+    antiColisaoHistoricaAtiva: merged.antiColisaoHistoricaAtiva ?? true,
+    antiPadraoViciadoAtivo: merged.antiPadraoViciadoAtivo ?? true,
+    autoCalibrarSomaUniverso: merged.autoCalibrarSomaUniverso ?? true,
+    modoFixas: modoFixasResolved,
+    dezenasFixas: fixedSanitized,
+    dezenasExcluidas: Array.from(new Set(merged.dezenasExcluidas || [])).sort((a, b) => a - b),
+  };
+}
+
+/**
  * Hook personalizado para gerenciar e persistir deterministicamente o estado do 'activeFilterConfig'.
  * Captura todos os parâmetros (pares/ímpares, primos, moldura, repetidas, soma, linhas/colunas,
- * sequências consecutivas, Cruz da Lotofácil e Bolas Extremas) e sincroniza com a esteira geradora.
+ * sequências consecutivas, Cruz da Lotofácil, Bolas Extremas, Posicional D1–D15, Múltiplos M3–M8,
+ * Soma dos Dígitos 63–87 e Equilíbrio de Ranking Histórico) e sincroniza com a esteira geradora.
  */
 export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) {
   const [activeFilterConfig, setActiveFilterConfigState] = useState<FilterCriteria>(() => {
@@ -15,19 +89,12 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return {
-          ...DEFAULT_FILTERS,
-          ...parsed,
-          ...(initialFilters || {}),
-        };
+        return normalizeActiveFilterConfig(initialFilters, normalizeActiveFilterConfig(parsed));
       }
     } catch (e) {
       console.warn('Erro ao carregar activeFilterConfig do localStorage:', e);
     }
-    return {
-      ...DEFAULT_FILTERS,
-      ...(initialFilters || {}),
-    };
+    return normalizeActiveFilterConfig(initialFilters);
   });
 
   // Salva no localStorage e dispara evento para atualização síncrona
@@ -38,13 +105,16 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
         | ((prev: FilterCriteria) => FilterCriteria)
     ) => {
       setActiveFilterConfigState((prev) => {
-        const next =
+        const rawNext =
           typeof newConfigOrFn === 'function' ? newConfigOrFn(prev) : newConfigOrFn;
+        const next = normalizeActiveFilterConfig(rawNext, prev);
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-          window.dispatchEvent(
-            new CustomEvent('lotosniper-active-filter-updated', { detail: next })
-          );
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('lotosniper-active-filter-updated', { detail: next })
+            );
+          }
         } catch (e) {
           console.warn('Erro ao salvar activeFilterConfig no localStorage:', e);
         }
@@ -56,44 +126,11 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
 
   /**
    * Captura e normaliza todos os parâmetros das Sugestões Estratégicas em um objeto unificado
-   * garantindo que nenhuma propriedade fique indefinida ou com hardcoded obsoleto.
+   * garantindo que nenhum dos 5 novos filtros ou regras canônicas fique indefinido.
    */
   const applyStrategicFilters = useCallback(
     (strategicParams: Partial<FilterCriteria>) => {
-      setActiveFilterConfig((prev) => {
-        const normalized: FilterCriteria = {
-          ...prev,
-          ...strategicParams,
-          // Garante integridade das regras canônicas de suporte
-          cruzAtiva: strategicParams.cruzAtiva ?? prev.cruzAtiva ?? true,
-          cruzMin: strategicParams.cruzMin ?? prev.cruzMin ?? 4,
-          cruzMax: strategicParams.cruzMax ?? prev.cruzMax ?? 7,
-          extremidadesAtiva: strategicParams.extremidadesAtiva ?? prev.extremidadesAtiva ?? true,
-          bola1Min: strategicParams.bola1Min ?? prev.bola1Min ?? 1,
-          bola1Max: strategicParams.bola1Max ?? prev.bola1Max ?? 4,
-          bola15Min: strategicParams.bola15Min ?? prev.bola15Min ?? 22,
-          bola15Max: strategicParams.bola15Max ?? prev.bola15Max ?? 25,
-          antiColisaoHistoricaAtiva:
-            strategicParams.antiColisaoHistoricaAtiva ?? prev.antiColisaoHistoricaAtiva ?? true,
-          antiPadraoViciadoAtivo:
-            strategicParams.antiPadraoViciadoAtivo ?? prev.antiPadraoViciadoAtivo ?? true,
-          strictValidation:
-            strategicParams.strictValidation ??
-            strategicParams.validacaoEstritaCruz ??
-            prev.strictValidation ??
-            prev.validacaoEstritaCruz ??
-            false,
-          validacaoEstritaCruz:
-            strategicParams.strictValidation ??
-            strategicParams.validacaoEstritaCruz ??
-            prev.strictValidation ??
-            prev.validacaoEstritaCruz ??
-            false,
-          dezenasFixas: strategicParams.dezenasFixas ?? prev.dezenasFixas ?? [],
-          dezenasExcluidas: strategicParams.dezenasExcluidas ?? prev.dezenasExcluidas ?? [],
-        };
-        return normalized;
-      });
+      setActiveFilterConfig((prev) => normalizeActiveFilterConfig(strategicParams, prev));
     },
     [setActiveFilterConfig]
   );
@@ -104,12 +141,17 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
    */
   const setStrictValidation = useCallback(
     (enabled: boolean) => {
-      setActiveFilterConfig((prev) => ({
-        ...prev,
-        strictValidation: enabled,
-        validacaoEstritaCruz: enabled,
-        ...(enabled ? { cruzMin: 5, cruzMax: 6 } : {}),
-      }));
+      setActiveFilterConfig((prev) =>
+        normalizeActiveFilterConfig(
+          {
+            strictValidation: enabled,
+            validacaoEstritaCruz: enabled,
+            cruzAtiva: true,
+            ...(enabled ? { cruzMin: 5, cruzMax: 6 } : { cruzMin: 4, cruzMax: 7 }),
+          },
+          prev
+        )
+      );
     },
     [setActiveFilterConfig]
   );
@@ -117,12 +159,15 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
   const toggleStrictValidation = useCallback(() => {
     setActiveFilterConfig((prev) => {
       const nextVal = !(prev.strictValidation ?? prev.validacaoEstritaCruz ?? false);
-      return {
-        ...prev,
-        strictValidation: nextVal,
-        validacaoEstritaCruz: nextVal,
-        ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
-      };
+      return normalizeActiveFilterConfig(
+        {
+          strictValidation: nextVal,
+          validacaoEstritaCruz: nextVal,
+          cruzAtiva: true,
+          ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : { cruzMin: 4, cruzMax: 7 }),
+        },
+        prev
+      );
     });
   }, [setActiveFilterConfig]);
 
@@ -130,7 +175,7 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
    * Restaura os filtros para a calibração canônica oficial padrão do LotoSniper
    */
   const resetToCanonicalFilters = useCallback(() => {
-    setActiveFilterConfig({ ...DEFAULT_FILTERS });
+    setActiveFilterConfig(normalizeActiveFilterConfig(DEFAULT_FILTERS));
   }, [setActiveFilterConfig]);
 
   // Listener para sincronização multi-abas ou disparo global
@@ -139,7 +184,7 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
       if (event.key === STORAGE_KEY && event.newValue) {
         try {
           const parsed = JSON.parse(event.newValue);
-          setActiveFilterConfigState(parsed);
+          setActiveFilterConfigState(normalizeActiveFilterConfig(parsed));
         } catch {}
       }
     };

@@ -384,7 +384,7 @@ export class FechamentoWorkerClient {
 
       try {
         this.worker = new Worker(
-          new URL('../workers/fechamentoCombinatoricsWorker.ts', import.meta.url),
+          new URL('../workers/generator.worker.ts', import.meta.url),
           { type: 'module' }
         );
 

@@ -1,0 +1,402 @@
+/**
+ * Web Worker Dedicado de Geração Combinatória do LotoSniper (`generator.worker.ts`)
+ *
+ * Executa fora da thread principal:
+ * 1. Cálculo de Distância de Hamming Bitwise (`15 - popcount(maskA & maskB)`)
+ * 2. Rotatividade Inteligente de Fixas (K de N, máx. 5 fixas, [max(1, N-2), N-1])
+ * 3. Estratificação Anti-Cisne Negro (75% Central / 15% Cauda Baixa / 10% Cauda Alta)
+ * 4. Poda Antecipada (Branch & Bound) dos 5 Filtros Matemáticos (D1-D15, M3-M8, Dígitos 63-87, Cruz, Ranking)
+ */
+
+import {
+  generateFechamentoCovering,
+  generateFechamentoInteligentePonderado,
+  generateDesdobramento25Blocos,
+  generateSuper14Coringas11Jogos,
+  generatePadraoPivo9,
+  generateCobertura25TresGrupos18,
+  generateApostaEspelho,
+  FechamentoPonderadoResult,
+} from '../services/combinatorics';
+import {
+  FilterCriteria,
+  GameTicket,
+  LotofacilDraw,
+  DezenaStats,
+  FechamentoMode,
+} from '../types/lotofacil';
+
+export const WORKER_MAX_FIXED_NUMBERS = 5;
+
+/**
+ * Popcount bitwise SWAR em O(1) para inteiros de 32 bits (dezenas 1..25).
+ */
+export function popcountBitwise(x: number): number {
+  let v = x | 0;
+  v = v - ((v >>> 1) & 0x55555555);
+  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+  return (((v + (v >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+}
+
+/**
+ * Converte um array de dezenas (1..25) em bitmask de 25 bits.
+ */
+export function encodeTicketMaskBitwise(dezenas: number[]): number {
+  let mask = 0;
+  for (let i = 0; i < dezenas.length; i++) {
+    const d = dezenas[i];
+    if (d >= 1 && d <= 25) {
+      mask |= 1 << (d - 1);
+    }
+  }
+  return mask;
+}
+
+/**
+ * Calcula a distância de espalhamento geométrico de Hamming entre dois bilhetes de 15 dezenas via bitwise:
+ * dezenasDiferentes = 15 - popcount(maskA & maskB).
+ * (Equivalente à metade da distância simétrica XOR quando ambos têm 15 bits ligados.)
+ */
+export function hammingDistanceBitwise(maskA: number, maskB: number): number {
+  return 15 - popcountBitwise(maskA & maskB);
+}
+
+/**
+ * Valida se um cartão candidato respeita distância de Hamming mínima em relação a todos os bilhetes já selecionados.
+ */
+export function passesHammingSpreadBitwise(
+  candMask: number,
+  selectedMasks: number[],
+  minHammingDiff: number
+): boolean {
+  for (let i = 0; i < selectedMasks.length; i++) {
+    if (hammingDistanceBitwise(candMask, selectedMasks[i]) < minHammingDiff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Sanitiza dezenas fixas contra o universo e impõe trava máxima de 5 fixas.
+ */
+export function sanitizeFixedNumbersWorker(rawFixas: number[] = [], pool?: number[]): number[] {
+  const poolSet = pool && pool.length > 0 ? new Set(pool) : null;
+  return Array.from(
+    new Set(
+      rawFixas
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 25 && (!poolSet || poolSet.has(n)))
+    )
+  )
+    .sort((a, b) => a - b)
+    .slice(0, WORKER_MAX_FIXED_NUMBERS);
+}
+
+/**
+ * Resolve limites K de N para Fixas Rotativas Inteligentes:
+ * - Quando N >= 3 e modo !== 'rigidas': ativa rotatividade K in [max(1, N-2), N-1]
+ * - Quando N <= 2 ou modo === 'rigidas': K = N (100%)
+ */
+export function resolveRotativeFixedKofN(
+  fixasCount: number,
+  requestedMode?: 'rotativas' | 'rigidas'
+): { modo: 'rotativas' | 'rigidas'; minK: number; maxK: number; avgK: number } {
+  if (fixasCount <= 0) {
+    return { modo: 'rigidas', minK: 0, maxK: 0, avgK: 0 };
+  }
+  if (fixasCount >= 3 && requestedMode !== 'rigidas') {
+    const minK = Math.max(1, fixasCount - 2);
+    const maxK = fixasCount - 1;
+    return { modo: 'rotativas', minK, maxK, avgK: (minK + maxK) / 2 };
+  }
+  return { modo: 'rigidas', minK: fixasCount, maxK: fixasCount, avgK: fixasCount };
+}
+
+/**
+ * Gera todos os subconjuntos rotativos K-de-N para rotação uniforme entre bilhetes.
+ */
+export function generateKofNFixedSubsets(
+  fixas: number[],
+  minK: number,
+  maxK: number
+): number[][] {
+  const subsets: number[][] = [];
+  if (fixas.length === 0 || maxK === 0) {
+    subsets.push([]);
+    return subsets;
+  }
+
+  const build = (k: number, start: number, current: number[]) => {
+    if (current.length === k) {
+      subsets.push([...current]);
+      return;
+    }
+    for (let i = start; i <= fixas.length - (k - current.length); i++) {
+      current.push(fixas[i]);
+      build(k, i + 1, current);
+      current.pop();
+    }
+  };
+
+  for (let k = minK; k <= maxK; k++) {
+    build(k, 0, []);
+  }
+  return subsets.length > 0 ? subsets : [[]];
+}
+
+/**
+ * Calcula cotas Anti-Cisne Negro (75% Central / 15% Cauda Baixa / 10% Cauda Alta).
+ */
+export function computeStratifiedQuotasWorker(
+  maxTickets: number,
+  enableStratification: boolean
+): { coreQuota: number; lowerQuota: number; upperQuota: number } {
+  if (!enableStratification || maxTickets < 10) {
+    return { coreQuota: maxTickets, lowerQuota: 0, upperQuota: 0 };
+  }
+  const lowerQuota = Math.max(1, Math.round(maxTickets * 0.15));
+  const upperQuota = Math.max(1, Math.round(maxTickets * 0.1));
+  const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
+  return { coreQuota, lowerQuota, upperQuota };
+}
+
+export interface GeneratorWorkerCoveringStart {
+  type: 'START_COVERING' | 'GENERATE_MATRIX';
+  jobId: string;
+  selectedNumbers: number[];
+  targetHits: number;
+  maxTickets: number;
+  filters: FilterCriteria;
+  drawDezenas?: number[];
+  aiScores?: number[];
+}
+
+export interface GeneratorWorkerPonderadoStart {
+  type: 'START_PONDERADO';
+  jobId: string;
+  selectedNumbers: number[];
+  targetHits: number;
+  maxTickets: number;
+  filters: FilterCriteria;
+  dynamicStats?: DezenaStats[];
+  latestDraw?: LotofacilDraw;
+  aiScores?: number[];
+}
+
+export interface GeneratorWorkerSpecialMatrixStart {
+  type: 'START_SPECIAL_MATRIX';
+  jobId: string;
+  mode: FechamentoMode | string;
+  pivotCountK?: 4 | 5 | 6;
+  maxTickets?: number;
+  filters: FilterCriteria;
+  dynamicStats?: DezenaStats[];
+  latestDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
+  aiScores?: number[];
+}
+
+export type GeneratorWorkerIncomingMessage =
+  | GeneratorWorkerCoveringStart
+  | GeneratorWorkerPonderadoStart
+  | GeneratorWorkerSpecialMatrixStart;
+
+/**
+ * Processa mensagens do Web Worker de forma desacoplada (permite testes diretos e execução em thread Worker).
+ */
+export function handleGeneratorWorkerMessage(
+  data: GeneratorWorkerIncomingMessage,
+  postMsg: (payload: any) => void
+): void {
+  if (!data || !data.type) return;
+  const jobId = data.jobId;
+
+  try {
+    if (data.type === 'START_COVERING' || data.type === 'GENERATE_MATRIX') {
+      const fixasSanitizadas = sanitizeFixedNumbersWorker(
+        data.filters?.dezenasFixas || [],
+        data.selectedNumbers
+      );
+      const kInfo = resolveRotativeFixedKofN(fixasSanitizadas.length, data.filters?.modoFixas);
+      const targetHamming = Math.min(
+        data.maxTickets <= 6 ? 4 : data.maxTickets <= 32 ? 3 : 2,
+        Math.max(1, data.selectedNumbers.length - 15)
+      );
+      const quotas = computeStratifiedQuotasWorker(
+        data.maxTickets,
+        data.maxTickets >= 10 && data.selectedNumbers.length >= 16
+      );
+
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 15,
+        message:
+          kInfo.modo === 'rotativas'
+            ? `Configurando Fixas Rotativas (${kInfo.minK}–${kInfo.maxK} de ${fixasSanitizadas.length}) e cota Anti-Cisne Negro (${quotas.coreQuota}/${quotas.lowerQuota}/${quotas.upperQuota})...`
+            : 'Executando poda antecipada D1–D15, M3–M8, Dígitos 63–87, Cruz e Ranking...',
+      });
+
+      const tickets: GameTicket[] = generateFechamentoCovering(
+        data.selectedNumbers,
+        data.targetHits,
+        data.maxTickets,
+        {
+          ...data.filters,
+          dezenasFixas: fixasSanitizadas,
+          modoFixas: kInfo.modo,
+        },
+        data.drawDezenas,
+        data.aiScores
+      );
+
+      // Auditoria bitwise rápida de distância mínima de Hamming na matriz resultante
+      const masks = tickets.map((t) => encodeTicketMaskBitwise(t.dezenas));
+      let minObservedHamming = 15;
+      for (let i = 0; i < masks.length; i++) {
+        for (let j = i + 1; j < masks.length; j++) {
+          const dist = hammingDistanceBitwise(masks[i], masks[j]);
+          if (dist < minObservedHamming) minObservedHamming = dist;
+        }
+      }
+
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 90,
+        message: `Auditoria bitwise concluída (Hamming mín. observado: ${
+          masks.length > 1 ? minObservedHamming : 15
+        }, alvo: ≥${targetHamming})...`,
+      });
+
+      postMsg({
+        type: 'DONE_COVERING',
+        jobId,
+        payload: {
+          tickets,
+          count: tickets.length,
+          workerMetrics: {
+            modoFixas: kInfo.modo,
+            kMinFixas: kInfo.minK,
+            kMaxFixas: kInfo.maxK,
+            targetHamming,
+            minObservedHamming: masks.length > 1 ? minObservedHamming : 15,
+            stratifiedQuotas: quotas,
+          },
+        },
+      });
+    } else if (data.type === 'START_PONDERADO') {
+      const fixasSanitizadas = sanitizeFixedNumbersWorker(
+        data.filters?.dezenasFixas || [],
+        data.selectedNumbers
+      );
+      const kInfo = resolveRotativeFixedKofN(fixasSanitizadas.length, data.filters?.modoFixas);
+
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 20,
+        message: 'Calculando IP, Fixas Rotativas (K de N) e auto-calibração de soma do universo...',
+      });
+
+      const result: FechamentoPonderadoResult = generateFechamentoInteligentePonderado({
+        selectedNumbers: data.selectedNumbers,
+        targetHits: data.targetHits,
+        maxTickets: data.maxTickets,
+        filters: {
+          ...data.filters,
+          dezenasFixas: fixasSanitizadas,
+          modoFixas: kInfo.modo,
+        },
+        dynamicStats: data.dynamicStats,
+        latestDraw: data.latestDraw,
+        aiScores: data.aiScores,
+      });
+
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 90,
+        message: 'Aplicando espalhamento Hamming bitwise, Frequency Cap e Anti-Cisne Negro 75/15/10...',
+      });
+
+      postMsg({
+        type: 'DONE_PONDERADO',
+        jobId,
+        payload: result,
+      });
+    } else if (data.type === 'START_SPECIAL_MATRIX') {
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 25,
+        message: 'Processando matriz especial com poda antecipada e auditoria bitwise...',
+      });
+
+      let tickets: GameTicket[] = [];
+      if (data.mode === 'super_14_coringas_25') {
+        tickets = generateSuper14Coringas11Jogos({
+          latestDraw: data.latestDraw,
+          drawsHistory: data.drawsHistory,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'pivo_9_dezenas') {
+        tickets = generatePadraoPivo9({
+          pivotCountK: data.pivotCountK ?? 5,
+          maxTickets: data.maxTickets ?? 24,
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'cobertura_25_3x18') {
+        tickets = generateCobertura25TresGrupos18({
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'aposta_espelho_2') {
+        tickets = generateApostaEspelho({
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else {
+        tickets = generateDesdobramento25Blocos({
+          baseDraw: data.latestDraw,
+          maxGames: 10,
+          iterations: 200,
+          aiScores: data.aiScores,
+        });
+      }
+
+      postMsg({
+        type: 'DONE_COVERING',
+        jobId,
+        payload: {
+          tickets,
+          count: tickets.length,
+        },
+      });
+    }
+  } catch (err: any) {
+    postMsg({
+      type: 'ERROR',
+      jobId,
+      error: err?.message || 'Erro inesperado na thread do Web Worker combinatório.',
+      stack: err?.stack,
+    });
+  }
+}
+
+// Registra listener somente quando executado em contexto de Web Worker / Browser
+if (typeof self !== 'undefined' && typeof (self as any).postMessage === 'function') {
+  self.onmessage = (e: MessageEvent<GeneratorWorkerIncomingMessage>) => {
+    handleGeneratorWorkerMessage(e.data, (msg) => self.postMessage(msg));
+  };
+}
