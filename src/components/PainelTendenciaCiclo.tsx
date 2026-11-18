@@ -109,7 +109,7 @@ export const PainelTendenciaCiclo: React.FC<PainelTendenciaCicloProps> = ({
       // Prioritize pending numbers first
       chosen = [...cyclePendingNumbers];
       if (config.fixedPending) {
-        toFix = [...cyclePendingNumbers];
+        toFix = [...cyclePendingNumbers].slice(0, 5);
       }
       // Fill remaining spots from top AI/frequency numbers not already in pending
       const fillers = dynamicStats
@@ -158,7 +158,7 @@ export const PainelTendenciaCiclo: React.FC<PainelTendenciaCicloProps> = ({
       chosen = dynamicStats.slice(0, targetCount).map((s) => s.numero).sort((a, b) => a - b);
     }
 
-    onApplyToVolante(chosen, toFix);
+    onApplyToVolante(chosen, toFix.slice(0, 5));
   };
 
   return (

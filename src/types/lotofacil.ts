@@ -79,6 +79,24 @@ export interface FilterCriteria {
   validacaoEstritaCruz?: boolean; // Modo Validação Estrita: restringe estritamente para 5-6 dezenas na Cruz da Lotofácil
   strictValidation?: boolean; // Trava booleana de Validação Estrita: descarta jogos fora de 5 a 6 dezenas na Cruz
   presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'custom';
+  modoFixas?: 'rotativas' | 'rigidas'; // Proteção K de N (padrão quando fixas >= 3) vs Rígidas 100%
+  autoCalibrarSomaUniverso?: boolean; // Auto-calibra faixa de soma pelo universo selecionado (μ_U ± 20)
+  // 6 Novos Filtros Matemáticos (Poda Combinatória & Bitwise)
+  posicionalAtivo?: boolean; // Intervalos posicionais por bola D1..D15 + Branch & Bound
+  multiplosAtivo?: boolean; // Máscaras bitwise M(3)..M(8)
+  contagemDigitosAtiva?: boolean; // Dezenas 01-09 (3..8) e total dígitos (22..27)
+  digitosMin?: number;
+  digitosMax?: number;
+  umDigitoMin?: number;
+  umDigitoMax?: number;
+  somaAlgarismosAtiva?: boolean; // Soma dos algarismos individuais [63..87]
+  somaAlgarismosMin?: number;
+  somaAlgarismosMax?: number;
+  linhasColunasAtivo?: boolean; // Matriz 5x5: zero linhas/colunas vazias + máx 1 cheia
+  maxLinhasCheias?: number;
+  maxColunasCheias?: number;
+  rankingHistoricoAtivo?: boolean; // Equilíbrio Top 5, 10, 15, 20 mais sorteadas
+  palpiteIneditoAtivo?: boolean; // Anti-repetição O(1) contra todos os sorteios oficiais
   // Aliases canônicos de limites de filtros
   minSoma?: number;
   maxSoma?: number;
@@ -99,7 +117,15 @@ export type FechamentoMode =
   | '18_13_14'
   | '21_13_15'
   | 'desdobramento_25_blocos'
-  | 'surpresinha_inteligente';
+  | 'surpresinha_inteligente'
+  | 'erre_4_21'
+  | 'super_14_coringas_25'
+  | 'pivo_9_dezenas'
+  | 'cobertura_25_3x18'
+  | '18_ultra_economico_6'
+  | '20_compacto_4'
+  | '20_compacto_9'
+  | 'aposta_espelho_2';
 
 export interface FechamentoPreset {
   nome: string;
@@ -132,6 +158,21 @@ export interface GameTicket {
   tags?: string[];
   auditoriaAnomalias?: string;
   faixaSoma?: 'ouro' | 'baixa' | 'alta';
+  // Métricas auditadas dos novos filtros bitwise
+  somaAlgarismos?: number;
+  digitosTotal?: number;
+  dezenasUmDigito?: number;
+  multiplosM3?: number;
+  multiplosM4?: number;
+  multiplosM5?: number;
+  multiplosM6?: number;
+  multiplosM7?: number;
+  multiplosM8?: number;
+  multiplosOk?: boolean;
+  posicionalOk?: boolean;
+  linhasColunasOk?: boolean;
+  rankingHistoricoOk?: boolean;
+  inedito?: boolean;
 }
 
 export interface SimulationResult {
@@ -187,4 +228,14 @@ export interface FechamentoExportMeta {
   concursoAlvo?: number;
   dataConcurso?: string;
   timestamp?: number;
+  engineMetadata?: {
+    modoFixasAplicado: 'rotativas' | 'rigidas' | 'nenhuma';
+    kMinFixas?: number;
+    kMaxFixas?: number;
+    minHammingDist: number;
+    mediaUniversoSoma: number;
+    faixaSomaCalibrada: [number, number];
+    estratificacaoAplicada: boolean;
+    freqIdealVariavel: number;
+  };
 }

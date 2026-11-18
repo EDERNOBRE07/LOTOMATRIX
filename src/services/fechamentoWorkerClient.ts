@@ -11,6 +11,11 @@ import { FilterCriteria, GameTicket, LotofacilDraw, DezenaStats, FechamentoMode 
 import {
   generateFechamentoCovering,
   generateFechamentoInteligentePonderado,
+  generateDesdobramento25Blocos,
+  generateSuper14Coringas11Jogos,
+  generatePadraoPivo9,
+  generateCobertura25TresGrupos18,
+  generateApostaEspelho,
   FechamentoPonderadoResult,
 } from './combinatorics';
 import {
@@ -52,6 +57,23 @@ export interface PonderadoWorkerParams {
   filters: FilterCriteria;
   dynamicStats?: DezenaStats[];
   latestDraw: LotofacilDraw;
+  aiScores?: number[];
+  onProgress?: (progress: CombinatoricsProgress) => void;
+  timeoutMs?: number;
+}
+
+export interface SpecialMatrixWorkerParams {
+  mode: FechamentoMode | string;
+  targetCount: number;
+  selectedNumbers: number[];
+  fixedNumbers?: number[];
+  excludedNumbers?: number[];
+  pivotCountK?: 4 | 5 | 6;
+  maxTickets?: number;
+  filters: FilterCriteria;
+  dynamicStats?: DezenaStats[];
+  latestDraw: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
   aiScores?: number[];
   onProgress?: (progress: CombinatoricsProgress) => void;
   timeoutMs?: number;
@@ -225,10 +247,111 @@ export class FechamentoWorkerClient {
   }
 
   /**
+   * Executa estratégias especiais de 25 dezenas ou Pivô 9 no Web Worker.
+   */
+  public async generateSpecialMatrix(params: SpecialMatrixWorkerParams): Promise<GameTicket[]> {
+    const {
+      mode,
+      targetCount,
+      selectedNumbers,
+      fixedNumbers = [],
+      excludedNumbers = [],
+      pivotCountK = 5,
+      maxTickets = 24,
+      filters,
+      dynamicStats,
+      latestDraw,
+      drawsHistory,
+      aiScores,
+      onProgress,
+      timeoutMs = 15000,
+    } = params;
+
+    const snapshot = saveFechamentoPreflightSnapshot({
+      mode,
+      targetCount,
+      selectedNumbers,
+      fixedNumbers,
+      excludedNumbers,
+      activeFilters: filters,
+      drawConcurso: latestDraw.concurso,
+      drawData: latestDraw.data,
+      executionType: 'worker',
+    });
+
+    onProgress?.({ percent: 15, message: 'Iniciando estratégia especial no Web Worker...' });
+
+    const runSyncFallback = (): GameTicket[] => {
+      if (mode === 'super_14_coringas_25') {
+        return generateSuper14Coringas11Jogos({ latestDraw, drawsHistory, dynamicStats, filters, aiScores });
+      }
+      if (mode === 'pivo_9_dezenas') {
+        return generatePadraoPivo9({ pivotCountK, maxTickets, latestDraw, dynamicStats, filters, aiScores });
+      }
+      if (mode === 'cobertura_25_3x18') {
+        return generateCobertura25TresGrupos18({ latestDraw, dynamicStats, filters, aiScores });
+      }
+      if (mode === 'aposta_espelho_2') {
+        return generateApostaEspelho({ latestDraw, dynamicStats, filters, aiScores });
+      }
+      return generateDesdobramento25Blocos({ baseDraw: latestDraw, maxGames: 10, iterations: 200, aiScores });
+    };
+
+    try {
+      const tickets = await this.executeInWorker<GameTicket[]>({
+        type: 'START_SPECIAL_MATRIX',
+        payload: {
+          mode,
+          pivotCountK,
+          maxTickets,
+          filters,
+          dynamicStats,
+          latestDraw,
+          drawsHistory,
+          aiScores,
+        },
+        timeoutMs,
+        onProgress,
+        fallbackFn: () =>
+          new Promise<GameTicket[]>((resolve, reject) => {
+            setTimeout(() => {
+              try {
+                onProgress?.({ percent: 65, message: 'Executando matriz especial de forma cooperativa...' });
+                const out = runSyncFallback();
+                onProgress?.({ percent: 100, message: 'Matriz concluída com sucesso!' });
+                resolve(out);
+              } catch (e) {
+                reject(e);
+              }
+            }, 16);
+          }),
+      });
+
+      markFechamentoPreflightSuccess(snapshot.id);
+      return tickets;
+    } catch (err: any) {
+      logFechamentoError({
+        stage: 'combinatoria',
+        mode,
+        targetCount,
+        selectedNumbers,
+        fixedNumbers,
+        excludedNumbers,
+        activeFilters: filters,
+        drawConcurso: latestDraw.concurso,
+        drawData: latestDraw.data,
+        errorMessage: err?.message || 'Falha na geração da matriz especial.',
+        errorStack: err?.stack,
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Executa a tarefa no Web Worker com timeout watchdog e chaveamento de fallback.
    */
   private executeInWorker<T>(options: {
-    type: 'START_COVERING' | 'START_PONDERADO';
+    type: 'START_COVERING' | 'START_PONDERADO' | 'START_SPECIAL_MATRIX';
     payload: any;
     timeoutMs: number;
     onProgress?: (progress: CombinatoricsProgress) => void;
@@ -347,7 +470,7 @@ export class FechamentoWorkerClient {
 
       scheduleYield(() => {
         try {
-          params.onProgress?.({ percent: 60, message: 'Calculando cobertura combinatória mínima...' });
+          params.onProgress?.({ percent: 60, message: 'Calculando cobertura com Hamming bitwise, Fixas Rotativas e Frequency Cap...' });
           const tickets = generateFechamentoCovering(
             params.selectedNumbers,
             params.targetHits,
@@ -358,7 +481,7 @@ export class FechamentoWorkerClient {
           );
 
           scheduleYield(() => {
-            params.onProgress?.({ percent: 100, message: 'Concluído com sucesso!' });
+            params.onProgress?.({ percent: 100, message: 'Concluído com proteção 155–235 e Hamming!' });
             resolve(tickets);
           });
         } catch (err) {
@@ -382,7 +505,7 @@ export class FechamentoWorkerClient {
     onProgress?: (progress: CombinatoricsProgress) => void;
   }): Promise<FechamentoPonderadoResult> {
     return new Promise((resolve, reject) => {
-      params.onProgress?.({ percent: 30, message: 'Calculando índices e particionando em microtarefas...' });
+      params.onProgress?.({ percent: 30, message: 'Auto-calibrando universo (μ_U ± 20) e clusterização...' });
 
       const scheduleYield = (cb: () => void) => {
         if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
@@ -394,7 +517,7 @@ export class FechamentoWorkerClient {
 
       scheduleYield(() => {
         try {
-          params.onProgress?.({ percent: 70, message: 'Gerando fechamento ponderado com clusterização...' });
+          params.onProgress?.({ percent: 70, message: 'Aplicando Fixas Rotativas (K de N), Hamming e Anti-Cisne Negro 75/15/10...' });
           const result = generateFechamentoInteligentePonderado({
             selectedNumbers: params.selectedNumbers,
             targetHits: params.targetHits,

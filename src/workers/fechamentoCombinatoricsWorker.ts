@@ -5,8 +5,13 @@
 import {
   generateFechamentoCovering,
   generateFechamentoInteligentePonderado,
+  generateDesdobramento25Blocos,
+  generateSuper14Coringas11Jogos,
+  generatePadraoPivo9,
+  generateCobertura25TresGrupos18,
+  generateApostaEspelho,
 } from '../services/combinatorics';
-import { FilterCriteria, GameTicket, LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { FilterCriteria, GameTicket, LotofacilDraw, DezenaStats, FechamentoMode } from '../types/lotofacil';
 import { FechamentoPonderadoResult } from '../services/fechamentoPonderadoService';
 
 export interface FechamentoWorkerCoveringStart {
@@ -32,9 +37,23 @@ export interface FechamentoWorkerPonderadoStart {
   aiScores?: number[];
 }
 
+export interface FechamentoWorkerSpecialMatrixStart {
+  type: 'START_SPECIAL_MATRIX';
+  jobId: string;
+  mode: FechamentoMode | string;
+  pivotCountK?: 4 | 5 | 6;
+  maxTickets?: number;
+  filters: FilterCriteria;
+  dynamicStats?: DezenaStats[];
+  latestDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
+  aiScores?: number[];
+}
+
 export type FechamentoWorkerIncomingMessage =
   | FechamentoWorkerCoveringStart
-  | FechamentoWorkerPonderadoStart;
+  | FechamentoWorkerPonderadoStart
+  | FechamentoWorkerSpecialMatrixStart;
 
 self.onmessage = (e: MessageEvent<FechamentoWorkerIncomingMessage>) => {
   const data = e.data;
@@ -48,7 +67,7 @@ self.onmessage = (e: MessageEvent<FechamentoWorkerIncomingMessage>) => {
         type: 'PROGRESS',
         jobId,
         percent: 15,
-        message: 'Filtrando universo e aplicando restrições canônicas...',
+        message: 'Auto-calibrando soma (μ_U ± 20) e configurando Fixas Rotativas (K de N)...',
       });
 
       const tickets: GameTicket[] = generateFechamentoCovering(
@@ -64,7 +83,7 @@ self.onmessage = (e: MessageEvent<FechamentoWorkerIncomingMessage>) => {
         type: 'PROGRESS',
         jobId,
         percent: 90,
-        message: 'Validando cobertura combinatória e integridade...',
+        message: 'Auditando espalhamento Hamming bitwise, Frequency Cap e poda posicional D1–D15...',
       });
 
       self.postMessage({
@@ -80,7 +99,7 @@ self.onmessage = (e: MessageEvent<FechamentoWorkerIncomingMessage>) => {
         type: 'PROGRESS',
         jobId,
         percent: 20,
-        message: 'Calculando Índices de Performance (IP) e clusterização por densidade...',
+        message: 'Calculando IP, Fixas Rotativas (K de N) e auto-calibração de soma do universo...',
       });
 
       const result: FechamentoPonderadoResult = generateFechamentoInteligentePonderado({
@@ -97,13 +116,70 @@ self.onmessage = (e: MessageEvent<FechamentoWorkerIncomingMessage>) => {
         type: 'PROGRESS',
         jobId,
         percent: 90,
-        message: 'Auditando robustez estatística 50 e sazonalidade MM100...',
+        message: 'Aplicando espalhamento Hamming bitwise, Frequency Cap e Anti-Cisne Negro 75/15/10...',
       });
 
       self.postMessage({
         type: 'DONE_PONDERADO',
         jobId,
         payload: result,
+      });
+    } else if (data.type === 'START_SPECIAL_MATRIX') {
+      self.postMessage({
+        type: 'PROGRESS',
+        jobId,
+        percent: 25,
+        message: 'Processando matriz especial e auditoria bitwise...',
+      });
+
+      let tickets: GameTicket[] = [];
+      if (data.mode === 'super_14_coringas_25') {
+        tickets = generateSuper14Coringas11Jogos({
+          latestDraw: data.latestDraw,
+          drawsHistory: data.drawsHistory,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'pivo_9_dezenas') {
+        tickets = generatePadraoPivo9({
+          pivotCountK: data.pivotCountK ?? 5,
+          maxTickets: data.maxTickets ?? 24,
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'cobertura_25_3x18') {
+        tickets = generateCobertura25TresGrupos18({
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else if (data.mode === 'aposta_espelho_2') {
+        tickets = generateApostaEspelho({
+          latestDraw: data.latestDraw,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
+          aiScores: data.aiScores,
+        });
+      } else {
+        tickets = generateDesdobramento25Blocos({
+          baseDraw: data.latestDraw,
+          maxGames: 10,
+          iterations: 200,
+          aiScores: data.aiScores,
+        });
+      }
+
+      self.postMessage({
+        type: 'DONE_COVERING',
+        jobId,
+        payload: {
+          tickets,
+          count: tickets.length,
+        },
       });
     }
   } catch (err: any) {

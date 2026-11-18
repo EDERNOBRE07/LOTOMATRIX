@@ -105,9 +105,11 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
         const pOk =
           game.pares >= (activeFiltersConfig.paresMin ?? 5) &&
           game.pares <= (activeFiltersConfig.paresMax ?? 10);
+        const sMin = activeFiltersConfig.somaMin ?? 175;
+        const sMax = activeFiltersConfig.somaMax ?? 225;
         const sOk =
-          game.soma >= (activeFiltersConfig.somaMin ?? 175) &&
-          game.soma <= (activeFiltersConfig.somaMax ?? 225);
+          (game.soma >= sMin && game.soma <= sMax) ||
+          (activeSummary.allResults.length >= 10 && game.soma >= 155 && game.soma <= 235);
         const prOk =
           game.primos >= (activeFiltersConfig.primosMin ?? 3) &&
           game.primos <= (activeFiltersConfig.primosMax ?? 8);
@@ -123,9 +125,14 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
           repCount >= (activeFiltersConfig.repetidasMin ?? 6) &&
           repCount <= (activeFiltersConfig.repetidasMax ?? 12);
         const seqOk = (game.maxSequencia ?? 1) <= maxConsecutivas;
+        const cappedFixas = dezenasFixas.slice(0, 5);
+        const fixedMatches = cappedFixas.filter((n) => game.dezenas.includes(n)).length;
+        const isRotativa = cappedFixas.length >= 3 && activeFiltersConfig.modoFixas !== 'rigidas';
         const fixOk =
-          dezenasFixas.length === 0 ||
-          dezenasFixas.every((n) => game.dezenas.includes(n));
+          cappedFixas.length === 0 ||
+          (isRotativa
+            ? fixedMatches >= Math.max(1, cappedFixas.length - 2) && fixedMatches <= cappedFixas.length - 1
+            : fixedMatches === cappedFixas.length);
         const excOk =
           dezenasExcluidas.length === 0 ||
           !dezenasExcluidas.some((n) => game.dezenas.includes(n));

@@ -30,6 +30,8 @@ interface VolanteSelectorProps {
   targetCount?: number;
   onStrategySelect?: (strategyName: string) => void;
   activeStrategy?: string;
+  onActivateErre4Mode?: (excluded4: number[], complementary21: number[]) => void;
+  activeMode?: string;
 }
 
 export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
@@ -48,13 +50,28 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   targetCount = 18,
   onStrategySelect,
   activeStrategy,
+  onActivateErre4Mode,
+  activeMode,
 }) => {
   const [visualMode, setVisualMode] = useState<
-    'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc'
+    'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc' | 'pivo_9'
   >('normal');
-  const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude'>('select');
+  const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude' | 'exclude_4'>(
+    activeMode === 'erre_4_21' ? 'exclude_4' : 'select'
+  );
   const [showRollingModal, setShowRollingModal] = useState<boolean>(false);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (activeMode === 'erre_4_21') {
+      setClickMode('exclude_4');
+    } else if (activeMode === 'pivo_9_dezenas') {
+      setVisualMode('pivo_9');
+      if (clickMode === 'exclude_4') setClickMode('select');
+    } else if (clickMode === 'exclude_4') {
+      setClickMode('select');
+    }
+  }, [activeMode]);
 
   const recommended18 = React.useMemo(() => {
     const pool = buildOptimal18Pool(latestDraw, statsList, cyclePendingNumbers);
@@ -261,6 +278,34 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       const willUnfix = fixedNumbers.includes(n);
       setLastActionType(willUnfix ? 'unfixed' : 'fixed');
       onSetFixed(n);
+    } else if (clickMode === 'exclude_4') {
+      const isAlreadyExcluded = excludedNumbers.includes(n);
+      let nextExcluded: number[];
+      if (isAlreadyExcluded) {
+        nextExcluded = excludedNumbers.filter((x) => x !== n);
+        setLastActionType('unexcluded');
+        onSetExcluded(n);
+      } else {
+        if (excludedNumbers.length >= 4) {
+          // Substitui a primeira exclusão mais antiga se já houver 4 marcadas
+          const oldest = excludedNumbers[0];
+          onSetExcluded(oldest);
+          onSetExcluded(n);
+          nextExcluded = [...excludedNumbers.slice(1), n];
+        } else {
+          onSetExcluded(n);
+          nextExcluded = [...excludedNumbers, n];
+        }
+        setLastActionType('excluded');
+      }
+      if (nextExcluded.length === 4) {
+        const comp21 = Array.from({ length: 25 }, (_, i) => i + 1)
+          .filter((x) => !nextExcluded.includes(x))
+          .sort((a, b) => a - b);
+        onSelectSet(comp21);
+        onActivateErre4Mode?.(nextExcluded.sort((a, b) => a - b), comp21);
+        soundService.playSuccess();
+      }
     } else if (clickMode === 'exclude') {
       const willUnexclude = excludedNumbers.includes(n);
       setLastActionType(willUnexclude ? 'unexcluded' : 'excluded');
@@ -472,10 +517,10 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 ? 'bg-blue-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white'
             }`}
-            title="Dezenas fixas entram em 100% dos jogos gerados"
+            title="Máximo de 5 dezenas fixas (com 3+ ativam-se Fixas Rotativas K de N automaticamente)"
           >
             <Pin className="w-3.5 h-3.5" />
-            <span>Fixar ({fixedNumbers.length})</span>
+            <span>Fixar ({fixedNumbers.length}/5)</span>
           </button>
           <button
             onClick={() => setClickMode('exclude')}
@@ -488,6 +533,19 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           >
             <Ban className="w-3.5 h-3.5" />
             <span>Excluir ({excludedNumbers.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setClickMode('exclude_4')}
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition cursor-pointer ${
+              clickMode === 'exclude_4'
+                ? 'bg-amber-500 text-slate-950 shadow-sm'
+                : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-500/10'
+            }`}
+            title="Modo Exclusão: escolha exatamente 4 dezenas para errar e o motor preenche automaticamente as 21 complementares"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Modo Exclusão: Escolher 4 para Errar ({Math.min(4, excludedNumbers.length)}/4)</span>
           </button>
         </div>
       </div>
@@ -669,6 +727,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           >
             <Award className="w-3 h-3 text-amber-400" />
             Curva ABC
+          </button>
+          <button
+            onClick={() => setVisualMode('pivo_9')}
+            className={`px-2.5 py-1 rounded-lg transition text-[11px] cursor-pointer flex items-center gap-1 ${
+              visualMode === 'pivo_9'
+                ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-400 font-semibold'
+                : 'bg-slate-800/60 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-3 h-3 text-indigo-400" />
+            Pivô 9
           </button>
         </div>
       </div>
@@ -916,6 +985,11 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 borderStyle = 'border-purple-500/50';
                 if (!isSelected) bgStyle = 'bg-purple-950/20 text-purple-200 border-purple-500/40';
               }
+            } else if (visualMode === 'pivo_9') {
+              if ([5, 6, 7, 12, 13, 14, 19, 20, 21].includes(num)) {
+                borderStyle = 'border-indigo-400 shadow-sm shadow-indigo-500/20';
+                if (!isSelected) bgStyle = 'bg-indigo-950/35 text-indigo-200 border-indigo-400/60';
+              }
             }
 
             // Selection overrides
@@ -979,7 +1053,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                     className={`absolute inset-0 rounded-xl pointer-events-none ring-2 ${
                       clickMode === 'fix'
                         ? 'ring-blue-400 bg-blue-400/25'
-                        : clickMode === 'exclude'
+                        : clickMode === 'exclude' || clickMode === 'exclude_4'
                         ? 'ring-rose-400 bg-rose-400/25'
                         : isSelected
                         ? 'ring-emerald-400 bg-emerald-400/30'

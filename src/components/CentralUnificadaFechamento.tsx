@@ -83,6 +83,25 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
   },
   // 18 Dezenas
   {
+    id: 'matriz-18-cologa-6',
+    mode: '18_ultra_economico_6',
+    dezenas: 18,
+    jogos: 6,
+    garantia: '13 se 15 (Ultra-Econômico)',
+    condicao: 'Matriz COLOGA em 6 jogos com espalhamento Hamming máximo',
+    tag: 'COLOGA R$ 21',
+    popular: true,
+  },
+  {
+    id: 'matriz-18-12',
+    mode: '18_13_14',
+    dezenas: 18,
+    jogos: 12,
+    garantia: '13 se 14 (e 14 se 15)',
+    condicao: 'Fechamento enxuto de alto retorno e baixo custo',
+    tag: 'Econômico',
+  },
+  {
     id: 'matriz-18-24',
     mode: '18_14_15',
     dezenas: 18,
@@ -112,12 +131,12 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
   },
   // 19 Dezenas
   {
-    id: 'matriz-19-36',
+    id: 'matriz-19-48',
     mode: '19_14_15',
     dezenas: 19,
-    jogos: 36,
-    garantia: '13 se 15',
-    condicao: 'Cobertura ampla de 76% do volante',
+    jogos: 48,
+    garantia: '14 se 15',
+    condicao: 'Cobertura ampla de 76% do volante (48 jogos)',
     tag: 'Econômico Amplo',
   },
   {
@@ -125,40 +144,116 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     mode: '19_14_15',
     dezenas: 19,
     jogos: 70,
-    garantia: '14 se 15',
+    garantia: '14 se 15 Reforçado',
     condicao: 'Acertando 15 entre 19 escolhidas',
     tag: 'Alta Probabilidade',
     popular: true,
   },
   // 20 Dezenas
   {
+    id: 'matriz-20-cologa-4',
+    mode: '20_compacto_4',
+    dezenas: 20,
+    jogos: 4,
+    garantia: '11/12/13 Pontos Tático',
+    condicao: '4 jogos de separação máxima cobrindo 80% do volante',
+    tag: 'COLOGA R$ 14',
+  },
+  {
+    id: 'matriz-20-cologa-9',
+    mode: '20_compacto_9',
+    dezenas: 20,
+    jogos: 9,
+    garantia: '12/13 se 15 (Enxuto)',
+    condicao: '9 jogos otimizados para 20 dezenas com alta taxa de retorno',
+    tag: 'COLOGA R$ 31,50',
+    popular: true,
+  },
+  {
     id: 'matriz-20-64',
     mode: '20_14_15',
     dezenas: 20,
     jogos: 64,
-    garantia: '13 se 14',
-    condicao: 'Acertando 14 entre 20 dezenas',
+    garantia: '14 se 15',
+    condicao: 'Acertando 15 entre 20 dezenas',
     tag: 'Redução 99.6%',
-    popular: true,
   },
   {
     id: 'matriz-20-128',
     mode: '20_14_15',
     dezenas: 20,
     jogos: 128,
-    garantia: '14 se 15',
+    garantia: '14 se 15 Reforçado',
     condicao: 'Garantia robusta de 14 pontos em 20 dezenas',
     tag: 'Super Bolão',
   },
   // 21 Dezenas
   {
-    id: 'matriz-21-100',
+    id: 'matriz-21-erre-4',
+    mode: 'erre_4_21',
+    dezenas: 21,
+    jogos: 24,
+    garantia: '13/14 se Errar 4',
+    condicao: 'Escolha 4 dezenas para errar e feche as 21 complementares',
+    tag: 'Erre Apenas 4',
+    popular: true,
+  },
+  {
+    id: 'matriz-21-32',
     mode: '21_13_15',
     dezenas: 21,
-    jogos: 100,
+    jogos: 32,
     garantia: '13 se 15',
-    condicao: '84% de cobertura de todas as 25 dezenas',
+    condicao: '84% de cobertura do volante em 32 bilhetes otimizados',
     tag: 'Mega Cobertura',
+  },
+  // 25 Dezenas (100% do Volante & Pivô 9)
+  {
+    id: 'matriz-25-espelho-2',
+    mode: 'aposta_espelho_2',
+    dezenas: 25,
+    jogos: 2,
+    garantia: '100% Volante (Espelho)',
+    condicao: '5 fixas + 2 blocos disjuntos de 10 dezenas em 2 apostas',
+    tag: 'R$ 7,00 • Express',
+  },
+  {
+    id: 'matriz-25-blocos-10',
+    mode: 'desdobramento_25_blocos',
+    dezenas: 25,
+    jogos: 10,
+    garantia: '100% Volante (9 Rep + 6 Aus)',
+    condicao: 'Blocos cruzados de trincas e duplas cobrindo 25 dezenas',
+    tag: 'R$ 35,00',
+  },
+  {
+    id: 'matriz-25-coringas-11',
+    mode: 'super_14_coringas_25',
+    dezenas: 25,
+    jogos: 11,
+    garantia: '14 Coringas + 11 Variáveis',
+    condicao: '9 repetidas + 5 ausentes quentes fixadas em 11 jogos exatos',
+    tag: 'R$ 38,50 • Novo',
+    popular: true,
+  },
+  {
+    id: 'matriz-25-3x18-18',
+    mode: 'cobertura_25_3x18',
+    dezenas: 25,
+    jogos: 18,
+    garantia: '3 Grupos de 18 (100% Volante)',
+    condicao: 'Divide as 25 dezenas em 3 grupos ponderados de 18 (6 jogos cada)',
+    tag: 'R$ 63,00 • Novo',
+  },
+  {
+    id: 'matriz-25-pivo-9',
+    mode: 'pivo_9_dezenas',
+    dezenas: 25,
+    jogos: 24,
+    garantia: 'Padrão Pivô 9 (K=4,5,6)',
+    condicao: 'Isola o bloco central Pivô [5,6,7,12,13,14,19,20,21] + Hamming',
+    tag: 'Pivô 9 • Novo',
+    popular: true,
   },
 ];
 
@@ -224,6 +319,7 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
 }) => {
   const [selectedUniverseTab, setSelectedUniverseTab] = useState<number>(targetCount);
   const [activeQuickPill, setActiveQuickPill] = useState<string>('manual');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
 
   // Mantém a aba de universo sincronizada com o targetCount ativo
   useMemo(() => {
@@ -232,12 +328,18 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
 
   // Encontra a matriz ativa no catálogo
   const activeMatrix = useMemo(() => {
+    if (selectedCatalogId) {
+      const exact = UNIFIED_MATRIX_CATALOG.find(
+        (m) => m.id === selectedCatalogId && m.mode === mode
+      );
+      if (exact) return exact;
+    }
     return (
       UNIFIED_MATRIX_CATALOG.find(
         (m) => m.mode === mode && m.dezenas === targetCount
       ) || UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === targetCount) || UNIFIED_MATRIX_CATALOG[5]
     );
-  }, [mode, targetCount]);
+  }, [mode, targetCount, selectedCatalogId]);
 
   const jogosCount = activeMatrix.jogos;
   const investimentoTotal = jogosCount * VALOR_APOSTA_LOTOFACIL;
@@ -578,17 +680,17 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
             </span>
           </div>
 
-          {/* Abas de Tamanho de Universo (15 a 21) */}
+          {/* Abas de Tamanho de Universo (15 a 25) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {[15, 16, 17, 18, 19, 20, 21].map((size) => (
+            {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => (
               <button
                 key={size}
                 type="button"
                 onClick={() => {
                   setSelectedUniverseTab(size);
-                  // Encontra a primeira matriz deste universo
                   const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
                   if (firstMatrix) {
+                    setSelectedCatalogId(firstMatrix.id);
                     onSelectMode(firstMatrix.mode, size);
                   }
                 }}
@@ -598,7 +700,7 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
                     : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
                 }`}
               >
-                <span>{size} Dezenas</span>
+                <span>{size === 25 ? '25 (100% Volante)' : `${size} Dezenas`}</span>
               </button>
             ))}
           </div>
@@ -606,12 +708,15 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
           {/* Cards de Matrizes para o Universo Selecionado */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {UNIFIED_MATRIX_CATALOG.filter((m) => m.dezenas === selectedUniverseTab).map((item) => {
-              const isSelected = mode === item.mode && targetCount === item.dezenas;
+              const isSelected = activeMatrix.id === item.id;
               const custoItem = item.jogos * VALOR_APOSTA_LOTOFACIL;
               return (
                 <div
                   key={item.id}
-                  onClick={() => onSelectMode(item.mode, item.dezenas)}
+                  onClick={() => {
+                    setSelectedCatalogId(item.id);
+                    onSelectMode(item.mode, item.dezenas);
+                  }}
                   className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
                     isSelected
                       ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-2 ring-emerald-400/20 shadow-xl shadow-emerald-500/10'

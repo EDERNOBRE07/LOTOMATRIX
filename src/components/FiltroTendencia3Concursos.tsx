@@ -56,7 +56,9 @@ export const FiltroTendencia3Concursos: React.FC<FiltroTendencia3ConcursosProps>
   }, [last3]);
 
   const handleFixSuperQuentes = () => {
-    const newFixed = Array.from(new Set([...fixedNumbers, ...stats3.superQuentes])).sort((a, b) => a - b);
+    const newFixed = Array.from(new Set([...fixedNumbers, ...stats3.superQuentes]))
+      .sort((a, b) => a - b)
+      .slice(0, 5);
     onSetFixedNumbers(newFixed);
     onAddNumbersToSelected(stats3.superQuentes);
   };

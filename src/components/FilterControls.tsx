@@ -30,11 +30,14 @@ import {
 import { saveCurvaAbcFilterConfig } from '../services/curvaAbcService';
 import { saveVoidExclusionConfig, computeVoidHeatmap } from '../services/vaziosService';
 
+import { calibrarFaixaSomaUniverso, getRotatedFixedBounds, MAX_DEZENAS_FIXAS } from '../services/combinatorics';
+
 interface FilterControlsProps {
   filters: FilterCriteria;
   onChange: (filters: FilterCriteria) => void;
   onReset: () => void;
   latestDraw?: LotofacilDraw;
+  selectedNumbers?: number[];
   soundAlertEnabled?: boolean;
   onToggleSoundAlert?: (enabled: boolean) => void;
 }
@@ -44,6 +47,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
   onChange,
   onReset,
   latestDraw = CONCURSO_ATUAL,
+  selectedNumbers = [],
   soundAlertEnabled = false,
   onToggleSoundAlert,
 }) => {
@@ -325,6 +329,47 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </p>
 
               <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-2.5">
+                {(() => {
+                  const autoAtivo = filters.autoCalibrarSomaUniverso !== false;
+                  const universoCal = selectedNumbers.length >= 15 ? calibrarFaixaSomaUniverso(selectedNumbers) : null;
+                  return (
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                      <div className="text-[11px]">
+                        <span className="text-slate-200 font-semibold block">
+                          Auto-Calibrar Soma pelo Universo (μ_U ± 20)
+                        </span>
+                        <span className="text-[10px] font-mono text-indigo-300/90">
+                          {universoCal
+                            ? `μ_U = ${universoCal.mediaUniverso.toFixed(1)} → Sugerido ${universoCal.somaMin}–${universoCal.somaMax}`
+                            : 'Ajusta Soma Min/Max automaticamente às dezenas escolhidas'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextAuto = !autoAtivo;
+                          if (nextAuto && universoCal) {
+                            update({
+                              autoCalibrarSomaUniverso: true,
+                              somaMin: universoCal.somaMin,
+                              somaMax: universoCal.somaMax,
+                            });
+                          } else {
+                            update({ autoCalibrarSomaUniverso: nextAuto });
+                          }
+                        }}
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                          autoAtivo
+                            ? 'bg-indigo-500 text-white border-indigo-400'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        {autoAtivo ? '✓ Auto Ativa' : 'Manual'}
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-400">Soma Mínima:</span>
@@ -335,7 +380,12 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                     min="150"
                     max={filters.somaMax - 5}
                     value={filters.somaMin}
-                    onChange={(e) => update({ somaMin: parseInt(e.target.value, 10) })}
+                    onChange={(e) =>
+                      update({
+                        somaMin: parseInt(e.target.value, 10),
+                        autoCalibrarSomaUniverso: false,
+                      })
+                    }
                     className="w-full accent-indigo-500 cursor-pointer"
                   />
                 </div>
@@ -350,7 +400,12 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                     min={filters.somaMin + 5}
                     max="240"
                     value={filters.somaMax}
-                    onChange={(e) => update({ somaMax: parseInt(e.target.value, 10) })}
+                    onChange={(e) =>
+                      update({
+                        somaMax: parseInt(e.target.value, 10),
+                        autoCalibrarSomaUniverso: false,
+                      })
+                    }
                     className="w-full accent-indigo-500 cursor-pointer"
                   />
                 </div>
@@ -358,7 +413,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 {/* Quick Gold Calibration */}
                 <button
                   type="button"
-                  onClick={() => update({ somaMin: 185, somaMax: 215 })}
+                  onClick={() => update({ somaMin: 185, somaMax: 215, autoCalibrarSomaUniverso: false })}
                   className="w-full py-1 text-[11px] rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 font-bold border border-indigo-500/40 transition cursor-pointer"
                 >
                   ⚡ Calibrar Zona de Ouro Expandida (185–215)
@@ -472,6 +527,63 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </div>
             </div>
           </div>
+
+          {/* 1.3 Modo de Dezenas Fixas: Rotativas Inteligentes (K de N) vs Rígidas (100%) */}
+          {(() => {
+            const fixasCount = (filters.dezenasFixas || []).length;
+            const kBounds = getRotatedFixedBounds(fixasCount, filters.modoFixas);
+            const activeMode = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
+            return (
+              <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Lock className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs sm:text-sm font-bold text-white">
+                      Modo de Fixas: Proteção Contra Falha de Âncoras
+                    </span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      {fixasCount}/{MAX_DEZENAS_FIXAS} Fixas Marcadas
+                    </span>
+                    {fixasCount >= 3 && kBounds.modo === 'rotativas' && (
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        Rotativas ({kBounds.minK}–{kBounds.maxK} de {fixasCount} por bilhete)
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Com 3 a 5 fixas, o modo <strong className="text-emerald-300">Rotativas Inteligentes (K de N)</strong> rotaciona entre{' '}
+                    <span className="font-mono text-slate-200">max(1, N-2)</span> e <span className="font-mono text-slate-200">N-1</span> fixas por cartão,
+                    evitando perder 14/15 pontos se 2 ou 3 fixas falharem no sorteio. Limite máximo travado em {MAX_DEZENAS_FIXAS} fixas.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => update({ modoFixas: 'rotativas' })}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                      activeMode === 'rotativas'
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    Rotativas Inteligentes (K de N)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ modoFixas: 'rigidas' })}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                      activeMode === 'rigidas'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    Rígidas (100% em todos)
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ==================== SEÇÃO 2: FILTROS AVANÇADOS ==================== */}
@@ -1015,6 +1127,344 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ==================== SEÇÃO 3: PODA COMBINATÓRIA AVANÇADA (6 FILTROS BITWISE) ==================== */}
+        <div className="space-y-3 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-cyan-500/30">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                <Sliders className="w-4 h-4 text-cyan-400" />
+              </span>
+              <div>
+                <span className="text-sm font-black uppercase tracking-wider text-cyan-300 font-mono">
+                  Poda Combinatória Avançada (Filtros Bitwise &amp; Posicional)
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  Filtros matemáticos de alta precisão com Branch &amp; Bound posicional, máscaras bitwise O(1) e proteção anti-repetição histórica.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  soundService.playFilterClick();
+                  update({
+                    posicionalAtivo: true,
+                    multiplosAtivo: true,
+                    contagemDigitosAtiva: true,
+                    digitosMin: 22,
+                    digitosMax: 27,
+                    umDigitoMin: 3,
+                    umDigitoMax: 8,
+                    somaAlgarismosAtiva: true,
+                    somaAlgarismosMin: 63,
+                    somaAlgarismosMax: 87,
+                    linhasColunasAtivo: true,
+                    maxLinhasCheias: 1,
+                    maxColunasCheias: 1,
+                    rankingHistoricoAtivo: true,
+                    palpiteIneditoAtivo: true,
+                    antiColisaoHistoricaAtiva: true,
+                  });
+                }}
+                className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition cursor-pointer"
+              >
+                Ativar Todos os 6
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  soundService.playFilterClick();
+                  update({
+                    posicionalAtivo: false,
+                    multiplosAtivo: false,
+                    contagemDigitosAtiva: false,
+                    somaAlgarismosAtiva: false,
+                    linhasColunasAtivo: false,
+                    rankingHistoricoAtivo: false,
+                    palpiteIneditoAtivo: false,
+                  });
+                }}
+                className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+              >
+                Desligar
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {/* 3.1 Intervalos Posicionais D1..D15 + Branch & Bound */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.posicionalAtivo
+                  ? 'bg-cyan-950/25 border-cyan-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    1. Intervalos Posicionais D1–D15
+                  </span>
+                  <span className="text-[10px] font-mono text-cyan-300/90">
+                    Branch &amp; Bound • 95%+ Histórico
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    update({ posicionalAtivo: !filters.posicionalAtivo });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.posicionalAtivo
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.posicionalAtivo ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Poda combinações impossíveis por posição ordenada: <span className="font-mono text-slate-300">D1∈[1..3]</span>, <span className="font-mono text-slate-300">D7∈[8..15]</span>, <span className="font-mono text-slate-300">D15∈[23..25]</span>.
+              </p>
+            </div>
+
+            {/* 3.2 Múltiplos M(3) a M(8) Bitwise */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.multiplosAtivo
+                  ? 'bg-emerald-950/25 border-emerald-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    2. Múltiplos M(3) a M(8) Bitwise
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-300/90">
+                    -672.984 Combos Improváveis
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    update({ multiplosAtivo: !filters.multiplosAtivo });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.multiplosAtivo
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.multiplosAtivo ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Máscaras O(1): <span className="font-mono text-slate-300">M(3): 4–7</span> • <span className="font-mono text-slate-300">M(4): 2–5</span> • <span className="font-mono text-slate-300">M(5..8) ≥ 1</span> por bilhete.
+              </p>
+            </div>
+
+            {/* 3.3 Contagem de Dígitos & Soma dos Algarismos */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.contagemDigitosAtiva || filters.somaAlgarismosAtiva
+                  ? 'bg-indigo-950/25 border-indigo-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    3. Dígitos &amp; Soma Algarismos
+                  </span>
+                  <span className="text-[10px] font-mono text-indigo-300/90">
+                    {filters.digitosMin ?? 22}–{filters.digitosMax ?? 27} Díg • Soma {filters.somaAlgarismosMin ?? 63}–{filters.somaAlgarismosMax ?? 87}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    const nextOn = !(filters.contagemDigitosAtiva || filters.somaAlgarismosAtiva);
+                    update({
+                      contagemDigitosAtiva: nextOn,
+                      somaAlgarismosAtiva: nextOn,
+                      digitosMin: filters.digitosMin ?? 22,
+                      digitosMax: filters.digitosMax ?? 27,
+                      umDigitoMin: filters.umDigitoMin ?? 3,
+                      umDigitoMax: filters.umDigitoMax ?? 8,
+                      somaAlgarismosMin: filters.somaAlgarismosMin ?? 63,
+                      somaAlgarismosMax: filters.somaAlgarismosMax ?? 87,
+                    });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.contagemDigitosAtiva || filters.somaAlgarismosAtiva
+                      ? 'bg-indigo-500 text-white border-indigo-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.contagemDigitosAtiva || filters.somaAlgarismosAtiva ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Exige <span className="font-mono text-slate-300">3–8</span> dezenas 01–09 (<span className="font-mono text-slate-300">22–27</span> dígitos) e soma de algarismos <span className="font-mono text-slate-300">[63..87]</span>.
+              </p>
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80 text-[10px] font-mono text-slate-300">
+                <span>Algarismos:</span>
+                <input
+                  type="number"
+                  min={50}
+                  max={80}
+                  value={filters.somaAlgarismosMin ?? 63}
+                  onChange={(e) =>
+                    update({
+                      somaAlgarismosAtiva: true,
+                      somaAlgarismosMin: Math.min(85, Math.max(45, Number(e.target.value) || 63)),
+                    })
+                  }
+                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-white"
+                />
+                <span>a</span>
+                <input
+                  type="number"
+                  min={70}
+                  max={110}
+                  value={filters.somaAlgarismosMax ?? 87}
+                  onChange={(e) =>
+                    update({
+                      somaAlgarismosAtiva: true,
+                      somaAlgarismosMax: Math.max(65, Math.min(115, Number(e.target.value) || 87)),
+                    })
+                  }
+                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-white"
+                />
+              </div>
+            </div>
+
+            {/* 3.4 Integridade Linhas / Colunas 5x5 */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.linhasColunasAtivo
+                  ? 'bg-amber-950/25 border-amber-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    4. Linhas &amp; Colunas 5×5
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-300/90">
+                    Zero Vazias • Máx 1 Cheia
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    update({
+                      linhasColunasAtivo: !filters.linhasColunasAtivo,
+                      maxLinhasCheias: filters.maxLinhasCheias ?? 1,
+                      maxColunasCheias: filters.maxColunasCheias ?? 1,
+                    });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.linhasColunasAtivo
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.linhasColunasAtivo ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Bloqueia volantes com linha ou coluna zerada e impede concentração excessiva (máx. 1 linha e 1 coluna cheias).
+              </p>
+            </div>
+
+            {/* 3.5 Equilíbrio Ranking Histórico */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.rankingHistoricoAtivo
+                  ? 'bg-purple-950/25 border-purple-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    5. Ranking Histórico Top 5–20
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-300/90">
+                    Top5: 2–4 | Top10: 4–8 | Top15: 7–11
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    update({ rankingHistoricoAtivo: !filters.rankingHistoricoAtivo });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.rankingHistoricoAtivo
+                      ? 'bg-purple-500 text-white border-purple-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.rankingHistoricoAtivo ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Impede excesso ou escassez das dezenas mais sorteadas da história (<span className="font-mono text-slate-300">Top 20: 11–14</span> por jogo).
+              </p>
+            </div>
+
+            {/* 3.6 Anti-Repetição Palpite Inédito */}
+            <div
+              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+                filters.palpiteIneditoAtivo !== false
+                  ? 'bg-sky-950/25 border-sky-500/50'
+                  : 'bg-slate-950/75 border-slate-800'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    6. Palpite Inédito (Anti-15)
+                  </span>
+                  <span className="text-[10px] font-mono text-sky-300/90">
+                    Hash Bitwise O(1) vs Histórico
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundService.playFilterClick();
+                    const nextVal = filters.palpiteIneditoAtivo === false;
+                    update({
+                      palpiteIneditoAtivo: nextVal,
+                      antiColisaoHistoricaAtiva: nextVal,
+                    });
+                  }}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                    filters.palpiteIneditoAtivo !== false
+                      ? 'bg-sky-500 text-slate-950 border-sky-400 font-black'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {filters.palpiteIneditoAtivo !== false ? '✓ Ativo' : 'Inativo'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Rejeita instantaneamente combinações de 15 dezenas já premiadas em concursos oficiais anteriores.
+              </p>
             </div>
           </div>
         </div>

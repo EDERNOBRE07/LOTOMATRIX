@@ -50,6 +50,229 @@ export const MASK_FIBONACCI = criarMascara([1, 2, 3, 5, 8, 13, 21]);
 // 5. Cruz da Lotofácil (Linha 3 e Coluna 3: 3, 8, 11, 12, 13, 14, 15, 18, 23)
 export const MASK_CRUZ = criarMascara([3, 8, 11, 12, 13, 14, 15, 18, 23]);
 
+// 6. Máscaras Bitwise de Múltiplos M(3) a M(8)
+export const MASK_M3 = criarMascara([3, 6, 9, 12, 15, 18, 21, 24]);
+export const MASK_M4 = criarMascara([4, 8, 12, 16, 20, 24]);
+export const MASK_M5 = criarMascara([5, 10, 15, 20, 25]);
+export const MASK_M6 = criarMascara([6, 12, 18, 24]);
+export const MASK_M7 = criarMascara([7, 14, 21]);
+export const MASK_M8 = criarMascara([8, 16, 24]);
+
+// 7. Máscara de Dezenas de 1 Dígito (01 a 09)
+export const MASK_UM_DIGITO = criarMascara([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+// 8. Máscaras das 5 Linhas e 5 Colunas do Volante 5x5
+export const MASK_LINHAS: readonly number[] = [
+  criarMascara([1, 2, 3, 4, 5]),
+  criarMascara([6, 7, 8, 9, 10]),
+  criarMascara([11, 12, 13, 14, 15]),
+  criarMascara([16, 17, 18, 19, 20]),
+  criarMascara([21, 22, 23, 24, 25]),
+];
+
+export const MASK_COLUNAS: readonly number[] = [
+  criarMascara([1, 6, 11, 16, 21]),
+  criarMascara([2, 7, 12, 17, 22]),
+  criarMascara([3, 8, 13, 18, 23]),
+  criarMascara([4, 9, 14, 19, 24]),
+  criarMascara([5, 10, 15, 20, 25]),
+];
+
+// 9. Tabela pré-computada de soma dos algarismos individuais de cada dezena (índice 0..25)
+export const PESO_DIGITOS: readonly number[] = [
+  0,
+  1, 2, 3, 4, 5, 6, 7, 8, 9,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  2, 3, 4, 5, 6, 7,
+];
+
+// 10. Limites Posicionais Canônicos por Bola (D1 a D15 ordenados, ocorrência histórica >95%)
+export const POSITIONAL_BOUNDS: readonly [number, number][] = [
+  [1, 3],   // D1
+  [2, 6],   // D2
+  [3, 8],   // D3
+  [4, 10],  // D4
+  [5, 11],  // D5
+  [6, 13],  // D6
+  [8, 15],  // D7
+  [9, 16],  // D8
+  [11, 18], // D9
+  [12, 19], // D10
+  [15, 21], // D11 (>= 15)
+  [17, 22], // D12 (>= 17)
+  [19, 23], // D13 (>= 19)
+  [21, 24], // D14 (>= 21)
+  [23, 25], // D15 ([23, 25])
+];
+
+// 11. Padrão Pivô de 9 Dezenas
+export const PIVOT_9_DEZENAS: readonly number[] = [5, 6, 7, 12, 13, 14, 19, 20, 21];
+
+/**
+ * Valida se as 15 dezenas ordenadas (D1..D15) respeitam os intervalos posicionais canônicos.
+ */
+export function validarPosicionalSorted(sortedDezenas: number[]): {
+  valido: boolean;
+  violacoes: string[];
+} {
+  if (sortedDezenas.length !== 15) {
+    return { valido: false, violacoes: ['Cartão precisa ter 15 dezenas para auditoria posicional.'] };
+  }
+  const violacoes: string[] = [];
+  for (let i = 0; i < 15; i++) {
+    const val = sortedDezenas[i];
+    const [minB, maxB] = POSITIONAL_BOUNDS[i];
+    if (val < minB || val > maxB) {
+      violacoes.push(`D${i + 1}=${val.toString().padStart(2, '0')} fora de [${minB}..${maxB}]`);
+    }
+  }
+  return { valido: violacoes.length === 0, violacoes };
+}
+
+/**
+ * Validação bitwise simultânea dos múltiplos M(3) a M(8).
+ */
+export function validarMultiplosMask(mask: number): {
+  valido: boolean;
+  m3: number;
+  m4: number;
+  m5: number;
+  m6: number;
+  m7: number;
+  m8: number;
+  violacoes: string[];
+} {
+  const m3 = popcount(mask & MASK_M3);
+  const m4 = popcount(mask & MASK_M4);
+  const m5 = popcount(mask & MASK_M5);
+  const m6 = popcount(mask & MASK_M6);
+  const m7 = popcount(mask & MASK_M7);
+  const m8 = popcount(mask & MASK_M8);
+
+  const violacoes: string[] = [];
+  if (m3 < 4 || m3 > 7) violacoes.push(`M(3)=${m3} fora de [4..7]`);
+  if (m4 < 2 || m4 > 5) violacoes.push(`M(4)=${m4} fora de [2..5]`);
+  if (m5 < 1) violacoes.push(`M(5)=${m5} (< 1)`);
+  if (m6 < 1) violacoes.push(`M(6)=${m6} (< 1)`);
+  if (m7 < 1) violacoes.push(`M(7)=${m7} (< 1)`);
+  if (m8 < 1) violacoes.push(`M(8)=${m8} (< 1)`);
+
+  return {
+    valido: violacoes.length === 0,
+    m3,
+    m4,
+    m5,
+    m6,
+    m7,
+    m8,
+    violacoes,
+  };
+}
+
+/**
+ * Calcula soma dos algarismos individuais via lookup pré-computado.
+ */
+export function calcularSomaAlgarismos(dezenas: number[]): number {
+  let total = 0;
+  for (let i = 0; i < dezenas.length; i++) {
+    const d = dezenas[i];
+    if (d >= 1 && d <= 25) {
+      total += PESO_DIGITOS[d];
+    }
+  }
+  return total;
+}
+
+/**
+ * Contagem bitwise de dezenas de 1 dígito (01..09) e total de algarismos no volante.
+ */
+export function validarContagemDigitosMask(
+  mask: number,
+  umDigitoMin: number = 3,
+  umDigitoMax: number = 8,
+  digitosMin: number = 22,
+  digitosMax: number = 27
+): {
+  valido: boolean;
+  dezenasUmDigito: number;
+  digitosTotal: number;
+} {
+  const dezenasUmDigito = popcount(mask & MASK_UM_DIGITO);
+  const totalCartao = popcount(mask);
+  const digitosTotal = dezenasUmDigito + (totalCartao - dezenasUmDigito) * 2;
+  const valido =
+    dezenasUmDigito >= umDigitoMin &&
+    dezenasUmDigito <= umDigitoMax &&
+    digitosTotal >= digitosMin &&
+    digitosTotal <= digitosMax;
+  return { valido, dezenasUmDigito, digitosTotal };
+}
+
+/**
+ * Integridade estrutural da matriz 5x5:
+ * Proíbe linhas/colunas vazias (0 dezenas) e limita linhas/colunas cheias (5 dezenas).
+ */
+export function validarLinhasColunasMask(
+  mask: number,
+  maxLinhasCheias: number = 1,
+  maxColunasCheias: number = 1
+): {
+  valido: boolean;
+  linhasVazias: number;
+  colunasVazias: number;
+  linhasCheias: number;
+  colunasCheias: number;
+  violacoes: string[];
+} {
+  let linhasVazias = 0;
+  let linhasCheias = 0;
+  let colunasVazias = 0;
+  let colunasCheias = 0;
+
+  for (let i = 0; i < 5; i++) {
+    const cntL = popcount(mask & MASK_LINHAS[i]);
+    if (cntL === 0) linhasVazias++;
+    if (cntL === 5) linhasCheias++;
+
+    const cntC = popcount(mask & MASK_COLUNAS[i]);
+    if (cntC === 0) colunasVazias++;
+    if (cntC === 5) colunasCheias++;
+  }
+
+  const violacoes: string[] = [];
+  if (linhasVazias > 0) violacoes.push(`${linhasVazias} linha(s) vazia(s) no volante 5x5`);
+  if (colunasVazias > 0) violacoes.push(`${colunasVazias} coluna(s) vazia(s) no volante 5x5`);
+  if (linhasCheias > maxLinhasCheias) {
+    violacoes.push(`${linhasCheias} linhas completas (máx permitido: ${maxLinhasCheias})`);
+  }
+  if (colunasCheias > maxColunasCheias) {
+    violacoes.push(`${colunasCheias} colunas completas (máx permitido: ${maxColunasCheias})`);
+  }
+
+  return {
+    valido: violacoes.length === 0,
+    linhasVazias,
+    colunasVazias,
+    linhasCheias,
+    colunasCheias,
+    violacoes,
+  };
+}
+
+/**
+ * Pré-computa Set<number> com máscaras de 25 bits dos concursos oficiais para busca O(1).
+ */
+export function buildHistoricalMasksSet(draws: { dezenas: number[] }[]): Set<number> {
+  const set = new Set<number>();
+  for (let i = 0; i < draws.length; i++) {
+    const d = draws[i]?.dezenas;
+    if (Array.isArray(d) && d.length === 15) {
+      set.add(criarMascara(d));
+    }
+  }
+  return set;
+}
+
 /**
  * Matrizes de Cobertura Canônica Mínima do La Jolla Covering Repository (LJCR)
  * Esquemas ótimos provados com instantaneidade O(1) no mapeamento das dezenas.
@@ -214,6 +437,7 @@ export function combinarComPodaDinamica(
     somaMax?: number;
     paresMin?: number;
     paresMax?: number;
+    posicionalAtivo?: boolean;
   },
   fixasMask: number,
   callbackValido: (jogoCompletoMask: number) => void
@@ -230,6 +454,14 @@ export function combinarComPodaDinamica(
   for (let i = idx; i <= n - vagasRestantes; i++) {
     const val = variaveisValores[i];
     const bit = variaveisBits[i];
+
+    // --- PODA POSICIONAL ANTECIPADA (Branch & Bound D1..D15) ---
+    if (filtros.posicionalAtivo && fixasMask === 0 && profundidade < 15) {
+      const [minPos, maxPos] = POSITIONAL_BOUNDS[profundidade];
+      if (val < minPos) continue;
+      if (val > maxPos) break;
+    }
+
     const novaSoma = somaAtual + val;
     const novosPares = paresAtual + (val % 2 === 0 ? 1 : 0);
     const novasVagas = vagasRestantes - 1;
@@ -377,6 +609,12 @@ export function validarIntegridadeFechamento(
   const inicio = performance.now();
   const erros: string[] = [];
   const hashes = new Set<string>();
+  const fixasSanitizadas = Array.from(new Set(dezenasFixas)).slice(0, 5);
+  const usarFixasRotativas =
+    fixasSanitizadas.length >= 3 && filtros.modoFixas !== 'rigidas';
+  const kMinFixas = Math.max(1, fixasSanitizadas.length - 2);
+  const kMaxFixas = fixasSanitizadas.length - 1;
+  const allowCisneNegroBounds = jogos.length >= 10;
 
   jogos.forEach((jogo, idx) => {
     // 1. Tamanho do cartão
@@ -404,19 +642,30 @@ export function validarIntegridadeFechamento(
       hashes.add(hash);
     }
 
-    // 5. Presença de dezenas fixas
-    if (dezenasFixas.length > 0) {
-      const fixasFaltantes = dezenasFixas.filter((f) => !jogo.includes(f));
-      if (fixasFaltantes.length > 0) {
-        erros.push(`Cartão #${idx + 1}: Faltam fixas obrigatórias: [${fixasFaltantes.join(', ')}].`);
+    // 5. Presença de dezenas fixas (Rígidas 100% ou Rotativas K de N)
+    if (fixasSanitizadas.length > 0) {
+      if (usarFixasRotativas) {
+        const presentes = fixasSanitizadas.filter((f) => jogo.includes(f)).length;
+        if (presentes < kMinFixas || presentes > kMaxFixas) {
+          erros.push(
+            `Cartão #${idx + 1}: Fixas rotativas fora da janela K de N (${presentes}/${fixasSanitizadas.length}, esperado ${kMinFixas} a ${kMaxFixas}).`
+          );
+        }
+      } else {
+        const fixasFaltantes = fixasSanitizadas.filter((f) => !jogo.includes(f));
+        if (fixasFaltantes.length > 0) {
+          erros.push(`Cartão #${idx + 1}: Faltam fixas obrigatórias: [${fixasFaltantes.join(', ')}].`);
+        }
       }
     }
 
-    // 6. Validação de Filtros Específicos (ex: Soma)
+    // 6. Validação de Filtros Específicos (Soma com suporte Anti-Cisne Negro 155–235 para >= 10 jogos)
     if (filtros.somaMin !== undefined && filtros.somaMax !== undefined) {
       const soma = jogo.reduce((acc, val) => acc + val, 0);
-      if (soma < filtros.somaMin || soma > filtros.somaMax) {
-        erros.push(`Cartão #${idx + 1}: Soma ${soma} fora da faixa [${filtros.somaMin}, ${filtros.somaMax}].`);
+      const effectiveMin = allowCisneNegroBounds ? Math.min(155, filtros.somaMin) : filtros.somaMin;
+      const effectiveMax = allowCisneNegroBounds ? Math.max(235, filtros.somaMax) : filtros.somaMax;
+      if (soma < effectiveMin || soma > effectiveMax) {
+        erros.push(`Cartão #${idx + 1}: Soma ${soma} fora da faixa [${effectiveMin}, ${effectiveMax}].`);
       }
     }
   });

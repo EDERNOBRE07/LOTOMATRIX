@@ -32,6 +32,11 @@ import {
   auditarMatrizCompleta,
   criarMascara,
   IndicadorGarantiaPayload,
+  MAX_DEZENAS_FIXAS,
+  sanitizeDezenasFixas,
+  calibrarFaixaSomaUniverso,
+  getRotatedFixedBounds,
+  resolveModoFixas,
 } from '../services/combinatorics';
 import { CentralUnificadaFechamento, UNIFIED_MATRIX_CATALOG, MatrixCatalogItem } from './CentralUnificadaFechamento';
 import { BentoGridFechamento } from './BentoGridFechamento';
@@ -188,7 +193,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   });
 
-  const [fixedNumbers, setFixedNumbers] = useState<number[]>(cyclePendingNumbers.slice(0, 2));
+  const [fixedNumbers, setFixedNumbers] = useState<number[]>(() =>
+    sanitizeDezenasFixas(cyclePendingNumbers.slice(0, 2))
+  );
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [showBolaoSimulator, setShowBolaoSimulator] = useState(false);
   const [filters, setFilters] = useState<FilterCriteria>(() => {
@@ -197,12 +204,48 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     return {
       ...DEFAULT_FILTERS,
       ...(activeFilterConfig || {}),
+      modoFixas: activeFilterConfig?.modoFixas || 'rotativas',
+      autoCalibrarSomaUniverso: activeFilterConfig?.autoCalibrarSomaUniverso !== false,
       curvaAbcAtiva: curvaAbcConfig.ativo,
       minDezenasClasseA: curvaAbcConfig.minClasseA,
       vaziosAtivos: voidConfig.ativo,
       combinacoesVazioExcluidas: voidConfig.paresExcluidos,
     };
   });
+
+  // Auto-Calibração contínua da Faixa de Soma pelo Universo Selecionado (μ_U ± 20)
+  useEffect(() => {
+    if (selectedNumbers.length < 15) return;
+    if (filters.autoCalibrarSomaUniverso === false) return;
+    const cal = calibrarFaixaSomaUniverso(selectedNumbers);
+    if (filters.somaMin !== cal.somaMin || filters.somaMax !== cal.somaMax) {
+      setFilters((prev) => ({
+        ...prev,
+        somaMin: cal.somaMin,
+        somaMax: cal.somaMax,
+      }));
+    }
+  }, [selectedNumbers, filters.autoCalibrarSomaUniverso, filters.somaMin, filters.somaMax]);
+
+  // Sincronização automática de Fixas (máx 5) e ativação padrão de Rotativas (K de N) para 3+ fixas
+  useEffect(() => {
+    const sanitized = sanitizeDezenasFixas(fixedNumbers);
+    if (sanitized.length !== fixedNumbers.length) {
+      setFixedNumbers(sanitized);
+      return;
+    }
+    const resolvedModo = resolveModoFixas(sanitized.length, filters.modoFixas);
+    const sameFixas =
+      (filters.dezenasFixas || []).length === sanitized.length &&
+      sanitized.every((v, idx) => (filters.dezenasFixas || [])[idx] === v);
+    if (!sameFixas || (sanitized.length >= 3 && filters.modoFixas === undefined)) {
+      setFilters((prev) => ({
+        ...prev,
+        dezenasFixas: sanitized,
+        modoFixas: prev.modoFixas === 'rigidas' ? 'rigidas' : resolvedModo,
+      }));
+    }
+  }, [fixedNumbers, filters.dezenasFixas, filters.modoFixas]);
 
   // Estado da Garantia Efetiva Auditada (LJCR & Set Cover)
   const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);
@@ -235,6 +278,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isVolanteSupportOpen, setIsVolanteSupportOpen] = useState(false);
   const [selectedCatalogUniverse, setSelectedCatalogUniverse] = useState<number>(targetCount);
+  const [pivotCountK, setPivotCountK] = useState<4 | 5 | 6>(5);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
+
+  const isSpecial25Mode =
+    mode === 'desdobramento_25_blocos' ||
+    mode === 'super_14_coringas_25' ||
+    mode === 'pivo_9_dezenas' ||
+    mode === 'cobertura_25_3x18' ||
+    mode === 'aposta_espelho_2';
 
   useEffect(() => {
     setSelectedCatalogUniverse(targetCount);
@@ -265,20 +317,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   // Listener para aplicação automática de Dezenas Fixas / 3 Âncoras / Par de Ouro
   useEffect(() => {
     if (initialFixedNumbers && initialFixedNumbers.length > 0) {
-      setFixedNumbers((prev) =>
-        Array.from(new Set([...prev, ...initialFixedNumbers])).sort((a, b) => a - b)
-      );
+      const incomingSanitized = sanitizeDezenasFixas(initialFixedNumbers);
+      setFixedNumbers((prev) => sanitizeDezenasFixas([...prev, ...incomingSanitized]));
       setSelectedNumbers((prev) => {
-        const union = Array.from(new Set([...initialFixedNumbers, ...prev])).sort((a, b) => a - b);
+        const union = Array.from(new Set([...incomingSanitized, ...prev])).sort((a, b) => a - b);
         return union.slice(0, targetCount);
       });
-      const isAnchors = initialFixedNumbers.length === 3;
+      const isAnchors = incomingSanitized.length === 3;
       const title = isAnchors
-        ? `3 Dezenas Âncoras [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
-        : `Par de Ouro [${initialFixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ')}]`;
+        ? `3 Dezenas Âncoras [${incomingSanitized.map((n) => n.toString().padStart(2, '0')).join(', ')}]`
+        : `Par de Ouro [${incomingSanitized.map((n) => n.toString().padStart(2, '0')).join(', ')}]`;
       setStrategyName(title);
       setDocumentMessage(
-        `✓ ${isAnchors ? '3 Dezenas Âncoras' : 'Par de Ouro'} [${initialFixedNumbers
+        `✓ ${isAnchors ? '3 Dezenas Âncoras' : 'Par de Ouro'} [${incomingSanitized
           .map((n) => n.toString().padStart(2, '0'))
           .join(', ')}] fixadas com sucesso na Matriz de Fechamento!`
       );
@@ -291,16 +342,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const handleFixAnchorsEvent = (e: any) => {
       const nums = e.detail?.numbers || e.detail?.anchors;
       if (Array.isArray(nums) && nums.length > 0) {
-        setFixedNumbers((prev) => Array.from(new Set([...prev, ...nums])).sort((a, b) => a - b));
+        const incomingSanitized = sanitizeDezenasFixas(nums);
+        setFixedNumbers((prev) => sanitizeDezenasFixas([...prev, ...incomingSanitized]));
         setSelectedNumbers((prev) => {
-          const union = Array.from(new Set([...nums, ...prev])).sort((a, b) => a - b);
+          const union = Array.from(new Set([...incomingSanitized, ...prev])).sort((a, b) => a - b);
           return union.slice(0, targetCount);
         });
         setStrategyName(
-          `3 Dezenas Âncoras [${nums.map((n: number) => n.toString().padStart(2, '0')).join(', ')}]`
+          `3 Dezenas Âncoras [${incomingSanitized.map((n: number) => n.toString().padStart(2, '0')).join(', ')}]`
         );
         setDocumentMessage(
-          `✓ 3 Dezenas Âncoras [${nums
+          `✓ 3 Dezenas Âncoras [${incomingSanitized
             .map((n: number) => n.toString().padStart(2, '0'))
             .join(', ')}] fixadas com sucesso na Matriz de Fechamento!`
         );
@@ -364,11 +416,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const handleCanonicalRestrictionsUpdated = (e: any) => {
       const incomingDezenas = e.detail?.dezenas;
       if (Array.isArray(incomingDezenas)) {
-        const sorted = [...incomingDezenas].sort((a, b) => a - b);
+        const sorted = sanitizeDezenasFixas(incomingDezenas);
         setFixedNumbers(sorted);
         setFilters((prev) => ({
           ...prev,
           dezenasFixas: sorted,
+          modoFixas: sorted.length >= 3 && prev.modoFixas !== 'rigidas' ? 'rotativas' : prev.modoFixas,
         }));
         setSelectedNumbers((prev) => {
           const union = Array.from(new Set([...sorted, ...prev])).sort((a, b) => a - b);
@@ -376,7 +429,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         });
         const dezStr = sorted.map((d: number) => d.toString().padStart(2, '0')).join(', ');
         setDocumentMessage(
-          `✓ ${sorted.length} Dezenas Fixas [${dezStr}] sincronizadas nas Restrições Canônicas do Fechamento!`
+          `✓ ${sorted.length}/${MAX_DEZENAS_FIXAS} Dezenas Fixas [${dezStr}] sincronizadas nas Restrições Canônicas do Fechamento!`
         );
         soundService.playGoldenZoneSuccessChime();
         setTimeout(() => setDocumentMessage(null), 6000);
@@ -483,7 +536,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const handleApplyCycleTendencyToVolante = (selectedNums: number[], fixedNums?: number[]) => {
     setSelectedNumbers(selectedNums.slice(0, targetCount));
     if (fixedNums && fixedNums.length > 0) {
-      setFixedNumbers(fixedNums);
+      setFixedNumbers(sanitizeDezenasFixas(fixedNums, selectedNums.slice(0, targetCount)));
     }
     const modeName =
       cycleTendencyConfig.mode === 'pendentes'
@@ -702,9 +755,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     // Se já existirem bilhetes gerados na tela, valida e poda imediatamente bilhetes que violem os filtros ativos
     if (generatedTickets.length > 0) {
       setGoldenGlowTrigger(Date.now());
-      const compliantTickets = generatedTickets.filter(
-        (t) => validateFilters(t, newFilters, latestDraw.dezenas).isValid
-      );
+      const sumManuallyChanged =
+        newFilters.somaMin !== filters.somaMin || newFilters.somaMax !== filters.somaMax;
+      const compliantTickets = generatedTickets.filter((t) => {
+        if (
+          !sumManuallyChanged &&
+          (t.faixaSoma === 'baixa' || t.faixaSoma === 'alta') &&
+          t.soma >= 155 &&
+          t.soma <= 235
+        ) {
+          return t.maxConsecutivas <= 8;
+        }
+        return validateFilters(t, newFilters, latestDraw.dezenas).isValid;
+      });
       if (compliantTickets.length !== generatedTickets.length) {
         setGeneratedTickets(compliantTickets);
         if (compliantTickets.length === 0) {
@@ -718,8 +781,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         }
       }
 
-      // Recálculo dinâmico da garantia efetiva restante após pós-poda dos filtros
-      if (compliantTickets.length > 0 && selectedNumbers.length >= 15) {
+      // Recálculo dinâmico da garantia efetiva restante após pós-poda dos filtros (evita explosão C(25,15) para > 21 dezenas)
+      if (compliantTickets.length > 0 && selectedNumbers.length >= 15 && selectedNumbers.length <= 21) {
         try {
           const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
           const masks = compliantTickets.map((t) => criarMascara(t.dezenas));
@@ -745,7 +808,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         } catch (e) {
           console.warn('Erro ao recalcular garantia em handleFiltersChange:', e);
         }
-      } else if (compliantTickets.length === 0) {
+      } else {
         setIndicadorGarantia(null);
       }
     }
@@ -823,29 +886,57 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   }, [filters, targetCount, latestDraw, dynamicStats, cyclePendingNumbers, aiPrediction, selectedNumbers, fixedNumbers, excludedNumbers]);
 
-  // Selecionar a Estratégia de Fechamento (15 a 21 Números) carregando com os filtros selecionados
+  // Selecionar a Estratégia de Fechamento (15 a 25 Números) carregando com os filtros selecionados
   const handleSelectClosingStrategy = (key: FechamentoMode) => {
     const p = FECHAMENTO_PRESETS[key];
     const newTarget = p.dezenasNecessarias;
     setMode(key);
 
-    if (key === 'desdobramento_25_blocos') {
+    if (
+      key === 'desdobramento_25_blocos' ||
+      key === 'super_14_coringas_25' ||
+      key === 'pivo_9_dezenas' ||
+      key === 'cobertura_25_3x18' ||
+      key === 'aposta_espelho_2'
+    ) {
       const all25 = Array.from({ length: 25 }, (_, i) => i + 1);
       setSelectedNumbers(all25);
-      const newName = 'Cobertura Total 25 Dezenas (Blocos Cruzados)';
-      setStrategyName(newName);
-      setActiveModel(newName);
-      setDocumentMessage(
-        '✓ Cobertura Total 25 Dezenas: 10 jogos cobrindo 100% do volante com 9 repetidas e 6 ausentes'
-      );
+      setExcludedNumbers([]);
+      setStrategyName(p.nome);
+      setActiveModel(p.nome);
+      setDocumentMessage(`✓ ${p.nome}: ${p.descricao}`);
       soundService.playGoldenZoneSuccessChime();
       setTimeout(() => setDocumentMessage(null), 6000);
       return;
     }
 
+    if (key === 'erre_4_21') {
+      const all25 = Array.from({ length: 25 }, (_, i) => i + 1);
+      let excl4 = excludedNumbers.slice(0, 4);
+      if (excl4.length < 4) {
+        const rankedAsc = [...all25].sort((a, b) => {
+          const sa = aiPrediction?.scores?.[a - 1] ?? 50;
+          const sb = aiPrediction?.scores?.[b - 1] ?? 50;
+          return sa - sb;
+        });
+        excl4 = rankedAsc.slice(0, 4).sort((a, b) => a - b);
+        setExcludedNumbers(excl4);
+      }
+      const comp21 = all25.filter((n) => !excl4.includes(n));
+      setSelectedNumbers(comp21);
+      setFixedNumbers((prev) => prev.filter((n) => !excl4.includes(n)));
+      setStrategyName(p.nome);
+      setActiveModel(p.nome);
+      setDocumentMessage(
+        `✓ Modo Erre Apenas 4: Excluídas [${excl4.map((n) => n.toString().padStart(2, '0')).join(', ')}] e selecionadas as 21 complementares. Clique em "Escolher 4 p/ Errar" no volante para personalizar.`
+      );
+      soundService.playGoldenZoneSuccessChime();
+      setTimeout(() => setDocumentMessage(null), 6500);
+      return;
+    }
+
     // Carrega a estratégia de fechamento preservando 100% dos filtros selecionados
     const calibrated = buildFilterCompliantPool({
-
       targetCount: newTarget,
       filters,
       previousDraw: latestDraw,
@@ -1093,7 +1184,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setActiveStrategicBox('pares_ouro');
     setAppliedSuggestionName('Pares de Ouro');
     const goldenPair = [11, 20];
-    setFixedNumbers((prev) => Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b));
+    setFixedNumbers((prev) => sanitizeDezenasFixas([...prev, ...goldenPair]));
     setSelectedNumbers((prev) => {
       const merged = Array.from(new Set([...prev, ...goldenPair])).sort((a, b) => a - b);
       return merged.slice(0, targetCount);
@@ -1299,9 +1390,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     if (fixedNumbers.includes(n)) {
       setFixedNumbers(fixedNumbers.filter((num) => num !== n));
     } else {
+      if (fixedNumbers.length >= MAX_DEZENAS_FIXAS) {
+        setDocumentMessage(
+          `⚠️ Limite máximo de ${MAX_DEZENAS_FIXAS} dezenas fixas atingido para evitar vulnerabilidade combinatória.`
+        );
+        setTimeout(() => setDocumentMessage(null), 4500);
+        return;
+      }
       setFixedNumbers([...fixedNumbers, n].sort((a, b) => a - b));
       if (!selectedNumbers.includes(n)) {
-        setSelectedNumbers([...selectedNumbers, n].sort((a, b) => a - b));
+        const nextSelected = [...selectedNumbers, n].sort((a, b) => a - b);
+        setSelectedNumbers(nextSelected.slice(0, Math.max(targetCount, nextSelected.length)));
       }
       setExcludedNumbers(excludedNumbers.filter((num) => num !== n));
     }
@@ -1333,9 +1432,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       suggestions.push(`Marque mais ${targetNeeded - pool.length} dezenas no volante acima ou utilize uma das estratégias de calibração automática.`);
     }
 
-    if (fixed.length > 15) {
-      reasons.push(`Foram marcadas ${fixed.length} dezenas fixas. O bilhete da Lotofácil é composto por exatamente 15 dezenas.`);
-      suggestions.push('Reduza a quantidade de dezenas fixas para no máximo 10 ou 12.');
+    if (fixed.length > MAX_DEZENAS_FIXAS) {
+      reasons.push(`Foram marcadas ${fixed.length} dezenas fixas. O limite máximo de segurança do motor combinatório é de ${MAX_DEZENAS_FIXAS} dezenas fixas.`);
+      suggestions.push(`Reduza a quantidade de dezenas fixas para no máximo ${MAX_DEZENAS_FIXAS} e utilize Fixas Rotativas (K de N).`);
     }
 
     const overlap = fixed.filter((n) => excluded.includes(n));
@@ -1420,9 +1519,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, 3824);
       const concursoAlvo = Number(concursoBase) + 1;
       const poolToSave = activePool.length > 0 ? activePool : selectedNumbers;
-      const fixasToSave = (metaData.fixedNumbers || fixedNumbers || [])
-        .filter((d) => poolToSave.includes(d))
-        .slice(0, Math.min(12, Math.max(0, poolToSave.length - 3)));
+      const fixasToSave = sanitizeDezenasFixas(
+        metaData.fixedNumbers || fixedNumbers || [],
+        poolToSave
+      );
       const excluidasToSave = metaData.excludedNumbers || excludedNumbers || [];
       const canonicalType = fechamentoType ? getCanonicalFechamentoTypeName() : getCanonicalFechamentoTypeName();
       const garantiaTexto = metaData.garantia || preset?.garantia || '14 se 15';
@@ -1558,13 +1658,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setFilters(fullFilters);
 
       let tickets: GameTicket[] = [];
+      const active25Pool = Array.from({ length: 25 }, (_, i) => i + 1);
 
-      if (mode === 'desdobramento_25_blocos') {
-        tickets = generateDesdobramento25Blocos({
-          baseDraw: latestDraw,
-          maxGames: 10,
-          iterations: 200,
+      if (isSpecial25Mode) {
+        tickets = await fechamentoWorkerClient.generateSpecialMatrix({
+          mode,
+          targetCount,
+          selectedNumbers: active25Pool,
+          fixedNumbers,
+          excludedNumbers,
+          pivotCountK,
+          maxTickets: preset.jogosMaximos,
+          filters: fullFilters,
+          dynamicStats,
+          latestDraw,
+          drawsHistory: RECENT_DRAWS,
           aiScores: aiPrediction?.scores,
+          onProgress: (p) => setWorkerProgress(p),
         });
       } else if (fullFilters.fechamentoPonderadoAtivo) {
         const result = await fechamentoWorkerClient.generatePonderado({
@@ -1585,7 +1695,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setDiscardedByRobustezCount(result.discardedByRobustezCount);
         setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
       } else {
-
         tickets = await fechamentoWorkerClient.generateCovering({
           mode,
           targetCount,
@@ -1629,9 +1738,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         return;
       }
 
-      // Sanitização estrita: 100% das dezenas devem pertencer ao universo selecionado
+      // Sanitização estrita: 100% das dezenas devem pertencer ao universo selecionado (ou 1..25 nas matrizes globais)
+      const validUniverse = isSpecial25Mode ? active25Pool : selectedNumbers;
       tickets = tickets.filter(
-        (t) => t.dezenas && t.dezenas.length === 15 && t.dezenas.every((d) => selectedNumbers.includes(d))
+        (t) => t.dezenas && t.dezenas.length === 15 && t.dezenas.every((d) => validUniverse.includes(d))
       );
 
       // Desduplicação estrita via hash
@@ -1651,10 +1761,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       const finalPrognosticoName = getFullPrognosticoFechamentoName();
       const exportMeta: FechamentoExportMeta = {
         strategyName: finalPrognosticoName,
-        modeName: `${preset.nome} - Matriz Pro (${tickets.length} Jogos - Garantia ${preset.garantia} (com 35% de chance de 15))`,
+        modeName: `${preset.nome} - Matriz Pro (${tickets.length} Jogos - Garantia ${preset.garantia})`,
         garantia: preset.garantia,
         targetCount: targetCount,
-        selectedNumbers: selectedNumbers,
+        selectedNumbers: validUniverse,
         fixedNumbers: fixedNumbers,
         excludedNumbers: excludedNumbers,
         filters: fullFilters,
@@ -1669,14 +1779,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       setGeneratedTickets(tickets);
 
-      // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR)
+      // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR, limitado a <= 21 dezenas)
       validarIntegridadeFechamento(
         tickets.map((t) => t.dezenas),
         fixedNumbers,
         fullFilters
       );
 
-      if (selectedNumbers.length >= 15) {
+      if (!isSpecial25Mode && selectedNumbers.length >= 15 && selectedNumbers.length <= 21) {
         try {
           const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
           const masks = tickets.map((t) => criarMascara(t.dezenas));
@@ -1702,6 +1812,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         } catch (e) {
           console.warn('Erro ao auditar garantia efetiva:', e);
         }
+      } else {
+        setIndicadorGarantia(null);
       }
 
       onSaveTickets(tickets, exportMeta);
@@ -2208,7 +2320,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       setGeneratedTickets(tickets);
 
-      if (selectedNumbers.length >= 15) {
+      if (selectedNumbers.length >= 15 && selectedNumbers.length <= 21) {
         try {
           const cenarios = gerarTodosCenariosAcerto(selectedNumbers);
           const masks = tickets.map((t) => criarMascara(t.dezenas));
@@ -2234,6 +2346,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         } catch (e) {
           console.warn('Erro ao auditar garantia efetiva:', e);
         }
+      } else {
+        setIndicadorGarantia(null);
       }
 
       onSaveTickets(tickets, exportMeta);
@@ -2399,32 +2513,39 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
-      {/* Mode Selection Carousel (15 a 21 Dezenas) */}
+      {/* Mode Selection Carousel (15 a 25 Dezenas + Estratégias Especiais) */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            1. Selecione a Estratégia de Fechamento (15 a 21 Números):
+            1. Selecione a Estratégia de Fechamento &amp; Matrizes Econômicas:
           </label>
           <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full self-start sm:self-auto">
-            Matriz Selecionada: {targetCount} Dezenas ({preset.jogosMaximos} Jogos • Garantia {preset.garantia})
+            Ativa: {preset.nome} ({preset.jogosMaximos} Jogos • {preset.garantia})
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5">
           {(
             [
-              'desdobramento_25_blocos',
               'surpresinha_inteligente',
               '16_14_15',
               '17_14_15',
-              '18_14_15',
+              '18_ultra_economico_6',
               '18_13_14',
+              '18_14_15',
               '19_14_15',
+              '20_compacto_4',
+              '20_compacto_9',
               '20_14_15',
               '21_13_15',
+              'erre_4_21',
+              'aposta_espelho_2',
+              'desdobramento_25_blocos',
+              'super_14_coringas_25',
+              'cobertura_25_3x18',
+              'pivo_9_dezenas',
             ] as FechamentoMode[]
           ).map((key) => {
-
             const p = FECHAMENTO_PRESETS[key];
             const isSelected = mode === key;
             const custoFechamento = p.jogosMaximos * VALOR_APOSTA_LOTOFACIL;
@@ -2439,29 +2560,78 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs sm:text-sm text-white">
-                    {p.dezenasNecessarias} Dezenas
+                <div className="flex items-start justify-between gap-1">
+                  <span className="font-bold text-xs text-white leading-tight">
+                    {key === 'erre_4_21'
+                      ? 'Erre Apenas 4'
+                      : key === 'super_14_coringas_25'
+                      ? '14 Coringas'
+                      : key === 'pivo_9_dezenas'
+                      ? 'Padrão Pivô 9'
+                      : key === 'cobertura_25_3x18'
+                      ? '25 em 3×18'
+                      : key === 'aposta_espelho_2'
+                      ? 'Espelho (25)'
+                      : key === '18_ultra_economico_6'
+                      ? '18 COLOGA 6J'
+                      : key === '20_compacto_4'
+                      ? '20 COLOGA 4J'
+                      : key === '20_compacto_9'
+                      ? '20 COLOGA 9J'
+                      : `${p.dezenasNecessarias} Dezenas`}
                   </span>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold block">
-                      {p.jogosMaximos} jogos
+                      {p.jogosMaximos}j
                     </span>
                     <span className="text-[10px] font-mono font-bold text-amber-300 block mt-0.5">
                       R$ {custoFechamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
-                <div className="text-[11px] text-emerald-300 font-semibold mt-1">
+                <div className="text-[10px] text-emerald-300 font-semibold mt-1 line-clamp-1">
                   {p.garantia}
                 </div>
                 <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
-                  Economia de {p.reducaoPercentual}%
+                  Redução {p.reducaoPercentual}%
                 </div>
               </button>
             );
           })}
         </div>
+
+        {/* Configuração Interativa do Padrão Pivô 9 Dezenas (K = 4, 5 ou 6) */}
+        {mode === 'pivo_9_dezenas' && (
+          <div className="p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-cyan-300 block">
+                Configuração Padrão Pivô 9 Dezenas [05, 06, 07, 12, 13, 14, 19, 20, 21]
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Escolha quantas dezenas do bloco Pivô (K) serão combinadas com {15 - pivotCountK} dezenas externas em cada bilhete:
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {([4, 5, 6] as const).map((kVal) => (
+                <button
+                  key={kVal}
+                  type="button"
+                  onClick={() => {
+                    setPivotCountK(kVal);
+                    soundService.playFilterClick();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition cursor-pointer ${
+                    pivotCountK === kVal
+                      ? 'bg-cyan-400 text-slate-950 border-cyan-300 shadow'
+                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                  }`}
+                >
+                  K={kVal} ({kVal} Pivô + {15 - kVal} Ext)
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Seletor de Modelos de Prognósticos & Estratégias */}
@@ -2685,6 +2855,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               setActiveModel(stratName);
             }}
             activeStrategy={strategyName}
+            activeMode={mode}
+            onActivateErre4Mode={(excl4, comp21) => {
+              setMode('erre_4_21');
+              setExcludedNumbers(excl4);
+              setSelectedNumbers(comp21);
+              setFixedNumbers((prev) => prev.filter((n) => !excl4.includes(n)));
+              const p = FECHAMENTO_PRESETS['erre_4_21'];
+              setStrategyName(p.nome);
+              setActiveModel(p.nome);
+              setDocumentMessage(
+                `✓ Modo Erre Apenas 4 ativado! Excluídas [${excl4.map((n) => n.toString().padStart(2, '0')).join(', ')}] e selecionadas as 21 dezenas complementares.`
+              );
+              soundService.playGoldenZoneSuccessChime();
+              setTimeout(() => setDocumentMessage(null), 6000);
+            }}
             onClear={() => {
               setSelectedNumbers([]);
               setFixedNumbers([]);
@@ -2965,7 +3150,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   M
                 </span>
                 <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
-                  Catálogo de Matrizes de 15 a 21 Dezenas
+                  Catálogo de Matrizes de 15 a 25 Dezenas
                 </h3>
               </div>
               <span className="text-[11px] font-mono text-slate-400">
@@ -2973,9 +3158,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </span>
             </div>
 
-            {/* Abas de Universo 15 a 21 */}
+            {/* Abas de Universo 15 a 25 */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-              {[15, 16, 17, 18, 19, 20, 21].map((size) => (
+              {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => (
                 <button
                   key={size}
                   type="button"
@@ -2983,11 +3168,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     setSelectedCatalogUniverse(size);
                     const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
                     if (firstMatrix) {
-                      setMode(firstMatrix.mode);
-                      if (selectedNumbers.length > size) {
-                        setSelectedNumbers(selectedNumbers.slice(0, size));
-                      }
-                      soundService.playFilterClick();
+                      setSelectedCatalogId(firstMatrix.id);
+                      handleSelectClosingStrategy(firstMatrix.mode);
                     }
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border ${
@@ -2996,7 +3178,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
                   }`}
                 >
-                  {size} Dezenas
+                  {size === 25 ? '25 (100% Volante)' : `${size} Dezenas`}
                 </button>
               ))}
             </div>
@@ -3004,17 +3186,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             {/* Cards de Matrizes para o Universo Selecionado */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {UNIFIED_MATRIX_CATALOG.filter((m) => m.dezenas === selectedCatalogUniverse).map((item) => {
-                const isSelected = mode === item.mode && targetCount === item.dezenas;
+                const isSelected = selectedCatalogId
+                  ? selectedCatalogId === item.id && mode === item.mode
+                  : mode === item.mode && targetCount === item.dezenas;
                 const custoItem = item.jogos * VALOR_APOSTA_LOTOFACIL;
                 return (
                   <div
                     key={item.id}
                     onClick={() => {
-                      setMode(item.mode);
-                      if (selectedNumbers.length > item.dezenas) {
-                        setSelectedNumbers(selectedNumbers.slice(0, item.dezenas));
-                      }
-                      soundService.playFilterClick();
+                      setSelectedCatalogId(item.id);
+                      handleSelectClosingStrategy(item.mode);
                     }}
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
                       isSelected
@@ -3130,22 +3311,105 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   setFilters((prev) => ({
                     ...prev,
                     somaMin: 155,
-                    somaMax: 230,
+                    somaMax: 235,
                     maxConsecutivas: 8,
+                    autoCalibrarSomaUniverso: false,
                     presetEstatistico: 'custom',
                   }));
                   soundService.playFilterClick();
                 }}
                 className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.somaMin === 155 && filters.somaMax === 230
+                  filters.somaMin === 155 && filters.somaMax === 235
                     ? 'bg-amber-500/20 border-amber-400 text-white shadow-md shadow-amber-500/20'
                     : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
                 }`}
               >
                 <div className="text-xs font-bold text-amber-400">👑 Anti-Cisne Negro</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">75 / 15 / 10% Estratificado</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">75 / 15 / 10% (155–235)</div>
               </button>
             </div>
+
+            {/* Barra de Controle Direto: Fixas Rotativas (K de N) & Auto-Calibração Universo */}
+            {(() => {
+              const uniCal = calibrarFaixaSomaUniverso(selectedNumbers);
+              const kBounds = getRotatedFixedBounds(fixedNumbers.length, filters.modoFixas);
+              const activeModoFixas = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                  <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold text-slate-200 block">
+                        Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400 block truncate">
+                        {fixedNumbers.length >= 3 && kBounds.modo === 'rotativas'
+                          ? `Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedNumbers.length} por cartão)`
+                          : fixedNumbers.length > 0 && activeModoFixas === 'rigidas'
+                          ? 'Rígidas (100% em todos os bilhetes)'
+                          : 'Marque 3–5 fixas para Rotativas K de N'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rotativas' }, false)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          activeModoFixas === 'rotativas'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        Rotativas (K/N)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rigidas' }, false)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                          activeModoFixas === 'rigidas'
+                            ? 'bg-amber-500 text-slate-950 border-amber-400'
+                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        Rígidas
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold text-slate-200 block">
+                        Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400 block truncate">
+                        Central: {filters.somaMin}–{filters.somaMax} {preset.jogosMaximos >= 10 ? '• Caudas: 155–235 (75/15/10%)' : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextAuto = filters.autoCalibrarSomaUniverso === false;
+                        handleFiltersChange(
+                          {
+                            ...filters,
+                            autoCalibrarSomaUniverso: nextAuto,
+                            somaMin: nextAuto ? uniCal.somaMin : filters.somaMin,
+                            somaMax: nextAuto ? uniCal.somaMax : filters.somaMax,
+                          },
+                          false
+                        );
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0 ${
+                        filters.autoCalibrarSomaUniverso !== false
+                          ? 'bg-indigo-500 text-white border-indigo-400'
+                          : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {filters.autoCalibrarSomaUniverso !== false ? 'μ_U ± 20 Auto ✓' : 'Manual'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Drawer Expandível de Ajuste Fino */}
             {isAdvancedFiltersOpen && (
@@ -3162,6 +3426,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   onChange={(f) => handleFiltersChange(f, true)}
                   onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
                   latestDraw={latestDraw}
+                  selectedNumbers={selectedNumbers}
                   soundAlertEnabled={soundAlertEnabled}
                   onToggleSoundAlert={handleToggleSoundAlert}
                 />
@@ -3203,7 +3468,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Fixas</span>
                   <span className="font-mono font-bold text-amber-400 text-xs">
-                    {fixedNumbers.length} Dezenas
+                    {fixedNumbers.length}/{MAX_DEZENAS_FIXAS}{' '}
+                    {fixedNumbers.length >= 3 && filters.modoFixas !== 'rigidas' ? '(Rotativas)' : 'Dezenas'}
                   </span>
                 </div>
 
@@ -3226,9 +3492,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={selectedNumbers.length < targetCount || isGenerating}
+                  disabled={(!isSpecial25Mode && selectedNumbers.length < targetCount) || isGenerating}
                   className={`w-full sm:w-auto px-6 py-3 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-xl ${
-                    selectedNumbers.length === targetCount && !isGenerating
+                    (isSpecial25Mode || selectedNumbers.length >= targetCount) && !isGenerating
                       ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:scale-102 active:scale-95 ring-2 ring-emerald-300'
                       : 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-70'
                   }`}
@@ -3237,7 +3503,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   <span>
                     {isGenerating
                       ? 'Processando Matriz...'
-                      : selectedNumbers.length < targetCount
+                      : !isSpecial25Mode && selectedNumbers.length < targetCount
                       ? `Faltam ${targetCount - selectedNumbers.length} Dezenas`
                       : 'Gerar Fechamento Agora'}
                   </span>
@@ -3580,6 +3846,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   <span>0 Redundâncias • 100% Únicos • 0 Anomalias</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/35 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3 h-3 text-sky-400 shrink-0" />
+                  <span>
+                    Espalhamento Hamming ✓ |{' '}
+                    {filters.modoFixas === 'rigidas' && fixedNumbers.length >= 3
+                      ? 'Fixas Rígidas (100%)'
+                      : 'Fixas Rotativas ✓'}{' '}
+                    | Proteção 155–235 ✓
+                  </span>
                 </span>
                 <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                   <span>Custo Total:</span>
@@ -4206,6 +4482,41 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     >
                       B1: {b1.toString().padStart(2, '0')} | B15: {b15.toString().padStart(2, '0')}
                       {extremidadesFalhou && ' ⚠️ Fora do Padrão'}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono border ${
+                        ticket.multiplosOk !== false
+                          ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/20'
+                          : 'bg-amber-950/50 text-amber-300 border-amber-500/30'
+                      }`}
+                      title={`M3:${ticket.multiplosM3 ?? '-'} | M4:${ticket.multiplosM4 ?? '-'} | M5:${ticket.multiplosM5 ?? '-'} | M6:${ticket.multiplosM6 ?? '-'} | M7:${ticket.multiplosM7 ?? '-'} | M8:${ticket.multiplosM8 ?? '-'}`}
+                    >
+                      Múltiplos M3:{ticket.multiplosM3 ?? '-'} M4:{ticket.multiplosM4 ?? '-'}{' '}
+                      {ticket.multiplosOk !== false ? '✓' : '⚠️'}
+                    </span>
+                    <span
+                      className="px-1.5 py-0.5 rounded font-mono border bg-indigo-950/40 text-indigo-300 border-indigo-500/20"
+                      title={`Total de dígitos: ${ticket.digitosTotal ?? '-'} (${ticket.dezenasUmDigito ?? '-'} dezenas 01-09)`}
+                    >
+                      Soma Dígitos: {ticket.somaAlgarismos ?? '-'} ({ticket.digitosTotal ?? '-'}d)
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono border ${
+                        ticket.posicionalOk !== false
+                          ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/20'
+                          : 'bg-rose-950/50 text-rose-300 border-rose-500/30'
+                      }`}
+                    >
+                      Posicional D1-D15 {ticket.posicionalOk !== false ? '✓' : '⚠️'}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded font-mono border ${
+                        ticket.inedito !== false
+                          ? 'bg-sky-950/40 text-sky-300 border-sky-500/25'
+                          : 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-bold'
+                      }`}
+                    >
+                      {ticket.inedito !== false ? 'Inédito ✓' : 'Colisão 15 ⚠️'}
                     </span>
                   </div>
                 </div>

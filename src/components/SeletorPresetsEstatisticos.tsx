@@ -89,6 +89,28 @@ export const SeletorPresetsEstatisticos: React.FC<SeletorPresetsEstatisticosProp
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 leading-snug mb-2">{preset.descricao}</p>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {preset.filtros.posicionalAtivo && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-cyan-300 border border-slate-700">
+                    Posicional D1–D15
+                  </span>
+                )}
+                {preset.filtros.multiplosAtivo && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-emerald-300 border border-slate-700">
+                    Múltiplos M3–M8
+                  </span>
+                )}
+                {preset.filtros.somaAlgarismosAtiva && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-indigo-300 border border-slate-700">
+                    Dígitos 22–27
+                  </span>
+                )}
+                {preset.filtros.rankingHistoricoAtivo && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/90 text-purple-300 border border-slate-700">
+                    Ranking Top20
+                  </span>
+                )}
+              </div>
               <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-2 text-slate-500">
                 <span>Corte médio: {preset.corteMedio}</span>
                 {isSelected && <span className="text-sky-400 font-bold">● Ativo</span>}

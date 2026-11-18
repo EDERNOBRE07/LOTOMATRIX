@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import mysql from 'mysql2/promise';
 
 dotenv.config();
@@ -26,7 +26,7 @@ const ai = apiKey
         headers: {
           'User-Agent': 'aistudio-build',
         },
-        timeout: 10000,
+        timeout: 25000,
       },
     })
   : null;
@@ -48,43 +48,80 @@ function isQuotaOrRateLimitError(err: any): boolean {
   );
 }
 
+function isTransientTimeoutOrUnavailableError(err: any): boolean {
+  const msg = String(err?.message || err || '').toUpperCase();
+  const status = err?.status ?? err?.code;
+  return (
+    status === 504 ||
+    status === 503 ||
+    status === 500 ||
+    status === 408 ||
+    msg.includes('504') ||
+    msg.includes('503') ||
+    msg.includes('DEADLINE_EXCEEDED') ||
+    msg.includes('UNAVAILABLE') ||
+    msg.includes('TIMEOUT') ||
+    msg.includes('ETIMEDOUT')
+  );
+}
+
 async function generateJsonWithGeminiFallback(
   contents: string,
   responseSchema: any,
-  timeoutMs = 8000
+  timeoutMs = 18000
 ): Promise<{ text: string; model: string } | null> {
   if (!ai) return null;
-  const now = Date.now();
 
   for (const modelName of GEMINI_TEXT_MODELS) {
     const cooldownUntil = geminiModelCooldownUntil[modelName] || 0;
-    if (now < cooldownUntil) {
+    if (Date.now() < cooldownUntil) {
       continue;
     }
 
-    try {
-      const aiCall = ai.models.generateContent({
-        model: modelName,
-        contents,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema,
-        },
-      });
-      const response = await withTimeout(aiCall, timeoutMs, `Gemini ${modelName} timeout`);
-      if (response?.text) {
-        return { text: response.text, model: modelName };
-      }
-    } catch (aiError: any) {
-      if (isQuotaOrRateLimitError(aiError)) {
-        geminiModelCooldownUntil[modelName] = Date.now() + 15 * 60 * 1000;
+    const thinkingLevel =
+      modelName === 'gemini-4-hydrogen' ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const aiCall = ai.models.generateContent({
+          model: modelName,
+          contents,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema,
+            thinkingConfig: { thinkingLevel },
+          },
+        });
+        const response = await withTimeout(aiCall, timeoutMs, `Gemini ${modelName} timeout`);
+        if (response?.text) {
+          return { text: response.text, model: modelName };
+        }
+        break;
+      } catch (aiError: any) {
+        if (isQuotaOrRateLimitError(aiError)) {
+          geminiModelCooldownUntil[modelName] = Date.now() + 15 * 60 * 1000;
+          console.info(
+            `[LotoSniper AI] Cota/rate-limit atingida no modelo ${modelName}; alternando para próximo recurso por 15 min.`
+          );
+          break;
+        }
+
+        if (isTransientTimeoutOrUnavailableError(aiError)) {
+          if (attempt === 0) {
+            await new Promise((r) => setTimeout(r, 450));
+            continue;
+          }
+          geminiModelCooldownUntil[modelName] = Date.now() + 5 * 60 * 1000;
+          console.info(
+            `[LotoSniper AI] Modelo ${modelName} excedeu tempo limite; redirecionando automaticamente por 5 min.`
+          );
+          break;
+        }
+
         console.info(
-          `[LotoSniper AI] Cota/rate-limit atingida no modelo ${modelName}; alternando para fallback estatístico por 15 min.`
+          `[LotoSniper AI] Modelo ${modelName} indisponível no momento; alternando automaticamente.`
         );
-      } else {
-        console.info(
-          `[LotoSniper AI] Modelo ${modelName} indisponível no momento (${aiError?.message || 'timeout'}); utilizando fallback.`
-        );
+        break;
       }
     }
   }
@@ -96,16 +133,13 @@ async function generateJsonWithGeminiFallback(
  * Utility to execute an async operation with a strict timeout guard,
  * ensuring timeouts don't hang and timers are promptly cleared.
  */
-function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000, errorMsg = 'Operação expirou por limite de tempo'): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs = 18000, errorMsg = 'Operação expirou por limite de tempo'): Promise<T> {
   let timeoutHandle: NodeJS.Timeout;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
   });
   return Promise.race([
-    promise.then((res) => {
-      clearTimeout(timeoutHandle);
-      return res;
-    }),
+    promise.finally(() => clearTimeout(timeoutHandle)),
     timeoutPromise,
   ]);
 }
@@ -528,7 +562,7 @@ Forneça uma análise preditiva em formato JSON estruturado com:
               'dezenasChave',
             ],
           },
-          8000
+          18000
         );
 
         if (geminiResult?.text) {
@@ -804,7 +838,7 @@ INSTRUÇÕES DO LAUDO:
               'ajusteFino',
             ],
           },
-          8000
+          18000
         );
 
         if (geminiResult?.text) {

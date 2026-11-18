@@ -14,8 +14,14 @@ import {
   ticketPassesFilters,
   isCanonicalAnomaly,
   countMatches,
-  getMaxConsecutiveSequence,
+  getCombinations,
+  sanitizeDezenasFixas,
+  getRotatedFixedBounds,
+  resolveCentralSumBounds,
+  passesHammingDistance,
+  calculateVariableFrequencyBounds,
 } from './combinatorics';
+import { criarMascara } from './tabelasCoberturaLJCR';
 import { getHistorical100Draws } from './historical100Draws';
 import { getAllSavedTicketsSet } from './savedFechamentosStorage';
 
@@ -534,20 +540,29 @@ export function isPadraoRaro500Concursos(
     fibonacci: number;
     maxConsecutivas: number;
     repetidas?: number;
+  },
+  bounds?: {
+    somaMin?: number;
+    somaMax?: number;
+    maxConsecutivas?: number;
   }
 ): { raro: boolean; motivo?: string } {
-  // 1. Veto categórico para Soma < 180 (Alerta Estatístico vetado pelo LotoSniper)
-  if (analysis.soma < 180) {
+  const minSomaAllowed = bounds?.somaMin ?? 180;
+  const maxSomaAllowed = bounds?.somaMax ?? 226;
+  const maxSeqAllowed = bounds?.maxConsecutivas ?? 6;
+
+  // 1. Limite de Soma calibrado pelo universo / proteção
+  if (analysis.soma < minSomaAllowed) {
     return {
       raro: true,
-      motivo: `Soma baixa (${analysis.soma} < 180): padrão raro vetado para focar 100% na Zona de Ouro`,
+      motivo: `Soma baixa (${analysis.soma} < ${minSomaAllowed}): fora da faixa central calibrada`,
     };
   }
 
-  if (analysis.soma > 226) {
+  if (analysis.soma > maxSomaAllowed) {
     return {
       raro: true,
-      motivo: `Soma excessiva (${analysis.soma} > 226): presente em <0.5% dos últimos 500 concursos`,
+      motivo: `Soma excessiva (${analysis.soma} > ${maxSomaAllowed}): fora do teto calibrado`,
     };
   }
 
@@ -575,8 +590,8 @@ export function isPadraoRaro500Concursos(
     };
   }
 
-  // 5. Sequências consecutivas > 6 dezenas
-  if (analysis.maxConsecutivas > 6) {
+  // 5. Sequências consecutivas > maxSeqAllowed
+  if (analysis.maxConsecutivas > maxSeqAllowed) {
     return {
       raro: true,
       motivo: `Sequência excessiva (${analysis.maxConsecutivas} dezenas em fila): presente em <0.4% dos concursos`,
@@ -883,16 +898,16 @@ export function generateFechamentoInteligentePonderado({
   latestDraw?: LotofacilDraw;
   aiScores?: number[];
 }): FechamentoPonderadoResult {
-  // Filtrar números excluídos logo no início
+  // 0. Filtrar números excluídos e travar no máximo 5 dezenas fixas
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
-  const fixedList = (filters?.dezenasFixas || []).filter((f) => !excludedSet.has(f));
+  const rawFixed = (filters?.dezenasFixas || []).filter((f) => !excludedSet.has(f));
   const validSelected = Array.isArray(selectedNumbers) ? selectedNumbers : [];
   const rawPool = validSelected.filter((n) => !excludedSet.has(n));
 
   // Garantir que números fixos estejam no pool
-  const poolSet = new Set([...rawPool, ...fixedList]);
+  const prelimFixas = sanitizeDezenasFixas(rawFixed);
+  const poolSet = new Set([...rawPool, ...prelimFixas]);
 
-  // Se o pool tiver menos de 15 dezenas, completar de forma inteligente
   if (poolSet.size < 15) {
     for (let i = 1; i <= 25 && poolSet.size < 15; i++) {
       if (!excludedSet.has(i)) {
@@ -903,6 +918,28 @@ export function generateFechamentoInteligentePonderado({
 
   const sortedPool = Array.from(poolSet).sort((a, b) => a - b);
   const n = sortedPool.length;
+
+  // Sanitização final de fixas (máximo absoluto de 5 dezenas)
+  const fixedList = sanitizeDezenasFixas(rawFixed, sortedPool);
+  const fixedSet = new Set(fixedList);
+  const fixasExcedentesCount = Math.max(0, rawFixed.length - fixedList.length);
+
+  // Modo de Fixas: Rotativas Inteligentes (K de N) ativo por padrão se N >= 3
+  const kBounds = getRotatedFixedBounds(fixedList.length, filters?.modoFixas);
+
+  // Auto-Calibração da Faixa de Soma pelo Universo Selecionado + Anti-Cisne Negro (75/15/10 em >= 10 jogos)
+  const sumBounds = resolveCentralSumBounds(sortedPool, filters);
+  const useStratifiedAntiCisne = maxTickets >= 10 && n >= 16;
+  const lowTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
+  const highTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
+  const coreQuota = Math.max(1, maxTickets - lowTailQuota - highTailQuota);
+
+  // Alvo de Espalhamento Geométrico (Hamming >= 3 até 32 jogos; >= 2 para 64+ jogos)
+  const rawHammingTarget = maxTickets <= 32 ? 3 : 2;
+  const minHammingTarget = n >= 18 ? rawHammingTarget : Math.min(rawHammingTarget, Math.max(1, n - 15));
+
+  // Metas de Controle de Frequência Equilibrada por Dezena
+  const freqBounds = calculateVariableFrequencyBounds(maxTickets, n, fixedList.length, kBounds.modo);
 
   // 1. Análise da Sazonalidade Estatística (MM 100 Concursos vs MM 50)
   const sazonalidade = calcularSazonalidadeEstatistica(latestDraw);
@@ -915,7 +952,7 @@ export function generateFechamentoInteligentePonderado({
   // Mapear Índice de Performance e Força de Ciclo para cada dezena do pool
   const ipMap = new Map<number, number>();
   const forcaCicloMap = new Map<number, number>();
-  const cyclePending = [17, 22]; // Dezenas pendentes de fechar o ciclo
+  const cyclePending = [17, 22];
 
   sortedPool.forEach((num) => {
     const stat = dynamicStats.find((s) => s.numero === num);
@@ -928,50 +965,50 @@ export function generateFechamentoInteligentePonderado({
     }
   });
 
-  // Diluição do Peso das Fixas:
-  // O motor desencoraja chumbar mais de 3 a 5 dezenas (como na estratégia do Par de Ouro [11, 20]).
-  // As 3 a 5 de maior pontuação são mantidas fixas absolutas em 100% dos bilhetes;
-  // O restante é liberado para permutar livremente através dos clusters de densidade,
-  // trazendo máxima resiliência estatística contra zebras.
-  let effectiveFixedList = [...fixedList];
-  let fixasPermutadasCount = 0;
-
-  if (fixedList.length > 5) {
-    const scoredFixed = [...fixedList].sort((a, b) => {
-      const sA = (ipMap.get(a) || 50) * 0.45 + (forcaCicloMap.get(a) || 50) * 0.55;
-      const sB = (ipMap.get(b) || 50) * 0.45 + (forcaCicloMap.get(b) || 50) * 0.55;
-      return sB - sA;
-    });
-    // Manter as 5 principais como fixas centrais (ex: Par de Ouro [11, 20])
-    effectiveFixedList = scoredFixed.slice(0, 5);
-    fixasPermutadasCount = fixedList.length - 5;
-  }
-
-  // Ordenar pool combinando 55% Força de Ciclo + 45% Índice de Performance
-  const nonFixedPool = sortedPool.filter((num) => !effectiveFixedList.includes(num));
+  // Ordenar dezenas variáveis por 55% Força de Ciclo + 45% IP
+  const nonFixedPool = sortedPool.filter((num) => !fixedSet.has(num));
   const weightedNonFixed = [...nonFixedPool].sort((a, b) => {
-    // Dar prioridade alta para as dezenas que eram fixas excedentes para aparecerem com frequência
-    const isExcessoA = fixedList.includes(a) && !effectiveFixedList.includes(a);
-    const isExcessoB = fixedList.includes(b) && !effectiveFixedList.includes(b);
-
+    const isExcessoA = rawFixed.includes(a) && !fixedSet.has(a);
+    const isExcessoB = rawFixed.includes(b) && !fixedSet.has(b);
     const bonusA = isExcessoA ? 25 : 0;
     const bonusB = isExcessoB ? 25 : 0;
-
     const scoreA = (ipMap.get(a) || 50) * 0.45 + (forcaCicloMap.get(a) || 50) * 0.55 + bonusA;
     const scoreB = (ipMap.get(b) || 50) * 0.45 + (forcaCicloMap.get(b) || 50) * 0.55 + bonusB;
     return scoreB - scoreA;
   });
 
+  // Subconjuntos válidos de fixas para rotação uniforme K de N
+  const fixedSubsets: number[][] = [];
+  if (fixedList.length === 0) {
+    fixedSubsets.push([]);
+  } else if (kBounds.modo === 'rigidas') {
+    fixedSubsets.push([...fixedList]);
+  } else {
+    for (let k = kBounds.minK; k <= kBounds.maxK; k++) {
+      if (nonFixedPool.length >= 15 - k) {
+        const combos = getCombinations(fixedList, k);
+        fixedSubsets.push(...combos);
+      }
+    }
+    if (fixedSubsets.length === 0) {
+      fixedSubsets.push([...fixedList]);
+    }
+  }
+
   let totalAvaliadas = 0;
   let descartadasRobustez = 0;
   let descartadasPadroesRaros = 0;
 
+  type SumStratum = 'ouro' | 'baixa' | 'alta';
+
   interface CandidateItem {
     dezenas: number[];
+    mask: number;
     scorePonderado: number;
     ipMedio: number;
     forcaCicloMedio: number;
     matchedClusterId?: string;
+    slotType: SumStratum;
   }
 
   function evaluateCandidateSingle(
@@ -980,78 +1017,119 @@ export function generateFechamentoInteligentePonderado({
   ): CandidateItem | null {
     totalAvaliadas++;
     const sorted = [...combination].sort((a, b) => a - b);
+
+    // Verificar cota de fixas (Rígidas 100% ou Rotativas K de N)
+    if (fixedList.length > 0) {
+      let fixedHits = 0;
+      for (const f of fixedList) {
+        if (sorted.includes(f)) fixedHits++;
+      }
+      if (fixedHits < kBounds.minK || fixedHits > kBounds.maxK) {
+        return null;
+      }
+    }
+
     const analysis = analyzeTicket(sorted, latestDraw.dezenas, aiScores);
 
-    // Veto Incondicional LotoSniper: Bilhetes com Soma < 180 são vetados para focar 100% na Zona de Ouro
-    if (analysis.soma < 180) {
+    const isCore = analysis.soma >= sumBounds.centralMin && analysis.soma <= sumBounds.centralMax;
+    const isLowTail =
+      useStratifiedAntiCisne &&
+      analysis.soma >= 155 &&
+      analysis.soma < sumBounds.centralMin &&
+      analysis.maxConsecutivas <= 8;
+    const isHighTail =
+      useStratifiedAntiCisne &&
+      analysis.soma > sumBounds.centralMax &&
+      analysis.soma <= 235 &&
+      analysis.maxConsecutivas <= 8;
+
+    if (!isCore && !isLowTail && !isHighTail) {
       descartadasPadroesRaros++;
       return null;
     }
 
-    // Conferir se dezenas fixas centrais (núcleo resiliente 3 a 5) estão presentes
-    if (effectiveFixedList.length > 0) {
-      for (const fix of effectiveFixedList) {
-        if (!sorted.includes(fix)) return null;
-      }
-    }
+    const slotType: SumStratum = isCore ? 'ouro' : isLowTail ? 'baixa' : 'alta';
 
-    // Tier 1: Rigor Máximo (Todos os Filtros Combinados + Robustez Sazonal + Padrões Raros 500)
-    if (tier === 1) {
-      if (isCanonicalAnomaly(sorted, analysis, latestDraw.dezenas)) {
-        return null;
-      }
-      const checkRaro = isPadraoRaro500Concursos(analysis);
-      if (checkRaro.raro) {
-        descartadasPadroesRaros++;
-        return null;
-      }
-      if (applyRobustez) {
-        const checkRobust = isCombinationRobust50(
-          { soma: analysis.soma, pares: analysis.pares, moldura: analysis.moldura },
-          robustezIntervals
-        );
-        if (!checkRobust.valido) {
-          descartadasRobustez++;
+    if (slotType === 'ouro') {
+      // Validação do Estrato Central (75%)
+      if (tier === 1) {
+        if (
+          isCanonicalAnomaly(sorted, analysis, latestDraw.dezenas, {
+            somaMin: sumBounds.centralMin,
+            somaMax: sumBounds.centralMax,
+          })
+        ) {
           return null;
         }
+        const checkRaro = isPadraoRaro500Concursos(analysis, {
+          somaMin: sumBounds.centralMin,
+          somaMax: sumBounds.centralMax,
+          maxConsecutivas: Math.max(6, filters?.maxConsecutivas ?? 6),
+        });
+        if (checkRaro.raro) {
+          descartadasPadroesRaros++;
+          return null;
+        }
+        if (applyRobustez) {
+          const calibratedRobustez: Robustez50Intervals = {
+            ...robustezIntervals,
+            somaMin: Math.min(robustezIntervals.somaMin, sumBounds.centralMin),
+            somaMax: Math.max(robustezIntervals.somaMax, sumBounds.centralMax),
+          };
+          const checkRobust = isCombinationRobust50(
+            { soma: analysis.soma, pares: analysis.pares, moldura: analysis.moldura },
+            calibratedRobustez
+          );
+          if (!checkRobust.valido) {
+            descartadasRobustez++;
+            return null;
+          }
+        }
+        if (filters) {
+          const adjustedFilters: FilterCriteria = {
+            ...filters,
+            somaMin: sumBounds.centralMin,
+            somaMax: sumBounds.centralMax,
+          };
+          if (!ticketPassesFilters(analysis, adjustedFilters)) {
+            return null;
+          }
+        }
+      } else if (tier === 2) {
+        const minPares = Math.max(5, (filters?.paresMin ?? 6) - 1);
+        const maxPares = Math.min(10, (filters?.paresMax ?? 8) + 1);
+        if (analysis.pares < minPares || analysis.pares > maxPares) return null;
+
+        const minMoldura = Math.max(7, (filters?.molduraMin ?? 9) - 1);
+        const maxMoldura = Math.min(12, (filters?.molduraMax ?? 11) + 1);
+        if (analysis.moldura < minMoldura || analysis.moldura > maxMoldura) return null;
+
+        const minPrimos = Math.max(3, (filters?.primosMin ?? 4) - 1);
+        const maxPrimos = Math.min(8, (filters?.primosMax ?? 7) + 1);
+        if (analysis.primos < minPrimos || analysis.primos > maxPrimos) return null;
+
+        const minFib = Math.max(2, (filters?.fibonacciMin ?? 3) - 1);
+        const maxFib = Math.min(6, (filters?.fibonacciMax ?? 5) + 1);
+        if (analysis.fibonacci < minFib || analysis.fibonacci > maxFib) return null;
+
+        const minRep = Math.max(6, (filters?.repetidasMin ?? 8) - 1);
+        const maxRep = Math.min(12, (filters?.repetidasMax ?? 10) + 1);
+        if (analysis.repetidas < minRep || analysis.repetidas > maxRep) return null;
+
+        if (analysis.maxConsecutivas > 6) return null;
+      } else {
+        if (analysis.pares < 5 || analysis.pares > 10) return null;
+        if (analysis.moldura < 7 || analysis.moldura > 12) return null;
+        if (analysis.maxConsecutivas > 6) return null;
       }
-      if (filters && !ticketPassesFilters(analysis, filters)) {
-        return null;
-      }
-    } else if (tier === 2) {
-      // Tier 2: Flexibilização Suave (Tolerância Ampla Dinâmica)
-      // Absorve oscilações atípicas sem perder a consistência probabilística
-      const minPares = Math.max(5, (filters?.paresMin ?? 6) - 1);
-      const maxPares = Math.min(10, (filters?.paresMax ?? 8) + 1);
-      if (analysis.pares < minPares || analysis.pares > maxPares) return null;
-
-      const minMoldura = Math.max(7, (filters?.molduraMin ?? 9) - 1);
-      const maxMoldura = Math.min(12, (filters?.molduraMin ?? 11) + 1);
-      if (analysis.moldura < minMoldura || analysis.moldura > maxMoldura) return null;
-
-      const minPrimos = Math.max(3, (filters?.primosMin ?? 4) - 1);
-      const maxPrimos = Math.min(8, (filters?.primosMax ?? 7) + 1);
-      if (analysis.primos < minPrimos || analysis.primos > maxPrimos) return null;
-
-      const minFib = Math.max(2, (filters?.fibonacciMin ?? 3) - 1);
-      const maxFib = Math.min(6, (filters?.fibonacciMax ?? 5) + 1);
-      if (analysis.fibonacci < minFib || analysis.fibonacci > maxFib) return null;
-
-      const minRep = Math.max(6, (filters?.repetidasMin ?? 8) - 1);
-      const maxRep = Math.min(12, (filters?.repetidasMax ?? 10) + 1);
-      if (analysis.repetidas < minRep || analysis.repetidas > maxRep) return null;
-
-      if (analysis.maxConsecutivas > 6) return null;
-      if (analysis.soma < 180 || analysis.soma > 225) return null;
     } else {
-      // Tier 3: Proteção Central Zona de Ouro (Soma 180 a 225, Paridade 5 a 10, Moldura 7 a 12)
-      if (analysis.soma < 180 || analysis.soma > 226) return null;
-      if (analysis.pares < 5 || analysis.pares > 10) return null;
-      if (analysis.moldura < 7 || analysis.moldura > 12) return null;
-      if (analysis.maxConsecutivas > 6) return null;
+      // Validação Estratos Anti-Cisne Negro (Cauda Baixa 155..centralMin-1 e Cauda Alta centralMax+1..235)
+      if (analysis.pares < 4 || analysis.pares > 11) return null;
+      if (analysis.moldura < 6 || analysis.moldura > 13) return null;
+      if (analysis.maxConsecutivas > 8) return null;
     }
 
-    // Avaliação de Colinearidade nos Clusters de Densidade (500 Concursos)
+    // Colinearidade nos Clusters de Densidade
     let clusterBonus = 0;
     let bestMatchedCluster: string | undefined;
 
@@ -1069,13 +1147,12 @@ export function generateFechamentoInteligentePonderado({
     });
 
     const ipMedio = Number(
-      (sorted.reduce((acc, n) => acc + (ipMap.get(n) || 50), 0) / 15).toFixed(1)
+      (sorted.reduce((acc, num) => acc + (ipMap.get(num) || 50), 0) / 15).toFixed(1)
     );
     const forcaCicloMedio = Number(
-      (sorted.reduce((acc, n) => acc + (forcaCicloMap.get(n) || 50), 0) / 15).toFixed(1)
+      (sorted.reduce((acc, num) => acc + (forcaCicloMap.get(num) || 50), 0) / 15).toFixed(1)
     );
 
-    // Avaliação de aderência aos parâmetros dos Fechamentos Vencedores do Concurso #3822
     const regraVencedora = evaluateAderenciaRegraVencedora3822(sorted, analysis);
 
     const scorePonderado =
@@ -1087,202 +1164,330 @@ export function generateFechamentoInteligentePonderado({
 
     return {
       dezenas: sorted,
+      mask: criarMascara(sorted),
       scorePonderado,
       ipMedio,
       forcaCicloMedio,
       matchedClusterId: bestMatchedCluster,
+      slotType,
     };
   }
 
   const validCandidates: CandidateItem[] = [];
   const candidateKeys = new Set<string>();
-  const maxPoolCandidates = n <= 18 ? 4500 : 8500;
-  const neededNonFixed = 15 - effectiveFixedList.length;
+  const maxPoolCandidates = n <= 18 ? 4800 : 8800;
 
   let tierApplied: 1 | 2 | 3 = 1;
-  let relaxExplanation = 'Todos os filtros combinados foram validados com 100% de rigor estrito.';
+  let relaxExplanation = `Motor calibrado para o universo (μ=${sumBounds.mediaUniverso.toFixed(1)}, faixa ${sumBounds.centralMin}–${sumBounds.centralMax})${
+    kBounds.modo === 'rotativas'
+      ? `, Fixas Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedList.length})`
+      : fixedList.length > 0
+      ? `, Fixas Rígidas (${fixedList.length})`
+      : ''
+  } e Hamming ≥${minHammingTarget}.`;
 
-  if (fixasPermutadasCount > 0) {
-    relaxExplanation += ` Diluição Estratégica: ${fixedList.length} fixas solicitadas. Para maximizar resiliência contra zebras, o motor preservou as 5 fixas prioritárias (Par de Ouro [11, 20] e âncoras) e permutou as demais através dos clusters de densidade.`;
+  if (fixasExcedentesCount > 0) {
+    relaxExplanation += ` Trava de segurança aplicada: máximo 5 dezenas fixas (${fixasExcedentesCount} excedente(s) movida(s) ao pool variável).`;
   }
+
+  // PRNG determinístico simples para amostragem estratificada de caudas e rotação uniforme
+  let randSeed = (sortedPool.reduce((acc, v, idx) => acc + v * (idx + 3), 1337) + maxTickets * 97) % 2147483647;
+  const nextRand = () => {
+    randSeed = (randSeed * 16807) % 2147483647;
+    return (randSeed - 1) / 2147483646;
+  };
 
   function searchCandidates(tier: 1 | 2 | 3) {
-    function backtrack(start: number, current: number[]) {
-      if (validCandidates.length >= maxPoolCandidates) return;
-      if (current.length === neededNonFixed) {
-        const fullCombo = [...effectiveFixedList, ...current].sort((a, b) => a - b);
-        const key = fullCombo.join('-');
-        if (!candidateKeys.has(key)) {
-          const evalResult = evaluateCandidateSingle(fullCombo, tier);
-          if (evalResult) {
-            candidateKeys.add(key);
-            validCandidates.push(evalResult);
+    const budgetPerSubset = Math.max(120, Math.floor(2400 / Math.max(1, fixedSubsets.length)));
+
+    // 1. Varredura sistemática rotacionando todos os subconjuntos de fixas (K de N)
+    for (let sIdx = 0; sIdx < fixedSubsets.length && validCandidates.length < maxPoolCandidates; sIdx++) {
+      const fSub = fixedSubsets[sIdx];
+      const neededNonFixed = 15 - fSub.length;
+      if (neededNonFixed < 0 || weightedNonFixed.length < neededNonFixed) continue;
+
+      let evaluatedInSubset = 0;
+      // Rotaciona o ponto de partida de weightedNonFixed para evitar concentrar nas mesmas dezenas
+      const shift = (sIdx * 3) % weightedNonFixed.length;
+      const rotatedVars = [...weightedNonFixed.slice(shift), ...weightedNonFixed.slice(0, shift)];
+
+      function backtrack(start: number, current: number[]) {
+        if (validCandidates.length >= maxPoolCandidates || evaluatedInSubset >= budgetPerSubset) return;
+        if (current.length === neededNonFixed) {
+          evaluatedInSubset++;
+          const fullCombo = [...fSub, ...current].sort((a, b) => a - b);
+          const key = fullCombo.join('-');
+          if (!candidateKeys.has(key)) {
+            const evalResult = evaluateCandidateSingle(fullCombo, tier);
+            if (evalResult) {
+              candidateKeys.add(key);
+              validCandidates.push(evalResult);
+            }
           }
+          return;
         }
-        return;
+
+        const needed = neededNonFixed - current.length;
+        const available = rotatedVars.length - start;
+        if (available < needed) return;
+
+        for (let i = start; i < rotatedVars.length; i++) {
+          current.push(rotatedVars[i]);
+          backtrack(i + 1, current);
+          current.pop();
+          if (validCandidates.length >= maxPoolCandidates || evaluatedInSubset >= budgetPerSubset) break;
+        }
       }
 
-      const needed = neededNonFixed - current.length;
-      const available = weightedNonFixed.length - start;
-      if (available < needed) return;
-
-      for (let i = start; i < weightedNonFixed.length; i++) {
-        current.push(weightedNonFixed[i]);
-        backtrack(i + 1, current);
-        current.pop();
-        if (validCandidates.length >= maxPoolCandidates) break;
-      }
+      backtrack(0, []);
     }
 
-    backtrack(0, []);
+    // 2. Amostragem estratificada para garantir descoberta de Cauda Baixa (155+), Cauda Alta (..235) e diversidade Hamming
+    const ascendingVars = [...nonFixedPool].sort((a, b) => a - b);
+    const descendingVars = [...nonFixedPool].sort((a, b) => b - a);
+    const stratifiedAttempts = n >= 16 ? 2600 : 400;
+
+    for (let att = 0; att < stratifiedAttempts && validCandidates.length < maxPoolCandidates; att++) {
+      const fSub = fixedSubsets[att % fixedSubsets.length];
+      const neededNonFixed = 15 - fSub.length;
+      if (neededNonFixed < 0 || nonFixedPool.length < neededNonFixed) continue;
+
+      let sourcePool: number[];
+      if (useStratifiedAntiCisne && att % 5 === 0) {
+        // Viés Cauda Baixa (dezenas menores primeiro com shuffle parcial)
+        sourcePool = [...ascendingVars];
+      } else if (useStratifiedAntiCisne && att % 5 === 1) {
+        // Viés Cauda Alta (dezenas maiores primeiro com shuffle parcial)
+        sourcePool = [...descendingVars];
+      } else {
+        sourcePool = [...nonFixedPool];
+        for (let i = sourcePool.length - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [sourcePool[i], sourcePool[j]] = [sourcePool[j], sourcePool[i]];
+        }
+      }
+
+      // Em viés de cauda, embaralhar janela inicial maior para variar mantendo tendência
+      if (useStratifiedAntiCisne && (att % 5 === 0 || att % 5 === 1)) {
+        const windowSize = Math.min(sourcePool.length, neededNonFixed + 4);
+        for (let i = windowSize - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [sourcePool[i], sourcePool[j]] = [sourcePool[j], sourcePool[i]];
+        }
+      }
+
+      const fullCombo = [...fSub, ...sourcePool.slice(0, neededNonFixed)].sort((a, b) => a - b);
+      const key = fullCombo.join('-');
+      if (!candidateKeys.has(key)) {
+        const evalResult = evaluateCandidateSingle(fullCombo, tier);
+        if (evalResult) {
+          candidateKeys.add(key);
+          validCandidates.push(evalResult);
+        }
+      }
+    }
   }
 
-  // Execução Cascata de Relaxamento:
-  // Passo 1: Tenta com Tier 1 (Rigor Máximo)
+  // Execução Cascata de Relaxamento
   searchCandidates(1);
 
-  // Passo 2: Se não houver candidatos suficientes para cobrir maxTickets, roda Tier 2
-  if (validCandidates.length < maxTickets) {
+  if (validCandidates.filter((c) => c.slotType === 'ouro').length < coreQuota) {
     tierApplied = 2;
     relaxExplanation =
-      'Flexibilização adaptativa ativada: faixas de paridade, moldura e repetidas foram dinamicamente ampliadas (ex: 6 a 9 pares, repetidas piso 6) absorvendo oscilações sem quebrar a Zona de Ouro (Soma >= 180).';
+      'Flexibilização adaptativa ativada: faixas de paridade, moldura e repetidas foram ampliadas suavemente mantendo a Soma calibrada pelo universo e proteção 155–235.';
     searchCandidates(2);
   }
 
-  // Passo 3: Se ainda for insuficiente, roda Tier 3 (Zona de Ouro Ampla Protegida)
-  if (validCandidates.length < maxTickets) {
+  if (validCandidates.filter((c) => c.slotType === 'ouro').length < coreQuota) {
     tierApplied = 3;
     relaxExplanation =
-      'Modo de Proteção Central Zona de Ouro: filtros extremos foram flexibilizados para garantir os 28 bilhetes otimizados com soma canônica rigorosamente entre 180 e 225.';
+      'Modo de Proteção Ampla Calibrada: tolerâncias estendidas para assegurar cobertura integral, Fixas Rotativas K de N e estratificação Anti-Cisne Negro 75/15/10.';
     searchCandidates(3);
   }
 
-  // Se mesmo assim ainda faltar (e.g. pool pequeno de 15 a 16 números):
   if (validCandidates.length === 0 && sortedPool.length >= 15) {
-    const direct15 = sortedPool.slice(0, 15);
+    const fSub = fixedSubsets[0] || [];
+    const needed = 15 - fSub.length;
+    const direct15 = [...fSub, ...nonFixedPool.slice(0, needed)].sort((a, b) => a - b);
     const directEval = evaluateCandidateSingle(direct15, 3);
     if (directEval) {
       validCandidates.push(directEval);
     }
   }
 
-  // Ordenar candidatos válidos pelo Score Ponderado Decrescente (Maior IP primeiro)
+  // Ordenar candidatos válidos pelo Score Ponderado Decrescente
   validCandidates.sort((a, b) => b.scorePonderado - a.scorePonderado);
 
-  // Greedy Covering com Ponderação de Performance
-  const testSubsets = validCandidates.slice(0, Math.min(validCandidates.length, 500)).map((c) => c.dezenas);
+  // Cobertura ponderada com Distância de Hamming Bitwise + Frequency Cap + Quotas 75/15/10
+  const testSubsets = validCandidates.slice(0, Math.min(validCandidates.length, 450)).map((c) => c.dezenas);
   const uncovered = new Set<number>(testSubsets.map((_, idx) => idx));
-  const chosenTickets: number[][] = [];
-  const chosenIPs: number[] = [];
-  const chosenClusters: (string | undefined)[] = [];
-
-  // Consulta histórico de fechamentos salvos para evitar tickets redundantes entre gerações
   const savedTicketsSet = getAllSavedTicketsSet();
 
-  while (uncovered.size > 0 && chosenTickets.length < maxTickets && validCandidates.length > 0) {
-    let bestIdx = -1;
-    let bestCombinedWeight = -999999;
+  const chosenItems: CandidateItem[] = [];
+  const chosenMasks: number[] = [];
+  const chosenKeys = new Set<string>();
+  const varFreq = new Array(26).fill(0);
+  const fixedFreq = new Array(26).fill(0);
+
+  const registerChosen = (cand: CandidateItem, coveredSet: number[] = []) => {
+    chosenItems.push(cand);
+    chosenMasks.push(cand.mask);
+    chosenKeys.add(cand.dezenas.join('-'));
+    for (const d of cand.dezenas) {
+      if (fixedSet.has(d)) fixedFreq[d]++;
+      else varFreq[d]++;
+    }
+    for (const cIdx of coveredSet) {
+      uncovered.delete(cIdx);
+    }
+  };
+
+  // Calcula bônus/penalidade de Frequência Equilibrada e Rotação de Fixas
+  const scoreBalanceForCandidate = (cand: CandidateItem): number => {
+    let balance = 0;
+    for (const d of cand.dezenas) {
+      if (fixedSet.has(d)) {
+        // Favorece rotação uniforme das fixas
+        balance += (freqBounds.fixedIdeal - fixedFreq[d]) * 4.5;
+      } else {
+        const f = varFreq[d];
+        if (f >= freqBounds.freqMaxCap) {
+          balance -= (f - freqBounds.freqMaxCap + 1) * 12;
+        } else if (f < freqBounds.freqMinTarget) {
+          balance += (freqBounds.freqMinTarget - f) * 5.0;
+        }
+      }
+    }
+    return balance;
+  };
+
+  // Fase 1: Preencher estratos Anti-Cisne Negro (15% Cauda Baixa e 10% Cauda Alta) quando maxTickets >= 10
+  const selectQuotaStratum = (stratum: SumStratum, targetCount: number) => {
+    if (targetCount <= 0) return;
+    let added = 0;
+    for (const minDiffTry of [minHammingTarget, Math.min(2, minHammingTarget), 1]) {
+      while (added < targetCount && chosenItems.length < maxTickets) {
+        let bestCand: CandidateItem | null = null;
+        let bestScore = -1e9;
+        for (let i = 0; i < validCandidates.length; i++) {
+          const cand = validCandidates[i];
+          if (cand.slotType !== stratum) continue;
+          const key = cand.dezenas.join('-');
+          if (chosenKeys.has(key)) continue;
+          if (!passesHammingDistance(cand.mask, chosenMasks, minDiffTry)) continue;
+          const isSavedPenalty = savedTicketsSet.has(key) ? 25 : 0;
+          const totalScore = cand.scorePonderado * 0.6 + scoreBalanceForCandidate(cand) - isSavedPenalty;
+          if (totalScore > bestScore) {
+            bestScore = totalScore;
+            bestCand = cand;
+          }
+        }
+        if (!bestCand) break;
+        registerChosen(bestCand);
+        added++;
+      }
+    }
+  };
+
+  if (useStratifiedAntiCisne) {
+    selectQuotaStratum('baixa', lowTailQuota);
+    selectQuotaStratum('alta', highTailQuota);
+  }
+
+  // Fase 2: Greedy Covering estritamente do estrato Central (75% ouro) respeitando Hamming >= minHammingTarget + Frequency Cap
+  const pickFromStratum = (stratumFilter: SumStratum | 'any', minDiffTry: number): boolean => {
+    let bestCand: CandidateItem | null = null;
+    let bestWeight = -1e9;
     let bestCoveredSet: number[] = [];
 
-    const searchLimit = Math.min(validCandidates.length, 300);
-    for (let i = 0; i < searchLimit; i++) {
+    for (let i = 0; i < validCandidates.length; i++) {
       const cand = validCandidates[i];
+      if (stratumFilter !== 'any' && cand.slotType !== stratumFilter) continue;
+      const candKey = cand.dezenas.join('-');
+      if (chosenKeys.has(candKey)) continue;
+      if (!passesHammingDistance(cand.mask, chosenMasks, minDiffTry)) continue;
+
       let coverCount = 0;
       const coveredHere: number[] = [];
-
-      for (const subsetIdx of uncovered) {
-        if (countMatches(cand.dezenas, testSubsets[subsetIdx]) >= targetHits) {
-          coverCount++;
-          coveredHere.push(subsetIdx);
+      if (uncovered.size > 0 && i < 600) {
+        for (const subsetIdx of uncovered) {
+          if (countMatches(cand.dezenas, testSubsets[subsetIdx]) >= targetHits) {
+            coverCount++;
+            coveredHere.push(subsetIdx);
+          }
         }
       }
 
-      // Penaliza tickets que já foram salvos em fechamentos anteriores
-      const candKey = cand.dezenas.join('-');
       const isAlreadySaved = savedTicketsSet.has(candKey);
-      const savedPenalty = isAlreadySaved ? 35 : 0;
-      const jitter = Math.random() * 0.2;
+      const savedPenalty = isAlreadySaved ? 30 : 0;
+      const weight =
+        coverCount * 1.4 +
+        (cand.scorePonderado / 100) * 2.2 +
+        scoreBalanceForCandidate(cand) * 0.35 -
+        savedPenalty;
 
-      // Combina cobertura de subconjuntos com o Índice de Performance da combinação
-      const weight = (coverCount * 1.5) + (cand.scorePonderado / 100) * 2.0 + jitter - savedPenalty;
-
-      if (weight > bestCombinedWeight) {
-        bestCombinedWeight = weight;
-        bestIdx = i;
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        bestCand = cand;
         bestCoveredSet = coveredHere;
       }
     }
 
-    if (bestIdx === -1 || bestCoveredSet.length === 0) {
-      break;
+    if (!bestCand) return false;
+    registerChosen(bestCand, bestCoveredSet);
+    return true;
+  };
+
+  for (const minDiffTry of [minHammingTarget, Math.min(2, minHammingTarget), 1]) {
+    while (chosenItems.length < maxTickets && validCandidates.length > 0) {
+      if (!pickFromStratum('ouro', minDiffTry)) break;
     }
+    if (chosenItems.length >= maxTickets) break;
+  }
 
-    const chosen = validCandidates[bestIdx];
-    chosenTickets.push(chosen.dezenas);
-    chosenIPs.push(chosen.ipMedio);
-    chosenClusters.push(chosen.matchedClusterId);
-    validCandidates.splice(bestIdx, 1);
+  // Fallback se estrato central não tiver combinações suficientes para completar maxTickets
+  for (const minDiffTry of [minHammingTarget, Math.min(2, minHammingTarget), 1]) {
+    while (chosenItems.length < maxTickets && validCandidates.length > 0) {
+      if (!pickFromStratum('any', minDiffTry)) break;
+    }
+    if (chosenItems.length >= maxTickets) break;
+  }
 
-    for (const cIdx of bestCoveredSet) {
-      uncovered.delete(cIdx);
+  // Fase 3: Síntese complementar caso restrições extremas impeçam atingir maxTickets (mantendo fixas K de N)
+  if (chosenItems.length < maxTickets && sortedPool.length >= 15) {
+    for (let attempt = 0; attempt < 250 && chosenItems.length < maxTickets; attempt++) {
+      const fSub = fixedSubsets[attempt % fixedSubsets.length];
+      const needed = 15 - fSub.length;
+      const orderedVars = [...nonFixedPool].sort((a, b) => varFreq[a] - varFreq[b] || a - b);
+      const shift = attempt % Math.max(1, orderedVars.length);
+      const pickedVars = [...orderedVars.slice(shift), ...orderedVars.slice(0, shift)].slice(0, needed);
+      const candidate = [...fSub, ...pickedVars].sort((a, b) => a - b);
+      const key = candidate.join('-');
+      if (chosenKeys.has(key)) continue;
+      const mask = criarMascara(candidate);
+      if (!passesHammingDistance(mask, chosenMasks, Math.min(2, minHammingTarget)) && attempt < 180) continue;
+      const soma = candidate.reduce((acc, v) => acc + v, 0);
+      if (soma < 155 || soma > 235) continue;
+      const slotType: SumStratum =
+        soma < sumBounds.centralMin ? 'baixa' : soma > sumBounds.centralMax ? 'alta' : 'ouro';
+      registerChosen({
+        dezenas: candidate,
+        mask,
+        scorePonderado: 75,
+        ipMedio: 75,
+        forcaCicloMedio: 75,
+        matchedClusterId: 'Síntese Equilibrada',
+        slotType,
+      });
     }
   }
 
-  // Complementar até maxTickets caso ainda restem vagas, priorizando bilhetes inéditos
-  const uniqueMap = new Map<string, { dezenas: number[]; ip: number; cluster?: string }>();
-  chosenTickets.forEach((t, i) => {
-    uniqueMap.set(t.join('-'), { dezenas: t, ip: chosenIPs[i] || 70, cluster: chosenClusters[i] });
-  });
-
-  // Primeiro passo: adicionar candidatos que NÃO estão nos jogos salvos
-  for (const cand of validCandidates) {
-    if (uniqueMap.size >= maxTickets) break;
-    const key = cand.dezenas.join('-');
-    if (!uniqueMap.has(key) && !savedTicketsSet.has(key)) {
-      uniqueMap.set(key, { dezenas: cand.dezenas, ip: cand.ipMedio, cluster: cand.matchedClusterId });
-    }
-  }
-
-  // Segundo passo: se ainda faltar, preenche com os demais candidatos
-  for (const cand of validCandidates) {
-    if (uniqueMap.size >= maxTickets) break;
-    const key = cand.dezenas.join('-');
-    if (!uniqueMap.has(key)) {
-      uniqueMap.set(key, { dezenas: cand.dezenas, ip: cand.ipMedio, cluster: cand.matchedClusterId });
-    }
-  }
-
-
-  // Se por restrição matemática extrema do pool ainda faltar bilhetes para maxTickets,
-  // sintetizar permutações válidas mantendo fixas e soma >= 180
-  if (uniqueMap.size < maxTickets && sortedPool.length > 15) {
-    for (let i = 0; i < sortedPool.length && uniqueMap.size < maxTickets; i++) {
-      const candidate: number[] = [...fixedList];
-      const remainder = sortedPool.filter((x) => !candidate.includes(x));
-      // Shuffle determinístico pelo índice
-      const rotated = [...remainder.slice(i), ...remainder.slice(0, i)];
-      for (const num of rotated) {
-        if (candidate.length === 15) break;
-        candidate.push(num);
-      }
-      candidate.sort((a, b) => a - b);
-      const s = candidate.reduce((acc, curr) => acc + curr, 0);
-      if (s >= 180 && !uniqueMap.has(candidate.join('-'))) {
-        uniqueMap.set(candidate.join('-'), {
-          dezenas: candidate,
-          ip: 75,
-          cluster: 'Síntese Ouro Complementar',
-        });
-      }
-    }
-  }
-
-  // Construir GameTicket final com metadados de performance, ciclo e robustez
-  const finalTickets: GameTicket[] = Array.from(uniqueMap.values()).map((item, idx) => {
+  // Construir GameTicket final com metadados de performance, estrato Anti-Cisne Negro, Fixas Rotativas e Hamming
+  const finalTickets: GameTicket[] = chosenItems.map((item, idx) => {
     const analysis = analyzeTicket(item.dezenas, latestDraw.dezenas, aiScores);
-    const tags: string[] = [`IP: ${item.ip}%`];
-    if (item.cluster) {
-      tags.push(`Cluster Densidade ${item.cluster} ✓`);
+    const tags: string[] = [`IP: ${item.ipMedio}%`];
+    if (item.matchedClusterId) {
+      tags.push(`Cluster Densidade ${item.matchedClusterId} ✓`);
     }
     if (applyRobustez) {
       tags.push(`Robustez Sazonal (${sazonalidade.agressividadeFiltros.split(' ')[0]}) ✓`);
@@ -1290,8 +1495,20 @@ export function generateFechamentoInteligentePonderado({
     if (tierApplied > 1) {
       tags.push('Filtro Flexibilizado ✓');
     }
-    if (item.ip >= 80) tags.push('Top Performance 🔥');
-    tags.push('Zona de Ouro (180+) ✓');
+    if (kBounds.modo === 'rotativas') {
+      tags.push(`Fixas Rotativas ${kBounds.minK}–${kBounds.maxK}/${fixedList.length} ✓`);
+    }
+    tags.push(`Hamming ≥${minHammingTarget} ✓`);
+
+    if (item.slotType === 'baixa') {
+      tags.push(`Cauda Baixa (${analysis.soma}) 🛡️`);
+    } else if (item.slotType === 'alta') {
+      tags.push(`Cauda Alta (${analysis.soma}) 🛡️`);
+    } else {
+      tags.push(`Zona Central (${sumBounds.centralMin}–${sumBounds.centralMax}) ✓`);
+    }
+
+    if (item.ipMedio >= 80) tags.push('Top Performance 🔥');
     const checkVencedor = evaluateAderenciaRegraVencedora3822(item.dezenas, analysis);
     if (checkVencedor.atendePlenamente) {
       tags.push('Regra Vencedora #3822 (12+ pts) ✓');
@@ -1301,7 +1518,8 @@ export function generateFechamentoInteligentePonderado({
       id: `ticket-ip-${idx + 1}`,
       index: idx + 1,
       ...analysis,
-      scoreIA: item.ip,
+      scoreIA: item.ipMedio,
+      faixaSoma: item.slotType,
       tags,
     };
   });
