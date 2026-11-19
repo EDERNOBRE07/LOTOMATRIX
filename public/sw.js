@@ -41,8 +41,16 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Skip non-GET requests and browser extensions
-  if (request.method !== 'GET' || !url.protocol.startsWith('http')) {
+  // Skip non-GET requests, browser extensions, API calls, and agent discovery endpoints
+  if (
+    request.method !== 'GET' ||
+    !url.protocol.startsWith('http') ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/.well-known/') ||
+    url.pathname === '/robots.txt' ||
+    url.pathname === '/sitemap.xml' ||
+    url.pathname === '/llms.txt'
+  ) {
     return;
   }
 

@@ -1,0 +1,19 @@
+# LotoSniper
+
+> Plataforma brasileira de engenharia combinatória, estatística em tempo real e IA preditiva para análise e fechamentos matemáticos da Lotofácil.
+
+O LotoSniper aplica poda combinatória (Branch and Bound), máscaras bitwise para validação instantânea, garantia matemática de 14 pontos e sincronização com resultados oficiais da Caixa Econômica Federal.
+
+## Páginas Principais
+
+- [Página Inicial e Estúdio Combinatório](https://lotosniper.com.br/): Estúdio completo de fechamentos da Lotofácil, estatísticas de ciclo, mapa de calor 5×5, simulador e conferidor.
+- [Sobre o LotoSniper](https://lotosniper.com.br/sobre): Arquitetura matemática, filtros D1–D15, múltiplos M3–M8, geometria da cruz e metodologia combinatória.
+- [Contato e Suporte](https://lotosniper.com.br/contato): Canal oficial de atendimento via contato@lotosniper.com.br e informações institucionais.
+- [Termos de Uso](https://lotosniper.com.br/termos): Regras de utilização, isenção de responsabilidade lotérica e diretrizes estatísticas.
+- [Política de Privacidade](https://lotosniper.com.br/privacidade): Tratamento de dados locais no navegador, transparência e segurança.
+
+## Capacidades para Agentes (MCP & Negociação de Conteúdo)
+
+- [MCP Server Card](https://lotosniper.com.br/.well-known/mcp/server-card.json): Descritor SEP-1649 com ferramentas para validar bilhetes, gerar fechamentos e consultar o último concurso.
+- [Sitemap XML](https://lotosniper.com.br/sitemap.xml): Índice estruturado de todas as URLs públicas da plataforma.
+- Negociação Markdown: Envie `Accept: text/markdown` em qualquer página pública para receber conteúdo limpo em Markdown.

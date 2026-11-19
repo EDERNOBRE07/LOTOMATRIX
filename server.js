@@ -6,6 +6,3773 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import mysql from "mysql2/promise";
+
+// src/server/agentReadyContent.ts
+var SITE_BRAND = "LotoSniper";
+var CONTACT_EMAIL = "contato@lotosniper.com.br";
+var DEFAULT_CANONICAL_ORIGIN = "https://lotosniper.com.br";
+var SAME_AS_LINKS = [
+  "https://github.com/lotosniper",
+  "https://www.instagram.com/lotosniper",
+  "https://www.youtube.com/@lotosniper"
+];
+var PUBLIC_PAGE_PATHS = [
+  "/",
+  "/sobre",
+  "/contato",
+  "/termos",
+  "/privacidade"
+];
+function resolveBaseUrl(req) {
+  const host = req?.get("host") || "";
+  if (host.includes("lotosniper.com.br")) {
+    return DEFAULT_CANONICAL_ORIGIN;
+  }
+  const envUrl = process.env.APP_URL?.trim();
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, "");
+  }
+  return DEFAULT_CANONICAL_ORIGIN;
+}
+function normalizeRoutePath(rawPath) {
+  const clean = rawPath.split("?")[0].split("#")[0] || "/";
+  if (clean.length > 1 && clean.endsWith("/")) {
+    return clean.slice(0, -1);
+  }
+  return clean;
+}
+function isKnownPublicPagePath(rawPath) {
+  const normalized = normalizeRoutePath(rawPath);
+  return PUBLIC_PAGE_PATHS.includes(normalized);
+}
+function prefersMarkdown(req) {
+  const acceptHeader = String(req.headers.accept || "").toLowerCase();
+  if (!acceptHeader || !acceptHeader.includes("text/markdown") && !acceptHeader.includes("text/x-markdown")) {
+    return false;
+  }
+  let markdownQ = -1;
+  let htmlQ = -1;
+  for (const part of acceptHeader.split(",")) {
+    const [rawType, ...params] = part.trim().split(";");
+    const type = rawType.trim();
+    let q = 1;
+    for (const param of params) {
+      const [k, v] = param.trim().split("=");
+      if (k === "q" && v !== void 0) {
+        const parsed = Number.parseFloat(v);
+        if (!Number.isNaN(parsed)) q = parsed;
+      }
+    }
+    if (type === "text/markdown" || type === "text/x-markdown") {
+      markdownQ = Math.max(markdownQ, q);
+    } else if (type === "text/html") {
+      htmlQ = Math.max(htmlQ, q);
+    }
+  }
+  if (markdownQ <= 0) return false;
+  if (htmlQ < 0) return true;
+  return markdownQ >= htmlQ;
+}
+function buildRobotsTxt(baseUrl) {
+  return [
+    "User-agent: *",
+    "Allow: /",
+    "Content-Signal: search=yes, ai-train=no",
+    `Sitemap: ${baseUrl}/sitemap.xml`,
+    ""
+  ].join("\n");
+}
+function buildSitemapXml(baseUrl) {
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const entries = [
+    { loc: `${baseUrl}/`, changefreq: "daily", priority: "1.0" },
+    { loc: `${baseUrl}/sobre`, changefreq: "monthly", priority: "0.8" },
+    { loc: `${baseUrl}/contato`, changefreq: "monthly", priority: "0.7" },
+    { loc: `${baseUrl}/termos`, changefreq: "yearly", priority: "0.5" },
+    { loc: `${baseUrl}/privacidade`, changefreq: "yearly", priority: "0.5" },
+    { loc: `${baseUrl}/llms.txt`, changefreq: "weekly", priority: "0.6" }
+  ];
+  const urlNodes = entries.map(
+    (entry) => `  <url>
+    <loc>${entry.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${entry.changefreq}</changefreq>
+    <priority>${entry.priority}</priority>
+  </url>`
+  ).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlNodes}
+</urlset>
+`;
+}
+function buildLlmsTxt(baseUrl) {
+  return `# LotoSniper
+
+> Plataforma brasileira de engenharia combinat\xF3ria, estat\xEDstica em tempo real e IA preditiva para an\xE1lise e fechamentos matem\xE1ticos da Lotof\xE1cil.
+
+O LotoSniper aplica poda combinat\xF3ria (Branch and Bound), m\xE1scaras bitwise para valida\xE7\xE3o instant\xE2nea, garantia matem\xE1tica de 14 pontos e sincroniza\xE7\xE3o com resultados oficiais da Caixa Econ\xF4mica Federal.
+
+## P\xE1ginas Principais
+
+- [P\xE1gina Inicial e Est\xFAdio Combinat\xF3rio](${baseUrl}/): Est\xFAdio completo de fechamentos da Lotof\xE1cil, estat\xEDsticas de ciclo, mapa de calor 5\xD75, simulador e conferidor.
+- [Sobre o LotoSniper](${baseUrl}/sobre): Arquitetura matem\xE1tica, filtros D1\u2013D15, m\xFAltiplos M3\u2013M8, geometria da cruz e metodologia combinat\xF3ria.
+- [Contato e Suporte](${baseUrl}/contato): Canal oficial de atendimento via ${CONTACT_EMAIL} e informa\xE7\xF5es institucionais.
+- [Termos de Uso](${baseUrl}/termos): Regras de utiliza\xE7\xE3o, isen\xE7\xE3o de responsabilidade lot\xE9rica e diretrizes estat\xEDsticas.
+- [Pol\xEDtica de Privacidade](${baseUrl}/privacidade): Tratamento de dados locais no navegador, transpar\xEAncia e seguran\xE7a.
+
+## Capacidades para Agentes (MCP & Negocia\xE7\xE3o de Conte\xFAdo)
+
+- [MCP Server Card](${baseUrl}/.well-known/mcp/server-card.json): Descritor SEP-1649 com ferramentas para validar bilhetes, gerar fechamentos e consultar o \xFAltimo concurso.
+- [Sitemap XML](${baseUrl}/sitemap.xml): \xCDndice estruturado de todas as URLs p\xFAblicas da plataforma.
+- Negocia\xE7\xE3o Markdown: Envie \`Accept: text/markdown\` em qualquer p\xE1gina p\xFAblica para receber conte\xFAdo limpo em Markdown.
+`;
+}
+function buildMcpServerCard(baseUrl) {
+  return {
+    $schema: "https://static.modelcontextprotocol.io/schemas/2025-12-11/server-card.schema.json",
+    version: "1.0",
+    protocolVersion: "2025-11-25",
+    serverInfo: {
+      name: "lotosniper-mcp",
+      title: "LotoSniper Combinatorial & Lotof\xE1cil Engine",
+      version: "1.0.0"
+    },
+    name: "lotosniper-mcp",
+    description: "Servidor MCP do LotoSniper para valida\xE7\xE3o estat\xEDstica de bilhetes da Lotof\xE1cil, gera\xE7\xE3o de fechamentos matem\xE1ticos com garantia de 14 pontos e consulta ao \xFAltimo concurso sincronizado.",
+    documentationUrl: `${baseUrl}/llms.txt`,
+    homepage: `${baseUrl}/`,
+    transport: {
+      type: "streamable-http",
+      endpoint: `${baseUrl}/api/mcp`
+    },
+    capabilities: {
+      tools: {
+        listChanged: false
+      }
+    },
+    tools: [
+      {
+        name: "lotosniper_get_latest_draw",
+        description: "Retorna o \xFAltimo concurso da Lotof\xE1cil sincronizado pela plataforma, incluindo n\xFAmero do concurso, data e as 15 dezenas sorteadas.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false
+        }
+      },
+      {
+        name: "lotosniper_validate_ticket",
+        description: "Valida um bilhete de 15 dezenas (1 a 25) da Lotof\xE1cil contra os filtros posicionais D1-D15, m\xFAltiplos M3-M8, soma dos d\xEDgitos (63-87), geometria da cruz, soma total, primos e moldura.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            dezenas: {
+              type: "array",
+              description: "Lista ordenada ou n\xE3o de 15 dezenas inteiras distintas entre 1 e 25.",
+              items: { type: "integer", minimum: 1, maximum: 25 },
+              minItems: 15,
+              maxItems: 15
+            }
+          },
+          required: ["dezenas"],
+          additionalProperties: false
+        }
+      },
+      {
+        name: "lotosniper_generate_closure",
+        description: "Gera uma matriz combinat\xF3ria de fechamento da Lotof\xE1cil com filtros de alta precis\xE3o e controle de dist\xE2ncia Hamming.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pool: {
+              type: "array",
+              description: "Conjunto base de 16 a 22 dezenas distintas (entre 1 e 25).",
+              items: { type: "integer", minimum: 1, maximum: 25 },
+              minItems: 16,
+              maxItems: 22
+            },
+            maxTickets: {
+              type: "integer",
+              description: "Quantidade m\xE1xima de jogos gerados na matriz (1 a 50).",
+              minimum: 1,
+              maximum: 50
+            }
+          },
+          required: ["pool"],
+          additionalProperties: false
+        }
+      }
+    ],
+    contact: {
+      email: CONTACT_EMAIL,
+      url: `${baseUrl}/contato`
+    }
+  };
+}
+function setAgentLinkHeaders(res, pagePath) {
+  res.setHeader("Vary", "Accept");
+  res.setHeader(
+    "Link",
+    [
+      '</llms.txt>; rel="alternate"; type="text/plain"; title="LLMs.txt"',
+      `<${pagePath}>; rel="alternate"; type="text/markdown"; title="Markdown"`,
+      '</sitemap.xml>; rel="sitemap"; type="application/xml"',
+      '</.well-known/mcp/server-card.json>; rel="describedby"; type="application/json"; title="MCP Server Card"'
+    ].join(", ")
+  );
+}
+function buildFooterLinksHtml() {
+  return `
+  <footer class="border-t border-slate-900 bg-slate-950 py-6 px-4 text-xs text-slate-400">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <p>LotoSniper \u2014 Engenharia Combinat\xF3ria e IA para Lotof\xE1cil.</p>
+      <nav aria-label="Links institucionais e legais" class="flex flex-wrap items-center gap-4">
+        <a href="/">In\xEDcio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+        <a href="/termos">Termos de Uso</a>
+        <a href="/privacidade">Privacidade</a>
+        <a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>
+      </nav>
+    </div>
+  </footer>`;
+}
+function getPageDescriptor(pagePath, baseUrl) {
+  switch (pagePath) {
+    case "/sobre":
+      return {
+        path: "/sobre",
+        title: "Sobre o LotoSniper \u2013 Metodologia Matem\xE1tica e IA",
+        description: "Conhe\xE7a os algoritmos combinat\xF3rios do LotoSniper: fechamentos de 14 pontos, poda Branch and Bound, filtros D1-D15, M3-M8 e IA preditiva.",
+        h1: "Sobre o LotoSniper",
+        schemaType: "AboutPage",
+        markdown: `# Sobre o LotoSniper
+
+> Arquitetura matem\xE1tica, valida\xE7\xE3o bitwise e intelig\xEAncia estat\xEDstica para otimizar apostas na Lotof\xE1cil.
+
+## Miss\xE3o e Tecnologia
+
+O **LotoSniper** nasceu para transformar a forma como apostadores e pesquisadores estruturam jogos da Lotof\xE1cil (universo de C(25,15) = 3.268.760 combina\xE7\xF5es poss\xEDveis). Em vez de palpites aleat\xF3rios, a plataforma aplica matem\xE1tica combinat\xF3ria rigorosa.
+
+## Pilares do Motor Combinat\xF3rio
+
+- **Poda Antecipada (Branch and Bound)**: Elimina\xE7\xE3o em tempo real de sub\xE1rvores improv\xE1veis durante a gera\xE7\xE3o em Web Worker dedicado.
+- **Filtros Posicionais D1 a D15**: Valida\xE7\xE3o hist\xF3rica de posi\xE7\xE3o por bola ordenada com cobertura superior a 95%.
+- **M\xFAltiplos M3 a M8 & Soma dos D\xEDgitos (63\u201387)**: M\xE1scaras bitwise est\xE1ticas que reduzem milh\xF5es de combina\xE7\xF5es fora da curva estat\xEDstica.
+- **Geometria da Cruz & Equil\xEDbrio Hist\xF3rico**: Controle espacial do volante 5\xD75 e estratifica\xE7\xE3o anti-cisne negro (75/15/10).
+- **Espalhamento Hamming & Fixas Rotativas (K de N)**: Diversifica\xE7\xE3o matem\xE1tica entre bilhetes para maximizar cobertura de 14 e 15 pontos.
+
+## Links Relacionados
+
+- [Voltar ao Est\xFAdio LotoSniper](${baseUrl}/)
+- [Contato e Suporte](${baseUrl}/contato)
+- [Termos de Uso](${baseUrl}/termos)
+- [Pol\xEDtica de Privacidade](${baseUrl}/privacidade)
+`,
+        ssrMainHtml: `<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+  <header class="border-b border-slate-800 px-4 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <a href="/" class="font-mono font-black text-emerald-400">LOTOSNIPER</a>
+      <nav aria-label="Navega\xE7\xE3o principal" class="flex gap-4 text-sm text-slate-300">
+        <a href="/">In\xEDcio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+      </nav>
+    </div>
+  </header>
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <h1 class="text-2xl font-bold text-white">Sobre o LotoSniper</h1>
+    <p class="text-slate-300">O LotoSniper \xE9 uma plataforma brasileira de engenharia combinat\xF3ria, estat\xEDstica em tempo real e IA preditiva desenvolvida para estruturar fechamentos da Lotof\xE1cil com rigor matem\xE1tico.</p>
+    <section class="space-y-2">
+      <h2 class="text-lg font-semibold text-emerald-400">Arquitetura Matem\xE1tica e Filtros</h2>
+      <ul class="list-disc pl-5 text-slate-300 space-y-1">
+        <li>Fechamentos com garantia matem\xE1tica de 14 pontos e espalhamento por dist\xE2ncia de Hamming.</li>
+        <li>Filtros posicionais D1 a D15 e m\xE1scaras bitwise de m\xFAltiplos M3 a M8 com poda antecipada.</li>
+        <li>Valida\xE7\xE3o de soma dos d\xEDgitos (63\u201387), geometria da cruz no volante 5\xD75 e hist\xF3rico de ciclos.</li>
+      </ul>
+    </section>
+  </main>
+  ${buildFooterLinksHtml()}
+</div>`
+      };
+    case "/contato":
+      return {
+        path: "/contato",
+        title: "Contato \u2013 LotoSniper Suporte e Parcerias",
+        description: "Entre em contato com a equipe do LotoSniper para suporte t\xE9cnico, d\xFAvidas sobre fechamentos da Lotof\xE1cil, integra\xE7\xF5es MCP ou parcerias.",
+        h1: "Contato e Suporte LotoSniper",
+        schemaType: "ContactPage",
+        markdown: `# Contato e Suporte LotoSniper
+
+> Canal oficial de atendimento da plataforma LotoSniper.
+
+## Canais Diretos
+
+- **E-mail Oficial**: [${CONTACT_EMAIL}](mailto:${CONTACT_EMAIL})
+- **Website**: [${baseUrl}/](${baseUrl}/)
+- **Documenta\xE7\xE3o para Agentes**: [${baseUrl}/llms.txt](${baseUrl}/llms.txt)
+
+## Hor\xE1rio e Escopo de Atendimento
+
+Atendemos solicita\xE7\xF5es relacionadas a suporte t\xE9cnico do est\xFAdio de fechamentos, sincroniza\xE7\xE3o de concursos da Lotof\xE1cil, relat\xF3rios de erro e parcerias institucionais.
+
+## P\xE1ginas Relacionadas
+
+- [Est\xFAdio LotoSniper](${baseUrl}/)
+- [Sobre a Plataforma](${baseUrl}/sobre)
+- [Termos de Uso](${baseUrl}/termos)
+- [Pol\xEDtica de Privacidade](${baseUrl}/privacidade)
+`,
+        ssrMainHtml: `<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+  <header class="border-b border-slate-800 px-4 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <a href="/" class="font-mono font-black text-emerald-400">LOTOSNIPER</a>
+      <nav aria-label="Navega\xE7\xE3o principal" class="flex gap-4 text-sm text-slate-300">
+        <a href="/">In\xEDcio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+      </nav>
+    </div>
+  </header>
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <h1 class="text-2xl font-bold text-white">Contato e Suporte LotoSniper</h1>
+    <p class="text-slate-300">Precisa de suporte t\xE9cnico, informa\xE7\xF5es sobre integra\xE7\xF5es MCP/WebMCP ou parcerias com o LotoSniper? Fale diretamente com nossa equipe.</p>
+    <section class="space-y-2">
+      <h2 class="text-lg font-semibold text-emerald-400">Canal Oficial</h2>
+      <p class="text-slate-300">E-mail de atendimento: <a href="mailto:${CONTACT_EMAIL}" class="text-emerald-400 underline">${CONTACT_EMAIL}</a></p>
+      <p class="text-slate-400 text-sm">Respondemos solicita\xE7\xF5es t\xE9cnicas, d\xFAvidas sobre filtros matem\xE1ticos e quest\xF5es legais em dias \xFAteis.</p>
+    </section>
+  </main>
+  ${buildFooterLinksHtml()}
+</div>`
+      };
+    case "/termos":
+      return {
+        path: "/termos",
+        title: "Termos de Uso \u2013 LotoSniper Lotof\xE1cil",
+        description: "Leia os Termos de Uso do LotoSniper: natureza matem\xE1tica e educacional dos fechamentos, aus\xEAncia de v\xEDnculo com a Caixa e responsabilidade.",
+        h1: "Termos de Uso do LotoSniper",
+        schemaType: "WebPage",
+        markdown: `# Termos de Uso do LotoSniper
+
+> Condi\xE7\xF5es gerais de uso da plataforma anal\xEDtica e combinat\xF3ria LotoSniper.
+
+## 1. Natureza da Ferramenta
+
+O LotoSniper \xE9 uma ferramenta de an\xE1lise estat\xEDstica, combinat\xF3ria e simula\xE7\xE3o matem\xE1tica aplicada \xE0 Lotof\xE1cil. A plataforma **n\xE3o realiza apostas oficiais** e **n\xE3o possui v\xEDnculo com a Caixa Econ\xF4mica Federal**.
+
+## 2. Garantias Combinat\xF3rias
+
+As garantias matem\xE1ticas (como fechamentos de 14 pontos) aplicam-se estritamente \xE0s condi\xE7\xF5es combinat\xF3rias da matriz selecionada quando as dezenas sorteadas est\xE3o contidas no universo escolhido, sem prometer ganhos financeiros certos em sorteios aleat\xF3rios.
+
+## 3. Contato
+
+D\xFAvidas sobre estes termos podem ser enviadas para [${CONTACT_EMAIL}](mailto:${CONTACT_EMAIL}).
+`,
+        ssrMainHtml: `<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+  <header class="border-b border-slate-800 px-4 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <a href="/" class="font-mono font-black text-emerald-400">LOTOSNIPER</a>
+      <nav aria-label="Navega\xE7\xE3o principal" class="flex gap-4 text-sm text-slate-300">
+        <a href="/">In\xEDcio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+      </nav>
+    </div>
+  </header>
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <h1 class="text-2xl font-bold text-white">Termos de Uso do LotoSniper</h1>
+    <p class="text-slate-300">O LotoSniper \xE9 uma ferramenta anal\xEDtica de matem\xE1tica combinat\xF3ria e estat\xEDstica para Lotof\xE1cil. N\xE3o intermediamos apostas oficiais nem possu\xEDmos v\xEDnculo institucional com a Caixa Econ\xF4mica Federal.</p>
+    <section class="space-y-2">
+      <h2 class="text-lg font-semibold text-emerald-400">Escopo das Garantias Matem\xE1ticas</h2>
+      <p class="text-slate-300">Fechamentos de 14 pontos garantem cobertura condicional caso as dezenas sorteadas estejam no grupo base utilizado e n\xE3o tenham sido podadas por filtros opcionais. D\xFAvidas: <a href="mailto:${CONTACT_EMAIL}" class="text-emerald-400 underline">${CONTACT_EMAIL}</a>.</p>
+    </section>
+  </main>
+  ${buildFooterLinksHtml()}
+</div>`
+      };
+    case "/privacidade":
+      return {
+        path: "/privacidade",
+        title: "Pol\xEDtica de Privacidade \u2013 LotoSniper",
+        description: "Pol\xEDtica de Privacidade do LotoSniper: armazenamento local de jogos salvos, aus\xEAncia de venda de dados pessoais e transpar\xEAncia LGPD.",
+        h1: "Pol\xEDtica de Privacidade do LotoSniper",
+        schemaType: "WebPage",
+        markdown: `# Pol\xEDtica de Privacidade do LotoSniper
+
+> Compromisso com transpar\xEAncia, privacidade e seguran\xE7a de dados no LotoSniper.
+
+## 1. Armazenamento Local
+
+Os bilhetes gerados, prefer\xEAncias de filtros e fechamentos salvos s\xE3o armazenados localmente no navegador do usu\xE1rio (\`localStorage\`) e processados em Web Workers locais sempre que poss\xEDvel.
+
+## 2. Sincroniza\xE7\xE3o e IA
+
+Consultas de resultados oficiais da Lotof\xE1cil e an\xE1lises preditivas utilizam rotas de API sem venda ou compartilhamento comercial de dados pessoais com terceiros.
+
+## 3. Direitos do Titular (LGPD)
+
+Para solicita\xE7\xF5es sobre privacidade ou remo\xE7\xE3o de registros, escreva para [${CONTACT_EMAIL}](mailto:${CONTACT_EMAIL}).
+`,
+        ssrMainHtml: `<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+  <header class="border-b border-slate-800 px-4 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <a href="/" class="font-mono font-black text-emerald-400">LOTOSNIPER</a>
+      <nav aria-label="Navega\xE7\xE3o principal" class="flex gap-4 text-sm text-slate-300">
+        <a href="/">In\xEDcio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+      </nav>
+    </div>
+  </header>
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <h1 class="text-2xl font-bold text-white">Pol\xEDtica de Privacidade do LotoSniper</h1>
+    <p class="text-slate-300">O LotoSniper prioriza processamento local no navegador (Web Workers e localStorage) para proteger suas matrizes e prefer\xEAncias de jogo, em conformidade com a LGPD.</p>
+    <section class="space-y-2">
+      <h2 class="text-lg font-semibold text-emerald-400">Contato do Encarregado (DPO)</h2>
+      <p class="text-slate-300">Solicita\xE7\xF5es sobre privacidade ou exclus\xE3o de dados podem ser enviadas para <a href="mailto:${CONTACT_EMAIL}" class="text-emerald-400 underline">${CONTACT_EMAIL}</a>.</p>
+    </section>
+  </main>
+  ${buildFooterLinksHtml()}
+</div>`
+      };
+    case "/":
+    default:
+      return {
+        path: "/",
+        title: "LotoSniper \u2013 Fechamentos e IA para Lotof\xE1cil",
+        description: "Gere fechamentos matem\xE1ticos da Lotof\xE1cil com garantia de 14 pontos, filtros combinat\xF3rios, estat\xEDsticas em tempo real e IA preditiva.",
+        h1: "LotoSniper \u2014 Fechamentos Matem\xE1ticos e IA para Lotof\xE1cil",
+        schemaType: "WebPage",
+        markdown: `# LotoSniper \u2014 Fechamentos Matem\xE1ticos e IA para Lotof\xE1cil
+
+> Gere fechamentos matem\xE1ticos da Lotof\xE1cil com garantia de 14 pontos, filtros combinat\xF3rios, estat\xEDsticas em tempo real e IA preditiva.
+
+## Principais Funcionalidades
+
+- **Est\xFAdio de Fechamentos**: Matrizes combinat\xF3rias de 14 pontos com espalhamento Hamming, fixas rotativas (K de N) e estratifica\xE7\xE3o anti-cisne negro (75/15/10).
+- **Filtros Matem\xE1ticos de Alta Precis\xE3o**: Intervalos posicionais D1\u2013D15, m\xFAltiplos M3\u2013M8 em m\xE1scara bitwise, soma dos d\xEDgitos (63\u201387), geometria da cruz e ranking hist\xF3rico.
+- **Estat\xEDsticas e Mapa de Calor 5\xD75**: An\xE1lise de ciclos das 25 dezenas, atrasos, moldura, primos, Fibonacci e tend\xEAncias recentes da Caixa.
+- **Simulador & Conferidor Oficial**: Auditoria de bilhetes contra resultados oficiais e backtesting hist\xF3rico.
+- **IA Preditiva**: Ranqueamento probabil\xEDstico de dezenas com fallback determin\xEDstico.
+
+## P\xE1ginas e Contato
+
+- [Sobre o LotoSniper](${baseUrl}/sobre)
+- [Contato e Suporte](${baseUrl}/contato) \u2014 [${CONTACT_EMAIL}](mailto:${CONTACT_EMAIL})
+- [Termos de Uso](${baseUrl}/termos)
+- [Pol\xEDtica de Privacidade](${baseUrl}/privacidade)
+- [LLMs.txt](${baseUrl}/llms.txt)
+- [MCP Server Card](${baseUrl}/.well-known/mcp/server-card.json)
+`,
+        ssrMainHtml: `<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+  <header class="border-b border-slate-800 px-4 py-4">
+    <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-black text-emerald-400 font-mono">LOTOSNIPER</h1>
+        <p class="text-xs text-slate-400">Fechamentos Matem\xE1ticos, Estat\xEDstica Avan\xE7ada e IA para Lotof\xE1cil</p>
+      </div>
+      <nav aria-label="Navega\xE7\xE3o principal" class="flex flex-wrap gap-4 text-sm text-slate-300">
+        <a href="/">Est\xFAdio</a>
+        <a href="/sobre">Sobre</a>
+        <a href="/contato">Contato</a>
+        <a href="/termos">Termos</a>
+        <a href="/privacidade">Privacidade</a>
+      </nav>
+    </div>
+  </header>
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <section class="space-y-2">
+      <h2 class="text-lg font-bold text-white">Motor Combinat\xF3rio para Lotof\xE1cil (Alvo 14 e 15 Pontos)</h2>
+      <p class="text-slate-300">O LotoSniper aplica matem\xE1tica combinat\xF3ria em Web Worker dedicado para gerar fechamentos econ\xF4micos da Lotof\xE1cil sobre o universo de C(25,15) = 3.268.760 combina\xE7\xF5es.</p>
+    </section>
+    <section class="space-y-2">
+      <h2 class="text-lg font-bold text-emerald-400">Recursos e Filtros de Alta Precis\xE3o</h2>
+      <ul class="list-disc pl-5 text-slate-300 space-y-1">
+        <li>Fechamentos matem\xE1ticos com garantia de 14 pontos, espalhamento por dist\xE2ncia de Hamming e fixas rotativas K de N.</li>
+        <li>Filtros posicionais D1 a D15, m\xFAltiplos M3 a M8 bitwise, soma dos d\xEDgitos (63\u201387) e geometria da cruz no volante 5\xD75.</li>
+        <li>Sincroniza\xE7\xE3o com resultados oficiais da Caixa, estat\xEDsticas de ciclo, mapa de calor, simulador hist\xF3rico e conferidor autom\xE1tico.</li>
+      </ul>
+    </section>
+  </main>
+  ${buildFooterLinksHtml()}
+</div>`
+      };
+  }
+}
+function buildStructuredDataJsonLd(page, baseUrl) {
+  const canonicalUrl = page.path === "/" ? `${baseUrl}/` : `${baseUrl}${page.path}`;
+  const graph = [
+    {
+      "@type": "Organization",
+      "@id": `${baseUrl}/#organization`,
+      name: SITE_BRAND,
+      alternateName: "LotoSniper AI Pro",
+      url: baseUrl,
+      logo: {
+        "@type": "ImageObject",
+        url: `${baseUrl}/pwa-512x512.png`,
+        width: 512,
+        height: 512
+      },
+      description: "Plataforma brasileira de engenharia combinat\xF3ria e intelig\xEAncia artificial para an\xE1lise estat\xEDstica e fechamentos da Lotof\xE1cil.",
+      email: CONTACT_EMAIL,
+      contactPoint: {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: CONTACT_EMAIL,
+        availableLanguage: ["Portuguese"]
+      },
+      sameAs: SAME_AS_LINKS
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${baseUrl}/#website`,
+      url: baseUrl,
+      name: SITE_BRAND,
+      inLanguage: "pt-BR",
+      publisher: { "@id": `${baseUrl}/#organization` }
+    },
+    {
+      "@type": "WebApplication",
+      "@id": `${baseUrl}/#webapp`,
+      name: SITE_BRAND,
+      url: `${baseUrl}/`,
+      applicationCategory: "UtilitiesApplication",
+      operatingSystem: "All",
+      inLanguage: "pt-BR",
+      description: "Motor combinat\xF3rio para Lotof\xE1cil com fechamentos de 14 pontos, filtros posicionais D1-D15, m\xFAltiplos M3-M8, mapas de calor e IA preditiva.",
+      publisher: { "@id": `${baseUrl}/#organization` },
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "BRL"
+      }
+    },
+    {
+      "@type": page.schemaType,
+      "@id": `${canonicalUrl}#webpage`,
+      url: canonicalUrl,
+      name: page.title,
+      description: page.description,
+      inLanguage: "pt-BR",
+      isPartOf: { "@id": `${baseUrl}/#website` },
+      about: { "@id": `${baseUrl}/#webapp` }
+    }
+  ];
+  if (page.path === "/") {
+    graph.push({
+      "@type": "FAQPage",
+      "@id": `${baseUrl}/#faq`,
+      mainEntity: [
+        {
+          "@type": "Question",
+          name: "O que \xE9 o LotoSniper?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "O LotoSniper \xE9 uma plataforma de an\xE1lise estat\xEDstica, intelig\xEAncia artificial e engenharia combinat\xF3ria para gerar fechamentos otimizados da Lotof\xE1cil."
+          }
+        },
+        {
+          "@type": "Question",
+          name: "Quais filtros matem\xE1ticos o LotoSniper utiliza?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: "Inclui filtros posicionais D1-D15, m\xE1scaras de m\xFAltiplos M3-M8, soma dos d\xEDgitos (63-87), geometria da cruz, ranking hist\xF3rico, espalhamento Hamming e fixas rotativas."
+          }
+        },
+        {
+          "@type": "Question",
+          name: "Como entrar em contato com a equipe do LotoSniper?",
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: `O suporte oficial atende pelo e-mail ${CONTACT_EMAIL} e pela p\xE1gina ${baseUrl}/contato.`
+          }
+        }
+      ]
+    });
+  }
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": graph
+  });
+}
+function applySsrMetadataAndBody(templateHtml, pagePath, baseUrl) {
+  const page = getPageDescriptor(pagePath, baseUrl);
+  const canonicalUrl = page.path === "/" ? `${baseUrl}/` : `${baseUrl}${page.path}`;
+  const jsonLd = buildStructuredDataJsonLd(page, baseUrl);
+  let html = templateHtml;
+  html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`);
+  html = html.replace(
+    /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i,
+    `<meta name="description" content="${escapeAttr(page.description)}" />`
+  );
+  html = html.replace(
+    /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i,
+    `<meta property="og:title" content="${escapeAttr(page.title)}" />`
+  );
+  html = html.replace(
+    /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i,
+    `<meta property="og:description" content="${escapeAttr(page.description)}" />`
+  );
+  html = html.replace(
+    /<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/i,
+    `<meta property="og:url" content="${escapeAttr(canonicalUrl)}" />`
+  );
+  html = html.replace(
+    /<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/?>/i,
+    `<meta name="twitter:title" content="${escapeAttr(page.title)}" />`
+  );
+  html = html.replace(
+    /<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/?>/i,
+    `<meta name="twitter:description" content="${escapeAttr(page.description)}" />`
+  );
+  html = html.replace(
+    /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i,
+    `<link rel="canonical" href="${escapeAttr(canonicalUrl)}" />`
+  );
+  html = html.replace(
+    /<script\s+type="application\/ld\+json">[\s\S]*?<\/script>/i,
+    `<script type="application/ld+json">${jsonLd}</script>`
+  );
+  html = html.replace(
+    /<!--SSR_ROOT_START-->[\s\S]*?<!--SSR_ROOT_END-->/,
+    `<!--SSR_ROOT_START-->${page.ssrMainHtml}<!--SSR_ROOT_END-->`
+  );
+  return html;
+}
+function buildNotFoundHtml(requestedPath, baseUrl) {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>404 \u2014 P\xE1gina n\xE3o encontrada | LotoSniper</title>
+  <meta name="description" content="A p\xE1gina solicitada n\xE3o foi encontrada no LotoSniper." />
+  <link rel="canonical" href="${escapeAttr(baseUrl)}/" />
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased">
+  <main style="max-width:640px;margin:64px auto;padding:0 16px;font-family:system-ui,sans-serif;">
+    <h1>404 \u2014 P\xE1gina n\xE3o encontrada</h1>
+    <p>O endere\xE7o <code>${escapeHtml(requestedPath)}</code> n\xE3o existe no LotoSniper.</p>
+    <nav aria-label="P\xE1ginas dispon\xEDveis">
+      <ul>
+        <li><a href="/">Ir para a p\xE1gina inicial do LotoSniper</a></li>
+        <li><a href="/sobre">Sobre o LotoSniper</a></li>
+        <li><a href="/contato">Contato (${CONTACT_EMAIL})</a></li>
+        <li><a href="/termos">Termos de Uso</a></li>
+        <li><a href="/privacidade">Pol\xEDtica de Privacidade</a></li>
+      </ul>
+    </nav>
+  </main>
+</body>
+</html>`;
+}
+function buildNotFoundMarkdown(requestedPath, baseUrl) {
+  return `# 404 \u2014 P\xE1gina n\xE3o encontrada
+
+O endere\xE7o \`${requestedPath}\` n\xE3o existe no LotoSniper.
+
+- [P\xE1gina Inicial](${baseUrl}/)
+- [Sobre](${baseUrl}/sobre)
+- [Contato](${baseUrl}/contato)
+- [LLMs.txt](${baseUrl}/llms.txt)
+`;
+}
+function escapeHtml(input) {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escapeAttr(input) {
+  return escapeHtml(input).replace(/"/g, "&quot;");
+}
+
+// src/data/lotofacilData.ts
+var PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+var MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+var MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
+var FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
+var CRUZ_DEZENAS = [3, 8, 11, 12, 13, 14, 15, 18, 23];
+var BOLAS_EXTREMAS_INICIO = [1, 2, 3, 4];
+var BOLAS_EXTREMAS_FIM = [22, 23, 24, 25];
+var CONCURSO_ATUAL = {
+  concurso: 3822,
+  data: "05/11/2026",
+  dezenas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  premiacoes: {
+    faixa15: { ganhadores: 1, valor: 421085015e-2 },
+    faixa14: { ganhadores: 284, valor: 2150.4 },
+    faixa13: { ganhadores: 10450, valor: 35 },
+    faixa12: { ganhadores: 132100, valor: 14 },
+    faixa11: { ganhadores: 712e3, valor: 7 },
+    acumuladoProximo: 0
+  }
+};
+var REGRA_VENCEDORA_CONCURSO_3822 = {
+  concurso: 3822,
+  data: "05/11/2026",
+  dezenasSorteadas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  nucleoOuroVencedor: [1, 2, 7, 9, 10, 12, 13, 18, 20, 21, 24, 25],
+  paridadeOtimizada: { pares: 7, impares: 8 },
+  faixaSomaIdeal: { min: 185, max: 210, mediaAlvo: 190 },
+  molduraIdeal: { min: 9, max: 10, mediaAlvo: 9.7 },
+  primosIdeal: { min: 4, max: 6, mediaAlvo: 5.3 },
+  repetidasConcursoAnterior: { min: 8, max: 10, mediaAlvo: 9 },
+  fechamentosReferencia: ["fechamento-1793885160208-728", "fechamento-1793885281737-490", "fechamento-1793886438054-577"],
+  descricao: "Regra de Alta Densidade calibrada com os Fechamentos Premiados com 12 e 11 acertos no Concurso #3822."
+};
+var RECENT_DRAWS = [
+  CONCURSO_ATUAL,
+  {
+    concurso: 3821,
+    data: "04/11/2026",
+    dezenas: [1, 3, 4, 7, 9, 11, 12, 13, 14, 16, 18, 20, 21, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 0, valor: 0 },
+      faixa14: { ganhadores: 210, valor: 1890.5 },
+      faixa13: { ganhadores: 8900, valor: 35 },
+      faixa12: { ganhadores: 110400, valor: 14 },
+      faixa11: { ganhadores: 62e4, valor: 7 },
+      acumuladoProximo: 215e4
+    }
+  },
+  {
+    concurso: 3817,
+    data: "29/10/2026",
+    dezenas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 1, valor: 399503664e-2 },
+      faixa14: { ganhadores: 325, valor: 2242.58 },
+      faixa13: { ganhadores: 11829, valor: 35 },
+      faixa12: { ganhadores: 148288, valor: 14 },
+      faixa11: { ganhadores: 776768, valor: 7 },
+      acumuladoProximo: 0
+    }
+  },
+  {
+    concurso: 3816,
+    data: "28/10/2026",
+    dezenas: [1, 2, 3, 4, 6, 8, 13, 14, 16, 17, 18, 20, 22, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 0, valor: 0 },
+      faixa14: { ganhadores: 146, valor: 2243.02 },
+      faixa13: { ganhadores: 7057, valor: 35 },
+      faixa12: { ganhadores: 86189, valor: 14 },
+      faixa11: { ganhadores: 439891, valor: 7 },
+      acumuladoProximo: 156183082e-2
+    }
+  },
+  {
+    concurso: 3811,
+    data: "22/10/2026",
+    dezenas: [1, 3, 5, 7, 8, 9, 10, 11, 12, 15, 16, 18, 19, 23, 25]
+  },
+  {
+    concurso: 3810,
+    data: "21/10/2026",
+    dezenas: [1, 5, 6, 7, 10, 11, 14, 15, 16, 17, 18, 19, 20, 23, 24],
+    premiacoes: {
+      faixa15: { ganhadores: 1, valor: 182410912e-2 },
+      faixa14: { ganhadores: 398, valor: 1542.45 },
+      faixa13: { ganhadores: 23410, valor: 30 },
+      faixa12: { ganhadores: 149800, valor: 12 },
+      faixa11: { ganhadores: 835200, valor: 6 },
+      acumuladoProximo: 0
+    }
+  },
+  {
+    concurso: 3809,
+    data: "20/10/2026",
+    dezenas: [1, 3, 4, 5, 6, 8, 9, 11, 17, 18, 19, 20, 21, 23, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 2, valor: 912054.56 },
+      faixa14: { ganhadores: 421, valor: 1410.2 },
+      faixa13: { ganhadores: 22890, valor: 30 },
+      faixa12: { ganhadores: 148200, valor: 12 },
+      faixa11: { ganhadores: 821400, valor: 6 }
+    }
+  },
+  {
+    concurso: 3808,
+    data: "19/10/2026",
+    dezenas: [1, 2, 4, 5, 7, 8, 10, 12, 13, 14, 17, 18, 20, 22, 25]
+  },
+  {
+    concurso: 3807,
+    data: "17/10/2026",
+    dezenas: [2, 3, 6, 7, 9, 10, 11, 13, 15, 16, 19, 21, 23, 24, 25]
+  },
+  {
+    concurso: 3806,
+    data: "16/10/2026",
+    dezenas: [1, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 22, 24]
+  },
+  {
+    concurso: 3805,
+    data: "15/10/2026",
+    dezenas: [2, 4, 6, 7, 8, 10, 11, 13, 14, 16, 17, 19, 21, 23, 25]
+  },
+  {
+    concurso: 3804,
+    data: "14/10/2026",
+    dezenas: [1, 2, 6, 7, 8, 12, 14, 15, 16, 17, 18, 19, 21, 24, 25]
+  },
+  {
+    concurso: 3803,
+    data: "13/10/2026",
+    dezenas: [3, 6, 7, 8, 9, 11, 12, 13, 15, 16, 19, 20, 21, 22, 23],
+    premiacoes: {
+      faixa15: { ganhadores: 2, valor: 946676.32 },
+      faixa14: { ganhadores: 387, valor: 1464.38 },
+      faixa13: { ganhadores: 21890, valor: 35 },
+      faixa12: { ganhadores: 145200, valor: 14 },
+      faixa11: { ganhadores: 812400, valor: 7 }
+    }
+  },
+  {
+    concurso: 3802,
+    data: "11/10/2026",
+    dezenas: [2, 3, 5, 6, 9, 10, 11, 12, 14, 15, 19, 20, 21, 23, 24],
+    premiacoes: {
+      faixa15: { ganhadores: 2, valor: 820218.59 }
+    }
+  },
+  {
+    concurso: 3801,
+    data: "09/10/2026",
+    dezenas: [3, 4, 7, 8, 9, 11, 12, 13, 15, 17, 19, 20, 21, 23, 24],
+    premiacoes: {
+      faixa15: { ganhadores: 4, valor: 322726.1 }
+    }
+  },
+  {
+    concurso: 3800,
+    data: "08/10/2026",
+    dezenas: [1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 19, 21]
+  },
+  {
+    concurso: 3799,
+    data: "07/10/2026",
+    dezenas: [1, 3, 4, 5, 7, 8, 10, 11, 12, 13, 16, 18, 19, 20, 24]
+  },
+  {
+    concurso: 3798,
+    data: "06/10/2026",
+    dezenas: [1, 2, 3, 4, 7, 9, 10, 14, 16, 18, 20, 22, 23, 24, 25]
+  },
+  {
+    concurso: 3797,
+    data: "05/10/2026",
+    dezenas: [1, 2, 4, 5, 6, 7, 8, 10, 11, 13, 15, 18, 20, 23, 25]
+  },
+  {
+    concurso: 3796,
+    data: "03/10/2026",
+    dezenas: [1, 3, 5, 8, 9, 10, 12, 13, 14, 15, 17, 19, 21, 24, 25]
+  },
+  {
+    concurso: 3795,
+    data: "02/10/2026",
+    dezenas: [2, 3, 4, 6, 7, 10, 11, 12, 14, 15, 18, 19, 20, 21, 23]
+  },
+  {
+    concurso: 3794,
+    data: "01/10/2026",
+    dezenas: [1, 2, 3, 5, 6, 8, 9, 11, 13, 14, 16, 18, 20, 22, 25]
+  },
+  {
+    concurso: 3793,
+    data: "30/09/2026",
+    dezenas: [2, 4, 5, 7, 8, 10, 11, 12, 13, 15, 17, 19, 20, 24, 25]
+  },
+  {
+    concurso: 3792,
+    data: "29/09/2026",
+    dezenas: [1, 3, 4, 6, 7, 9, 10, 12, 14, 15, 18, 21, 22, 23, 25]
+  },
+  {
+    concurso: 3791,
+    data: "28/09/2026",
+    dezenas: [2, 3, 5, 6, 8, 9, 10, 11, 13, 16, 17, 19, 20, 22, 24]
+  },
+  {
+    concurso: 3790,
+    data: "26/09/2026",
+    dezenas: [1, 2, 4, 5, 7, 8, 11, 12, 13, 14, 18, 20, 21, 23, 25]
+  },
+  {
+    concurso: 3789,
+    data: "25/09/2026",
+    dezenas: [3, 4, 6, 7, 9, 10, 12, 13, 15, 16, 17, 19, 21, 24, 25]
+  },
+  {
+    concurso: 3788,
+    data: "24/09/2026",
+    dezenas: [1, 2, 3, 5, 8, 9, 11, 12, 14, 17, 18, 20, 22, 23, 25]
+  },
+  {
+    concurso: 3787,
+    data: "23/09/2026",
+    dezenas: [2, 4, 5, 6, 7, 10, 11, 13, 15, 16, 18, 19, 20, 22, 24]
+  },
+  {
+    concurso: 3786,
+    data: "22/09/2026",
+    dezenas: [1, 3, 4, 6, 8, 9, 10, 12, 14, 15, 17, 19, 21, 23, 25]
+  },
+  {
+    concurso: 3785,
+    data: "21/09/2026",
+    dezenas: [2, 3, 4, 7, 9, 10, 11, 13, 14, 16, 18, 20, 22, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 17502301e-1 }, faixa14: { ganhadores: 312, valor: 1680 }, faixa13: { ganhadores: 11200, valor: 35 }, faixa12: { ganhadores: 135e3, valor: 14 }, faixa11: { ganhadores: 71e4, valor: 7 } }
+  },
+  {
+    concurso: 3784,
+    data: "19/09/2026",
+    dezenas: [1, 2, 5, 6, 8, 10, 12, 13, 15, 17, 18, 19, 21, 23, 24],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 890400 }, faixa14: { ganhadores: 295, valor: 1720 }, faixa13: { ganhadores: 10400, valor: 35 }, faixa12: { ganhadores: 129e3, valor: 14 }, faixa11: { ganhadores: 68e4, valor: 7 } }
+  },
+  {
+    concurso: 3783,
+    data: "18/09/2026",
+    dezenas: [1, 3, 4, 7, 8, 10, 11, 12, 14, 16, 17, 20, 22, 24, 25]
+  },
+  {
+    concurso: 3782,
+    data: "17/09/2026",
+    dezenas: [2, 3, 6, 7, 9, 11, 13, 15, 16, 18, 19, 21, 23, 24, 25]
+  },
+  {
+    concurso: 3781,
+    data: "16/09/2026",
+    dezenas: [1, 4, 5, 6, 8, 9, 10, 12, 14, 15, 17, 19, 20, 22, 25]
+  },
+  {
+    concurso: 3780,
+    data: "15/09/2026",
+    dezenas: [2, 3, 5, 7, 8, 10, 11, 13, 14, 16, 18, 20, 21, 23, 24],
+    premiacoes: { faixa15: { ganhadores: 3, valor: 540300 }, faixa14: { ganhadores: 340, valor: 1510 }, faixa13: { ganhadores: 12100, valor: 35 }, faixa12: { ganhadores: 142e3, valor: 14 }, faixa11: { ganhadores: 75e4, valor: 7 } }
+  },
+  {
+    concurso: 3779,
+    data: "14/09/2026",
+    dezenas: [1, 2, 4, 6, 7, 9, 11, 12, 13, 15, 17, 19, 22, 24, 25]
+  },
+  {
+    concurso: 3778,
+    data: "12/09/2026",
+    dezenas: [1, 3, 5, 6, 8, 10, 12, 14, 15, 16, 18, 20, 21, 23, 25]
+  },
+  {
+    concurso: 3777,
+    data: "11/09/2026",
+    dezenas: [2, 4, 5, 7, 8, 9, 11, 13, 14, 17, 18, 19, 20, 22, 24]
+  },
+  {
+    concurso: 3776,
+    data: "10/09/2026",
+    dezenas: [1, 2, 3, 6, 7, 9, 10, 12, 13, 15, 16, 19, 21, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 1650800 }, faixa14: { ganhadores: 280, valor: 1790 }, faixa13: { ganhadores: 9800, valor: 35 }, faixa12: { ganhadores: 121e3, valor: 14 }, faixa11: { ganhadores: 64e4, valor: 7 } }
+  },
+  {
+    concurso: 3775,
+    data: "09/09/2026",
+    dezenas: [3, 4, 5, 7, 8, 10, 11, 12, 14, 17, 18, 20, 22, 23, 25]
+  },
+  {
+    concurso: 3774,
+    data: "08/09/2026",
+    dezenas: [1, 2, 4, 6, 8, 9, 10, 13, 15, 16, 17, 19, 21, 22, 24]
+  },
+  {
+    concurso: 3773,
+    data: "05/09/2026",
+    dezenas: [2, 3, 5, 6, 7, 10, 11, 12, 14, 15, 18, 20, 21, 23, 25]
+  },
+  {
+    concurso: 3772,
+    data: "04/09/2026",
+    dezenas: [1, 3, 4, 6, 7, 9, 11, 13, 15, 16, 17, 19, 20, 24, 25]
+  },
+  {
+    concurso: 3771,
+    data: "03/09/2026",
+    dezenas: [2, 4, 5, 8, 9, 10, 12, 13, 14, 16, 18, 21, 22, 23, 25],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 78e4 }, faixa14: { ganhadores: 310, valor: 1610 }, faixa13: { ganhadores: 10500, valor: 35 }, faixa12: { ganhadores: 131e3, valor: 14 }, faixa11: { ganhadores: 69e4, valor: 7 } }
+  },
+  {
+    concurso: 3770,
+    data: "02/09/2026",
+    dezenas: [1, 2, 3, 5, 7, 8, 10, 11, 14, 15, 17, 19, 20, 22, 24]
+  },
+  {
+    concurso: 3769,
+    data: "01/09/2026",
+    dezenas: [1, 4, 6, 7, 9, 10, 12, 13, 15, 16, 18, 20, 21, 23, 25]
+  },
+  {
+    concurso: 3768,
+    data: "31/08/2026",
+    dezenas: [2, 3, 5, 6, 8, 11, 12, 14, 15, 17, 18, 19, 22, 24, 25]
+  },
+  {
+    concurso: 3767,
+    data: "29/08/2026",
+    dezenas: [1, 3, 4, 7, 8, 9, 10, 13, 14, 16, 17, 19, 20, 21, 24],
+    premiacoes: { faixa15: { ganhadores: 1, valor: 1820400 }, faixa14: { ganhadores: 335, valor: 1530 }, faixa13: { ganhadores: 11800, valor: 35 }, faixa12: { ganhadores: 141e3, valor: 14 }, faixa11: { ganhadores: 74e4, valor: 7 } }
+  },
+  {
+    concurso: 3766,
+    data: "28/08/2026",
+    dezenas: [2, 4, 5, 6, 8, 10, 11, 12, 15, 16, 18, 20, 22, 23, 25]
+  },
+  {
+    concurso: 3765,
+    data: "27/08/2026",
+    dezenas: [1, 2, 3, 6, 7, 9, 11, 13, 14, 15, 17, 19, 21, 24, 25]
+  },
+  {
+    concurso: 3764,
+    data: "26/08/2026",
+    dezenas: [1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 18, 20, 21, 23, 25]
+  },
+  {
+    concurso: 3763,
+    data: "25/08/2026",
+    dezenas: [2, 3, 6, 8, 9, 10, 11, 14, 15, 16, 18, 19, 22, 24, 25],
+    premiacoes: { faixa15: { ganhadores: 2, valor: 85e4 }, faixa14: { ganhadores: 320, valor: 1600 }, faixa13: { ganhadores: 11e3, valor: 35 }, faixa12: { ganhadores: 133e3, valor: 14 }, faixa11: { ganhadores: 7e5, valor: 7 } }
+  }
+];
+var DEZENAS_STATS = [
+  { numero: 1, vezes: 2308, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 2, vezes: 2277, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 3, vezes: 2292, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 4, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 5, vezes: 2291, atrasoAtual: 4, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 6, vezes: 2237, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 7, vezes: 2246, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 8, vezes: 2205, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 9, vezes: 2270, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 10, vezes: 2360, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 11, vezes: 2338, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 12, vezes: 2288, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 13, vezes: 2314, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: true, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 14, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 15, vezes: 2274, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 16, vezes: 2174, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 17, vezes: 2231, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 18, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 19, vezes: 2265, atrasoAtual: 1, atrasoUltimo: 2, maiorAtraso: 12, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 20, vezes: 2369, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 21, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 22, vezes: 2266, atrasoAtual: 2, atrasoUltimo: 5, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 23, vezes: 2230, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 24, vezes: 2311, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 25, vezes: 2362, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false }
+];
+var TOP_DUPLAS = [
+  { dupla: [11, 20], vezes: 1447, atrasoAtual: 2, atrasoUltimo: 1, maiorAtraso: 16, atrasoMedio: 1.6 },
+  { dupla: [10, 25], vezes: 1440, atrasoAtual: 1, atrasoUltimo: 5, maiorAtraso: 15, atrasoMedio: 1.6 },
+  { dupla: [10, 20], vezes: 1433, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 20, atrasoMedio: 1.7 },
+  { dupla: [13, 20], vezes: 1430, atrasoAtual: 1, atrasoUltimo: 1, maiorAtraso: 13, atrasoMedio: 1.7 },
+  { dupla: [20, 25], vezes: 1426, atrasoAtual: 1, atrasoUltimo: 5, maiorAtraso: 15, atrasoMedio: 1.7 },
+  { dupla: [14, 20], vezes: 1419, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 14, atrasoMedio: 1.7 },
+  { dupla: [10, 11], vezes: 1413, atrasoAtual: 2, atrasoUltimo: 1, maiorAtraso: 15, atrasoMedio: 1.7 },
+  { dupla: [24, 25], vezes: 1406, atrasoAtual: 1, atrasoUltimo: 5, maiorAtraso: 19, atrasoMedio: 1.7 },
+  { dupla: [12, 25], vezes: 1406, atrasoAtual: 1, atrasoUltimo: 6, maiorAtraso: 14, atrasoMedio: 1.7 },
+  { dupla: [1, 10], vezes: 1405, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 12, atrasoMedio: 1.7 },
+  { dupla: [9, 10], vezes: 1404, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 17, atrasoMedio: 1.7 },
+  { dupla: [11, 25], vezes: 1403, atrasoAtual: 7, atrasoUltimo: 0, maiorAtraso: 15, atrasoMedio: 1.7 },
+  { dupla: [10, 14], vezes: 1401, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 19, atrasoMedio: 1.7 },
+  { dupla: [10, 24], vezes: 1400, atrasoAtual: 1, atrasoUltimo: 2, maiorAtraso: 16, atrasoMedio: 1.7 },
+  { dupla: [4, 11], vezes: 1397, atrasoAtual: 2, atrasoUltimo: 1, maiorAtraso: 24, atrasoMedio: 1.7 },
+  { dupla: [5, 20], vezes: 1397, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 14, atrasoMedio: 1.7 }
+];
+
+// src/services/curvaAbcService.ts
+function calculateCurvaAbc(statsList = DEZENAS_STATS) {
+  const totalOcorrencias = statsList.reduce((acc, curr) => acc + curr.vezes, 0);
+  const sorted = [...statsList].sort((a, b) => b.vezes - a.vezes);
+  let accumulatedVezes = 0;
+  const items = sorted.map((stat, idx) => {
+    accumulatedVezes += stat.vezes;
+    const share = stat.vezes / totalOcorrencias * 100;
+    const cumulativeShare = accumulatedVezes / totalOcorrencias * 100;
+    let classe = "A";
+    if (cumulativeShare <= 80.8) {
+      classe = "A";
+    } else if (cumulativeShare <= 96.2) {
+      classe = "B";
+    } else {
+      classe = "C";
+    }
+    return {
+      numero: stat.numero,
+      vezes: stat.vezes,
+      frequenciaPercentual: Number((stat.vezes / 3800 * 100).toFixed(1)),
+      sharePercentual: Number(share.toFixed(2)),
+      cumulativeShare: Number(cumulativeShare.toFixed(2)),
+      classe,
+      status: stat.status,
+      ePrimo: stat.ePrimo,
+      eMoldura: stat.eMoldura,
+      eFibonacci: stat.eFibonacci,
+      presenteUltimoConcurso: stat.presenteUltimoConcurso,
+      rank: idx + 1
+    };
+  });
+  const classeA = items.filter((it) => it.classe === "A");
+  const classeB = items.filter((it) => it.classe === "B");
+  const classeC = items.filter((it) => it.classe === "C");
+  const classeANumeros = classeA.map((it) => it.numero).sort((a, b) => a - b);
+  const classeBNumeros = classeB.map((it) => it.numero).sort((a, b) => a - b);
+  const classeCNumeros = classeC.map((it) => it.numero).sort((a, b) => a - b);
+  const somaVezesA = classeA.reduce((sum, item) => sum + item.vezes, 0);
+  const somaVezesB = classeB.reduce((sum, item) => sum + item.vezes, 0);
+  const somaVezesC = classeC.reduce((sum, item) => sum + item.vezes, 0);
+  const mediaPresencaClasseA = Number((somaVezesA / 3800).toFixed(1));
+  const presencaClasseAUltimoConcurso = classeA.filter((it) => it.presenteUltimoConcurso).length;
+  return {
+    items,
+    classeA,
+    classeB,
+    classeC,
+    classeANumeros,
+    classeBNumeros,
+    classeCNumeros,
+    totalOcorrencias,
+    mediaPresencaClasseA,
+    presencaClasseAUltimoConcurso,
+    pctVolumeClasseA: Number((somaVezesA / totalOcorrencias * 100).toFixed(1)),
+    pctVolumeClasseB: Number((somaVezesB / totalOcorrencias * 100).toFixed(1)),
+    pctVolumeClasseC: Number((somaVezesC / totalOcorrencias * 100).toFixed(1))
+  };
+}
+function countClasseADezenas(ticketNumbers, classeANumbers) {
+  const targetPool = classeANumbers || calculateCurvaAbc().classeANumeros;
+  return ticketNumbers.filter((n) => targetPool.includes(n)).length;
+}
+
+// src/services/savedFechamentosStorage.ts
+var FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
+function resolveConcursoBase(concurso, fallback = 3824) {
+  const num = Number(concurso);
+  return Number.isFinite(num) && num > 0 ? Math.trunc(num) : fallback;
+}
+function resolveConcursoAlvo(concursoBase, explicitAlvo, fallbackBase = 3824) {
+  const alvoNum = Number(explicitAlvo);
+  if (Number.isFinite(alvoNum) && alvoNum > 0) {
+    return Math.trunc(alvoNum);
+  }
+  return resolveConcursoBase(concursoBase, fallbackBase) + 1;
+}
+function stripConcursoAlvoPrefix(rawTitle) {
+  const str = String(rawTitle || "").trim();
+  if (!str) return "";
+  return str.replace(/^Concurso Alvo #\d+\s*\(Base #\d+\)\s*•\s*/i, "").replace(/^⚡\s*/, "").trim();
+}
+function buildStandardFilterSummary(item) {
+  const tokens = [
+    `Soma ${item.faixaSoma?.min ?? 180}-${item.faixaSoma?.max ?? 215}`,
+    `Pares ${item.paridade?.minPares ?? 6}-${item.paridade?.maxPares ?? 9}`,
+    `Moldura ${item.moldura?.min ?? 8}-${item.moldura?.max ?? 12}`,
+    `Primos ${item.primos?.min ?? 4}-${item.primos?.max ?? 6}`,
+    `Fib ${item.fibonacci?.min ?? 3}-${item.fibonacci?.max ?? 5}`,
+    `Rep ${item.repetidas?.min ?? 6}-${item.repetidas?.max ?? 10}`
+  ];
+  if (Array.isArray(item.dezenasFixas) && item.dezenasFixas.length > 0) {
+    tokens.push(`Fixas: [${[...item.dezenasFixas].sort((a, b) => a - b).join(",")}]`);
+  }
+  if (Array.isArray(item.dezenasExcluidas) && item.dezenasExcluidas.length > 0) {
+    tokens.push(`Excl: [${[...item.dezenasExcluidas].sort((a, b) => a - b).join(",")}]`);
+  }
+  return `Filtros: ${tokens.join(" | ")}`;
+}
+function formatStandardFechamentoTitle(params) {
+  const concursoBase = resolveConcursoBase(params.concursoBase);
+  const concursoAlvo = resolveConcursoAlvo(concursoBase, params.concursoAlvo);
+  let tipoClean = stripConcursoAlvoPrefix(params.tipoFechamento);
+  if (tipoClean.includes(" \u2022 ")) {
+    tipoClean = tipoClean.split(" \u2022 ")[0].trim();
+  }
+  if (!tipoClean) {
+    tipoClean = "Fechamento Cl\xE1ssico";
+  }
+  let garantiaText = String(params.garantia || "").trim();
+  if (!garantiaText && params.modalidadeMatriz) {
+    const matchGar = String(params.modalidadeMatriz).match(/Garantia[^)\]]*/i);
+    if (matchGar) {
+      garantiaText = matchGar[0].trim();
+    }
+  }
+  if (!garantiaText) {
+    garantiaText = "Garantia 14 se 15";
+  } else if (!/^garantia/i.test(garantiaText)) {
+    garantiaText = `Garantia ${garantiaText}`;
+  }
+  const resumoMatriz = `${params.universoCount} Dezenas (${params.totalJogos} Jogos \u2022 ${garantiaText})`;
+  const resumoFiltros = params.filterSummary || "Filtros: Soma 180-215 | Pares 6-9 | Moldura 8-12 | Primos 4-6 | Fib 3-5 | Rep 6-10";
+  return `Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) \u2022 ${tipoClean} \u2022 ${resumoMatriz} [${resumoFiltros}]`;
+}
+var STORAGE_KEY = "lotosniper_saved_prognosticos";
+var INITIALIZED_KEY = "lotosniper_prognosticos_initialized";
+function normalizeSavedFechamento(item, fallbackIndex = 0) {
+  if (!item || typeof item !== "object") {
+    return createInitialSampleFechamento();
+  }
+  const id = item.id ? String(item.id) : `fechamento-${Date.now()}-${fallbackIndex}`;
+  const concurso = resolveConcursoBase(item.concurso, 3824);
+  const concursoAlvo = resolveConcursoAlvo(concurso, item.concursoAlvo);
+  const dataConcurso = item.dataConcurso ? String(item.dataConcurso) : "";
+  const dataCriacao = item.dataCriacao ? String(item.dataCriacao) : (/* @__PURE__ */ new Date()).toLocaleString("pt-BR");
+  const rawTipo = item.tipoFechamento || item.nome || item.name || item.strategyName || item.modeName || item.modalidadeMatriz || "Fechamento Cl\xE1ssico";
+  const strippedTipo = stripConcursoAlvoPrefix(String(rawTipo));
+  const tipoFechamento = (strippedTipo.includes(" \u2022 ") ? strippedTipo.split(" \u2022 ")[0].trim() : strippedTipo) || "Fechamento Cl\xE1ssico";
+  const rawModalidade = item.modalidadeMatriz || item.garantia || "Matriz Pro (Garantia 14 se 15)";
+  const modalidadeMatriz = String(rawModalidade);
+  let rawTickets = [];
+  if (Array.isArray(item.tickets)) {
+    rawTickets = item.tickets;
+  } else if (Array.isArray(item.jogos)) {
+    rawTickets = item.jogos;
+  } else if (Array.isArray(item.dezenas) && item.dezenas.length >= 15) {
+    rawTickets = [item];
+  }
+  const tickets = rawTickets.map((t, idx) => {
+    const rawDez = Array.isArray(t?.dezenas) ? t.dezenas : Array.isArray(t?.numbers) ? t.numbers : [];
+    const dezenas = rawDez.filter((n) => typeof n === "number" && n >= 1 && n <= 25).sort((a, b) => a - b);
+    const validDez = dezenas.length === 15 ? dezenas : dezenas.length > 0 ? dezenas.slice(0, 15) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    const soma = typeof t?.soma === "number" ? t.soma : validDez.reduce((a, b) => a + b, 0);
+    const pares = typeof t?.pares === "number" ? t.pares : validDez.filter((n) => n % 2 === 0).length;
+    const impares = typeof t?.impares === "number" ? t.impares : 15 - pares;
+    const primos2 = typeof t?.primos === "number" ? t.primos : validDez.filter((n) => [2, 3, 5, 7, 11, 13, 17, 19, 23].includes(n)).length;
+    const moldura2 = typeof t?.moldura === "number" ? t.moldura : validDez.filter((n) => MOLDURA.includes(n)).length;
+    return {
+      id: t?.id ? String(t.id) : `ticket-${idx + 1}`,
+      index: typeof t?.index === "number" ? t.index : idx + 1,
+      dezenas: validDez,
+      soma,
+      pares,
+      impares,
+      primos: primos2,
+      moldura: moldura2,
+      fibonacci: typeof t?.fibonacci === "number" ? t.fibonacci : validDez.filter((n) => FIBONACCI_NUMBERS.includes(n)).length,
+      miolo: 15 - moldura2,
+      repetidas: typeof t?.repetidas === "number" ? t.repetidas : 9,
+      maxConsecutivas: typeof t?.maxConsecutivas === "number" ? t.maxConsecutivas : 4,
+      scoreIA: typeof t?.scoreIA === "number" ? t.scoreIA : 92,
+      auditoriaAnomalias: t?.auditoriaAnomalias || "Conforme filtros",
+      ...Array.isArray(t?.tags) ? { tags: t.tags.map((tag) => String(tag)) } : {}
+    };
+  });
+  let universoDezenas = Array.isArray(item.universoDezenas) ? item.universoDezenas.filter((n) => typeof n === "number" && n >= 1 && n <= 25) : Array.isArray(item.selectedNumbers) ? item.selectedNumbers.filter((n) => typeof n === "number" && n >= 1 && n <= 25) : [];
+  if (universoDezenas.length === 0 && tickets.length > 0) {
+    const set = /* @__PURE__ */ new Set();
+    tickets.forEach((t) => t.dezenas.forEach((d) => set.add(d)));
+    universoDezenas = Array.from(set).sort((a, b) => a - b);
+  }
+  if (universoDezenas.length === 0) {
+    universoDezenas = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 22, 23, 24, 25];
+  }
+  const dezenasFixas = Array.isArray(item.dezenasFixas) ? item.dezenasFixas.filter((n) => typeof n === "number" && universoDezenas.includes(n)) : [];
+  const dezenasExcluidas = Array.isArray(item.dezenasExcluidas) ? item.dezenasExcluidas.filter((n) => typeof n === "number") : [];
+  const totalJogos = typeof item.totalJogos === "number" && item.totalJogos > 0 ? item.totalJogos : tickets.length > 0 ? tickets.length : 1;
+  const custoTotal = typeof item.custoTotal === "number" && item.custoTotal > 0 ? item.custoTotal : totalJogos * VALOR_APOSTA_LOTOFACIL;
+  const faixaSoma = {
+    min: typeof item.faixaSoma?.min === "number" ? item.faixaSoma.min : 180,
+    max: typeof item.faixaSoma?.max === "number" ? item.faixaSoma.max : 215,
+    zonaOuro: item.faixaSoma?.zonaOuro ? String(item.faixaSoma.zonaOuro) : "190 a 210"
+  };
+  const paridade = {
+    minPares: typeof item.paridade?.minPares === "number" ? item.paridade.minPares : 6,
+    maxPares: typeof item.paridade?.maxPares === "number" ? item.paridade.maxPares : 9,
+    canonico: item.paridade?.canonico ? String(item.paridade.canonico) : "7P/8I ou 8P/7I"
+  };
+  const repetidas = {
+    min: typeof item.repetidas?.min === "number" ? item.repetidas.min : 8,
+    max: typeof item.repetidas?.max === "number" ? item.repetidas.max : 10,
+    concursoRef: typeof item.repetidas?.concursoRef === "number" ? item.repetidas.concursoRef : concurso
+  };
+  const moldura = {
+    min: typeof item.moldura?.min === "number" ? item.moldura.min : 8,
+    max: typeof item.moldura?.max === "number" ? item.moldura.max : 11
+  };
+  const primos = {
+    min: typeof item.primos?.min === "number" ? item.primos.min : 4,
+    max: typeof item.primos?.max === "number" ? item.primos.max : 7
+  };
+  const fibonacci = {
+    min: typeof item.fibonacci?.min === "number" ? item.fibonacci.min : 3,
+    max: typeof item.fibonacci?.max === "number" ? item.fibonacci.max : 6
+  };
+  const maxConsecutivas = typeof item.maxConsecutivas === "number" ? item.maxConsecutivas : 5;
+  const auditoriaAnomalias = typeof item.auditoriaAnomalias === "string" ? item.auditoriaAnomalias : `${totalJogos}/${totalJogos} bilhetes dentro da faixa`;
+  const filterSummary = buildStandardFilterSummary({
+    faixaSoma,
+    paridade,
+    moldura,
+    primos,
+    fibonacci,
+    repetidas,
+    dezenasFixas,
+    dezenasExcluidas
+  });
+  const nomeFechamento = formatStandardFechamentoTitle({
+    concursoBase: concurso,
+    concursoAlvo,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoCount: universoDezenas.length,
+    totalJogos,
+    filterSummary
+  });
+  return {
+    id,
+    timestamp: typeof item.timestamp === "number" ? item.timestamp : Date.now(),
+    dataCriacao,
+    concurso,
+    concursoAlvo,
+    dataConcurso,
+    nomeFechamento,
+    tipoFechamento,
+    modalidadeMatriz,
+    universoDezenas,
+    dezenasFixas,
+    dezenasExcluidas,
+    faixaSoma,
+    paridade,
+    maxConsecutivas,
+    auditoriaAnomalias,
+    repetidas,
+    moldura,
+    primos,
+    fibonacci,
+    tickets,
+    totalJogos,
+    custoTotal
+  };
+}
+function getSavedFechamentos() {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const isInitialized = localStorage.getItem(INITIALIZED_KEY) === "true";
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!isInitialized) {
+      localStorage.setItem(INITIALIZED_KEY, "true");
+      const sample = createInitialSampleFechamento();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([sample]));
+      return [sample];
+    }
+    if (!raw) return [];
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+    if (!Array.isArray(parsed)) return [];
+    let needsRepair = false;
+    const normalized = parsed.filter((p) => p && typeof p === "object").map((item, idx) => {
+      if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz || !item.concursoAlvo || !item.nomeFechamento) {
+        needsRepair = true;
+      }
+      return normalizeSavedFechamento(item, idx);
+    });
+    if (needsRepair && typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        localStorage.setItem("lotosniper_saved_fechamentos", JSON.stringify(normalized));
+      } catch {
+      }
+    }
+    const sorted = [...normalized].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    return sorted;
+  } catch (err) {
+    console.warn("[LotoSniper] Erro ao carregar fechamentos salvos:", err);
+    return [];
+  }
+}
+function getAllSavedTicketsSet() {
+  const set = /* @__PURE__ */ new Set();
+  if (typeof localStorage === "undefined") return set;
+  try {
+    const list = getSavedFechamentos();
+    for (const f of list) {
+      if (Array.isArray(f.tickets)) {
+        for (const t of f.tickets) {
+          if (Array.isArray(t.dezenas) && t.dezenas.length === 15) {
+            const sortedKey = [...t.dezenas].sort((a, b) => a - b).join("-");
+            set.add(sortedKey);
+          }
+        }
+      }
+    }
+  } catch {
+  }
+  return set;
+}
+function createInitialSampleFechamento() {
+  const universo = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 22, 23, 24, 25];
+  const sampleTickets = [
+    {
+      id: "sample-01",
+      index: 1,
+      dezenas: [1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+      pares: 7,
+      impares: 8,
+      primos: 6,
+      soma: 198,
+      moldura: 10,
+      miolo: 5,
+      fibonacci: 4,
+      repetidas: 9,
+      maxConsecutivas: 4,
+      scoreIA: 96
+    },
+    {
+      id: "sample-02",
+      index: 2,
+      dezenas: [1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 19, 20, 22, 23],
+      pares: 8,
+      impares: 7,
+      primos: 5,
+      soma: 204,
+      moldura: 9,
+      miolo: 6,
+      fibonacci: 4,
+      repetidas: 9,
+      maxConsecutivas: 3,
+      scoreIA: 97
+    },
+    {
+      id: "sample-03",
+      index: 3,
+      dezenas: [1, 2, 4, 5, 6, 10, 11, 12, 13, 14, 15, 17, 20, 22, 24],
+      pares: 8,
+      impares: 7,
+      primos: 5,
+      soma: 206,
+      moldura: 10,
+      miolo: 5,
+      fibonacci: 3,
+      repetidas: 8,
+      maxConsecutivas: 3,
+      scoreIA: 95
+    }
+  ];
+  const sampleConcurso = 3815;
+  const sampleConcursoAlvo = sampleConcurso + 1;
+  const sampleFaixaSoma = { min: 175, max: 220, zonaOuro: "190 a 210" };
+  const sampleParidade = { minPares: 7, maxPares: 8, canonico: "7P/8I ou 8P/7I" };
+  const sampleMoldura = { min: 8, max: 11 };
+  const samplePrimos = { min: 4, max: 7 };
+  const sampleFibonacci = { min: 3, max: 5 };
+  const sampleRepetidas = { min: 8, max: 10, concursoRef: sampleConcurso };
+  const sampleTipo = "Gerador Turbo (For\xE7a Bruta 14 Pts \u2022 17ms)";
+  const sampleModalidade = "21 Dezenas Amplo (18 Jogos \u2022 Garantia 14 se 15)";
+  return {
+    id: "fechamento-amplo-21-turbo",
+    timestamp: Date.now() - 36e5,
+    dataCriacao: new Date(Date.now() - 36e5).toLocaleString("pt-BR"),
+    concurso: sampleConcurso,
+    concursoAlvo: sampleConcursoAlvo,
+    dataConcurso: "24/10/2026",
+    nomeFechamento: formatStandardFechamentoTitle({
+      concursoBase: sampleConcurso,
+      concursoAlvo: sampleConcursoAlvo,
+      tipoFechamento: sampleTipo,
+      modalidadeMatriz: sampleModalidade,
+      universoCount: universo.length,
+      totalJogos: 18,
+      garantia: "Garantia 14 se 15",
+      filterSummary: buildStandardFilterSummary({
+        faixaSoma: sampleFaixaSoma,
+        paridade: sampleParidade,
+        moldura: sampleMoldura,
+        primos: samplePrimos,
+        fibonacci: sampleFibonacci,
+        repetidas: sampleRepetidas,
+        dezenasFixas: [1, 2]
+      })
+    }),
+    tipoFechamento: sampleTipo,
+    modalidadeMatriz: sampleModalidade,
+    universoDezenas: universo,
+    dezenasFixas: [1, 2],
+    dezenasExcluidas: [],
+    faixaSoma: sampleFaixaSoma,
+    paridade: sampleParidade,
+    maxConsecutivas: 5,
+    auditoriaAnomalias: "Todos os bilhetes foram auditados com 0 anomalias estat\xEDsticas",
+    repetidas: sampleRepetidas,
+    moldura: sampleMoldura,
+    primos: samplePrimos,
+    fibonacci: sampleFibonacci,
+    tickets: sampleTickets,
+    totalJogos: 18,
+    custoTotal: 18 * VALOR_APOSTA_LOTOFACIL
+  };
+}
+
+// src/services/tabelasCoberturaLJCR.ts
+function criarMascara(dezenas) {
+  let mask = 0;
+  for (let i = 0; i < dezenas.length; i++) {
+    const d = dezenas[i];
+    if (d >= 1 && d <= 25) {
+      mask |= 1 << d - 1;
+    }
+  }
+  return mask;
+}
+function mascaraParaDezenas(mask) {
+  const dezenas = [];
+  for (let i = 1; i <= 25; i++) {
+    if ((mask & 1 << i - 1) !== 0) {
+      dezenas.push(i);
+    }
+  }
+  return dezenas;
+}
+function popcount(x) {
+  x = x - (x >>> 1 & 1431655765);
+  x = (x & 858993459) + (x >>> 2 & 858993459);
+  return (x + (x >>> 4) & 252645135) * 16843009 >>> 24;
+}
+var MASK_PARES = criarMascara([2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]);
+var MASK_MOLDURA = criarMascara([1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25]);
+var MASK_PRIMOS = criarMascara([2, 3, 5, 7, 11, 13, 17, 19, 23]);
+var MASK_FIBONACCI = criarMascara([1, 2, 3, 5, 8, 13, 21]);
+var MASK_CRUZ = criarMascara([3, 8, 11, 12, 13, 14, 15, 18, 23]);
+var MASK_M3 = criarMascara([3, 6, 9, 12, 15, 18, 21, 24]);
+var MASK_M4 = criarMascara([4, 8, 12, 16, 20, 24]);
+var MASK_M5 = criarMascara([5, 10, 15, 20, 25]);
+var MASK_M6 = criarMascara([6, 12, 18, 24]);
+var MASK_M7 = criarMascara([7, 14, 21]);
+var MASK_M8 = criarMascara([8, 16, 24]);
+var MASK_UM_DIGITO = criarMascara([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+var MASK_LINHAS = [
+  criarMascara([1, 2, 3, 4, 5]),
+  criarMascara([6, 7, 8, 9, 10]),
+  criarMascara([11, 12, 13, 14, 15]),
+  criarMascara([16, 17, 18, 19, 20]),
+  criarMascara([21, 22, 23, 24, 25])
+];
+var MASK_COLUNAS = [
+  criarMascara([1, 6, 11, 16, 21]),
+  criarMascara([2, 7, 12, 17, 22]),
+  criarMascara([3, 8, 13, 18, 23]),
+  criarMascara([4, 9, 14, 19, 24]),
+  criarMascara([5, 10, 15, 20, 25])
+];
+var PESO_DIGITOS = [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+];
+var POSITIONAL_BOUNDS = [
+  [1, 3],
+  // D1
+  [2, 6],
+  // D2
+  [3, 8],
+  // D3
+  [4, 10],
+  // D4
+  [5, 11],
+  // D5
+  [6, 13],
+  // D6
+  [8, 15],
+  // D7
+  [9, 16],
+  // D8
+  [11, 18],
+  // D9
+  [12, 19],
+  // D10
+  [15, 21],
+  // D11 (>= 15)
+  [17, 22],
+  // D12 (>= 17)
+  [19, 23],
+  // D13 (>= 19)
+  [21, 24],
+  // D14 (>= 21)
+  [23, 25]
+  // D15 ([23, 25])
+];
+function validarPosicionalSorted(sortedDezenas) {
+  if (sortedDezenas.length !== 15) {
+    return { valido: false, violacoes: ["Cart\xE3o precisa ter 15 dezenas para auditoria posicional."] };
+  }
+  const violacoes = [];
+  for (let i = 0; i < 15; i++) {
+    const val = sortedDezenas[i];
+    const [minB, maxB] = POSITIONAL_BOUNDS[i];
+    if (val < minB || val > maxB) {
+      violacoes.push(`D${i + 1}=${val.toString().padStart(2, "0")} fora de [${minB}..${maxB}]`);
+    }
+  }
+  return { valido: violacoes.length === 0, violacoes };
+}
+function validarMultiplosMask(mask) {
+  const m3 = popcount(mask & MASK_M3);
+  const m4 = popcount(mask & MASK_M4);
+  const m5 = popcount(mask & MASK_M5);
+  const m6 = popcount(mask & MASK_M6);
+  const m7 = popcount(mask & MASK_M7);
+  const m8 = popcount(mask & MASK_M8);
+  const violacoes = [];
+  if (m3 < 4 || m3 > 7) violacoes.push(`M(3)=${m3} fora de [4..7]`);
+  if (m4 < 2 || m4 > 5) violacoes.push(`M(4)=${m4} fora de [2..5]`);
+  if (m5 < 1) violacoes.push(`M(5)=${m5} (< 1)`);
+  if (m6 < 1) violacoes.push(`M(6)=${m6} (< 1)`);
+  if (m7 < 1) violacoes.push(`M(7)=${m7} (< 1)`);
+  if (m8 < 1) violacoes.push(`M(8)=${m8} (< 1)`);
+  return {
+    valido: violacoes.length === 0,
+    m3,
+    m4,
+    m5,
+    m6,
+    m7,
+    m8,
+    violacoes
+  };
+}
+function calcularSomaAlgarismos(dezenas) {
+  let total = 0;
+  for (let i = 0; i < dezenas.length; i++) {
+    const d = dezenas[i];
+    if (d >= 1 && d <= 25) {
+      total += PESO_DIGITOS[d];
+    }
+  }
+  return total;
+}
+function validarContagemDigitosMask(mask, umDigitoMin = 3, umDigitoMax = 8, digitosMin = 22, digitosMax = 27) {
+  const dezenasUmDigito = popcount(mask & MASK_UM_DIGITO);
+  const totalCartao = popcount(mask);
+  const digitosTotal = dezenasUmDigito + (totalCartao - dezenasUmDigito) * 2;
+  const valido = dezenasUmDigito >= umDigitoMin && dezenasUmDigito <= umDigitoMax && digitosTotal >= digitosMin && digitosTotal <= digitosMax;
+  return { valido, dezenasUmDigito, digitosTotal };
+}
+function validarLinhasColunasMask(mask, maxLinhasCheias = 1, maxColunasCheias = 1) {
+  let linhasVazias = 0;
+  let linhasCheias = 0;
+  let colunasVazias = 0;
+  let colunasCheias = 0;
+  for (let i = 0; i < 5; i++) {
+    const cntL = popcount(mask & MASK_LINHAS[i]);
+    if (cntL === 0) linhasVazias++;
+    if (cntL === 5) linhasCheias++;
+    const cntC = popcount(mask & MASK_COLUNAS[i]);
+    if (cntC === 0) colunasVazias++;
+    if (cntC === 5) colunasCheias++;
+  }
+  const violacoes = [];
+  if (linhasVazias > 0) violacoes.push(`${linhasVazias} linha(s) vazia(s) no volante 5x5`);
+  if (colunasVazias > 0) violacoes.push(`${colunasVazias} coluna(s) vazia(s) no volante 5x5`);
+  if (linhasCheias > maxLinhasCheias) {
+    violacoes.push(`${linhasCheias} linhas completas (m\xE1x permitido: ${maxLinhasCheias})`);
+  }
+  if (colunasCheias > maxColunasCheias) {
+    violacoes.push(`${colunasCheias} colunas completas (m\xE1x permitido: ${maxColunasCheias})`);
+  }
+  return {
+    valido: violacoes.length === 0,
+    linhasVazias,
+    colunasVazias,
+    linhasCheias,
+    colunasCheias,
+    violacoes
+  };
+}
+function buildHistoricalMasksSet(draws) {
+  const set = /* @__PURE__ */ new Set();
+  for (let i = 0; i < draws.length; i++) {
+    const d = draws[i]?.dezenas;
+    if (Array.isArray(d) && d.length === 15) {
+      set.add(criarMascara(d));
+    }
+  }
+  return set;
+}
+function buildPodaDinamicaContext(variaveisValores, variaveisBits, filtros, fixasMask) {
+  const n = variaveisValores.length;
+  const sufCruz = new Int8Array(n + 1);
+  const sufM3 = new Int8Array(n + 1);
+  const sufM4 = new Int8Array(n + 1);
+  const sufM5 = new Int8Array(n + 1);
+  const sufM6 = new Int8Array(n + 1);
+  const sufM7 = new Int8Array(n + 1);
+  const sufM8 = new Int8Array(n + 1);
+  const sufT5 = new Int8Array(n + 1);
+  const sufT10 = new Int8Array(n + 1);
+  const sufT15 = new Int8Array(n + 1);
+  const sufT20 = new Int8Array(n + 1);
+  const rm = filtros.rankingMasks;
+  for (let i = n - 1; i >= 0; i--) {
+    const bit = variaveisBits[i];
+    sufCruz[i] = sufCruz[i + 1] + ((bit & MASK_CRUZ) !== 0 ? 1 : 0);
+    sufM3[i] = sufM3[i + 1] + ((bit & MASK_M3) !== 0 ? 1 : 0);
+    sufM4[i] = sufM4[i + 1] + ((bit & MASK_M4) !== 0 ? 1 : 0);
+    sufM5[i] = sufM5[i + 1] + ((bit & MASK_M5) !== 0 ? 1 : 0);
+    sufM6[i] = sufM6[i + 1] + ((bit & MASK_M6) !== 0 ? 1 : 0);
+    sufM7[i] = sufM7[i + 1] + ((bit & MASK_M7) !== 0 ? 1 : 0);
+    sufM8[i] = sufM8[i + 1] + ((bit & MASK_M8) !== 0 ? 1 : 0);
+    if (rm) {
+      sufT5[i] = sufT5[i + 1] + ((bit & rm.maskTop5) !== 0 ? 1 : 0);
+      sufT10[i] = sufT10[i + 1] + ((bit & rm.maskTop10) !== 0 ? 1 : 0);
+      sufT15[i] = sufT15[i + 1] + ((bit & rm.maskTop15) !== 0 ? 1 : 0);
+      sufT20[i] = sufT20[i + 1] + ((bit & rm.maskTop20) !== 0 ? 1 : 0);
+    }
+  }
+  const minAlgTable = new Array(n + 1);
+  const maxAlgTable = new Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    const remLen = n - i;
+    const weights = new Array(remLen);
+    for (let j = 0; j < remLen; j++) {
+      weights[j] = PESO_DIGITOS[variaveisValores[i + j]] ?? 0;
+    }
+    weights.sort((a, b) => a - b);
+    const maxK = Math.min(15, remLen);
+    const minP = new Int16Array(16);
+    const maxP = new Int16Array(16);
+    for (let k = 1; k <= maxK; k++) {
+      minP[k] = minP[k - 1] + weights[k - 1];
+      maxP[k] = maxP[k - 1] + weights[remLen - k];
+    }
+    for (let k = maxK + 1; k <= 15; k++) {
+      minP[k] = 999;
+      maxP[k] = -999;
+    }
+    minAlgTable[i] = minP;
+    maxAlgTable[i] = maxP;
+  }
+  const fixasSorted = fixasMask !== 0 ? mascaraParaDezenas(fixasMask) : [];
+  const algFixas = calcularSomaAlgarismos(fixasSorted);
+  const isStrictCruz = filtros.strictValidation === true || filtros.validacaoEstritaCruz === true;
+  const cruzMin = isStrictCruz ? 5 : filtros.cruzMin ?? 4;
+  const cruzMax = isStrictCruz ? 6 : filtros.cruzMax ?? 7;
+  return {
+    sufCruz,
+    sufM3,
+    sufM4,
+    sufM5,
+    sufM6,
+    sufM7,
+    sufM8,
+    sufT5,
+    sufT10,
+    sufT15,
+    sufT20,
+    minAlgTable,
+    maxAlgTable,
+    fixasSorted,
+    cruzAtual: popcount(fixasMask & MASK_CRUZ),
+    algAtual: algFixas,
+    m3Atual: popcount(fixasMask & MASK_M3),
+    m4Atual: popcount(fixasMask & MASK_M4),
+    m5Atual: popcount(fixasMask & MASK_M5),
+    m6Atual: popcount(fixasMask & MASK_M6),
+    m7Atual: popcount(fixasMask & MASK_M7),
+    m8Atual: popcount(fixasMask & MASK_M8),
+    t5Atual: rm ? popcount(fixasMask & rm.maskTop5) : 0,
+    t10Atual: rm ? popcount(fixasMask & rm.maskTop10) : 0,
+    t15Atual: rm ? popcount(fixasMask & rm.maskTop15) : 0,
+    t20Atual: rm ? popcount(fixasMask & rm.maskTop20) : 0,
+    cruzMin,
+    cruzMax,
+    algMin: filtros.somaAlgarismosMin ?? 63,
+    algMax: filtros.somaAlgarismosMax ?? 87
+  };
+}
+function combinarComPodaDinamica(idx, profundidade, maskAtual, somaAtual, paresAtual, vagasRestantes, variaveisValores, variaveisBits, filtros, fixasMask, callbackValido, _ctx) {
+  const ctx = _ctx ?? buildPodaDinamicaContext(variaveisValores, variaveisBits, filtros, fixasMask);
+  if (vagasRestantes === 0) {
+    const jogoCompletoMask = maskAtual | fixasMask;
+    if (filtros.posicionalAtivo && ctx.fixasSorted.length > 0) {
+      const sorted = mascaraParaDezenas(jogoCompletoMask);
+      if (!validarPosicionalSorted(sorted).valido) {
+        filtros.onBranchPruned?.();
+        return;
+      }
+    }
+    callbackValido(jogoCompletoMask);
+    return;
+  }
+  const n = variaveisValores.length;
+  const isStrictCruz = filtros.strictValidation === true || filtros.validacaoEstritaCruz === true;
+  const checkCruz = isStrictCruz || filtros.cruzAtiva !== false && filtros.cruzMin !== void 0;
+  const checkMultiplos = Boolean(filtros.multiplosAtivo);
+  const checkAlg = Boolean(filtros.somaAlgarismosAtiva);
+  const checkRanking = Boolean(filtros.rankingHistoricoAtivo && filtros.rankingMasks);
+  const rm = filtros.rankingMasks;
+  for (let i = idx; i <= n - vagasRestantes; i++) {
+    const val = variaveisValores[i];
+    const bit = variaveisBits[i];
+    const novasVagas = vagasRestantes - 1;
+    if (filtros.posicionalAtivo) {
+      let exactPos = profundidade;
+      if (ctx.fixasSorted.length > 0) {
+        for (let f = 0; f < ctx.fixasSorted.length; f++) {
+          if (ctx.fixasSorted[f] < val) exactPos++;
+          else break;
+        }
+      }
+      if (exactPos < 15) {
+        const [minPos, maxPos] = POSITIONAL_BOUNDS[exactPos];
+        if (val < minPos) {
+          filtros.onBranchPruned?.();
+          continue;
+        }
+        if (val > maxPos) {
+          filtros.onBranchPruned?.();
+          if (ctx.fixasSorted.length === 0) break;
+          continue;
+        }
+      }
+    }
+    const novaSoma = somaAtual + val;
+    const novosPares = paresAtual + (val % 2 === 0 ? 1 : 0);
+    let minSomaPossivel = novaSoma;
+    for (let k = 1; k <= novasVagas; k++) {
+      minSomaPossivel += variaveisValores[i + k];
+    }
+    if (filtros.somaMax !== void 0 && minSomaPossivel > filtros.somaMax) {
+      filtros.onBranchPruned?.();
+      break;
+    }
+    let maxSomaPossivel = novaSoma;
+    for (let k = 0; k < novasVagas; k++) {
+      maxSomaPossivel += variaveisValores[n - 1 - k];
+    }
+    if (filtros.somaMin !== void 0 && maxSomaPossivel < filtros.somaMin) {
+      filtros.onBranchPruned?.();
+      continue;
+    }
+    if (filtros.paresMax !== void 0 && novosPares > filtros.paresMax) {
+      filtros.onBranchPruned?.();
+      continue;
+    }
+    if (filtros.paresMin !== void 0 && novosPares + novasVagas < filtros.paresMin) {
+      filtros.onBranchPruned?.();
+      continue;
+    }
+    let novoCruz = ctx.cruzAtual;
+    if (checkCruz) {
+      novoCruz += (bit & MASK_CRUZ) !== 0 ? 1 : 0;
+      if (novoCruz > ctx.cruzMax) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+      const maxCruzPossivel = novoCruz + Math.min(novasVagas, ctx.sufCruz[i + 1]);
+      if (maxCruzPossivel < ctx.cruzMin) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+    let novaAlg = ctx.algAtual;
+    if (checkAlg) {
+      novaAlg += PESO_DIGITOS[val] ?? 0;
+      const minAlgPossivel = novaAlg + ctx.minAlgTable[i + 1][novasVagas];
+      const maxAlgPossivel = novaAlg + ctx.maxAlgTable[i + 1][novasVagas];
+      if (minAlgPossivel > ctx.algMax || maxAlgPossivel < ctx.algMin) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+    let nm3 = ctx.m3Atual;
+    let nm4 = ctx.m4Atual;
+    let nm5 = ctx.m5Atual;
+    let nm6 = ctx.m6Atual;
+    let nm7 = ctx.m7Atual;
+    let nm8 = ctx.m8Atual;
+    if (checkMultiplos) {
+      nm3 += (bit & MASK_M3) !== 0 ? 1 : 0;
+      nm4 += (bit & MASK_M4) !== 0 ? 1 : 0;
+      nm5 += (bit & MASK_M5) !== 0 ? 1 : 0;
+      nm6 += (bit & MASK_M6) !== 0 ? 1 : 0;
+      nm7 += (bit & MASK_M7) !== 0 ? 1 : 0;
+      nm8 += (bit & MASK_M8) !== 0 ? 1 : 0;
+      if (nm3 > 7 || nm3 + Math.min(novasVagas, ctx.sufM3[i + 1]) < 4 || nm4 > 5 || nm4 + Math.min(novasVagas, ctx.sufM4[i + 1]) < 2 || nm5 + Math.min(novasVagas, ctx.sufM5[i + 1]) < 1 || nm6 + Math.min(novasVagas, ctx.sufM6[i + 1]) < 1 || nm7 + Math.min(novasVagas, ctx.sufM7[i + 1]) < 1 || nm8 + Math.min(novasVagas, ctx.sufM8[i + 1]) < 1) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+    let nt5 = ctx.t5Atual;
+    let nt10 = ctx.t10Atual;
+    let nt15 = ctx.t15Atual;
+    let nt20 = ctx.t20Atual;
+    if (checkRanking && rm) {
+      nt5 += (bit & rm.maskTop5) !== 0 ? 1 : 0;
+      nt10 += (bit & rm.maskTop10) !== 0 ? 1 : 0;
+      nt15 += (bit & rm.maskTop15) !== 0 ? 1 : 0;
+      nt20 += (bit & rm.maskTop20) !== 0 ? 1 : 0;
+      if (nt5 > 4 || nt5 + Math.min(novasVagas, ctx.sufT5[i + 1]) < 2 || nt10 > 8 || nt10 + Math.min(novasVagas, ctx.sufT10[i + 1]) < 4 || nt15 > 11 || nt15 + Math.min(novasVagas, ctx.sufT15[i + 1]) < 7 || nt20 > 14 || nt20 + Math.min(novasVagas, ctx.sufT20[i + 1]) < 11) {
+        filtros.onBranchPruned?.();
+        continue;
+      }
+    }
+    const nextCtx = {
+      ...ctx,
+      cruzAtual: novoCruz,
+      algAtual: novaAlg,
+      m3Atual: nm3,
+      m4Atual: nm4,
+      m5Atual: nm5,
+      m6Atual: nm6,
+      m7Atual: nm7,
+      m8Atual: nm8,
+      t5Atual: nt5,
+      t10Atual: nt10,
+      t15Atual: nt15,
+      t20Atual: nt20
+    };
+    combinarComPodaDinamica(
+      i + 1,
+      profundidade + 1,
+      maskAtual | bit,
+      novaSoma,
+      novosPares,
+      novasVagas,
+      variaveisValores,
+      variaveisBits,
+      filtros,
+      fixasMask,
+      callbackValido,
+      nextCtx
+    );
+  }
+}
+
+// src/services/combinatorics.ts
+function isPrimo(n) {
+  return PRIMOS.includes(n);
+}
+function isMoldura(n) {
+  return MOLDURA.includes(n);
+}
+function isMiolo(n) {
+  return MIOLO.includes(n);
+}
+function isFibonacci(n) {
+  return FIBONACCI.includes(n);
+}
+function isCruz(n) {
+  return CRUZ_DEZENAS.includes(n);
+}
+function getMaxConsecutiveSequence(sortedNumbers) {
+  if (sortedNumbers.length === 0) return 0;
+  let maxSeq = 1;
+  let currentSeq = 1;
+  for (let i = 1; i < sortedNumbers.length; i++) {
+    if (sortedNumbers[i] === sortedNumbers[i - 1] + 1) {
+      currentSeq++;
+      if (currentSeq > maxSeq) maxSeq = currentSeq;
+    } else {
+      currentSeq = 1;
+    }
+  }
+  return maxSeq;
+}
+function getCombinations(arr, k) {
+  const result = [];
+  function backtrack(start, current) {
+    if (current.length === k) {
+      result.push([...current]);
+      return;
+    }
+    for (let i = start; i < arr.length; i++) {
+      current.push(arr[i]);
+      backtrack(i + 1, current);
+      current.pop();
+    }
+  }
+  backtrack(0, []);
+  return result;
+}
+function countMatches(arr1, arr2) {
+  let i = 0;
+  let j = 0;
+  let matches = 0;
+  while (i < arr1.length && j < arr2.length) {
+    if (arr1[i] === arr2[j]) {
+      matches++;
+      i++;
+      j++;
+    } else if (arr1[i] < arr2[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return matches;
+}
+var MAX_DEZENAS_FIXAS = 5;
+function sanitizeDezenasFixas(rawFixas = [], pool) {
+  const poolSet = pool && pool.length > 0 ? new Set(pool) : null;
+  const clean = Array.from(
+    new Set(
+      rawFixas.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25 && (!poolSet || poolSet.has(n)))
+    )
+  ).sort((a, b) => a - b);
+  return clean.slice(0, MAX_DEZENAS_FIXAS);
+}
+function resolveModoFixas(fixasCount, requestedMode) {
+  if (fixasCount >= 3 && requestedMode !== "rigidas") {
+    return "rotativas";
+  }
+  return "rigidas";
+}
+function getRotatedFixedBounds(fixasCount, requestedMode) {
+  if (fixasCount <= 0) {
+    return { modo: "rigidas", minK: 0, maxK: 0, avgK: 0 };
+  }
+  const modo = resolveModoFixas(fixasCount, requestedMode);
+  if (modo === "rotativas") {
+    const minK = Math.max(1, fixasCount - 2);
+    const maxK = fixasCount - 1;
+    return { modo: "rotativas", minK, maxK, avgK: (minK + maxK) / 2 };
+  }
+  return { modo: "rigidas", minK: fixasCount, maxK: fixasCount, avgK: fixasCount };
+}
+function calibrarFaixaSomaUniverso(universoDezenas) {
+  const clean = Array.from(new Set(universoDezenas.filter((n) => n >= 1 && n <= 25)));
+  if (clean.length === 0) {
+    return { mediaUniverso: 195, somaMin: 180, somaMax: 220 };
+  }
+  const somaTotal = clean.reduce((acc, v) => acc + v, 0);
+  const mediaExata = somaTotal / clean.length * 15;
+  const mediaUniverso = Math.round(mediaExata * 10) / 10;
+  const somaMin = Math.max(155, Math.min(220, Math.round(mediaExata - 20)));
+  const somaMax = Math.min(235, Math.max(somaMin + 10, Math.round(mediaExata + 20)));
+  return { mediaUniverso, somaMin, somaMax };
+}
+function resolveCentralSumBounds(universoDezenas, filters) {
+  const cal = calibrarFaixaSomaUniverso(universoDezenas);
+  if (!filters || filters.somaMin === void 0 || filters.somaMax === void 0) {
+    return {
+      mediaUniverso: cal.mediaUniverso,
+      centralMin: cal.somaMin,
+      centralMax: cal.somaMax,
+      wasAutoCalibrated: true
+    };
+  }
+  const isDefaultSum = filters.somaMin === 180 && filters.somaMax === 220;
+  if (filters.autoCalibrarSomaUniverso !== false && isDefaultSum) {
+    return {
+      mediaUniverso: cal.mediaUniverso,
+      centralMin: cal.somaMin,
+      centralMax: cal.somaMax,
+      wasAutoCalibrated: true
+    };
+  }
+  return {
+    mediaUniverso: cal.mediaUniverso,
+    centralMin: filters.somaMin,
+    centralMax: filters.somaMax,
+    wasAutoCalibrated: false
+  };
+}
+function hammingDistanceBitwise(maskA, maskB) {
+  return 15 - popcount(maskA & maskB);
+}
+function minHammingDistanceToMatrix(candMask, selectedMasks) {
+  if (selectedMasks.length === 0) return 15;
+  let minDiff = 15;
+  for (let i = 0; i < selectedMasks.length; i++) {
+    const dezenasDiferentes = hammingDistanceBitwise(candMask, selectedMasks[i]);
+    if (dezenasDiferentes < minDiff) {
+      minDiff = dezenasDiferentes;
+      if (minDiff === 0) return 0;
+    }
+  }
+  return minDiff;
+}
+function calculateVariableFrequencyBounds(totalJogos, totalUniverso, fixasCount, modoFixas) {
+  const kInfo = getRotatedFixedBounds(fixasCount, modoFixas);
+  const vagasVariaveis = Math.max(1, 15 - kInfo.avgK);
+  const qtdDezenasVariaveis = Math.max(1, totalUniverso - fixasCount);
+  const freqIdeal = totalJogos * vagasVariaveis / qtdDezenasVariaveis;
+  const freqMinTarget = freqIdeal * 0.85;
+  const freqMaxCap = freqIdeal * 1.15;
+  const fixedIdeal = fixasCount > 0 ? totalJogos * kInfo.avgK / fixasCount : 0;
+  return {
+    vagasVariaveis,
+    qtdDezenasVariaveis,
+    freqIdeal: Math.round(freqIdeal * 100) / 100,
+    freqMinTarget,
+    freqMaxCap,
+    fixedIdeal
+  };
+}
+var cachedDefaultHistoricalMasks = null;
+var cachedDefaultRankingMasks = null;
+function getHistoricalDrawMasksSet(historicalDraws = RECENT_DRAWS) {
+  if (historicalDraws === RECENT_DRAWS) {
+    if (!cachedDefaultHistoricalMasks) {
+      cachedDefaultHistoricalMasks = buildHistoricalMasksSet(RECENT_DRAWS);
+    }
+    return cachedDefaultHistoricalMasks;
+  }
+  return buildHistoricalMasksSet(historicalDraws);
+}
+function getHistoricalRankingMasks(statsList = DEZENAS_STATS) {
+  if (statsList === DEZENAS_STATS && cachedDefaultRankingMasks) {
+    return cachedDefaultRankingMasks;
+  }
+  const ordered = [...statsList].sort((a, b) => b.vezes !== a.vezes ? b.vezes - a.vezes : a.numero - b.numero).map((s) => s.numero);
+  const masks = {
+    maskTop5: criarMascara(ordered.slice(0, 5)),
+    maskTop10: criarMascara(ordered.slice(0, 10)),
+    maskTop15: criarMascara(ordered.slice(0, 15)),
+    maskTop20: criarMascara(ordered.slice(0, 20))
+  };
+  if (statsList === DEZENAS_STATS) {
+    cachedDefaultRankingMasks = masks;
+  }
+  return masks;
+}
+function validarRankingHistoricoMask(mask, statsList = DEZENAS_STATS) {
+  const { maskTop5, maskTop10, maskTop15, maskTop20 } = getHistoricalRankingMasks(statsList);
+  const top5 = popcount(mask & maskTop5);
+  const top10 = popcount(mask & maskTop10);
+  const top15 = popcount(mask & maskTop15);
+  const top20 = popcount(mask & maskTop20);
+  const violacoes = [];
+  if (top5 < 2 || top5 > 4) violacoes.push(`Top 5=${top5} fora de [2..4]`);
+  if (top10 < 4 || top10 > 8) violacoes.push(`Top 10=${top10} fora de [4..8]`);
+  if (top15 < 7 || top15 > 11) violacoes.push(`Top 15=${top15} fora de [7..11]`);
+  if (top20 < 11 || top20 > 14) violacoes.push(`Top 20=${top20} fora de [11..14]`);
+  return {
+    valido: violacoes.length === 0,
+    top5,
+    top10,
+    top15,
+    top20,
+    violacoes
+  };
+}
+function isHistorical15Collision(numbers, historicalDraws = RECENT_DRAWS) {
+  if (numbers.length !== 15) return false;
+  const mask = criarMascara(numbers);
+  return getHistoricalDrawMasksSet(historicalDraws).has(mask);
+}
+function hasViciousVisualPattern(numbers) {
+  const numSet = new Set(numbers);
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const LINHAS = [
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+    [11, 12, 13, 14, 15],
+    [16, 17, 18, 19, 20],
+    [21, 22, 23, 24, 25]
+  ];
+  for (let l = 0; l < LINHAS.length; l++) {
+    if (LINHAS[l].every((n) => numSet.has(n))) {
+      return { isVicious: true, reason: `Linha horizontal completa #${l + 1} (${LINHAS[l].join("-")}) no volante 5x5` };
+    }
+  }
+  const COLUNAS = [
+    [1, 6, 11, 16, 21],
+    [2, 7, 12, 17, 22],
+    [3, 8, 13, 18, 23],
+    [4, 9, 14, 19, 24],
+    [5, 10, 15, 20, 25]
+  ];
+  for (let c = 0; c < COLUNAS.length; c++) {
+    if (COLUNAS[c].every((n) => numSet.has(n))) {
+      return { isVicious: true, reason: `Coluna vertical completa #${c + 1} (${COLUNAS[c].join("-")}) no volante 5x5` };
+    }
+  }
+  const DIAGONAL_PRINCIPAL = [1, 7, 13, 19, 25];
+  if (DIAGONAL_PRINCIPAL.every((n) => numSet.has(n))) {
+    return { isVicious: true, reason: "Diagonal principal completa (01-07-13-19-25) no volante 5x5" };
+  }
+  const DIAGONAL_SECUNDARIA = [5, 9, 13, 17, 21];
+  if (DIAGONAL_SECUNDARIA.every((n) => numSet.has(n))) {
+    return { isVicious: true, reason: "Diagonal secund\xE1ria completa (05-09-13-17-21) no volante 5x5" };
+  }
+  for (let r = 1; r <= 5; r++) {
+    for (const start of sorted) {
+      let count = 1;
+      let curr = start;
+      const seq = [curr];
+      while (numSet.has(curr + r)) {
+        curr += r;
+        seq.push(curr);
+        count++;
+      }
+      if (count >= 5) {
+        const desc = r === 1 ? "consecutivas" : `em passo de ${r} em ${r}`;
+        return {
+          isVicious: true,
+          reason: `Progress\xE3o aritm\xE9tica \xF3bvia de ${count} dezenas (${seq.map((n) => n.toString().padStart(2, "0")).join("-")}) ${desc}`
+        };
+      }
+    }
+  }
+  return { isVicious: false };
+}
+function analyzeTicket(numbers, concursoAnterior = CONCURSO_ATUAL.dezenas, aiScores) {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  let pares = 0;
+  let impares = 0;
+  let primos = 0;
+  let soma = 0;
+  let moldura = 0;
+  let miolo = 0;
+  let fibonacci = 0;
+  let cruz = 0;
+  let repetidas = 0;
+  let scoreSum = 0;
+  for (const n of sorted) {
+    soma += n;
+    if (n % 2 === 0) pares++;
+    else impares++;
+    if (isPrimo(n)) primos++;
+    if (isMoldura(n)) moldura++;
+    if (isMiolo(n)) miolo++;
+    if (isFibonacci(n)) fibonacci++;
+    if (isCruz(n)) cruz++;
+    if (concursoAnterior.includes(n)) repetidas++;
+    if (aiScores && aiScores[n - 1] !== void 0) {
+      scoreSum += aiScores[n - 1];
+    } else {
+      const stats = DEZENAS_STATS.find((s) => s.numero === n);
+      scoreSum += stats ? stats.vezes / 24 : 50;
+    }
+  }
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
+  const maxConsecutivas = getMaxConsecutiveSequence(sorted);
+  let baseScore = scoreSum / 15;
+  if (soma >= 185 && soma <= 215) {
+    baseScore += 3;
+  } else if (soma >= 180 && soma < 185) {
+    baseScore -= 1;
+  } else if (soma > 215 && soma <= 222) {
+    baseScore -= (soma - 215) * 0.8;
+  } else if (soma > 222) {
+    baseScore -= 6 + (soma - 222) * 1.5;
+  }
+  if (moldura >= 8 && moldura <= 12) {
+    baseScore += 1.5;
+  }
+  if (cruz >= 5 && cruz <= 6) {
+    baseScore += 2;
+  } else if (cruz === 4 || cruz === 7) {
+    baseScore += 0.5;
+  } else {
+    baseScore -= 2.5;
+  }
+  if (bola1 === 1 || bola1 === 2) {
+    baseScore += 1;
+  } else if (BOLAS_EXTREMAS_INICIO.includes(bola1)) {
+    baseScore += 0.4;
+  } else {
+    baseScore -= 2;
+  }
+  if (bola15 === 24 || bola15 === 25) {
+    baseScore += 1;
+  } else if (BOLAS_EXTREMAS_FIM.includes(bola15)) {
+    baseScore += 0.4;
+  } else {
+    baseScore -= 2;
+  }
+  if (primos === 5 || primos === 6) {
+    baseScore += 1.5;
+  } else if (primos === 4 || primos === 7) {
+    baseScore += 0.3;
+  }
+  if (isHistorical15Collision(sorted)) {
+    baseScore -= 15;
+  }
+  if (hasViciousVisualPattern(sorted).isVicious) {
+    baseScore -= 12;
+  }
+  const scoreIA = Math.round(Math.max(30, Math.min(100, baseScore)) * 10) / 10;
+  const ticketMask = criarMascara(sorted);
+  const multiplosRes = validarMultiplosMask(ticketMask);
+  const digitosRes = validarContagemDigitosMask(ticketMask);
+  const somaAlgarismos = calcularSomaAlgarismos(sorted);
+  const posicionalRes = sorted.length === 15 ? validarPosicionalSorted(sorted) : { valido: true, violacoes: [] };
+  const linhasColunasRes = validarLinhasColunasMask(ticketMask, 1, 1);
+  const rankingRes = validarRankingHistoricoMask(ticketMask);
+  const inedito = !isHistorical15Collision(sorted);
+  return {
+    dezenas: sorted,
+    pares,
+    impares,
+    primos,
+    soma,
+    moldura,
+    miolo,
+    fibonacci,
+    cruz,
+    bola1,
+    bola15,
+    repetidas,
+    maxConsecutivas,
+    scoreIA,
+    somaAlgarismos,
+    digitosTotal: digitosRes.digitosTotal,
+    dezenasUmDigito: digitosRes.dezenasUmDigito,
+    multiplosM3: multiplosRes.m3,
+    multiplosM4: multiplosRes.m4,
+    multiplosM5: multiplosRes.m5,
+    multiplosM6: multiplosRes.m6,
+    multiplosM7: multiplosRes.m7,
+    multiplosM8: multiplosRes.m8,
+    multiplosOk: multiplosRes.valido,
+    posicionalOk: posicionalRes.valido,
+    linhasColunasOk: linhasColunasRes.valido,
+    rankingHistoricoOk: rankingRes.valido,
+    inedito
+  };
+}
+function validateFilters(combination, activeFilterConfig, concursoAnterior = CONCURSO_ATUAL.dezenas) {
+  const dezenas = Array.isArray(combination) ? [...combination].sort((a, b) => a - b) : combination.dezenas;
+  const analysis = Array.isArray(combination) ? analyzeTicket(dezenas, concursoAnterior) : combination;
+  const violations = [];
+  if (analysis.pares < activeFilterConfig.paresMin || analysis.pares > activeFilterConfig.paresMax) {
+    violations.push(
+      `Pares fora da faixa: ${analysis.pares}P (esperado: ${activeFilterConfig.paresMin}-${activeFilterConfig.paresMax}P)`
+    );
+  }
+  if (analysis.primos < activeFilterConfig.primosMin || analysis.primos > activeFilterConfig.primosMax) {
+    violations.push(
+      `Primos fora da faixa: ${analysis.primos} (esperado: ${activeFilterConfig.primosMin}-${activeFilterConfig.primosMax})`
+    );
+  }
+  if (activeFilterConfig.apenasZonaDeOuroPrimos && (analysis.primos < 5 || analysis.primos > 6)) {
+    violations.push(
+      `Zona de Ouro de Primos violada: ${analysis.primos} (esperado estrito: 5-6)`
+    );
+  }
+  if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
+    violations.push(
+      `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
+    );
+  }
+  if (analysis.moldura < activeFilterConfig.molduraMin || analysis.moldura > activeFilterConfig.molduraMax) {
+    violations.push(
+      `Moldura fora da faixa: ${analysis.moldura} (esperado: ${activeFilterConfig.molduraMin}-${activeFilterConfig.molduraMax})`
+    );
+  }
+  if (analysis.fibonacci < activeFilterConfig.fibonacciMin || analysis.fibonacci > activeFilterConfig.fibonacciMax) {
+    violations.push(
+      `Fibonacci fora da faixa: ${analysis.fibonacci} (esperado: ${activeFilterConfig.fibonacciMin}-${activeFilterConfig.fibonacciMax})`
+    );
+  }
+  if (analysis.repetidas < activeFilterConfig.repetidasMin || analysis.repetidas > activeFilterConfig.repetidasMax) {
+    violations.push(
+      `Repetidas fora da faixa: ${analysis.repetidas} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
+    );
+  }
+  if (analysis.maxConsecutivas > activeFilterConfig.maxConsecutivas) {
+    violations.push(
+      `Sequ\xEAncia consecutiva excessiva: ${analysis.maxConsecutivas} dezenas (m\xE1x permitido: ${activeFilterConfig.maxConsecutivas})`
+    );
+  }
+  const cruzCount = analysis.cruz ?? dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+  const isEstrita = activeFilterConfig.strictValidation === true || activeFilterConfig.validacaoEstritaCruz === true;
+  if (isEstrita || activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== void 0) {
+    const cMin = isEstrita ? 5 : activeFilterConfig.cruzMin ?? 4;
+    const cMax = isEstrita ? 6 : activeFilterConfig.cruzMax ?? 7;
+    if (cruzCount < cMin || cruzCount > cMax) {
+      violations.push(
+        isEstrita ? `Valida\xE7\xE3o Estrita da Cruz violada: ${cruzCount} (esperado estritamente 5 ou 6 dezenas na Cruz)` : `Cruz da Lotof\xE1cil fora da faixa: ${cruzCount} (esperado: ${cMin}-${cMax})`
+      );
+    }
+  }
+  const b1 = analysis.bola1 ?? dezenas[0];
+  const b15 = analysis.bola15 ?? dezenas[dezenas.length - 1];
+  if (activeFilterConfig.extremidadesAtiva !== false) {
+    const b1Min = activeFilterConfig.bola1Min ?? 1;
+    const b1Max = activeFilterConfig.bola1Max ?? 4;
+    const b15Min = activeFilterConfig.bola15Min ?? 22;
+    const b15Max = activeFilterConfig.bola15Max ?? 25;
+    if (b1 < b1Min || b1 > b1Max) {
+      violations.push(
+        `Bola 1 fora do intervalo can\xF4nico: ${b1} (esperado: ${b1Min}-${b1Max})`
+      );
+    }
+    if (b15 < b15Min || b15 > b15Max) {
+      violations.push(
+        `Bola 15 fora do intervalo can\xF4nico: ${b15} (esperado: ${b15Min}-${b15Max})`
+      );
+    }
+  }
+  const fixed = sanitizeDezenasFixas(activeFilterConfig.dezenasFixas || []);
+  const fixedBounds = getRotatedFixedBounds(fixed.length, activeFilterConfig.modoFixas);
+  if (fixed.length > 0) {
+    if (fixedBounds.modo === "rotativas") {
+      const presentCount = fixed.filter((f) => dezenas.includes(f)).length;
+      if (presentCount < fixedBounds.minK || presentCount > fixedBounds.maxK) {
+        violations.push(
+          `Fixas rotativas K de N fora da janela: ${presentCount}/${fixed.length} presentes (esperado: ${fixedBounds.minK} a ${fixedBounds.maxK})`
+        );
+      }
+    } else {
+      for (const fix of fixed) {
+        if (!dezenas.includes(fix)) {
+          violations.push(`Dezena fixa ausente: ${fix.toString().padStart(2, "0")}`);
+        }
+      }
+    }
+  }
+  const excluded = activeFilterConfig.dezenasExcluidas || [];
+  for (const exc of excluded) {
+    if (dezenas.includes(exc)) {
+      violations.push(`Dezena exclu\xEDda presente: ${exc.toString().padStart(2, "0")}`);
+    }
+  }
+  if (activeFilterConfig.curvaAbcAtiva && activeFilterConfig.minDezenasClasseA !== void 0) {
+    const countA = countClasseADezenas(dezenas);
+    if (countA < activeFilterConfig.minDezenasClasseA) {
+      violations.push(
+        `Curva ABC Classe A insuficiente: ${countA} dezenas (esperado m\xEDn: ${activeFilterConfig.minDezenasClasseA})`
+      );
+    }
+  }
+  if (activeFilterConfig.vaziosAtivos && activeFilterConfig.combinacoesVazioExcluidas && activeFilterConfig.combinacoesVazioExcluidas.length > 0) {
+    for (const [v1, v2] of activeFilterConfig.combinacoesVazioExcluidas) {
+      if (dezenas.includes(v1) && dezenas.includes(v2)) {
+        violations.push(`Par de vazio/anti-afinidade exclu\xEDdo presente: [${v1}, ${v2}]`);
+      }
+    }
+  }
+  if (activeFilterConfig.antiPadraoViciadoAtivo) {
+    const viciousCheck = hasViciousVisualPattern(dezenas);
+    if (viciousCheck.isVicious) {
+      violations.push(`Padr\xE3o viciado detectado: ${viciousCheck.reason}`);
+    }
+  }
+  if (activeFilterConfig.antiColisaoHistoricaAtiva || activeFilterConfig.palpiteIneditoAtivo) {
+    if (isHistorical15Collision(dezenas)) {
+      violations.push("Colis\xE3o hist\xF3rica detectada (Palpite In\xE9dito): combina\xE7\xE3o j\xE1 sorteada com 15 pontos");
+    }
+  }
+  if (activeFilterConfig.robustezEstatisticaAtiva) {
+    const rSomaMin = activeFilterConfig.robustez50SomaMin ?? 180;
+    const rSomaMax = activeFilterConfig.robustez50SomaMax ?? 220;
+    const rParesMin = activeFilterConfig.robustez50ParesMin ?? 6;
+    const rParesMax = activeFilterConfig.robustez50ParesMax ?? 8;
+    const rMolduraMin = activeFilterConfig.robustez50MolduraMin ?? 9;
+    const rMolduraMax = activeFilterConfig.robustez50MolduraMax ?? 11;
+    if (analysis.soma < rSomaMin || analysis.soma > rSomaMax) {
+      violations.push(`Robustez 50: Soma fora de [${rSomaMin}-${rSomaMax}]`);
+    }
+    if (analysis.pares < rParesMin || analysis.pares > rParesMax) {
+      violations.push(`Robustez 50: Pares fora de [${rParesMin}-${rParesMax}]`);
+    }
+    if (analysis.moldura < rMolduraMin || analysis.moldura > rMolduraMax) {
+      violations.push(`Robustez 50: Moldura fora de [${rMolduraMin}-${rMolduraMax}]`);
+    }
+  }
+  const cardMask = criarMascara(dezenas);
+  if (activeFilterConfig.posicionalAtivo) {
+    const posRes = validarPosicionalSorted(dezenas);
+    if (!posRes.valido) {
+      violations.push(`Posicional D1\u2013D15 violado: ${posRes.violacoes.slice(0, 3).join(", ")}`);
+    }
+  }
+  if (activeFilterConfig.multiplosAtivo) {
+    const multRes = validarMultiplosMask(cardMask);
+    if (!multRes.valido) {
+      violations.push(`M\xFAltiplos M(3)\u2013M(8) violados: ${multRes.violacoes.join(", ")}`);
+    }
+  }
+  if (activeFilterConfig.contagemDigitosAtiva) {
+    const digRes = validarContagemDigitosMask(
+      cardMask,
+      activeFilterConfig.umDigitoMin ?? 3,
+      activeFilterConfig.umDigitoMax ?? 8,
+      activeFilterConfig.digitosMin ?? 22,
+      activeFilterConfig.digitosMax ?? 27
+    );
+    if (!digRes.valido) {
+      violations.push(
+        `Contagem de D\xEDgitos violada: ${digRes.digitosTotal} d\xEDgitos (${digRes.dezenasUmDigito} de 1 d\xEDgito)`
+      );
+    }
+  }
+  if (activeFilterConfig.somaAlgarismosAtiva) {
+    const somaAlg = analysis.somaAlgarismos ?? calcularSomaAlgarismos(dezenas);
+    const algMin = activeFilterConfig.somaAlgarismosMin ?? 63;
+    const algMax = activeFilterConfig.somaAlgarismosMax ?? 87;
+    if (somaAlg < algMin || somaAlg > algMax) {
+      violations.push(`Soma dos Algarismos fora da faixa: ${somaAlg} (esperado: ${algMin}-${algMax})`);
+    }
+  }
+  if (activeFilterConfig.linhasColunasAtivo) {
+    const lcRes = validarLinhasColunasMask(
+      cardMask,
+      activeFilterConfig.maxLinhasCheias ?? 1,
+      activeFilterConfig.maxColunasCheias ?? 1
+    );
+    if (!lcRes.valido) {
+      violations.push(`Matriz 5x5 Linhas/Colunas: ${lcRes.violacoes.join(", ")}`);
+    }
+  }
+  if (activeFilterConfig.rankingHistoricoAtivo) {
+    const rankRes = validarRankingHistoricoMask(cardMask);
+    if (!rankRes.valido) {
+      violations.push(`Ranking Hist\xF3rico violado: ${rankRes.violacoes.join(", ")}`);
+    }
+  }
+  const isValid = violations.length === 0;
+  return {
+    isValid,
+    reason: violations.length > 0 ? violations.join("; ") : void 0,
+    violations,
+    metrics: {
+      soma: analysis.soma,
+      pares: analysis.pares,
+      impares: analysis.impares,
+      primos: analysis.primos,
+      moldura: analysis.moldura,
+      cruz: cruzCount,
+      fibonacci: analysis.fibonacci,
+      repetidas: analysis.repetidas,
+      maxConsecutivas: analysis.maxConsecutivas,
+      bola1: b1,
+      bola15: b15
+    }
+  };
+}
+function ticketPassesFilters(ticket, filters, concursoAnterior = CONCURSO_ATUAL.dezenas) {
+  return validateFilters(ticket, filters, concursoAnterior).isValid;
+}
+function isCanonicalAnomaly(numbers, analysis, concursoAnterior = CONCURSO_ATUAL.dezenas, sumBoundsOverride) {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const soma = analysis?.soma ?? sorted.reduce((acc, curr) => acc + curr, 0);
+  const pares = analysis?.pares ?? sorted.filter((n) => n % 2 === 0).length;
+  const primos = analysis?.primos ?? sorted.filter((n) => PRIMOS.includes(n)).length;
+  const moldura = analysis?.moldura ?? sorted.filter((n) => MOLDURA.includes(n)).length;
+  const cruz = analysis?.cruz ?? sorted.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+  const maxSequencia = analysis?.maxConsecutivas ?? getMaxConsecutiveSequence(sorted);
+  const bola1 = sorted[0];
+  const bola15 = sorted[sorted.length - 1];
+  const minSoma = sumBoundsOverride?.somaMin ?? 180;
+  const maxSoma = sumBoundsOverride?.somaMax ?? 225;
+  if (soma < minSoma || soma > maxSoma) return true;
+  if (pares < 5 || pares > 10) return true;
+  if (primos < 3 || primos > 8) return true;
+  if (moldura < 7 || moldura > 12) return true;
+  if (maxSequencia > 6) return true;
+  if (cruz < 3 || cruz > 8) return true;
+  if (bola1 > 4) return true;
+  if (bola15 < 22) return true;
+  if (isHistorical15Collision(sorted)) return true;
+  if (hasViciousVisualPattern(sorted).isVicious) return true;
+  if (concursoAnterior && concursoAnterior.length === 15) {
+    const repetidas = analysis?.repetidas ?? countMatches(sorted, concursoAnterior);
+    if (repetidas < 6 || repetidas > 12) return true;
+  }
+  return false;
+}
+function generateMinimumSetCoverFechamento({
+  selectedNumbers,
+  targetHits = 14,
+  maxTickets = 48,
+  filters,
+  concursoAnterior = CONCURSO_ATUAL.dezenas,
+  aiScores
+}) {
+  const excludedSet = new Set(filters?.dezenasExcluidas || []);
+  const sortedPool = [...new Set(selectedNumbers)].filter((d) => !excludedSet.has(d)).sort((a, b) => a - b);
+  const n = sortedPool.length;
+  if (n < 15) {
+    throw new Error("\xC9 necess\xE1rio selecionar pelo menos 15 dezenas.");
+  }
+  const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
+  const effectiveFixedSet = new Set(effectiveFixas);
+  const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
+  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  const effectiveCoreFilters = filters ? {
+    ...filters,
+    dezenasFixas: effectiveFixas,
+    modoFixas: fixedBounds.modo,
+    somaMin: centralMin,
+    somaMax: centralMax
+  } : void 0;
+  const checkFixasCompliance = (nums) => {
+    if (effectiveFixas.length === 0) return true;
+    let present = 0;
+    for (let i = 0; i < effectiveFixas.length; i++) {
+      if (nums.includes(effectiveFixas[i])) present++;
+    }
+    return present >= fixedBounds.minK && present <= fixedBounds.maxK;
+  };
+  const universeSubsets = getCombinations(sortedPool, 15);
+  const universeMasks = universeSubsets.map(criarMascara);
+  const totalUniverse = universeMasks.length;
+  const canonicalSumOverride = {
+    somaMin: Math.min(180, centralMin),
+    somaMax: Math.max(225, centralMax)
+  };
+  const isCandidateValid = (nums) => {
+    if (!checkFixasCompliance(nums)) return false;
+    const a = analyzeTicket(nums, concursoAnterior, aiScores);
+    if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
+    if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
+      return false;
+    }
+    if (a.soma < centralMin || a.soma > centralMax) return false;
+    return true;
+  };
+  const enableStratification = maxTickets >= 10 && n >= 16;
+  const lowerTailMax = Math.max(155, centralMin - 1);
+  const upperTailMin = Math.min(235, centralMax + 1);
+  const isLowerTailCandidate = (nums) => {
+    if (!checkFixasCompliance(nums)) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    if (soma < 155 || soma > lowerTailMax) return false;
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    if (maxSeq > 8) return false;
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    if (bola1 > 4 || bola15 < 20) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+  const isUpperTailCandidate = (nums) => {
+    if (!checkFixasCompliance(nums)) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    if (soma < upperTailMin || soma > 235) return false;
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    if (maxSeq > 7) return false;
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    if (bola1 > 5 || bola15 < 22) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+  const coreCombos = [];
+  const lowerTailCombos = [];
+  const upperTailCombos = [];
+  const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
+  const nonFixedBits = nonFixedPool.map((d) => 1 << d - 1);
+  const fixedSubsets = [];
+  if (effectiveFixas.length === 0) {
+    fixedSubsets.push([]);
+  } else if (fixedBounds.modo === "rotativas") {
+    for (let k = fixedBounds.minK; k <= fixedBounds.maxK; k++) {
+      fixedSubsets.push(...getCombinations(effectiveFixas, k));
+    }
+  } else {
+    fixedSubsets.push([...effectiveFixas]);
+  }
+  const rankingMasks = getHistoricalRankingMasks();
+  const coreSeenMasks = /* @__PURE__ */ new Set();
+  const coreBranchFilters = {
+    somaMin: centralMin,
+    somaMax: centralMax,
+    paresMin: effectiveCoreFilters?.paresMin ?? 5,
+    paresMax: effectiveCoreFilters?.paresMax ?? 10,
+    posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+    multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+    somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+    somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+    somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+    cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+    cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+    cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+    strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+    validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+    rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+    rankingMasks
+  };
+  for (const fSubset of fixedSubsets) {
+    const fMask = criarMascara(fSubset);
+    const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+    const fPares = fSubset.filter((v) => v % 2 === 0).length;
+    const vagas = 15 - fSubset.length;
+    if (vagas < 0 || vagas > nonFixedPool.length) continue;
+    combinarComPodaDinamica(
+      0,
+      0,
+      0,
+      fSum,
+      fPares,
+      vagas,
+      nonFixedPool,
+      nonFixedBits,
+      coreBranchFilters,
+      fMask,
+      (fullMask) => {
+        if (coreSeenMasks.has(fullMask)) return;
+        const combo = mascaraParaDezenas(fullMask);
+        if (isCandidateValid(combo)) {
+          coreSeenMasks.add(fullMask);
+          coreCombos.push(combo);
+        }
+      }
+    );
+  }
+  if (enableStratification) {
+    const lowerTailFilters = {
+      somaMin: 155,
+      somaMax: lowerTailMax,
+      paresMin: 4,
+      paresMax: 11,
+      posicionalAtivo: false
+    };
+    const upperTailFilters = {
+      somaMin: upperTailMin,
+      somaMax: 235,
+      paresMin: 4,
+      paresMax: 11,
+      posicionalAtivo: false
+    };
+    for (const fSubset of fixedSubsets) {
+      const fMask = criarMascara(fSubset);
+      const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+      const fPares = fSubset.filter((v) => v % 2 === 0).length;
+      const vagas = 15 - fSubset.length;
+      if (vagas < 0 || vagas > nonFixedPool.length) continue;
+      combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        lowerTailFilters,
+        fMask,
+        (fullMask) => {
+          if (coreSeenMasks.has(fullMask)) return;
+          const combo = mascaraParaDezenas(fullMask);
+          if (isLowerTailCandidate(combo)) {
+            coreSeenMasks.add(fullMask);
+            lowerTailCombos.push(combo);
+          }
+        }
+      );
+      combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        upperTailFilters,
+        fMask,
+        (fullMask) => {
+          if (coreSeenMasks.has(fullMask)) return;
+          const combo = mascaraParaDezenas(fullMask);
+          if (isUpperTailCandidate(combo)) {
+            coreSeenMasks.add(fullMask);
+            upperTailCombos.push(combo);
+          }
+        }
+      );
+    }
+  }
+  let lowerTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
+  let upperTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.1)) : 0;
+  if (lowerTailCombos.length === 0) lowerTailQuota = 0;
+  if (upperTailCombos.length === 0) upperTailQuota = 0;
+  const coreQuota = Math.max(1, maxTickets - lowerTailQuota - upperTailQuota);
+  const candidateCombos = [...coreCombos, ...lowerTailCombos, ...upperTailCombos];
+  if (candidateCombos.length === 0) {
+    throw new Error(
+      'Nenhum jogo compat\xEDvel com os filtros selecionados. Os filtros definidos em "Sugest\xF5es Estrat\xE9gicas" ou "Filtros Can\xF4nicos" s\xE3o excessivamente restritivos para o universo de dezenas selecionado. Tente flexibilizar os limites de Soma, Pares/\xCDmpares, Primos ou Moldura.'
+    );
+  }
+  const candMasks = candidateCombos.map(criarMascara);
+  const candCount = candidateCombos.length;
+  const candCoverLists = new Array(candCount);
+  for (let i = 0; i < candCount; i++) {
+    const cMask = candMasks[i];
+    const covered = [];
+    for (let j = 0; j < totalUniverse; j++) {
+      if (popcount(cMask & universeMasks[j]) >= targetHits) {
+        covered.push(j);
+      }
+    }
+    candCoverLists[i] = covered;
+  }
+  const candScores = candidateCombos.map(
+    (c) => analyzeTicket(c, concursoAnterior, aiScores).scoreIA
+  );
+  const coveredCounts = new Uint16Array(totalUniverse);
+  let uncoveredRemaining = totalUniverse;
+  const chosenIndices = [];
+  const chosenMasks = [];
+  const chosenSet = /* @__PURE__ */ new Set();
+  const targetHammingDist = Math.min(
+    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
+    Math.max(1, n - 15)
+  );
+  const freqBounds = calculateVariableFrequencyBounds(
+    maxTickets,
+    n,
+    effectiveFixas.length,
+    fixedBounds.modo
+  );
+  const numberFreq = {};
+  const fixedFreq = {};
+  const usedFixedSubsets = /* @__PURE__ */ new Set();
+  let lowerTailChosen = 0;
+  let upperTailChosen = 0;
+  let coreChosen = 0;
+  const savedTicketsSet = getAllSavedTicketsSet();
+  const pickBestCandidate = (minHammingReq, requireUncoveredGain, enforceSoftFreqCap) => {
+    let bestCandIdx = -1;
+    let bestCombinedGain = -9999999;
+    for (let i = 0; i < candCount; i++) {
+      if (chosenSet.has(i)) continue;
+      const cand = candidateCombos[i];
+      const cMask = candMasks[i];
+      const isLower = i >= coreCombos.length && i < coreCombos.length + lowerTailCombos.length;
+      const isUpper = i >= coreCombos.length + lowerTailCombos.length;
+      if (isLower && lowerTailChosen >= lowerTailQuota) continue;
+      if (isUpper && upperTailChosen >= upperTailQuota) continue;
+      if (!isLower && !isUpper && coreChosen >= coreQuota) {
+        const lowerNeeded = Math.max(0, lowerTailQuota - lowerTailChosen);
+        const upperNeeded = Math.max(0, upperTailQuota - upperTailChosen);
+        const remainingSlots = maxTickets - chosenIndices.length;
+        if (remainingSlots <= lowerNeeded + upperNeeded && (lowerTailCombos.length > 0 || upperTailCombos.length > 0)) {
+          continue;
+        }
+      }
+      const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
+      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
+        continue;
+      }
+      const covers = candCoverLists[i];
+      let newCovers = 0;
+      for (let k = 0; k < covers.length; k++) {
+        if (coveredCounts[covers[k]] === 0) {
+          newCovers++;
+        }
+      }
+      if (requireUncoveredGain && newCovers <= 0 && uncoveredRemaining > 0) continue;
+      let freqBalanceScore = 0;
+      let saturatedCount = 0;
+      for (let idxD = 0; idxD < cand.length; idxD++) {
+        const d = cand[idxD];
+        if (effectiveFixedSet.has(d)) {
+          if (fixedBounds.modo === "rotativas") {
+            const curF = fixedFreq[d] || 0;
+            if (curF > freqBounds.fixedIdeal * 1.1) {
+              freqBalanceScore -= 45 * (curF - freqBounds.fixedIdeal + 1);
+            } else if (curF < freqBounds.fixedIdeal * 0.9) {
+              freqBalanceScore += 22;
+            }
+          }
+        } else {
+          const curVarF = numberFreq[d] || 0;
+          if (curVarF >= freqBounds.freqMaxCap) {
+            saturatedCount++;
+            freqBalanceScore -= 85 * (curVarF - freqBounds.freqMaxCap + 1);
+          } else if (curVarF < freqBounds.freqMinTarget) {
+            freqBalanceScore += 18 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+          }
+        }
+      }
+      if (enforceSoftFreqCap && saturatedCount > 2) continue;
+      let rotationBonus = 0;
+      if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
+        const subsetKey = effectiveFixas.filter((f) => cand.includes(f)).join("-");
+        if (!usedFixedSubsets.has(subsetKey)) {
+          rotationBonus += 28;
+        }
+      }
+      const candKey = cand.join("-");
+      const savedPenalty = savedTicketsSet.has(candKey) ? 45 : 0;
+      const hammingBonus = Math.min(minDist, 6) * 6;
+      let winningBonus = 0;
+      const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
+      const nucleoHits = cand.filter((num) => nucleoVencedor.includes(num)).length;
+      if (nucleoHits >= 8) winningBonus += 0.8;
+      const jitter = Math.random() * 0.2;
+      const combinedGain = newCovers * 10 + candScores[i] / 100 + hammingBonus + freqBalanceScore + rotationBonus + winningBonus + jitter - savedPenalty;
+      if (combinedGain > bestCombinedGain) {
+        bestCombinedGain = combinedGain;
+        bestCandIdx = i;
+      }
+    }
+    return bestCandIdx;
+  };
+  const commitCandidate = (candIdx) => {
+    chosenSet.add(candIdx);
+    chosenIndices.push(candIdx);
+    chosenMasks.push(candMasks[candIdx]);
+    const chosenCand = candidateCombos[candIdx];
+    const isLower = candIdx >= coreCombos.length && candIdx < coreCombos.length + lowerTailCombos.length;
+    const isUpper = candIdx >= coreCombos.length + lowerTailCombos.length;
+    if (isLower) lowerTailChosen++;
+    else if (isUpper) upperTailChosen++;
+    else coreChosen++;
+    if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
+      const subsetKey = effectiveFixas.filter((f) => chosenCand.includes(f)).join("-");
+      usedFixedSubsets.add(subsetKey);
+    }
+    for (const d of chosenCand) {
+      if (effectiveFixedSet.has(d)) {
+        fixedFreq[d] = (fixedFreq[d] || 0) + 1;
+      } else {
+        numberFreq[d] = (numberFreq[d] || 0) + 1;
+      }
+    }
+    const covers = candCoverLists[candIdx];
+    for (let k = 0; k < covers.length; k++) {
+      const uIdx = covers[k];
+      if (coveredCounts[uIdx] === 0) {
+        uncoveredRemaining--;
+      }
+      coveredCounts[uIdx]++;
+    }
+  };
+  let greedyStep = 0;
+  const maxGreedySteps = Math.min(maxTickets * 2, 250);
+  while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
+    let idx = pickBestCandidate(targetHammingDist, true, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
+    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    if (idx === -1) break;
+    commitCandidate(idx);
+  }
+  while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
+    let idx = pickBestCandidate(targetHammingDist, false, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
+    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    if (idx === -1) break;
+    commitCandidate(idx);
+  }
+  let improved = true;
+  let prunePass = 0;
+  const minKeepCount = enableStratification ? maxTickets : maxTickets <= 24 ? Math.min(20, maxTickets) : Math.floor(maxTickets * 0.85);
+  while (improved && prunePass++ < 30 && chosenIndices.length > minKeepCount) {
+    improved = false;
+    for (let p = chosenIndices.length - 1; p >= 0; p--) {
+      const candIdx = chosenIndices[p];
+      const isTail = candIdx >= coreCombos.length;
+      if (isTail) continue;
+      const covers = candCoverLists[candIdx];
+      let canBePruned = true;
+      for (let k = 0; k < covers.length; k++) {
+        if (coveredCounts[covers[k]] <= 1) {
+          canBePruned = false;
+          break;
+        }
+      }
+      if (canBePruned && chosenIndices.length > minKeepCount) {
+        chosenIndices.splice(p, 1);
+        chosenMasks.splice(p, 1);
+        chosenSet.delete(candIdx);
+        for (let k = 0; k < covers.length; k++) {
+          coveredCounts[covers[k]]--;
+        }
+        improved = true;
+        break;
+      }
+    }
+  }
+  const finalEntries = chosenIndices.map((candIdx) => {
+    const faixaSoma = candIdx >= coreCombos.length + lowerTailCombos.length ? "alta" : candIdx >= coreCombos.length ? "baixa" : "ouro";
+    const analysis = analyzeTicket(candidateCombos[candIdx], concursoAnterior, aiScores);
+    return {
+      nums: candidateCombos[candIdx],
+      faixaSoma,
+      analysis
+    };
+  });
+  finalEntries.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
+  const universeSet = new Set(sortedPool);
+  const isValidUniverse = finalEntries.every((e) => e.nums.every((d) => universeSet.has(d)));
+  if (!isValidUniverse) {
+    throw new Error("Falha de integridade: bilhetes gerados cont\xEAm dezenas fora do universoDezenas selecionado.");
+  }
+  return finalEntries.map((entry, idx) => ({
+    id: `ticket-setcover-${idx + 1}`,
+    index: idx + 1,
+    ...entry.analysis,
+    faixaSoma: entry.faixaSoma,
+    tags: [
+      entry.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : entry.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : `Central (${centralMin}\u2013${centralMax})`,
+      fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : "Hamming Otimizado"
+    ]
+  }));
+}
+function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets = 32, filters, concursoAnterior = CONCURSO_ATUAL.dezenas, aiScores) {
+  const excludedSet = new Set(filters?.dezenasExcluidas || []);
+  const sortedPool = [...new Set(selectedNumbers)].filter((d) => !excludedSet.has(d)).sort((a, b) => a - b);
+  const n = sortedPool.length;
+  if (n < 15) {
+    throw new Error("\xC9 necess\xE1rio selecionar pelo menos 15 dezenas.");
+  }
+  const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
+  const effectiveFixedSet = new Set(effectiveFixas);
+  const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
+  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  const effectiveCoreFilters = filters ? {
+    ...filters,
+    dezenasFixas: effectiveFixas,
+    modoFixas: fixedBounds.modo,
+    somaMin: centralMin,
+    somaMax: centralMax
+  } : void 0;
+  if ((n === 18 || n === 19) && targetHits === 14) {
+    return generateMinimumSetCoverFechamento({
+      selectedNumbers: sortedPool,
+      targetHits: 14,
+      maxTickets,
+      filters: effectiveCoreFilters || {
+        ...DEFAULT_FILTERS,
+        dezenasFixas: effectiveFixas,
+        modoFixas: fixedBounds.modo,
+        somaMin: centralMin,
+        somaMax: centralMax
+      },
+      concursoAnterior,
+      aiScores
+    });
+  }
+  const checkFixasCompliance = (nums) => {
+    if (effectiveFixas.length === 0) return true;
+    let present = 0;
+    for (let i = 0; i < effectiveFixas.length; i++) {
+      if (nums.includes(effectiveFixas[i])) present++;
+    }
+    return present >= fixedBounds.minK && present <= fixedBounds.maxK;
+  };
+  const canonicalSumOverride = {
+    somaMin: Math.min(180, centralMin),
+    somaMax: Math.max(225, centralMax)
+  };
+  const isCandidateValid = (nums) => {
+    if (!checkFixasCompliance(nums)) return false;
+    const a = analyzeTicket(nums, concursoAnterior, aiScores);
+    if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
+    if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
+      return false;
+    }
+    if (a.soma < centralMin || a.soma > centralMax) return false;
+    return true;
+  };
+  if (n === 15) {
+    let final15 = [...sortedPool];
+    if (!isCandidateValid(final15)) {
+      const fixed = effectiveFixas;
+      const excluded = filters?.dezenasExcluidas ?? [];
+      const pool25 = Array.from({ length: 25 }, (_, i) => i + 1).filter((num) => !excluded.includes(num));
+      let foundValid = false;
+      const nonFixed = final15.filter((x) => !fixed.includes(x));
+      const availableSubstitutes = pool25.filter((x) => !final15.includes(x));
+      for (let i = 0; i < nonFixed.length && !foundValid; i++) {
+        for (let j = 0; j < availableSubstitutes.length; j++) {
+          const testComb = [...final15.filter((x) => x !== nonFixed[i]), availableSubstitutes[j]].sort((a, b) => a - b);
+          if (isCandidateValid(testComb)) {
+            final15 = testComb;
+            foundValid = true;
+            break;
+          }
+        }
+      }
+      if (!foundValid) {
+        const optPool = buildOptimal18Pool(CONCURSO_ATUAL, DEZENAS_STATS, [], 9, 9).dezenas18.filter((x) => !excluded.includes(x));
+        final15 = Array.from(/* @__PURE__ */ new Set([...fixed, ...optPool, ...pool25])).slice(0, 15).sort((a, b) => a - b);
+      }
+    }
+    const analysis = analyzeTicket(final15, concursoAnterior, aiScores);
+    return [{ id: "ticket-1", index: 1, ...analysis, faixaSoma: "ouro" }];
+  }
+  const enableStratification = maxTickets >= 10 && n >= 16;
+  const lowerTailMax = Math.max(155, centralMin - 1);
+  const upperTailMin = Math.min(235, centralMax + 1);
+  const isLowerTailCandidate = (nums) => {
+    if (!enableStratification) return false;
+    if (!checkFixasCompliance(nums)) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    if (soma < 155 || soma > lowerTailMax) return false;
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    if (maxSeq > 8) return false;
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    if (bola1 > 4 || bola15 < 20) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+  const isUpperTailCandidate = (nums) => {
+    if (!enableStratification) return false;
+    if (!checkFixasCompliance(nums)) return false;
+    const sorted = [...nums].sort((x, y) => x - y);
+    const soma = sorted.reduce((a, b) => a + b, 0);
+    if (soma < upperTailMin || soma > 235) return false;
+    const maxSeq = getMaxConsecutiveSequence(sorted);
+    if (maxSeq > 7) return false;
+    const pares = sorted.filter((d) => d % 2 === 0).length;
+    const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
+    const bola1 = sorted[0];
+    const bola15 = sorted[sorted.length - 1];
+    if (bola1 > 5 || bola15 < 22) return false;
+    if (pares < 4 || pares > 11) return false;
+    if (primos < 3 || primos > 8) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    return true;
+  };
+  const coreCandidates = [];
+  const lowerTailCandidates = [];
+  const upperTailCandidates = [];
+  const candidateSeen = /* @__PURE__ */ new Set();
+  const maxCorePool = n <= 17 ? 2e3 : 3500;
+  const maxTailPool = 600;
+  const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
+  const nonFixedBits = nonFixedPool.map((d) => 1 << d - 1);
+  const fixedSubsets = [];
+  if (effectiveFixas.length === 0) {
+    fixedSubsets.push([]);
+  } else if (fixedBounds.modo === "rotativas") {
+    for (let k = fixedBounds.minK; k <= fixedBounds.maxK; k++) {
+      fixedSubsets.push(...getCombinations(effectiveFixas, k));
+    }
+  } else {
+    fixedSubsets.push([...effectiveFixas]);
+  }
+  const rankingMasks = getHistoricalRankingMasks();
+  if (n <= 17) {
+    const coreBranchFilters = {
+      somaMin: centralMin,
+      somaMax: centralMax,
+      paresMin: effectiveCoreFilters?.paresMin ?? 5,
+      paresMax: effectiveCoreFilters?.paresMax ?? 10,
+      posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+      multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+      somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+      somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+      somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+      cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+      cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+      cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+      strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+      validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+      rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+      rankingMasks
+    };
+    for (const fSubset of fixedSubsets) {
+      const fMask = criarMascara(fSubset);
+      const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+      const fPares = fSubset.filter((v) => v % 2 === 0).length;
+      const vagas = 15 - fSubset.length;
+      if (vagas < 0 || vagas > nonFixedPool.length) continue;
+      combinarComPodaDinamica(
+        0,
+        0,
+        0,
+        fSum,
+        fPares,
+        vagas,
+        nonFixedPool,
+        nonFixedBits,
+        coreBranchFilters,
+        fMask,
+        (fullMask) => {
+          if (coreCandidates.length >= maxCorePool) return;
+          const combo = mascaraParaDezenas(fullMask);
+          const key = combo.join("-");
+          if (candidateSeen.has(key)) return;
+          if (isCandidateValid(combo)) {
+            candidateSeen.add(key);
+            coreCandidates.push(combo);
+          }
+        }
+      );
+    }
+    if (enableStratification) {
+      const lowerTailFilters = {
+        somaMin: 155,
+        somaMax: lowerTailMax,
+        paresMin: 4,
+        paresMax: 11,
+        posicionalAtivo: false
+      };
+      const upperTailFilters = {
+        somaMin: upperTailMin,
+        somaMax: 235,
+        paresMin: 4,
+        paresMax: 11,
+        posicionalAtivo: false
+      };
+      for (const fSubset of fixedSubsets) {
+        const fMask = criarMascara(fSubset);
+        const fSum = fSubset.reduce((acc, v) => acc + v, 0);
+        const fPares = fSubset.filter((v) => v % 2 === 0).length;
+        const vagas = 15 - fSubset.length;
+        if (vagas < 0 || vagas > nonFixedPool.length) continue;
+        combinarComPodaDinamica(
+          0,
+          0,
+          0,
+          fSum,
+          fPares,
+          vagas,
+          nonFixedPool,
+          nonFixedBits,
+          lowerTailFilters,
+          fMask,
+          (fullMask) => {
+            if (lowerTailCandidates.length >= maxTailPool) return;
+            const combo = mascaraParaDezenas(fullMask);
+            const key = combo.join("-");
+            if (candidateSeen.has(key)) return;
+            if (isLowerTailCandidate(combo)) {
+              candidateSeen.add(key);
+              lowerTailCandidates.push(combo);
+            }
+          }
+        );
+        combinarComPodaDinamica(
+          0,
+          0,
+          0,
+          fSum,
+          fPares,
+          vagas,
+          nonFixedPool,
+          nonFixedBits,
+          upperTailFilters,
+          fMask,
+          (fullMask) => {
+            if (upperTailCandidates.length >= maxTailPool) return;
+            const combo = mascaraParaDezenas(fullMask);
+            const key = combo.join("-");
+            if (candidateSeen.has(key)) return;
+            if (isUpperTailCandidate(combo)) {
+              candidateSeen.add(key);
+              upperTailCandidates.push(combo);
+            }
+          }
+        );
+      }
+    }
+  } else {
+    const totalAttempts = 16e3;
+    const workingNonFixed = [...nonFixedPool];
+    const nfLen = workingNonFixed.length;
+    const fastEarlyExitCoreCheck = (combo) => {
+      const soma = combo.reduce((a, b) => a + b, 0);
+      if (soma < centralMin || soma > centralMax) return false;
+      const mask = criarMascara(combo);
+      if (effectiveCoreFilters?.posicionalAtivo && !validarPosicionalSorted(combo).valido) return false;
+      if (effectiveCoreFilters?.multiplosAtivo && !validarMultiplosMask(mask).valido) return false;
+      if (effectiveCoreFilters?.somaAlgarismosAtiva) {
+        const alg = calcularSomaAlgarismos(combo);
+        const aMin = effectiveCoreFilters.somaAlgarismosMin ?? 63;
+        const aMax = effectiveCoreFilters.somaAlgarismosMax ?? 87;
+        if (alg < aMin || alg > aMax) return false;
+      }
+      if (effectiveCoreFilters?.cruzAtiva !== false) {
+        const isStrict = effectiveCoreFilters?.strictValidation || effectiveCoreFilters?.validacaoEstritaCruz;
+        const cMin = isStrict ? 5 : effectiveCoreFilters?.cruzMin ?? 4;
+        const cMax = isStrict ? 6 : effectiveCoreFilters?.cruzMax ?? 7;
+        const cruzCnt = popcount(mask & MASK_CRUZ);
+        if (cruzCnt < cMin || cruzCnt > cMax) return false;
+      }
+      if (effectiveCoreFilters?.rankingHistoricoAtivo && !validarRankingHistoricoMask(mask).valido) {
+        return false;
+      }
+      return true;
+    };
+    for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      if (coreCandidates.length >= maxCorePool && (!enableStratification || lowerTailCandidates.length >= maxTailPool && upperTailCandidates.length >= maxTailPool)) {
+        break;
+      }
+      const fSubset = fixedSubsets[attempt % fixedSubsets.length];
+      const needVar = 15 - fSubset.length;
+      if (needVar > nfLen || needVar < 0) continue;
+      let chosenVars;
+      if (enableStratification && attempt % 7 === 0 && lowerTailCandidates.length < maxTailPool) {
+        const biased = [...workingNonFixed].sort((a, b) => a - b + (Math.random() - 0.5) * 10);
+        chosenVars = biased.slice(0, needVar);
+      } else if (enableStratification && attempt % 7 === 1 && upperTailCandidates.length < maxTailPool) {
+        const biased = [...workingNonFixed].sort((a, b) => b - a + (Math.random() - 0.5) * 10);
+        chosenVars = biased.slice(0, needVar);
+      } else {
+        for (let i = 0; i < needVar; i++) {
+          const r = i + Math.floor(Math.random() * (nfLen - i));
+          const tmp = workingNonFixed[i];
+          workingNonFixed[i] = workingNonFixed[r];
+          workingNonFixed[r] = tmp;
+        }
+        chosenVars = workingNonFixed.slice(0, needVar);
+      }
+      const combo = [...fSubset, ...chosenVars].sort((a, b) => a - b);
+      const key = combo.join("-");
+      if (candidateSeen.has(key)) continue;
+      if (coreCandidates.length < maxCorePool && fastEarlyExitCoreCheck(combo) && isCandidateValid(combo)) {
+        candidateSeen.add(key);
+        coreCandidates.push(combo);
+      } else if (isLowerTailCandidate(combo) && lowerTailCandidates.length < maxTailPool) {
+        candidateSeen.add(key);
+        lowerTailCandidates.push(combo);
+      } else if (isUpperTailCandidate(combo) && upperTailCandidates.length < maxTailPool) {
+        candidateSeen.add(key);
+        upperTailCandidates.push(combo);
+      }
+    }
+  }
+  const allPoolCount = coreCandidates.length + lowerTailCandidates.length + upperTailCandidates.length;
+  if (allPoolCount === 0) {
+    throw new Error(
+      'Nenhum jogo compat\xEDvel com os filtros selecionados. Os filtros definidos em "Sugest\xF5es Estrat\xE9gicas" ou "Filtros Can\xF4nicos" s\xE3o excessivamente restritivos para o universo de dezenas selecionado. Tente flexibilizar os limites de Soma, Pares/\xCDmpares, Primos ou Moldura.'
+    );
+  }
+  const sortByAIScore = (arr) => {
+    arr.sort((a, b) => {
+      const sA = analyzeTicket(a, concursoAnterior, aiScores).scoreIA;
+      const sB = analyzeTicket(b, concursoAnterior, aiScores).scoreIA;
+      return sB - sA;
+    });
+  };
+  sortByAIScore(coreCandidates);
+  sortByAIScore(lowerTailCandidates);
+  sortByAIScore(upperTailCandidates);
+  const unifiedCandidates = [
+    ...coreCandidates.map((nums) => ({
+      nums,
+      mask: criarMascara(nums),
+      key: nums.join("-"),
+      faixaSoma: "ouro",
+      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
+    })),
+    ...lowerTailCandidates.map((nums) => ({
+      nums,
+      mask: criarMascara(nums),
+      key: nums.join("-"),
+      faixaSoma: "baixa",
+      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
+    })),
+    ...upperTailCandidates.map((nums) => ({
+      nums,
+      mask: criarMascara(nums),
+      key: nums.join("-"),
+      faixaSoma: "alta",
+      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
+    }))
+  ];
+  let lowerQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
+  let upperQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.1)) : 0;
+  if (lowerTailCandidates.length === 0) lowerQuota = 0;
+  if (upperTailCandidates.length === 0) upperQuota = 0;
+  const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
+  const testSubsetMasks = unifiedCandidates.slice(0, Math.min(unifiedCandidates.length, 600)).map((c) => c.mask);
+  const uncovered = new Set(testSubsetMasks.map((_, idx) => idx));
+  const chosen = [];
+  const chosenMasks = [];
+  const chosenKeySet = /* @__PURE__ */ new Set();
+  const targetHammingDist = Math.min(
+    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
+    Math.max(1, n - 15)
+  );
+  const freqBounds = calculateVariableFrequencyBounds(
+    maxTickets,
+    n,
+    effectiveFixas.length,
+    fixedBounds.modo
+  );
+  const numberFreq = {};
+  const fixedFreq = {};
+  const usedFixedSubsets = /* @__PURE__ */ new Set();
+  const savedTicketsSet = getAllSavedTicketsSet();
+  let coreChosen = 0;
+  let lowerChosen = 0;
+  let upperChosen = 0;
+  const selectNextFromPool = (allowedFaixa, minHammingReq, requireUncoveredGain, enforceSoftFreqCap) => {
+    let bestIdx = -1;
+    let bestWeight = -9999999;
+    let bestCovered = [];
+    const searchLimit = Math.min(unifiedCandidates.length, 650);
+    for (let i = 0; i < unifiedCandidates.length; i++) {
+      const cand = unifiedCandidates[i];
+      if (chosenKeySet.has(cand.key)) continue;
+      if (allowedFaixa !== "any" && cand.faixaSoma !== allowedFaixa) continue;
+      if (allowedFaixa === "any") {
+        if (cand.faixaSoma === "baixa" && lowerChosen >= lowerQuota) continue;
+        if (cand.faixaSoma === "alta" && upperChosen >= upperQuota) continue;
+        if (cand.faixaSoma === "ouro" && coreChosen >= coreQuota) continue;
+      }
+      const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
+      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
+        continue;
+      }
+      if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === "ouro") continue;
+      let coverCount = 0;
+      const coveredHere = [];
+      if (uncovered.size > 0) {
+        for (const subsetIdx of uncovered) {
+          if (popcount(cand.mask & testSubsetMasks[subsetIdx]) >= targetHits) {
+            coverCount++;
+            coveredHere.push(subsetIdx);
+          }
+        }
+      }
+      if (requireUncoveredGain && uncovered.size > 0 && coverCount === 0) continue;
+      let freqScore = 0;
+      let saturatedCount = 0;
+      for (let idxD = 0; idxD < cand.nums.length; idxD++) {
+        const d = cand.nums[idxD];
+        if (effectiveFixedSet.has(d)) {
+          if (fixedBounds.modo === "rotativas") {
+            const curF = fixedFreq[d] || 0;
+            if (curF > freqBounds.fixedIdeal * 1.1) {
+              freqScore -= 45 * (curF - freqBounds.fixedIdeal + 1);
+            } else if (curF < freqBounds.fixedIdeal * 0.9) {
+              freqScore += 20;
+            }
+          }
+        } else {
+          const curVarF = numberFreq[d] || 0;
+          if (curVarF >= freqBounds.freqMaxCap) {
+            saturatedCount++;
+            freqScore -= 85 * (curVarF - freqBounds.freqMaxCap + 1);
+          } else if (curVarF < freqBounds.freqMinTarget) {
+            freqScore += 18 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+          }
+        }
+      }
+      if (enforceSoftFreqCap && saturatedCount > 2) continue;
+      let rotationBonus = 0;
+      if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
+        const subsetKey = effectiveFixas.filter((f) => cand.nums.includes(f)).join("-");
+        if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 28;
+      }
+      const savedPenalty = savedTicketsSet.has(cand.key) ? 25 : 0;
+      const hammingBonus = Math.min(minDist, 6) * 5;
+      const jitter = Math.random() * 0.2;
+      const analysis = analyzeTicket(cand.nums, concursoAnterior, aiScores);
+      let winningBonus = 0;
+      const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
+      if (cand.nums.filter((num) => nucleoVencedor.includes(num)).length >= 8) winningBonus += 0.35;
+      if (analysis.pares === 7 && analysis.impares === 8) winningBonus += 0.25;
+      const weight = coverCount * 2 + cand.scoreIA / 100 * 0.8 + hammingBonus + freqScore + rotationBonus + winningBonus + jitter - savedPenalty;
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        bestIdx = i;
+        bestCovered = coveredHere;
+      }
+    }
+    if (bestIdx === -1) return null;
+    return { idx: bestIdx, coveredHere: bestCovered };
+  };
+  const commitChosen = (cand, coveredHere) => {
+    chosen.push(cand);
+    chosenMasks.push(cand.mask);
+    chosenKeySet.add(cand.key);
+    if (cand.faixaSoma === "baixa") lowerChosen++;
+    else if (cand.faixaSoma === "alta") upperChosen++;
+    else coreChosen++;
+    if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
+      const subsetKey = effectiveFixas.filter((f) => cand.nums.includes(f)).join("-");
+      usedFixedSubsets.add(subsetKey);
+    }
+    for (const d of cand.nums) {
+      if (effectiveFixedSet.has(d)) fixedFreq[d] = (fixedFreq[d] || 0) + 1;
+      else numberFreq[d] = (numberFreq[d] || 0) + 1;
+    }
+    for (const coveredIdx of coveredHere) {
+      uncovered.delete(coveredIdx);
+    }
+  };
+  if (enableStratification) {
+    while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
+      const hit = selectNextFromPool("baixa", targetHammingDist, false, true) || selectNextFromPool("baixa", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("baixa", 2, false, false) : null) || selectNextFromPool("baixa", 1, false, false);
+      if (!hit) break;
+      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    }
+    while (upperChosen < upperQuota && chosen.length < maxTickets) {
+      const hit = selectNextFromPool("alta", targetHammingDist, false, true) || selectNextFromPool("alta", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("alta", 2, false, false) : null) || selectNextFromPool("alta", 1, false, false);
+      if (!hit) break;
+      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    }
+  }
+  let greedyLoop = 0;
+  const maxGreedyLoops = Math.min(maxTickets * 2, 220);
+  while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
+    const hit = selectNextFromPool("ouro", targetHammingDist, true, true) || selectNextFromPool("ouro", targetHammingDist, true, false) || selectNextFromPool("ouro", targetHammingDist, false, true) || selectNextFromPool("ouro", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("ouro", 2, false, false) : null) || selectNextFromPool("ouro", 1, false, false);
+    if (!hit) break;
+    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+  }
+  while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
+    const hit = selectNextFromPool("any", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("any", 2, false, false) : null) || selectNextFromPool("any", 1, false, false);
+    if (!hit) break;
+    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+  }
+  chosen.sort((a, b) => b.scoreIA - a.scoreIA);
+  const universeSet = new Set(sortedPool);
+  const isValidUniverse = chosen.every((c) => c.nums.every((d) => universeSet.has(d)));
+  if (!isValidUniverse) {
+    throw new Error("Falha de integridade: bilhetes gerados cont\xEAm dezenas fora do universoDezenas selecionado.");
+  }
+  return chosen.map((item, index) => {
+    const analysis = analyzeTicket(item.nums, concursoAnterior, aiScores);
+    return {
+      id: `ticket-${index + 1}`,
+      index: index + 1,
+      ...analysis,
+      faixaSoma: item.faixaSoma,
+      tags: [
+        item.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : item.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : `Central (${centralMin}\u2013${centralMax})`,
+        fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : "Hamming Otimizado"
+      ]
+    };
+  });
+}
+var VALOR_APOSTA_LOTOFACIL = 3.5;
+var DEFAULT_FILTERS = {
+  paresMin: 6,
+  // Tolerância Dinâmica Ampla: absorve variações de 6 a 9 pares (incluindo atípicos como concurso #3816)
+  paresMax: 9,
+  primosMin: 4,
+  // Calibrated: 4 a 7 primos cobre >86% dos sorteios
+  primosMax: 7,
+  somaMin: 180,
+  // Vetar somas < 180 (Alerta Estatístico), concentrando na Zona de Ouro Expandida (185 a 215)
+  somaMax: 220,
+  molduraMin: 8,
+  // Moldura canônica expandida (8 a 12 externas): evita overfitting estatístico que elimina resultados reais
+  molduraMax: 12,
+  fibonacciMin: 3,
+  fibonacciMax: 5,
+  repetidasMin: 6,
+  // Alargamento da janela de repetidas para 6 a 10 dezenas (absorve quebras e transições de ciclo)
+  repetidasMax: 10,
+  maxConsecutivas: 6,
+  // Permite sequências de até 6 números consecutivos (ex: blocos 01-04, 16-18, 14-19)
+  cruzMin: 4,
+  // Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
+  cruzMax: 7,
+  cruzAtiva: true,
+  bola1Min: 1,
+  // Bola 1 deve ser 1, 2, 3 ou 4 (idealmente 1 ou 2)
+  bola1Max: 4,
+  bola15Min: 22,
+  // Bola 15 deve ser 22, 23, 24 ou 25 (idealmente 24 ou 25)
+  bola15Max: 25,
+  extremidadesAtiva: true,
+  apenasZonaDeOuroPrimos: false,
+  // Quando ativo restringe estritamente para 5 ou 6 primos (>70% histórico)
+  antiColisaoHistoricaAtiva: true,
+  // Bloqueia combinações 100% idênticas a concursos anteriores da Caixa
+  antiPadraoViciadoAtivo: true,
+  // Veta linhas/colunas cheias e sequências em PA óbvias
+  dezenasFixas: [],
+  dezenasExcluidas: [],
+  curvaAbcAtiva: false,
+  minDezenasClasseA: 11,
+  combinacoesVazioExcluidas: [],
+  vaziosAtivos: false,
+  robustezEstatisticaAtiva: false,
+  robustez50SomaMin: 180,
+  robustez50SomaMax: 220,
+  robustez50ParesMin: 6,
+  robustez50ParesMax: 9,
+  robustez50MolduraMin: 8,
+  robustez50MolduraMax: 12,
+  // Limite superior expandido para 12 dezenas na moldura
+  fechamentoPonderadoAtivo: false,
+  validacaoEstritaCruz: false,
+  strictValidation: false,
+  presetEstatistico: "balanceado",
+  modoFixas: "rotativas",
+  autoCalibrarSomaUniverso: true,
+  posicionalAtivo: true,
+  multiplosAtivo: true,
+  contagemDigitosAtiva: true,
+  digitosMin: 22,
+  digitosMax: 27,
+  umDigitoMin: 3,
+  umDigitoMax: 8,
+  somaAlgarismosAtiva: true,
+  somaAlgarismosMin: 63,
+  somaAlgarismosMax: 87,
+  linhasColunasAtivo: true,
+  maxLinhasCheias: 1,
+  maxColunasCheias: 1,
+  rankingHistoricoAtivo: true,
+  palpiteIneditoAtivo: true
+};
+function buildOptimalPool(targetCount = 18, previousDraw = CONCURSO_ATUAL, dynamicStats = DEZENAS_STATS, cyclePending = [], customRepetidas, customAusentes) {
+  const repetidasDisponiveis = [...previousDraw.dezenas];
+  const ausentesDisponiveis = Array.from({ length: 25 }, (_, i) => i + 1).filter(
+    (n) => !previousDraw.dezenas.includes(n)
+  );
+  let qtdRepetidas = customRepetidas;
+  let qtdAusentes = customAusentes;
+  if (qtdRepetidas === void 0 || qtdAusentes === void 0) {
+    if (targetCount === 15) {
+      qtdRepetidas = 9;
+      qtdAusentes = 6;
+    } else if (targetCount === 16) {
+      qtdRepetidas = 9;
+      qtdAusentes = 7;
+    } else if (targetCount === 17) {
+      qtdRepetidas = 9;
+      qtdAusentes = 8;
+    } else if (targetCount === 18) {
+      qtdRepetidas = 9;
+      qtdAusentes = 9;
+    } else if (targetCount === 19) {
+      qtdRepetidas = 10;
+      qtdAusentes = 9;
+    } else if (targetCount === 20) {
+      qtdRepetidas = 10;
+      qtdAusentes = 10;
+    } else if (targetCount >= 21) {
+      qtdRepetidas = 11;
+      qtdAusentes = 10;
+    } else {
+      qtdRepetidas = Math.min(9, targetCount);
+      qtdAusentes = targetCount - qtdRepetidas;
+    }
+  }
+  const scoredAusentes = ausentesDisponiveis.map((n) => {
+    const stat = dynamicStats.find((s) => s.numero === n);
+    let score = 50;
+    if (cyclePending.includes(n)) score += 60;
+    if (stat?.atrasoAcimaDaMedia) score += 40;
+    if (stat) score += (stat.atrasoAtual || 1) * 6;
+    if (isMoldura(n)) score += 8;
+    if (stat) score += stat.vezes / 200;
+    return { numero: n, score, stat };
+  });
+  scoredAusentes.sort((a, b) => b.score - a.score);
+  let ausentesSelecionadas = scoredAusentes.slice(0, qtdAusentes).map((a) => a.numero);
+  const scoredRepetidas = repetidasDisponiveis.map((n) => {
+    const stat = dynamicStats.find((s) => s.numero === n);
+    let score = 50;
+    if (stat) score += stat.vezes / 30;
+    if (isMoldura(n)) score += 10;
+    if (isPrimo(n)) score += 5;
+    for (const d of TOP_DUPLAS) {
+      if (d.dupla.includes(n)) {
+        score += 8;
+      }
+    }
+    return { numero: n, score, stat };
+  });
+  scoredRepetidas.sort((a, b) => b.score - a.score);
+  let repetidasSelecionadas = scoredRepetidas.slice(0, qtdRepetidas).map((r) => r.numero);
+  let poolComb = Array.from(/* @__PURE__ */ new Set([...repetidasSelecionadas, ...ausentesSelecionadas]));
+  const allDezenasSortedByFreqAsc = [...dynamicStats].sort(
+    (a, b) => (a.vezes || 2e3) - (b.vezes || 2e3)
+  );
+  const coldNumbers = allDezenasSortedByFreqAsc.map((s) => s.numero);
+  const qtdFriasDesejadas = targetCount >= 18 ? 2 : 1;
+  const friasNoPool = poolComb.filter((n) => coldNumbers.slice(0, 6).includes(n)).length;
+  if (friasNoPool < qtdFriasDesejadas) {
+    const faltamFrias = qtdFriasDesejadas - friasNoPool;
+    const candidatasFrias = coldNumbers.filter((n) => !poolComb.includes(n));
+    for (let i = 0; i < faltamFrias && i < candidatasFrias.length; i++) {
+      const dezenaFria = candidatasFrias[i];
+      if (poolComb.length >= targetCount) {
+        poolComb.pop();
+      }
+      poolComb.push(dezenaFria);
+    }
+  }
+  const criticalBlocks = [
+    [12, 13, 14, 15, 16],
+    // Bloco crítico intermediário da Lotofácil
+    [1, 2, 3, 4, 5],
+    // Linha 1
+    [6, 7, 8, 9, 10],
+    // Linha 2
+    [11, 12, 13, 14, 15],
+    // Linha 3
+    [16, 17, 18, 19, 20],
+    // Linha 4
+    [21, 22, 23, 24, 25]
+    // Linha 5
+  ];
+  for (const block of criticalBlocks) {
+    const hitsInBlock = poolComb.filter((n) => block.includes(n)).length;
+    if (hitsInBlock === 0) {
+      const candidatesInBlock = block.filter((n) => !poolComb.includes(n));
+      if (candidatesInBlock.length > 0) {
+        const bestFromBlock = candidatesInBlock.sort((a, b) => {
+          const sA = dynamicStats.find((s) => s.numero === a)?.vezes || 0;
+          const sB = dynamicStats.find((s) => s.numero === b)?.vezes || 0;
+          return sB - sA;
+        })[0];
+        if (poolComb.length >= targetCount) {
+          poolComb.pop();
+        }
+        poolComb.push(bestFromBlock);
+      }
+    }
+  }
+  const dezenas = Array.from(new Set(poolComb)).slice(0, targetCount).sort((a, b) => a - b);
+  return {
+    dezenas,
+    dezenas18: dezenas,
+    // compatibility alias
+    repetidasSelecionadas: repetidasSelecionadas.sort((a, b) => a - b),
+    ausentesSelecionadas: ausentesSelecionadas.sort((a, b) => a - b),
+    explicacao: `Matriz de ${targetCount} Dezenas calibrada pelo Concurso #${previousDraw.concurso} com Inje\xE7\xE3o de Ru\xEDdo Anti-V\xEDcio e Cobertura de Blocos: ${qtdRepetidas} Repetidas + ${qtdAusentes} Ausentes (Zona de Ouro 185\u2013215).`
+  };
+}
+function buildOptimal18Pool(previousDraw = CONCURSO_ATUAL, dynamicStats = DEZENAS_STATS, cyclePending = [], qtdRepetidas = 9, qtdAusentes = 9) {
+  return buildOptimalPool(18, previousDraw, dynamicStats, cyclePending, qtdRepetidas, qtdAusentes);
+}
+
+// server.ts
 dotenv.config();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
@@ -463,9 +4230,9 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
         console.info("[LotoSniper AI Optimize] Alternando para motor estat\xEDstico heur\xEDstico determin\xEDstico:", aiError?.message || "indispon\xEDvel");
       }
     }
-    const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
-    const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
-    const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
+    const PRIMOS3 = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+    const MOLDURA2 = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+    const FIBONACCI3 = [1, 2, 3, 5, 8, 13, 21];
     const COMPANHEIRAS_01_CICLO = [2, 3, 5, 11, 13, 17, 20, 21, 22, 25];
     const isCicloFechando = faltantesCiclo.length <= 3;
     const scores = Array.from({ length: 25 }, (_, i) => {
@@ -474,9 +4241,9 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
       if (faltantesCiclo.includes(d)) score += 40;
       if (dezenasSorteadas.includes(d)) score += 18;
       if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15;
-      if (PRIMOS.includes(d)) score += 6;
-      if (MOLDURA.includes(d)) score += 6;
-      if (FIBONACCI.includes(d)) score += 14;
+      if (PRIMOS3.includes(d)) score += 6;
+      if (MOLDURA2.includes(d)) score += 6;
+      if (FIBONACCI3.includes(d)) score += 14;
       if (COMPANHEIRAS_01_CICLO.includes(d)) score += isCicloFechando ? 20 : 10;
       if (d === 1) score += isCicloFechando || faltantesCiclo.includes(1) ? 22 : 12;
       return Math.min(99, Math.max(10, score));
@@ -1410,24 +5177,209 @@ app.get("/api/health/assets", (_req, res) => {
     verifiedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
+app.get("/robots.txt", (req, res) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type("text/plain; charset=utf-8").send(buildRobotsTxt(baseUrl));
+});
+app.get("/sitemap.xml", (req, res) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type("application/xml; charset=utf-8").send(buildSitemapXml(baseUrl));
+});
+app.get("/llms.txt", (req, res) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type("text/plain; charset=utf-8").send(buildLlmsTxt(baseUrl));
+});
+app.get("/.well-known/mcp/server-card.json", (req, res) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type("application/json; charset=utf-8").json(buildMcpServerCard(baseUrl));
+});
+app.post("/api/mcp", (req, res) => {
+  const baseUrl = resolveBaseUrl(req);
+  const rpc = req.body || {};
+  const id = rpc.id ?? null;
+  const method = rpc.method;
+  if (method === "initialize") {
+    return res.json({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: "2025-11-25",
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: "lotosniper-mcp", version: "1.0.0" }
+      }
+    });
+  }
+  if (method === "notifications/initialized" || method === "ping") {
+    return res.json({ jsonrpc: "2.0", id, result: {} });
+  }
+  if (method === "tools/list") {
+    const card = buildMcpServerCard(baseUrl);
+    return res.json({
+      jsonrpc: "2.0",
+      id,
+      result: { tools: card.tools }
+    });
+  }
+  if (method === "tools/call") {
+    const toolName = rpc.params?.name;
+    const args = rpc.params?.arguments || {};
+    if (toolName === "lotosniper_get_latest_draw") {
+      return res.json({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                concurso: CONCURSO_ATUAL.concurso,
+                data: CONCURSO_ATUAL.data,
+                dezenas: CONCURSO_ATUAL.dezenas
+              })
+            }
+          ]
+        }
+      });
+    }
+    if (toolName === "lotosniper_validate_ticket") {
+      const raw = Array.isArray(args.dezenas) ? args.dezenas : [];
+      const dezenas = Array.from(
+        new Set(
+          raw.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+        )
+      ).sort((a, b) => a - b);
+      if (dezenas.length !== 15) {
+        return res.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            isError: true,
+            content: [{ type: "text", text: "Informe exatamente 15 dezenas distintas entre 1 e 25." }]
+          }
+        });
+      }
+      const validation = validateFilters(dezenas, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
+      return res.json({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                dezenas,
+                passed: validation.isValid,
+                violations: validation.violations,
+                metrics: validation.metrics
+              })
+            }
+          ]
+        }
+      });
+    }
+    if (toolName === "lotosniper_generate_closure") {
+      const rawPool = Array.isArray(args.pool) ? args.pool : [];
+      const pool = Array.from(
+        new Set(
+          rawPool.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+        )
+      ).sort((a, b) => a - b);
+      const maxTickets = Math.min(50, Math.max(1, Number(args.maxTickets || 10)));
+      if (pool.length < 16 || pool.length > 22) {
+        return res.json({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            isError: true,
+            content: [{ type: "text", text: "O pool deve conter entre 16 e 22 dezenas distintas (1 a 25)." }]
+          }
+        });
+      }
+      const tickets = generateFechamentoCovering(pool, 14, maxTickets, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
+      return res.json({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                pool,
+                ticketCount: tickets.length,
+                tickets: tickets.map((t) => ({ index: t.index, dezenas: t.dezenas, soma: t.soma }))
+              })
+            }
+          ]
+        }
+      });
+    }
+    return res.status(400).json({
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: `Unknown tool: ${String(toolName)}` }
+    });
+  }
+  return res.status(400).json({
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32601, message: `Method not found: ${String(method)}` }
+  });
+});
 async function startServer() {
   const isDev = process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "publish" && !import.meta.url.endsWith("server.js");
+  let vite = null;
   if (isDev) {
     const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
+    vite = await createViteServer({
       server: {
         middlewareMode: true,
         hmr: false
       },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.resolve(__dirname, "dist")));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+      appType: "custom"
     });
   }
+  const publicPageHandler = async (req, res, next) => {
+    try {
+      const normalized = normalizeRoutePath(req.path === "/index.html" ? "/" : req.path);
+      if (!isKnownPublicPagePath(normalized)) {
+        return next();
+      }
+      const pagePath = normalized;
+      const baseUrl = resolveBaseUrl(req);
+      setAgentLinkHeaders(res, pagePath);
+      if (prefersMarkdown(req)) {
+        const descriptor = getPageDescriptor(pagePath, baseUrl);
+        return res.status(200).type("text/markdown; charset=utf-8").send(descriptor.markdown);
+      }
+      const templatePath = isDev ? path.resolve(__dirname, "index.html") : path.resolve(__dirname, "dist", "index.html");
+      const rawTemplate = fs.readFileSync(templatePath, "utf-8");
+      const ssrHtml = applySsrMetadataAndBody(rawTemplate, pagePath, baseUrl);
+      const finalHtml = vite ? await vite.transformIndexHtml(req.originalUrl, ssrHtml) : ssrHtml;
+      return res.status(200).type("text/html; charset=utf-8").send(finalHtml);
+    } catch (err) {
+      return next(err);
+    }
+  };
+  app.get(["/", "/index.html", "/sobre", "/contato", "/termos", "/privacidade"], publicPageHandler);
+  if (isDev && vite) {
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(__dirname, "dist"), { index: false }));
+  }
+  app.use((req, res) => {
+    const baseUrl = resolveBaseUrl(req);
+    if (req.path.startsWith("/api/")) {
+      return res.status(404).json({
+        error: "Not Found",
+        path: req.originalUrl
+      });
+    }
+    res.setHeader("Vary", "Accept");
+    if (prefersMarkdown(req)) {
+      return res.status(404).type("text/markdown; charset=utf-8").send(buildNotFoundMarkdown(req.path, baseUrl));
+    }
+    return res.status(404).type("text/html; charset=utf-8").send(buildNotFoundHtml(req.path, baseUrl));
+  });
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`LotoSniper Server rodando na porta ${PORT} [${!isDev ? "PROD" : "DEV"}]`);
   });

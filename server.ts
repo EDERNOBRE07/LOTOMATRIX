@@ -5,6 +5,28 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import mysql from 'mysql2/promise';
+import {
+  applySsrMetadataAndBody,
+  buildLlmsTxt,
+  buildMcpServerCard,
+  buildNotFoundHtml,
+  buildNotFoundMarkdown,
+  buildRobotsTxt,
+  buildSitemapXml,
+  getPageDescriptor,
+  isKnownPublicPagePath,
+  normalizeRoutePath,
+  prefersMarkdown,
+  PublicPagePath,
+  resolveBaseUrl,
+  setAgentLinkHeaders,
+} from './src/server/agentReadyContent';
+import { CONCURSO_ATUAL } from './src/data/lotofacilData';
+import {
+  DEFAULT_FILTERS,
+  generateFechamentoCovering,
+  validateFilters,
+} from './src/services/combinatorics';
 
 dotenv.config();
 
@@ -1655,6 +1677,172 @@ app.get('/api/health/assets', (_req: Request, res: Response) => {
   });
 });
 
+// ========================================================================
+// AGENT-READINESS: robots.txt, sitemap.xml, llms.txt & MCP Server Card
+// ========================================================================
+app.get('/robots.txt', (req: Request, res: Response) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type('text/plain; charset=utf-8').send(buildRobotsTxt(baseUrl));
+});
+
+app.get('/sitemap.xml', (req: Request, res: Response) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type('application/xml; charset=utf-8').send(buildSitemapXml(baseUrl));
+});
+
+app.get('/llms.txt', (req: Request, res: Response) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type('text/plain; charset=utf-8').send(buildLlmsTxt(baseUrl));
+});
+
+app.get('/.well-known/mcp/server-card.json', (req: Request, res: Response) => {
+  const baseUrl = resolveBaseUrl(req);
+  res.status(200).type('application/json; charset=utf-8').json(buildMcpServerCard(baseUrl));
+});
+
+// Lightweight JSON-RPC 2.0 MCP endpoint matching the published server-card.json
+app.post('/api/mcp', (req: Request, res: Response) => {
+  const baseUrl = resolveBaseUrl(req);
+  const rpc = req.body || {};
+  const id = rpc.id ?? null;
+  const method = rpc.method;
+
+  if (method === 'initialize') {
+    return res.json({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        protocolVersion: '2025-11-25',
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: { name: 'lotosniper-mcp', version: '1.0.0' },
+      },
+    });
+  }
+
+  if (method === 'notifications/initialized' || method === 'ping') {
+    return res.json({ jsonrpc: '2.0', id, result: {} });
+  }
+
+  if (method === 'tools/list') {
+    const card = buildMcpServerCard(baseUrl);
+    return res.json({
+      jsonrpc: '2.0',
+      id,
+      result: { tools: card.tools },
+    });
+  }
+
+  if (method === 'tools/call') {
+    const toolName = rpc.params?.name;
+    const args = rpc.params?.arguments || {};
+
+    if (toolName === 'lotosniper_get_latest_draw') {
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                concurso: CONCURSO_ATUAL.concurso,
+                data: CONCURSO_ATUAL.data,
+                dezenas: CONCURSO_ATUAL.dezenas,
+              }),
+            },
+          ],
+        },
+      });
+    }
+
+    if (toolName === 'lotosniper_validate_ticket') {
+      const raw: unknown[] = Array.isArray(args.dezenas) ? args.dezenas : [];
+      const dezenas: number[] = Array.from(
+        new Set<number>(
+          raw.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+        )
+      ).sort((a, b) => a - b);
+      if (dezenas.length !== 15) {
+        return res.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            isError: true,
+            content: [{ type: 'text', text: 'Informe exatamente 15 dezenas distintas entre 1 e 25.' }],
+          },
+        });
+      }
+      const validation = validateFilters(dezenas, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                dezenas,
+                passed: validation.isValid,
+                violations: validation.violations,
+                metrics: validation.metrics,
+              }),
+            },
+          ],
+        },
+      });
+    }
+
+    if (toolName === 'lotosniper_generate_closure') {
+      const rawPool: unknown[] = Array.isArray(args.pool) ? args.pool : [];
+      const pool: number[] = Array.from(
+        new Set<number>(
+          rawPool.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+        )
+      ).sort((a, b) => a - b);
+      const maxTickets = Math.min(50, Math.max(1, Number(args.maxTickets || 10)));
+      if (pool.length < 16 || pool.length > 22) {
+        return res.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            isError: true,
+            content: [{ type: 'text', text: 'O pool deve conter entre 16 e 22 dezenas distintas (1 a 25).' }],
+          },
+        });
+      }
+      const tickets = generateFechamentoCovering(pool, 14, maxTickets, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
+      return res.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                pool,
+                ticketCount: tickets.length,
+                tickets: tickets.map((t) => ({ index: t.index, dezenas: t.dezenas, soma: t.soma })),
+              }),
+            },
+          ],
+        },
+      });
+    }
+
+    return res.status(400).json({
+      jsonrpc: '2.0',
+      id,
+      error: { code: -32601, message: `Unknown tool: ${String(toolName)}` },
+    });
+  }
+
+  return res.status(400).json({
+    jsonrpc: '2.0',
+    id,
+    error: { code: -32601, message: `Method not found: ${String(method)}` },
+  });
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isDev =
@@ -1662,22 +1850,82 @@ async function startServer() {
     process.env.NODE_ENV !== 'publish' &&
     !import.meta.url.endsWith('server.js');
 
+  let vite: any = null;
   if (isDev) {
     const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
+    vite = await createViteServer({
       server: {
         middlewareMode: true,
         hmr: false,
       },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      appType: 'custom',
     });
   }
+
+  // Known HTML / Markdown public pages with RFC 8288 Link headers & SSR content
+  const publicPageHandler = async (req: Request, res: Response, next: express.NextFunction) => {
+    try {
+      const normalized = normalizeRoutePath(req.path === '/index.html' ? '/' : req.path);
+      if (!isKnownPublicPagePath(normalized)) {
+        return next();
+      }
+
+      const pagePath: PublicPagePath = normalized;
+      const baseUrl = resolveBaseUrl(req);
+      setAgentLinkHeaders(res, pagePath);
+
+      if (prefersMarkdown(req)) {
+        const descriptor = getPageDescriptor(pagePath, baseUrl);
+        return res
+          .status(200)
+          .type('text/markdown; charset=utf-8')
+          .send(descriptor.markdown);
+      }
+
+      const templatePath = isDev
+        ? path.resolve(__dirname, 'index.html')
+        : path.resolve(__dirname, 'dist', 'index.html');
+      const rawTemplate = fs.readFileSync(templatePath, 'utf-8');
+      const ssrHtml = applySsrMetadataAndBody(rawTemplate, pagePath, baseUrl);
+      const finalHtml = vite ? await vite.transformIndexHtml(req.originalUrl, ssrHtml) : ssrHtml;
+
+      return res.status(200).type('text/html; charset=utf-8').send(finalHtml);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
+  app.get(['/', '/index.html', '/sobre', '/contato', '/termos', '/privacidade'], publicPageHandler);
+
+  if (isDev && vite) {
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(__dirname, 'dist'), { index: false }));
+  }
+
+  // Real HTTP 404 handler for any missing page or endpoint
+  app.use((req: Request, res: Response) => {
+    const baseUrl = resolveBaseUrl(req);
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({
+        error: 'Not Found',
+        path: req.originalUrl,
+      });
+    }
+
+    res.setHeader('Vary', 'Accept');
+    if (prefersMarkdown(req)) {
+      return res
+        .status(404)
+        .type('text/markdown; charset=utf-8')
+        .send(buildNotFoundMarkdown(req.path, baseUrl));
+    }
+
+    return res
+      .status(404)
+      .type('text/html; charset=utf-8')
+      .send(buildNotFoundHtml(req.path, baseUrl));
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`LotoSniper Server rodando na porta ${PORT} [${!isDev ? 'PROD' : 'DEV'}]`);

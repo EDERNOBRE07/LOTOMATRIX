@@ -1,0 +1,80 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server-card.schema.json",
+  "version": "1.0",
+  "protocolVersion": "2025-11-25",
+  "serverInfo": {
+    "name": "lotosniper-mcp",
+    "title": "LotoSniper Combinatorial & Lotofácil Engine",
+    "version": "1.0.0"
+  },
+  "name": "lotosniper-mcp",
+  "description": "Servidor MCP do LotoSniper para validação estatística de bilhetes da Lotofácil, geração de fechamentos matemáticos com garantia de 14 pontos e consulta ao último concurso sincronizado.",
+  "documentationUrl": "https://lotosniper.com.br/llms.txt",
+  "homepage": "https://lotosniper.com.br/",
+  "transport": {
+    "type": "streamable-http",
+    "endpoint": "https://lotosniper.com.br/api/mcp"
+  },
+  "capabilities": {
+    "tools": {
+      "listChanged": false
+    }
+  },
+  "tools": [
+    {
+      "name": "lotosniper_get_latest_draw",
+      "description": "Retorna o último concurso da Lotofácil sincronizado pela plataforma, incluindo número do concurso, data e as 15 dezenas sorteadas.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lotosniper_validate_ticket",
+      "description": "Valida um bilhete de 15 dezenas (1 a 25) da Lotofácil contra os filtros posicionais D1-D15, múltiplos M3-M8, soma dos dígitos (63-87), geometria da cruz, soma total, primos e moldura.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dezenas": {
+            "type": "array",
+            "description": "Lista ordenada ou não de 15 dezenas inteiras distintas entre 1 e 25.",
+            "items": { "type": "integer", "minimum": 1, "maximum": 25 },
+            "minItems": 15,
+            "maxItems": 15
+          }
+        },
+        "required": ["dezenas"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lotosniper_generate_closure",
+      "description": "Gera uma matriz combinatória de fechamento da Lotofácil com filtros de alta precisão e controle de distância Hamming.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pool": {
+            "type": "array",
+            "description": "Conjunto base de 16 a 22 dezenas distintas (entre 1 e 25).",
+            "items": { "type": "integer", "minimum": 1, "maximum": 25 },
+            "minItems": 16,
+            "maxItems": 22
+          },
+          "maxTickets": {
+            "type": "integer",
+            "description": "Quantidade máxima de jogos gerados na matriz (1 a 50).",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": ["pool"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "contact": {
+    "email": "contato@lotosniper.com.br",
+    "url": "https://lotosniper.com.br/contato"
+  }
+}

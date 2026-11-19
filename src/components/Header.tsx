@@ -28,6 +28,7 @@ interface HeaderProps {
   onQuickOptimize?: () => void;
   onOpenBackup?: () => void;
   aiStatus: 'online' | 'ready' | 'loading';
+  titleAsSpan?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onQuickOptimize,
   onOpenBackup,
   aiStatus,
+  titleAsSpan = false,
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<'gold' | 'high_contrast' | 'slate'>(() => {
@@ -159,9 +161,15 @@ export const Header: React.FC<HeaderProps> = ({
           <LotoSniperLogo size="md" showText={false} />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black tracking-wider text-emerald-400 font-mono flex items-center gap-1.5 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
-                LOTOSNIPER
-              </h1>
+              {titleAsSpan ? (
+                <span className="text-xl font-black tracking-wider text-emerald-400 font-mono flex items-center gap-1.5 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+                  LOTOSNIPER
+                </span>
+              ) : (
+                <h1 className="text-xl font-black tracking-wider text-emerald-400 font-mono flex items-center gap-1.5 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+                  LOTOSNIPER
+                </h1>
+              )}
               <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                 Alvo 15 Pontos
               </span>

@@ -18,6 +18,7 @@ import { DevServerHealthStatus, ServerHealthState } from './components/DevServer
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BackupRestoreCenterModal } from './components/BackupRestoreCenterModal';
 import { FechamentoSavedToastAlert } from './components/FechamentoSavedToastAlert';
+import { LegalInfoPages, PublicInfoRoute } from './components/LegalInfoPages';
 import {
   saveLocalSnapshot,
   isAutoDownloadOnSaveEnabled,
@@ -83,9 +84,63 @@ export type TabType =
   | 'configuracoes'
   | 'hostinger';
 
+export type AppPublicRoute = '/' | PublicInfoRoute;
+
+const ROUTE_TITLES: Record<AppPublicRoute, string> = {
+  '/': 'LotoSniper – Fechamentos e IA para Lotofácil',
+  '/sobre': 'Sobre o LotoSniper – Metodologia Matemática e IA',
+  '/contato': 'Contato – LotoSniper Suporte e Parcerias',
+  '/termos': 'Termos de Uso – LotoSniper Lotofácil',
+  '/privacidade': 'Política de Privacidade – LotoSniper',
+};
+
+function resolvePublicRouteFromLocation(): AppPublicRoute {
+  if (typeof window === 'undefined') return '/';
+  const raw = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (raw === '/sobre' || raw === '/contato' || raw === '/termos' || raw === '/privacidade') {
+    return raw;
+  }
+  return '/';
+}
+
 export default function App() {
+  const [publicRoute, setPublicRoute] = useState<AppPublicRoute>(() => resolvePublicRouteFromLocation());
   const [activeTab, setActiveTab] = useState<TabType>('fechamento');
   const [jogosSubView, setJogosSubView] = useState<'salvos' | 'conferencia'>('salvos');
+
+  const navigatePublicRoute = (targetPath: AppPublicRoute) => {
+    if (typeof window !== 'undefined' && window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+    setPublicRoute(targetPath);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleSelectStudioTab = (tab: TabType) => {
+    if (publicRoute !== '/') {
+      navigatePublicRoute('/');
+    }
+    setActiveTab(tab);
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      setPublicRoute(resolvePublicRouteFromLocation());
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    document.title = ROUTE_TITLES[publicRoute];
+    const canonicalEl = document.querySelector('link[rel="canonical"]');
+    if (canonicalEl) {
+      canonicalEl.setAttribute('href', `${window.location.origin}${publicRoute}`);
+    }
+  }, [publicRoute]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('lotosniper_sidebar_collapsed') === 'true';
@@ -841,8 +896,9 @@ export default function App() {
         cyclePendingNumbers={dezenasPendentesCiclo}
         concursosNoCiclo={concursosNoCiclo}
         aiStatus={isAILoading ? 'loading' : 'ready'}
-        onQuickOptimize={() => setActiveTab('fechamento')}
+        onQuickOptimize={() => handleSelectStudioTab('fechamento')}
         onOpenBackup={() => setIsBackupModalOpen(true)}
+        titleAsSpan={publicRoute !== '/'}
       />
 
       {/* App Shell Layout: Sidebar Colapsável (Desktop) + Conteúdo Principal */}
@@ -850,7 +906,7 @@ export default function App() {
         {/* Desktop Sidebar Fina/Colapsável com os 4 Pilares */}
         <AppShellSidebar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleSelectStudioTab}
           savedTicketsCount={savedTickets.length}
           onOpenBackup={() => setIsBackupModalOpen(true)}
           onOpenTour={() => setIsTourOpen(true)}
@@ -1056,6 +1112,10 @@ export default function App() {
 
         {/* Tab Viewport */}
         <ErrorBoundary fallbackTitle="LotoSniper • Módulo Ativo">
+          {publicRoute !== '/' ? (
+            <LegalInfoPages page={publicRoute} onNavigate={navigatePublicRoute} />
+          ) : (
+            <>
           {activeTab === 'fechamento' && (
             <FechamentoTab
               latestDraw={latestDraw}
@@ -1257,6 +1317,8 @@ export default function App() {
           )}
 
           {activeTab === 'hostinger' && <HostingerGuideTab />}
+            </>
+          )}
         </ErrorBoundary>
       </main>
     </div>
@@ -1264,13 +1326,13 @@ export default function App() {
     {/* Mobile Bottom Navigation Bar Fixa (PWA) */}
     <AppShellMobileBottomNav
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={handleSelectStudioTab}
       savedTicketsCount={savedTickets.length}
     />
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
           <div>
             <span className="font-black text-emerald-400 font-mono tracking-wider">LOTOSNIPER</span> — Precisão
             cirúrgica na Lotofácil • Concurso #{latestDraw.concurso} ({latestDraw.data}).
@@ -1279,7 +1341,56 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] text-slate-400">
+          <nav aria-label="Links institucionais e legais" className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400">
+            <a
+              href="/sobre"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicRoute('/sobre');
+              }}
+              className="hover:text-emerald-400 transition"
+            >
+              Sobre
+            </a>
+            <a
+              href="/contato"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicRoute('/contato');
+              }}
+              className="hover:text-emerald-400 transition"
+            >
+              Contato
+            </a>
+            <a
+              href="/termos"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicRoute('/termos');
+              }}
+              className="hover:text-emerald-400 transition"
+            >
+              Termos de Uso
+            </a>
+            <a
+              href="/privacidade"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicRoute('/privacidade');
+              }}
+              className="hover:text-emerald-400 transition"
+            >
+              Privacidade
+            </a>
+            <a
+              href="mailto:contato@lotosniper.com.br"
+              className="text-emerald-400 hover:text-emerald-300 font-mono transition"
+            >
+              contato@lotosniper.com.br
+            </a>
+          </nav>
+
+          <div className="flex items-center gap-3 text-[11px] text-slate-400">
             <span>C(25,15) = 3.268.760 combinações</span>
             <span>•</span>
             <span className="text-emerald-400 font-semibold">Alvo 15 Pontos</span>

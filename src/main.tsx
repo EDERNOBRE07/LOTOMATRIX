@@ -1,8 +1,12 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { registerLotoSniperWebMCPTools } from './utils/webmcp';
 import * as d3 from 'd3';
 import './index.css';
+
+// Register WebMCP tools on page load when navigator.modelContext is available
+registerLotoSniperWebMCPTools();
 
 // Safeguard against d3-axis m.transition is not a function in tree-shaken bundles
 if (d3 && d3.selection && d3.selection.prototype) {
