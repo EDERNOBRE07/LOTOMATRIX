@@ -30,7 +30,13 @@ import {
 import { saveCurvaAbcFilterConfig } from '../services/curvaAbcService';
 import { saveVoidExclusionConfig, computeVoidHeatmap } from '../services/vaziosService';
 
-import { calibrarFaixaSomaUniverso, getRotatedFixedBounds, MAX_DEZENAS_FIXAS } from '../services/combinatorics';
+import {
+  calibrarFaixaSomaUniverso,
+  getRotatedFixedBounds,
+  MAX_DEZENAS_FIXAS,
+  RECOMMENDED_MAX_FIXAS,
+  assessFixedNumbersRisk,
+} from '../services/combinatorics';
 
 interface FilterControlsProps {
   filters: FilterCriteria;
@@ -533,54 +539,76 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             const fixasCount = (filters.dezenasFixas || []).length;
             const kBounds = getRotatedFixedBounds(fixasCount, filters.modoFixas);
             const activeMode = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
+            const risk = assessFixedNumbersRisk(fixasCount, activeMode);
+            const isRisky = risk.level === 'atencao' || risk.level === 'critico';
             return (
-              <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Lock className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs sm:text-sm font-bold text-white">
-                      Modo de Fixas: Proteção Contra Falha de Âncoras
-                    </span>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                      {fixasCount}/{MAX_DEZENAS_FIXAS} Fixas Marcadas
-                    </span>
-                    {fixasCount >= 3 && kBounds.modo === 'rotativas' && (
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        Rotativas ({kBounds.minK}–{kBounds.maxK} de {fixasCount} por bilhete)
+              <div
+                className={`p-4 rounded-2xl border space-y-3 ${
+                  isRisky
+                    ? 'bg-amber-950/25 border-amber-500/45'
+                    : 'bg-slate-950/90 border-slate-800'
+                }`}
+              >
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs sm:text-sm font-bold text-white">
+                        Modo de Fixas: Proteção Contra Falha de Âncoras
                       </span>
-                    )}
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        {fixasCount}/{MAX_DEZENAS_FIXAS} Fixas Marcadas
+                      </span>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        Recomendado: máx. 2–{RECOMMENDED_MAX_FIXAS} fixas
+                      </span>
+                      {fixasCount >= 3 && kBounds.modo === 'rotativas' && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                          Rotativas ({kBounds.minK}–{kBounds.maxK} de {fixasCount} por bilhete)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Na auditoria real (#3825–#3833), usar <strong className="text-emerald-300">no máximo 2 a 3 fixas</strong> concentrou 80% dos jogos de 13 pontos e ROIs de 142% a 285%. Acima de 3 fixas, mantenha{' '}
+                      <strong className="text-cyan-300">Rotativas (K de N)</strong> para evitar zerar o Hit Rate se 1 ou 2 âncoras falharem.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Com 3 a 5 fixas, o modo <strong className="text-emerald-300">Rotativas Inteligentes (K de N)</strong> rotaciona entre{' '}
-                    <span className="font-mono text-slate-200">max(1, N-2)</span> e <span className="font-mono text-slate-200">N-1</span> fixas por cartão,
-                    evitando perder 14/15 pontos se 2 ou 3 fixas falharem no sorteio. Limite máximo travado em {MAX_DEZENAS_FIXAS} fixas.
-                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => update({ modoFixas: 'rotativas' })}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        activeMode === 'rotativas'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                      }`}
+                    >
+                      Rotativas Inteligentes (K de N)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => update({ modoFixas: 'rigidas' })}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                        activeMode === 'rigidas'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                      }`}
+                    >
+                      Rígidas (100% em todos)
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => update({ modoFixas: 'rotativas' })}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                      activeMode === 'rotativas'
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black'
-                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-                    }`}
-                  >
-                    Rotativas Inteligentes (K de N)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => update({ modoFixas: 'rigidas' })}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                      activeMode === 'rigidas'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-                    }`}
-                  >
-                    Rígidas (100% em todos)
-                  </button>
-                </div>
+                {isRisky && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35 text-[11px] text-amber-200">
+                    <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-black">{risk.title}: </strong>
+                      <span>{risk.message}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}

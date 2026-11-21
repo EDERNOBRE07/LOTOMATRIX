@@ -355,6 +355,226 @@ export function countMatches(arr1: number[], arr2: number[]): number {
 }
 
 export const MAX_DEZENAS_FIXAS = 5;
+export const RECOMMENDED_MAX_FIXAS = 3;
+export const IDEAL_FIXAS_RANGE: readonly [number, number] = [2, 3];
+
+export type FixedNumbersRiskLevel = 'otimo' | 'recomendado' | 'atencao' | 'critico';
+
+export interface FixedNumbersRiskAssessment {
+  level: FixedNumbersRiskLevel;
+  count: number;
+  recommendedMax: number;
+  hardMax: number;
+  title: string;
+  message: string;
+}
+
+/**
+ * Avalia o risco combinatório da quantidade de dezenas fixas selecionadas.
+ * Auditoria (#3825–#3833): <= 2–3 fixas concentrou 80% dos jogos de 13 pts e ROIs de 142% a 285%;
+ * 6 a 12 fixas zeraram o Hit Rate mesmo com 14/15 acertos no universo.
+ */
+export function assessFixedNumbersRisk(
+  fixedCount: number,
+  modoFixas?: 'rotativas' | 'rigidas'
+): FixedNumbersRiskAssessment {
+  const count = Math.max(0, Math.trunc(fixedCount || 0));
+  if (count === 0) {
+    return {
+      level: 'otimo',
+      count,
+      recommendedMax: RECOMMENDED_MAX_FIXAS,
+      hardMax: MAX_DEZENAS_FIXAS,
+      title: 'Sem Fixas Obrigatórias',
+      message: 'Cobertura 100% livre. Se desejar ancorar dezenas fortes, o padrão auditado recomenda no máximo 2 a 3 fixas.',
+    };
+  }
+  if (count <= RECOMMENDED_MAX_FIXAS) {
+    const isRigidas3 = count === 3 && modoFixas === 'rigidas';
+    return {
+      level: isRigidas3 ? 'atencao' : 'recomendado',
+      count,
+      recommendedMax: RECOMMENDED_MAX_FIXAS,
+      hardMax: MAX_DEZENAS_FIXAS,
+      title: isRigidas3
+        ? '3 Fixas Rígidas (Prefira Rotativas ou 2 Fixas)'
+        : `Faixa Recomendada (${count} Fixa${count > 1 ? 's' : ''} • Máx. 2–3)`,
+      message: isRigidas3
+        ? 'Com 3 fixas em modo rígido, errar 1 fixa limita o teto a 14 pontos. Use modo Rotativas (K de N) ou reduza para 2 fixas.'
+        : 'Padrão de Alta Eficiência: até 2–3 fixas concentrou 80% dos jogos de 13 pontos e os ROIs de 142% a 285% na auditoria.',
+    };
+  }
+  if (count <= MAX_DEZENAS_FIXAS) {
+    return {
+      level: 'atencao',
+      count,
+      recommendedMax: RECOMMENDED_MAX_FIXAS,
+      hardMax: MAX_DEZENAS_FIXAS,
+      title: `Alerta de Risco Combinatório (${count} Fixas)`,
+      message:
+        'Acima do limite recomendado de 2 a 3 fixas. Cada dezena fixa que falhar reduz severamente o Hit Rate da matriz — reduza para no máximo 2–3 fixas ou mantenha Fixas Rotativas (K de N).',
+    };
+  }
+  return {
+    level: 'critico',
+    count,
+    recommendedMax: RECOMMENDED_MAX_FIXAS,
+    hardMax: MAX_DEZENAS_FIXAS,
+    title: `Risco Combinatório Crítico (${count} Fixas)`,
+    message:
+      'Fechamentos com 6 a 12 fixas zeraram o Hit Rate na auditoria mesmo com 14/15 acertos no universo. Reduza imediatamente para no máximo 2 a 3 dezenas fixas.',
+  };
+}
+
+export type ProgressiveFallbackLevel = 0 | 1 | 2 | 3;
+
+export interface ProgressiveFallbackConfig {
+  level: ProgressiveFallbackLevel;
+  filters: FilterCriteria;
+  label: string;
+  description: string;
+  bypassCanonicalAnomaly: boolean;
+}
+
+/**
+ * Fallback Progressivo Automático em 3 níveis quando os filtros estritos não atingem
+ * a quantidade alvo de bilhetes:
+ * - Nível 0: Filtros estritos configurados pelo usuário.
+ * - Nível 1: Libera maxConsecutivas até 6 e repetidas para 7..10.
+ * - Nível 2: Expande soma para 165..225 e moldura para 8..11 (além do Nível 1).
+ * - Nível 3: Desativa filtros secundários mantendo apenas cobertura combinatória + Hamming.
+ */
+export function buildProgressiveFallbackFilters(
+  baseFilters: FilterCriteria | undefined,
+  level: ProgressiveFallbackLevel
+): ProgressiveFallbackConfig {
+  const base: FilterCriteria = baseFilters ? { ...baseFilters } : { ...DEFAULT_FILTERS };
+
+  if (level === 0) {
+    return {
+      level: 0,
+      filters: base,
+      label: 'Nível 0 (Estrito)',
+      description: '100% dos filtros estritos ativos.',
+      bypassCanonicalAnomaly: false,
+    };
+  }
+
+  if (level === 1) {
+    return {
+      level: 1,
+      filters: {
+        ...base,
+        maxConsecutivas: Math.max(6, base.maxConsecutivas ?? 5),
+        repetidasMin: Math.min(7, base.repetidasMin ?? 8),
+        repetidasMax: Math.max(10, base.repetidasMax ?? 10),
+      },
+      label: 'Fallback Nível 1',
+      description: 'Relaxamento automático Nível 1: maxConsecutivas liberado até 6 e repetidas para 7–10.',
+      bypassCanonicalAnomaly: false,
+    };
+  }
+
+  if (level === 2) {
+    const somaMin = Math.min(165, base.somaMin ?? 180);
+    const somaMax = Math.max(225, base.somaMax ?? 215);
+    const molduraMin = Math.min(8, base.molduraMin ?? 9);
+    const molduraMax = Math.max(11, base.molduraMax ?? 11);
+    return {
+      level: 2,
+      filters: {
+        ...base,
+        maxConsecutivas: Math.max(6, base.maxConsecutivas ?? 6),
+        repetidasMin: Math.min(7, base.repetidasMin ?? 7),
+        repetidasMax: Math.max(10, base.repetidasMax ?? 10),
+        somaMin,
+        somaMax,
+        minSoma: somaMin,
+        maxSoma: somaMax,
+        molduraMin,
+        molduraMax,
+        minMoldura: molduraMin,
+        maxMoldura: molduraMax,
+        autoCalibrarSomaUniverso: false,
+        robustez50SomaMin: Math.min(somaMin, base.robustez50SomaMin ?? somaMin),
+        robustez50SomaMax: Math.max(somaMax, base.robustez50SomaMax ?? somaMax),
+        robustez50MolduraMin: Math.min(molduraMin, base.robustez50MolduraMin ?? molduraMin),
+        robustez50MolduraMax: Math.max(molduraMax, base.robustez50MolduraMax ?? molduraMax),
+        apenasZonaDeOuroPrimos: false,
+        strictValidation: false,
+        validacaoEstritaCruz: false,
+      },
+      label: 'Fallback Nível 2',
+      description: 'Relaxamento automático Nível 2: soma expandida para 165–225 e moldura para 8–11 (mantendo Nível 1).',
+      bypassCanonicalAnomaly: false,
+    };
+  }
+
+  // Nível 3: Desativa filtros secundários mantendo apenas cobertura combinatória + Hamming + fixas/excluídas
+  return {
+    level: 3,
+    filters: {
+      ...base,
+      paresMin: 0,
+      paresMax: 15,
+      minPares: 0,
+      maxPares: 15,
+      primosMin: 0,
+      primosMax: 9,
+      minPrimos: 0,
+      maxPrimos: 9,
+      somaMin: 120,
+      somaMax: 285,
+      minSoma: 120,
+      maxSoma: 285,
+      molduraMin: 0,
+      molduraMax: 16,
+      minMoldura: 0,
+      maxMoldura: 16,
+      fibonacciMin: 0,
+      fibonacciMax: 7,
+      repetidasMin: 0,
+      repetidasMax: 15,
+      maxConsecutivas: 15,
+      autoCalibrarSomaUniverso: false,
+      cruzAtiva: false,
+      validacaoEstritaCruz: false,
+      strictValidation: false,
+      extremidadesAtiva: false,
+      apenasZonaDeOuroPrimos: false,
+      antiColisaoHistoricaAtiva: false,
+      antiPadraoViciadoAtivo: false,
+      curvaAbcAtiva: false,
+      vaziosAtivos: false,
+      robustezEstatisticaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      rankingHistoricoAtivo: false,
+      palpiteIneditoAtivo: false,
+    },
+    label: 'Fallback Nível 3',
+    description: 'Relaxamento automático Nível 3: filtros secundários desativados, mantendo cobertura combinatória + Hamming.',
+    bypassCanonicalAnomaly: true,
+  };
+}
+
+/**
+ * Calcula a distância de Hamming alvo garantindo prioridade Hamming >= 3 para universos de 18 a 21 dezenas,
+ * evitando que jogos idênticos ou com 14 dezenas iguais (Hamming = 1) consumam o orçamento da matriz.
+ */
+export function getTargetHammingDistance(universeSize: number, maxTickets: number): number {
+  const maxPossibleDiff = Math.max(1, universeSize - 15);
+  if (universeSize >= 18 && universeSize <= 21) {
+    return Math.min(maxTickets <= 6 ? 4 : 3, maxPossibleDiff);
+  }
+  return Math.min(
+    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
+    maxPossibleDiff
+  );
+}
 
 /**
  * Sanitiza dezenas fixas contra o universo real e impõe trava estrita de no máximo 5 dezenas fixas.
@@ -1418,6 +1638,8 @@ export function generateMinimumSetCoverFechamento({
   filters,
   concursoAnterior = CONCURSO_ATUAL.dezenas,
   aiScores,
+  fallbackLevel = 0,
+  disableAutoFallback = false,
 }: {
   selectedNumbers: number[];
   targetHits?: number;
@@ -1425,6 +1647,8 @@ export function generateMinimumSetCoverFechamento({
   filters?: FilterCriteria;
   concursoAnterior?: number[];
   aiScores?: number[];
+  fallbackLevel?: ProgressiveFallbackLevel;
+  disableAutoFallback?: boolean;
 }): GameTicket[] {
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
   const sortedPool = [...new Set(selectedNumbers)]
@@ -1436,13 +1660,53 @@ export function generateMinimumSetCoverFechamento({
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
 
+  // Se o fallback automático estiver habilitado na chamada raiz, executa cascata de 3 níveis até atingir maxTickets
+  if (!disableAutoFallback && fallbackLevel === 0) {
+    let bestTickets: GameTicket[] = [];
+    for (const lvl of [0, 1, 2, 3] as ProgressiveFallbackLevel[]) {
+      const fb = buildProgressiveFallbackFilters(filters, lvl);
+      try {
+        const attemptTickets = generateMinimumSetCoverFechamento({
+          selectedNumbers: sortedPool,
+          targetHits,
+          maxTickets,
+          filters: fb.filters,
+          concursoAnterior,
+          aiScores,
+          fallbackLevel: lvl,
+          disableAutoFallback: true,
+        });
+        if (attemptTickets.length > bestTickets.length) {
+          bestTickets = attemptTickets;
+        }
+        if (attemptTickets.length >= maxTickets) {
+          return attemptTickets;
+        }
+      } catch {
+        // Continua para o próximo nível do fallback progressivo
+      }
+    }
+    if (bestTickets.length > 0) {
+      return bestTickets;
+    }
+    throw new Error(
+      'Nenhum jogo compatível com os filtros selecionados mesmo após o Fallback Progressivo de 3 níveis.'
+    );
+  }
+
+  const fallbackMeta = buildProgressiveFallbackFilters(filters, fallbackLevel);
+  const bypassAnomaly = fallbackMeta.bypassCanonicalAnomaly;
+
   // 1. Sanitização estrita de dezenas fixas (máx. 5) e Modo Rotativo Inteligente (K de N)
   const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
   const effectiveFixedSet = new Set(effectiveFixas);
   const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
 
-  // Auto-calibração de soma pelo universo selecionado (μ_U ± 20)
-  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  // Auto-calibração de soma pelo universo selecionado (μ_U ± 20) — desativada nos níveis 2 e 3
+  const sumCal = resolveCentralSumBounds(sortedPool, filters);
+  const centralMin = fallbackLevel === 3 ? 120 : fallbackLevel === 2 ? Math.min(165, sumCal.centralMin) : sumCal.centralMin;
+  const centralMax = fallbackLevel === 3 ? 285 : fallbackLevel === 2 ? Math.max(225, sumCal.centralMax) : sumCal.centralMax;
+
   const effectiveCoreFilters: FilterCriteria | undefined = filters
     ? {
         ...filters,
@@ -1467,14 +1731,18 @@ export function generateMinimumSetCoverFechamento({
   const universeMasks = universeSubsets.map(_criarMascara);
   const totalUniverse = universeMasks.length;
 
-  // 3. Validador de filtros canônicos estritos (com faixa calibrada pelo universo)
+  // 3. Validador de filtros canônicos estritos (respeitando o nível de Fallback Progressivo)
   const canonicalSumOverride = {
-    somaMin: Math.min(180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
     somaMax: Math.max(225, centralMax),
   };
 
   const isCandidateValid = (nums: number[]): boolean => {
     if (!checkFixasCompliance(nums)) return false;
+    if (bypassAnomaly) {
+      // Nível 3: mantém apenas cobertura combinatória + Hamming + fixas/excluídas
+      return true;
+    }
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
@@ -1484,8 +1752,8 @@ export function generateMinimumSetCoverFechamento({
     return true;
   };
 
-  // Candidatos de cota de borda (Anti-Cisne Negro 75/15/10) ativados para >= 10 jogos
-  const enableStratification = maxTickets >= 10 && n >= 16;
+  // Candidatos de cota de borda (Anti-Cisne Negro 75/15/10) ativados para >= 10 jogos (exceto Nível 3 onde tudo é cobertura livre)
+  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
   const lowerTailMax = Math.max(155, centralMin - 1);
   const upperTailMin = Math.min(235, centralMax + 1);
 
@@ -1495,7 +1763,7 @@ export function generateMinimumSetCoverFechamento({
     const soma = sorted.reduce((a, b) => a + b, 0);
     if (soma < 155 || soma > lowerTailMax) return false;
     const maxSeq = getMaxConsecutiveSequence(sorted);
-    if (maxSeq > 8) return false; // Permite até 8 consecutivas (Draw #3825 Soma 161)
+    if (maxSeq > 8) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
     const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
     const bola1 = sorted[0];
@@ -1511,7 +1779,7 @@ export function generateMinimumSetCoverFechamento({
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < upperTailMin || soma > 235) return false; // Captura extremos até 235 (Draw #3830 Soma 232)
+    if (soma < upperTailMin || soma > 235) return false;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 7) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -1525,7 +1793,7 @@ export function generateMinimumSetCoverFechamento({
     return true;
   };
 
-  // 4. Criação dos pools de candidatos estratificados com PODA ANTECIPADA (Branch & Bound) nos 5 filtros matemáticos
+  // 4. Criação dos pools de candidatos estratificados com PODA ANTECIPADA (Branch & Bound)
   const coreCombos: number[][] = [];
   const lowerTailCombos: number[][] = [];
   const upperTailCombos: number[][] = [];
@@ -1546,24 +1814,38 @@ export function generateMinimumSetCoverFechamento({
   const rankingMasks = getHistoricalRankingMasks();
   const coreSeenMasks = new Set<number>();
 
-  const coreBranchFilters: PodaDinamicaFiltros = {
-    somaMin: centralMin,
-    somaMax: centralMax,
-    paresMin: effectiveCoreFilters?.paresMin ?? 5,
-    paresMax: effectiveCoreFilters?.paresMax ?? 10,
-    posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
-    multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
-    somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
-    somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
-    somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
-    cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
-    cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
-    cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
-    strictValidation: effectiveCoreFilters?.strictValidation ?? false,
-    validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
-    rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
-    rankingMasks,
-  };
+  const coreBranchFilters: PodaDinamicaFiltros = bypassAnomaly
+    ? {
+        somaMin: 120,
+        somaMax: 285,
+        paresMin: 0,
+        paresMax: 15,
+        posicionalAtivo: false,
+        multiplosAtivo: false,
+        somaAlgarismosAtiva: false,
+        cruzAtiva: false,
+        strictValidation: false,
+        validacaoEstritaCruz: false,
+        rankingHistoricoAtivo: false,
+      }
+    : {
+        somaMin: centralMin,
+        somaMax: centralMax,
+        paresMin: effectiveCoreFilters?.paresMin ?? 5,
+        paresMax: effectiveCoreFilters?.paresMax ?? 10,
+        posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+        multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+        somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+        somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+        somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+        cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+        cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+        cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+        strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+        validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+        rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+        rankingMasks,
+      };
 
   for (const fSubset of fixedSubsets) {
     const fMask = _criarMascara(fSubset);
@@ -1696,18 +1978,16 @@ export function generateMinimumSetCoverFechamento({
     (c) => analyzeTicket(c, concursoAnterior, aiScores).scoreIA
   );
 
-  // 6. Algoritmo Guloso com Hamming Spread Bitwise + Fixas Rotativas Uniformes + Frequency Cap [0.85..1.15]
+  // 6. Algoritmo Guloso com Prioridade Estrita de Hamming >= 3 (18-21 dez) + Frequency Cap [0.85..1.15]
   const coveredCounts = new Uint16Array(totalUniverse);
   let uncoveredRemaining = totalUniverse;
   const chosenIndices: number[] = [];
   const chosenMasks: number[] = [];
   const chosenSet = new Set<number>();
 
-  // Filtro de Espalhamento Geométrico (Hamming >= 4 em ultra-compactas <= 6 jogos, >= 3 até 32 jogos, >= 2 para > 32)
-  const targetHammingDist = Math.min(
-    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
-    Math.max(1, n - 15)
-  );
+  // Prioriza estritamente Hamming >= 3 em universos de 18 a 21 dezenas
+  const is18to21 = n >= 18 && n <= 21;
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
 
   // Frequência ideal equilibrada por dezena variável e por fixa rotativa
   const freqBounds = calculateVariableFrequencyBounds(
@@ -1754,10 +2034,11 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      // Espalhamento Geométrico Hamming (bitwise)
+      // Espalhamento Geométrico Hamming (bitwise) — bloqueia duplicatas e 14 dezenas iguais (Hamming <= 1) em 18–21
       const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
-      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
-        continue;
+      if (chosenMasks.length > 0) {
+        if (minDist === 0) continue;
+        if (minHammingReq > 0 && minDist < minHammingReq) continue;
       }
 
       const covers = candCoverLists[i];
@@ -1806,7 +2087,8 @@ export function generateMinimumSetCoverFechamento({
 
       const candKey = cand.join('-');
       const savedPenalty = savedTicketsSet.has(candKey) ? 45 : 0;
-      const hammingBonus = Math.min(minDist, 6) * 6;
+      // Bônus elevado para Hamming >= 3 em 18-21 dezenas
+      const hammingBonus = Math.min(minDist, 6) * (is18to21 ? 10 : 6);
 
       let winningBonus = 0;
       const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
@@ -1815,7 +2097,7 @@ export function generateMinimumSetCoverFechamento({
 
       const jitter = Math.random() * 0.2;
       const combinedGain =
-        (newCovers * 10) +
+        (newCovers * 12) +
         (candScores[i] / 100) +
         hammingBonus +
         freqBalanceScore +
@@ -1873,26 +2155,35 @@ export function generateMinimumSetCoverFechamento({
   while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
     let idx = pickBestCandidate(targetHammingDist, true, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, false);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    // Em universos de 18-21 dezenas, prioriza Hamming >= 3 (e >= 2); só recorre a Hamming = 1 em pool 18 muito restrito para não descartar filtros estritos válidos
+    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets))) {
+      idx = pickBestCandidate(1, false, false);
+    }
     if (idx === -1) break;
     commitCandidate(idx);
   }
 
-  // Preenchimento complementar caso a cobertura ainda deixe vagas abertas até maxTickets (priorizando Hamming + Estratificação)
+  // Preenchimento complementar até maxTickets mantendo prioridade Hamming >= 3 em 18–21
   while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
     let idx = pickBestCandidate(targetHammingDist, false, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets))) {
+      idx = pickBestCandidate(1, false, false);
+    }
     if (idx === -1) break;
     commitCandidate(idx);
   }
 
-  // 7. Varredura 2-opt de Eliminação de Redundâncias (preservando estratos Anti-Cisne Negro)
+  // 7. Varredura 2-opt de Eliminação de Redundâncias (preservando estratos Anti-Cisne Negro e target maxTickets)
   let improved = true;
   let prunePass = 0;
   const minKeepCount = enableStratification ? maxTickets : (maxTickets <= 24 ? Math.min(20, maxTickets) : Math.floor(maxTickets * 0.85));
@@ -1901,7 +2192,7 @@ export function generateMinimumSetCoverFechamento({
     for (let p = chosenIndices.length - 1; p >= 0; p--) {
       const candIdx = chosenIndices[p];
       const isTail = candIdx >= coreCombos.length;
-      if (isTail) continue; // Nunca podar cotas de proteção Anti-Cisne Negro
+      if (isTail) continue;
       const covers = candCoverLists[candIdx];
 
       let canBePruned = true;
@@ -1949,22 +2240,30 @@ export function generateMinimumSetCoverFechamento({
     throw new Error('Falha de integridade: bilhetes gerados contêm dezenas fora do universoDezenas selecionado.');
   }
 
-  return finalEntries.map((entry, idx) => ({
-    id: `ticket-setcover-${idx + 1}`,
-    index: idx + 1,
-    ...entry.analysis,
-    faixaSoma: entry.faixaSoma,
-    tags: [
+  return finalEntries.map((entry, idx) => {
+    const tags = [
       entry.faixaSoma === 'baixa'
         ? 'Cauda Baixa (155+)'
         : entry.faixaSoma === 'alta'
         ? 'Cauda Alta (≤235)'
+        : fallbackLevel === 3
+        ? 'Cobertura Combinatória + Hamming'
         : `Central (${centralMin}–${centralMax})`,
       fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
         ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
-        : 'Hamming Otimizado',
-    ],
-  }));
+        : `Hamming ≥${targetHammingDist}`,
+    ];
+    if (fallbackLevel > 0) {
+      tags.push(fallbackMeta.label);
+    }
+    return {
+      id: `ticket-setcover-${idx + 1}`,
+      index: idx + 1,
+      ...entry.analysis,
+      faixaSoma: entry.faixaSoma,
+      tags,
+    };
+  });
 }
 
 /**
@@ -1981,7 +2280,9 @@ export function generateFechamentoCovering(
   maxTickets: number = 32,
   filters?: FilterCriteria,
   concursoAnterior: number[] = CONCURSO_ATUAL.dezenas,
-  aiScores?: number[]
+  aiScores?: number[],
+  fallbackLevel: ProgressiveFallbackLevel = 0,
+  disableAutoFallback: boolean = false
 ): GameTicket[] {
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
   const sortedPool = [...new Set(selectedNumbers)]
@@ -1993,13 +2294,53 @@ export function generateFechamentoCovering(
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
 
+  // Fallback Progressivo Automático em 3 níveis quando filtros estritos não atingem a meta de bilhetes
+  if (!disableAutoFallback && fallbackLevel === 0 && n > 15) {
+    let bestTickets: GameTicket[] = [];
+    for (const lvl of [0, 1, 2, 3] as ProgressiveFallbackLevel[]) {
+      const fb = buildProgressiveFallbackFilters(filters, lvl);
+      try {
+        const attempt = generateFechamentoCovering(
+          sortedPool,
+          targetHits,
+          maxTickets,
+          fb.filters,
+          concursoAnterior,
+          aiScores,
+          lvl,
+          true
+        );
+        if (attempt.length > bestTickets.length) {
+          bestTickets = attempt;
+        }
+        if (attempt.length >= maxTickets) {
+          return attempt;
+        }
+      } catch {
+        // Escala automaticamente para o próximo nível de relaxamento
+      }
+    }
+    if (bestTickets.length > 0) {
+      return bestTickets;
+    }
+    throw new Error(
+      'Nenhum jogo compatível com os filtros selecionados mesmo após o Fallback Progressivo de 3 níveis.'
+    );
+  }
+
+  const fallbackMeta = buildProgressiveFallbackFilters(filters, fallbackLevel);
+  const bypassAnomaly = fallbackMeta.bypassCanonicalAnomaly;
+
   // 1. Sanitização estrita de dezenas fixas (máx. 5) e Modo Rotativas Inteligentes (K de N)
   const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
   const effectiveFixedSet = new Set(effectiveFixas);
   const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
 
-  // Auto-calibração de soma pelo universo selecionado (μ_U ± 20)
-  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  // Auto-calibração de soma pelo universo selecionado (μ_U ± 20) — desativada nos níveis 2 e 3
+  const sumCal = resolveCentralSumBounds(sortedPool, filters);
+  const centralMin = fallbackLevel === 3 ? 120 : fallbackLevel === 2 ? Math.min(165, sumCal.centralMin) : sumCal.centralMin;
+  const centralMax = fallbackLevel === 3 ? 285 : fallbackLevel === 2 ? Math.max(225, sumCal.centralMax) : sumCal.centralMax;
+
   const effectiveCoreFilters: FilterCriteria | undefined = filters
     ? {
         ...filters,
@@ -2025,6 +2366,8 @@ export function generateFechamentoCovering(
       },
       concursoAnterior,
       aiScores,
+      fallbackLevel,
+      disableAutoFallback: true,
     });
   }
 
@@ -2038,12 +2381,13 @@ export function generateFechamentoCovering(
   };
 
   const canonicalSumOverride = {
-    somaMin: Math.min(180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
     somaMax: Math.max(225, centralMax),
   };
 
   const isCandidateValid = (nums: number[]): boolean => {
     if (!checkFixasCompliance(nums)) return false;
+    if (bypassAnomaly) return true;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
@@ -2086,8 +2430,8 @@ export function generateFechamentoCovering(
     return [{ id: 'ticket-1', index: 1, ...analysis, faixaSoma: 'ouro' }];
   }
 
-  // Estratificação Anti-Cisne Negro (75/15/10) ativada para fechamentos >= 10 jogos
-  const enableStratification = maxTickets >= 10 && n >= 16;
+  // Estratificação Anti-Cisne Negro (75/15/10) ativada para fechamentos >= 10 jogos (exceto Nível 3)
+  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
   const lowerTailMax = Math.max(155, centralMin - 1);
   const upperTailMin = Math.min(235, centralMax + 1);
 
@@ -2098,7 +2442,7 @@ export function generateFechamentoCovering(
     const soma = sorted.reduce((a, b) => a + b, 0);
     if (soma < 155 || soma > lowerTailMax) return false;
     const maxSeq = getMaxConsecutiveSequence(sorted);
-    if (maxSeq > 8) return false; // Permite até 8 consecutivas (Draw #3825 Soma 161)
+    if (maxSeq > 8) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
     const primos = sorted.filter((d) => PRIMOS.includes(d)).length;
     const bola1 = sorted[0];
@@ -2115,7 +2459,7 @@ export function generateFechamentoCovering(
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < upperTailMin || soma > 235) return false; // Captura extremos até 235 (Draw #3830 Soma 232)
+    if (soma < upperTailMin || soma > 235) return false;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 7) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -2135,7 +2479,7 @@ export function generateFechamentoCovering(
   const upperTailCandidates: number[][] = [];
   const candidateSeen = new Set<string>();
 
-  const maxCorePool = n <= 17 ? 2000 : 3500;
+  const maxCorePool = n <= 17 ? 2000 : 4000;
   const maxTailPool = 600;
 
   // Prepara subconjuntos K-de-N de fixas rotativas (ou fixas rígidas)
@@ -2154,26 +2498,40 @@ export function generateFechamentoCovering(
 
   const rankingMasks = getHistoricalRankingMasks();
 
-  // Para pools pequenos (n <= 17), enumera deterministicamente com Branch & Bound (early-exit) nos 5 filtros matemáticos
-  if (n <= 17) {
-    const coreBranchFilters: PodaDinamicaFiltros = {
-      somaMin: centralMin,
-      somaMax: centralMax,
-      paresMin: effectiveCoreFilters?.paresMin ?? 5,
-      paresMax: effectiveCoreFilters?.paresMax ?? 10,
-      posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
-      multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
-      somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
-      somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
-      somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
-      cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
-      cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
-      cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
-      strictValidation: effectiveCoreFilters?.strictValidation ?? false,
-      validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
-      rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
-      rankingMasks,
-    };
+  // Para pools pequenos (n <= 18), enumera deterministicamente com Branch & Bound (early-exit)
+  if (n <= 18) {
+    const coreBranchFilters: PodaDinamicaFiltros = bypassAnomaly
+      ? {
+          somaMin: 120,
+          somaMax: 285,
+          paresMin: 0,
+          paresMax: 15,
+          posicionalAtivo: false,
+          multiplosAtivo: false,
+          somaAlgarismosAtiva: false,
+          cruzAtiva: false,
+          strictValidation: false,
+          validacaoEstritaCruz: false,
+          rankingHistoricoAtivo: false,
+        }
+      : {
+          somaMin: centralMin,
+          somaMax: centralMax,
+          paresMin: effectiveCoreFilters?.paresMin ?? 5,
+          paresMax: effectiveCoreFilters?.paresMax ?? 10,
+          posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? true,
+          multiplosAtivo: effectiveCoreFilters?.multiplosAtivo ?? false,
+          somaAlgarismosAtiva: effectiveCoreFilters?.somaAlgarismosAtiva ?? false,
+          somaAlgarismosMin: effectiveCoreFilters?.somaAlgarismosMin ?? 63,
+          somaAlgarismosMax: effectiveCoreFilters?.somaAlgarismosMax ?? 87,
+          cruzAtiva: effectiveCoreFilters?.cruzAtiva ?? true,
+          cruzMin: effectiveCoreFilters?.cruzMin ?? 4,
+          cruzMax: effectiveCoreFilters?.cruzMax ?? 7,
+          strictValidation: effectiveCoreFilters?.strictValidation ?? false,
+          validacaoEstritaCruz: effectiveCoreFilters?.validacaoEstritaCruz ?? false,
+          rankingHistoricoAtivo: effectiveCoreFilters?.rankingHistoricoAtivo ?? false,
+          rankingMasks,
+        };
 
     for (const fSubset of fixedSubsets) {
       const fMask = _criarMascara(fSubset);
@@ -2277,12 +2635,13 @@ export function generateFechamentoCovering(
       }
     }
   } else {
-    // Para n >= 20 (ex: 54.264 combinações em 21 dezenas), amostragem estratificada + poda bitwise early-exit + rotação uniforme de fixas
-    const totalAttempts = 16000;
+    // Para n >= 19 (ex: 54.264 combinações em 21 dezenas), amostragem estratificada + poda bitwise early-exit
+    const totalAttempts = bypassAnomaly ? 8000 : 18000;
     const workingNonFixed = [...nonFixedPool];
     const nfLen = workingNonFixed.length;
 
     const fastEarlyExitCoreCheck = (combo: number[]): boolean => {
+      if (bypassAnomaly) return true;
       const soma = combo.reduce((a, b) => a + b, 0);
       if (soma < centralMin || soma > centralMax) return false;
       const mask = _criarMascara(combo);
@@ -2319,7 +2678,6 @@ export function generateFechamentoCovering(
       const needVar = 15 - fSubset.length;
       if (needVar > nfLen || needVar < 0) continue;
 
-      // Bias periódica para extremos baixos/altos para garantir amostragem rápida de caudas 155-179 e 216-235
       let chosenVars: number[];
       if (enableStratification && attempt % 7 === 0 && lowerTailCandidates.length < maxTailPool) {
         const biased = [...workingNonFixed].sort((a, b) => a - b + (Math.random() - 0.5) * 10);
@@ -2413,18 +2771,65 @@ export function generateFechamentoCovering(
   if (upperTailCandidates.length === 0) upperQuota = 0;
   const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
 
-  // Subconjuntos de teste bitwise para cobertura
-  const testSubsetMasks = unifiedCandidates.slice(0, Math.min(unifiedCandidates.length, 600)).map((c) => c.mask);
+  // Subconjuntos alvo de cobertura: em 18–21 dezenas gera amostra estratificada uniforme do universo C(n, 15)
+  // para evitar redundância e maximizar cobertura de triplas/quadras (captura de 13/14 pts em 21 dezenas)
+  const is18to21 = n >= 18 && n <= 21;
+  const testSubsetMasks: number[] = [];
+  if (is18to21) {
+    const targetSampleSize = 900;
+    const seenTestMasks = new Set<number>();
+    const sampleWork = [...sortedPool];
+    for (let s = 0; s < targetSampleSize * 2 && testSubsetMasks.length < targetSampleSize; s++) {
+      for (let i = 0; i < 15; i++) {
+        const r = i + Math.floor(Math.random() * (n - i));
+        const tmp = sampleWork[i];
+        sampleWork[i] = sampleWork[r];
+        sampleWork[r] = tmp;
+      }
+      const m = _criarMascara(sampleWork.slice(0, 15));
+      if (!seenTestMasks.has(m)) {
+        seenTestMasks.add(m);
+        testSubsetMasks.push(m);
+      }
+    }
+  } else {
+    for (let i = 0; i < Math.min(unifiedCandidates.length, 600); i++) {
+      testSubsetMasks.push(unifiedCandidates[i].mask);
+    }
+  }
   const uncovered = new Set<number>(testSubsetMasks.map((_, idx) => idx));
+
+  // Cobertura de pares/triplas das dezenas variáveis para otimizar 18–21 dezenas (captura de 13 pts com 14 no universo)
+  const pairCoverageCounts = new Uint16Array(26 * 26);
+  const tripleMasksForCoverage: number[] = [];
+  const tripleCoveredFlags: Uint8Array = new Uint8Array(is18to21 ? 400 : 0);
+  if (is18to21 && nonFixedPool.length >= 3) {
+    // Amostra determinística de até 400 triplas do pool variável para maximizar cobertura de triplas/quadras
+    const nfLen = nonFixedPool.length;
+    const allTriplesCount = (nfLen * (nfLen - 1) * (nfLen - 2)) / 6;
+    const step = Math.max(1, Math.floor(allTriplesCount / 400));
+    let idxCounter = 0;
+    for (let a = 0; a < nfLen - 2 && tripleMasksForCoverage.length < 400; a++) {
+      for (let b = a + 1; b < nfLen - 1 && tripleMasksForCoverage.length < 400; b++) {
+        for (let c = b + 1; c < nfLen && tripleMasksForCoverage.length < 400; c++) {
+          if (idxCounter++ % step === 0) {
+            tripleMasksForCoverage.push(
+              (1 << (nonFixedPool[a] - 1)) |
+              (1 << (nonFixedPool[b] - 1)) |
+              (1 << (nonFixedPool[c] - 1))
+            );
+          }
+        }
+      }
+    }
+  }
 
   const chosen: StratumCand[] = [];
   const chosenMasks: number[] = [];
   const chosenKeySet = new Set<string>();
 
-  const targetHammingDist = Math.min(
-    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
-    Math.max(1, n - 15)
-  );
+  // Prioriza estritamente Hamming >= 3 em universos de 18 a 21 dezenas
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -2450,7 +2855,7 @@ export function generateFechamentoCovering(
     let bestWeight = -9999999;
     let bestCovered: number[] = [];
 
-    const searchLimit = Math.min(unifiedCandidates.length, 650);
+    const searchLimit = Math.min(unifiedCandidates.length, is18to21 ? 950 : 650);
     for (let i = 0; i < unifiedCandidates.length; i++) {
       const cand = unifiedCandidates[i];
       if (chosenKeySet.has(cand.key)) continue;
@@ -2462,11 +2867,11 @@ export function generateFechamentoCovering(
       }
 
       const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
-      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
-        continue;
+      if (chosenMasks.length > 0) {
+        if (minDist === 0) continue;
+        if (minHammingReq > 0 && minDist < minHammingReq) continue;
       }
 
-      // Se estamos na busca principal de cobertura, limitamos custo de scan nos primeiros searchLimit
       if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === 'ouro') continue;
 
       let coverCount = 0;
@@ -2480,6 +2885,31 @@ export function generateFechamentoCovering(
         }
       }
       if (requireUncoveredGain && uncovered.size > 0 && coverCount === 0) continue;
+
+      // Bônus de cobertura de novas triplas e pares raros (crítico em 18–21 dezenas)
+      let tripleNoveltyBonus = 0;
+      if (is18to21 && tripleMasksForCoverage.length > 0) {
+        let newTriples = 0;
+        for (let t = 0; t < tripleMasksForCoverage.length; t++) {
+          if (tripleCoveredFlags[t] === 0 && (cand.mask & tripleMasksForCoverage[t]) === tripleMasksForCoverage[t]) {
+            newTriples++;
+          }
+        }
+        tripleNoveltyBonus += newTriples * 1.1;
+
+        // Penalidade leve para pares já excessivamente repetidos
+        let pairNovelty = 0;
+        for (let p1 = 0; p1 < cand.nums.length; p1++) {
+          const d1 = cand.nums[p1];
+          if (effectiveFixedSet.has(d1)) continue;
+          for (let p2 = p1 + 1; p2 < cand.nums.length; p2++) {
+            const d2 = cand.nums[p2];
+            if (effectiveFixedSet.has(d2)) continue;
+            if (pairCoverageCounts[d1 * 26 + d2] === 0) pairNovelty += 0.35;
+          }
+        }
+        tripleNoveltyBonus += pairNovelty;
+      }
 
       // Controle de Frequência Equilibrada [0.85x..1.15x] e rotação de fixas
       let freqScore = 0;
@@ -2514,7 +2944,7 @@ export function generateFechamentoCovering(
       }
 
       const savedPenalty = savedTicketsSet.has(cand.key) ? 25 : 0;
-      const hammingBonus = Math.min(minDist, 6) * 5;
+      const hammingBonus = Math.min(minDist, 6) * (is18to21 ? 9 : 5);
       const jitter = Math.random() * 0.2;
 
       const analysis = analyzeTicket(cand.nums, concursoAnterior, aiScores);
@@ -2524,7 +2954,8 @@ export function generateFechamentoCovering(
       if (analysis.pares === 7 && analysis.impares === 8) winningBonus += 0.25;
 
       const weight =
-        (coverCount * 2) +
+        (coverCount * 2.5) +
+        tripleNoveltyBonus +
         (cand.scoreIA / 100) * 0.8 +
         hammingBonus +
         freqScore +
@@ -2563,19 +2994,34 @@ export function generateFechamentoCovering(
       else numberFreq[d] = (numberFreq[d] || 0) + 1;
     }
 
+    if (is18to21) {
+      for (let t = 0; t < tripleMasksForCoverage.length; t++) {
+        if (tripleCoveredFlags[t] === 0 && (cand.mask & tripleMasksForCoverage[t]) === tripleMasksForCoverage[t]) {
+          tripleCoveredFlags[t] = 1;
+        }
+      }
+      for (let p1 = 0; p1 < cand.nums.length; p1++) {
+        const d1 = cand.nums[p1];
+        for (let p2 = p1 + 1; p2 < cand.nums.length; p2++) {
+          pairCoverageCounts[d1 * 26 + cand.nums[p2]]++;
+        }
+      }
+    }
+
     for (const coveredIdx of coveredHere) {
       uncovered.delete(coveredIdx);
     }
   };
 
-  // Fase 1: Preencher estratos protegidos (15% Cauda Baixa, 10% Cauda Alta) quando >= 10 jogos mantendo Hamming >= targetHammingDist
+  // Fase 1: Preencher estratos protegidos (15% Cauda Baixa, 10% Cauda Alta) mantendo Hamming >= targetHammingDist
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
       const hit =
         selectNextFromPool('baixa', targetHammingDist, false, true) ||
         selectNextFromPool('baixa', targetHammingDist, false, false) ||
+        (targetHammingDist > 3 ? selectNextFromPool('baixa', 3, false, false) : null) ||
         (targetHammingDist > 2 ? selectNextFromPool('baixa', 2, false, false) : null) ||
-        selectNextFromPool('baixa', 1, false, false);
+        (!is18to21 ? selectNextFromPool('baixa', 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
     }
@@ -2583,34 +3029,38 @@ export function generateFechamentoCovering(
       const hit =
         selectNextFromPool('alta', targetHammingDist, false, true) ||
         selectNextFromPool('alta', targetHammingDist, false, false) ||
+        (targetHammingDist > 3 ? selectNextFromPool('alta', 3, false, false) : null) ||
         (targetHammingDist > 2 ? selectNextFromPool('alta', 2, false, false) : null) ||
-        selectNextFromPool('alta', 1, false, false);
+        (!is18to21 ? selectNextFromPool('alta', 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
     }
   }
 
-  // Fase 2: Seleção gulosa de cobertura combinatória na Zona Central (priorizando Hamming >= targetHammingDist sobre ganho marginal)
+  // Fase 2: Seleção gulosa de cobertura combinatória na Zona Central (priorizando Hamming >= 3 em 18–21)
   let greedyLoop = 0;
   const maxGreedyLoops = Math.min(maxTickets * 2, 220);
   while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
     const hit =
       selectNextFromPool('ouro', targetHammingDist, true, true) ||
       selectNextFromPool('ouro', targetHammingDist, true, false) ||
+      (targetHammingDist > 3 ? selectNextFromPool('ouro', 3, true, false) : null) ||
       selectNextFromPool('ouro', targetHammingDist, false, true) ||
       selectNextFromPool('ouro', targetHammingDist, false, false) ||
+      (targetHammingDist > 3 ? selectNextFromPool('ouro', 3, false, false) : null) ||
       (targetHammingDist > 2 ? selectNextFromPool('ouro', 2, false, false) : null) ||
-      selectNextFromPool('ouro', 1, false, false);
+      (!is18to21 ? selectNextFromPool('ouro', 1, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
 
-  // Fase 3: Fallback final respeitando Hamming progressivo se algum estrato não teve candidatos suficientes
+  // Fase 3: Fallback final respeitando Hamming >= 3 (e nunca <= 1 em 18–21)
   while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
     const hit =
       selectNextFromPool('any', targetHammingDist, false, false) ||
+      (targetHammingDist > 3 ? selectNextFromPool('any', 3, false, false) : null) ||
       (targetHammingDist > 2 ? selectNextFromPool('any', 2, false, false) : null) ||
-      selectNextFromPool('any', 1, false, false);
+      (!is18to21 ? selectNextFromPool('any', 1, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
@@ -2626,21 +3076,27 @@ export function generateFechamentoCovering(
 
   return chosen.map((item, index) => {
     const analysis = analyzeTicket(item.nums, concursoAnterior, aiScores);
+    const tags = [
+      item.faixaSoma === 'baixa'
+        ? 'Cauda Baixa (155+)'
+        : item.faixaSoma === 'alta'
+        ? 'Cauda Alta (≤235)'
+        : fallbackLevel === 3
+        ? 'Cobertura Combinatória + Hamming'
+        : `Central (${centralMin}–${centralMax})`,
+      fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
+        ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
+        : `Hamming ≥${targetHammingDist}`,
+    ];
+    if (fallbackLevel > 0) {
+      tags.push(fallbackMeta.label);
+    }
     return {
       id: `ticket-${index + 1}`,
       index: index + 1,
       ...analysis,
       faixaSoma: item.faixaSoma,
-      tags: [
-        item.faixaSoma === 'baixa'
-          ? 'Cauda Baixa (155+)'
-          : item.faixaSoma === 'alta'
-          ? 'Cauda Alta (≤235)'
-          : `Central (${centralMin}–${centralMax})`,
-        fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
-          ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
-          : 'Hamming Otimizado',
-      ],
+      tags,
     };
   });
 }
@@ -2835,8 +3291,9 @@ export function gerarMatrizEstratificada(
   sortByScore(candidatosCaudaBaixa);
   sortByScore(candidatosCaudaAlta);
 
-  // 5. Seleção com Espalhamento Hamming Bitwise + Frequency Cap [0.85x..1.15x] + Fixas Rotativas Uniformes
-  const targetHammingDist = Math.min(totalJogos <= 32 ? 3 : 2, Math.max(1, n - 15));
+  // 5. Seleção com Espalhamento Hamming Bitwise (priorizando >= 3 em 18-21) + Frequency Cap [0.85x..1.15x]
+  const is18to21 = n >= 18 && n <= 21;
+  const targetHammingDist = getTargetHammingDistance(n, totalJogos);
   const freqBounds = calculateVariableFrequencyBounds(
     totalJogos,
     n,
@@ -2855,7 +3312,7 @@ export function gerarMatrizEstratificada(
     let picked = 0;
     const poolWithMasks = pool.map((nums) => ({ nums, mask: _criarMascara(nums), key: nums.join('-') }));
 
-    const runPass = (requireStrictHamming: boolean, enforceFreqCap: boolean) => {
+    const runPass = (minHammingReq: number, enforceFreqCap: boolean) => {
       while (picked < quota && selectedEntries.length < totalJogos) {
         let bestIdx = -1;
         let bestPenaltyScore = -Infinity;
@@ -2866,7 +3323,9 @@ export function gerarMatrizEstratificada(
           if (selectedKeys.has(cand.key)) continue;
 
           const minDist = minHammingDistanceToMatrix(cand.mask, selectedMasks);
-          if (requireStrictHamming && selectedMasks.length > 0 && minDist < targetHammingDist) continue;
+          if (selectedMasks.length > 0 && (minDist === 0 || (minHammingReq > 0 && minDist < minHammingReq))) {
+            continue;
+          }
 
           let freqBalance = 0;
           let saturated = false;
@@ -2895,7 +3354,7 @@ export function gerarMatrizEstratificada(
             if (!usedFixedSubsets.has(subKey)) rotBonus += 25;
           }
 
-          const rankScore = (scanLimit - i) * 0.1 + Math.min(minDist, 6) * 6 + freqBalance + rotBonus;
+          const rankScore = (scanLimit - i) * 0.1 + Math.min(minDist, 6) * (is18to21 ? 9 : 6) + freqBalance + rotBonus;
           if (rankScore > bestPenaltyScore) {
             bestPenaltyScore = rankScore;
             bestIdx = i;
@@ -2920,9 +3379,10 @@ export function gerarMatrizEstratificada(
       }
     };
 
-    runPass(true, true);
-    if (picked < quota && selectedEntries.length < totalJogos) runPass(true, false);
-    if (picked < quota && selectedEntries.length < totalJogos) runPass(false, false);
+    runPass(targetHammingDist, true);
+    if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false);
+    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 2) runPass(2, false);
+    if (picked < quota && selectedEntries.length < totalJogos && !is18to21) runPass(1, false);
   };
 
   pickFromPool(candidatosOuro, qtdOuro, 'ouro');
@@ -2975,153 +3435,331 @@ export function gerarMatrizEstratificada(
  * 6. Otimização Monte Carlo (200 iterações) na montagem dos blocos para maximizar a Zona de Ouro
  *    (Soma 190-210, Paridade 7P/8I ou 8P/7I, Primos 5-6, Cruz 5-6, Bola 1 <= 2 e Bola 15 >= 24)
  */
+export interface CoreSatelites25Partition {
+  core12: number[];
+  satellites13: number[];
+  weights: Record<number, number>;
+}
+
+/**
+ * Particiona as 25 dezenas do volante em:
+ * - Core (12 dezenas de maior peso composto: IA + frequência recente + pressão de ciclo + equilíbrio rep/aus)
+ * - Satélites (13 dezenas restantes)
+ *
+ * Reduz a dispersão excessiva (Hamming muito alto) nas matrizes de 25 dezenas ao concentrar
+ * o Núcleo Forte em 70%–80% dos bilhetes (9 dezenas Core + 6 Satélites por cartão = 75% médio).
+ */
+export function selectCoreAndSatellites25(options: {
+  latestDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
+  dynamicStats?: DezenaStats[];
+  aiScores?: number[];
+  priorityFixed?: number[];
+  pivotBoost?: number[];
+} = {}): CoreSatelites25Partition {
+  const baseDraw = options.latestDraw || CONCURSO_ATUAL;
+  const draws10 = (options.drawsHistory && options.drawsHistory.length > 0
+    ? options.drawsHistory
+    : RECENT_DRAWS
+  ).slice(0, 10);
+  const stats = options.dynamicStats || DEZENAS_STATS;
+  const aiScores = options.aiScores;
+  const priorityFixedSet = new Set(sanitizeDezenasFixas(options.priorityFixed || []));
+  const pivotBoostSet = new Set(options.pivotBoost || []);
+
+  const recentFreq: Record<number, number> = {};
+  for (let d = 1; d <= 25; d++) recentFreq[d] = 0;
+  for (const dr of draws10) {
+    for (const num of dr.dezenas || []) {
+      recentFreq[num] = (recentFreq[num] || 0) + 1;
+    }
+  }
+
+  const weights: Record<number, number> = {};
+  for (let d = 1; d <= 25; d++) {
+    const st = stats.find((s) => s.numero === d);
+    const ai = aiScores?.[d - 1] ?? (st ? Math.min(95, (st.vezes / 24)) : 50);
+    const freqScore = (recentFreq[d] || 0) * 6.5;
+    const delayScore = (st?.atrasoAtual || 0) * 3.2 + (st?.pendenteNoCiclo ? 10 : 0);
+    const histScore = (st?.vezes || 1800) * 0.008;
+    const fixedBoost = priorityFixedSet.has(d) ? 45 : 0;
+    const pivotBonus = pivotBoostSet.has(d) ? 6 : 0;
+    weights[d] = Math.round((ai * 0.55 + freqScore + delayScore + histScore + fixedBoost + pivotBonus) * 100) / 100;
+  }
+
+  const sorteadasSet = new Set(baseDraw.dezenas || []);
+  const rankedRepetidas = Array.from({ length: 25 }, (_, i) => i + 1)
+    .filter((d) => sorteadasSet.has(d))
+    .sort((a, b) => weights[b] - weights[a] || a - b);
+  const rankedAusentes = Array.from({ length: 25 }, (_, i) => i + 1)
+    .filter((d) => !sorteadasSet.has(d))
+    .sort((a, b) => weights[b] - weights[a] || a - b);
+
+  // Equilibra o Core 12 com 7 repetidas fortes + 5 ausentes fortes (ou respeitando fixas do usuário)
+  const coreSet = new Set<number>();
+  for (const fx of priorityFixedSet) {
+    if (coreSet.size < 12) coreSet.add(fx);
+  }
+  for (const r of rankedRepetidas) {
+    if (coreSet.size >= 12) break;
+    const repInCore = Array.from(coreSet).filter((x) => sorteadasSet.has(x)).length;
+    if (repInCore < 7) coreSet.add(r);
+  }
+  for (const a of rankedAusentes) {
+    if (coreSet.size >= 12) break;
+    coreSet.add(a);
+  }
+  for (const r of rankedRepetidas) {
+    if (coreSet.size >= 12) break;
+    coreSet.add(r);
+  }
+
+  const core12 = Array.from(coreSet).sort((a, b) => a - b);
+  const satellites13 = Array.from({ length: 25 }, (_, i) => i + 1)
+    .filter((d) => !coreSet.has(d))
+    .sort((a, b) => weights[b] - weights[a] || a - b);
+
+  return { core12, satellites13, weights };
+}
+
+/**
+ * Motor Unificado "Ancoragem em Núcleo Forte (Core 12 + Satélites 13)" para matrizes de 25 dezenas:
+ * - Cada uma das 12 dezenas Core aparece em 70%–80% dos bilhetes (ex: 7–8 de 10, 8–9 de 11, 17–19 de 24).
+ * - Cada bilhete combina 9 dezenas Core (75% de presença média) + 6 Satélites rotacionados.
+ * - Reduz a dispersão excessiva (Hamming controlado entre 3 e 6) mantendo 100% das 25 dezenas cobertas.
+ */
+export function generateCoreSatellites25Matrix(options: {
+  maxTickets: number;
+  baseDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
+  dynamicStats?: DezenaStats[];
+  filters?: FilterCriteria;
+  aiScores?: number[];
+  idPrefix: string;
+  tagLabel: string;
+  pivotConstraint?: { pivotNums: number[]; kPivot: 4 | 5 | 6 };
+}): GameTicket[] {
+  const {
+    maxTickets,
+    baseDraw = CONCURSO_ATUAL,
+    drawsHistory,
+    dynamicStats = DEZENAS_STATS,
+    filters,
+    aiScores,
+    idPrefix,
+    tagLabel,
+    pivotConstraint,
+  } = options;
+
+  const partition = selectCoreAndSatellites25({
+    latestDraw: baseDraw,
+    drawsHistory,
+    dynamicStats,
+    aiScores,
+    priorityFixed: filters?.dezenasFixas,
+    pivotBoost: pivotConstraint?.pivotNums,
+  });
+
+  const { core12, satellites13, weights } = partition;
+  const corePerTicket = 9; // 9 / 12 = 75% exato por bilhete -> faixa 70%–80% garantida
+  const satPerTicket = 6; // 6 / 13 = rotação uniforme cobrindo 100% das 13 satélites
+
+  const minCoreFreq = Math.floor(maxTickets * 0.70);
+  const maxCoreFreq = Math.ceil(maxTickets * 0.80);
+  const targetCoreFreq = maxTickets * 0.75;
+  const targetSatFreq = (maxTickets * satPerTicket) / satellites13.length;
+
+  const coreFreq: Record<number, number> = {};
+  const satFreq: Record<number, number> = {};
+  core12.forEach((d) => (coreFreq[d] = 0));
+  satellites13.forEach((d) => (satFreq[d] = 0));
+
+  const pivotSet = pivotConstraint ? new Set(pivotConstraint.pivotNums) : null;
+  const chosenCombos: number[][] = [];
+  const chosenMasks: number[] = [];
+  const usedKeys = new Set<string>();
+
+  const somaMin = Math.min(175, filters?.somaMin ?? 180);
+  const somaMax = Math.max(220, filters?.somaMax ?? 215);
+
+  for (let t = 0; t < maxTickets; t++) {
+    const remainingTickets = maxTickets - t;
+    let bestCombo: number[] | null = null;
+    let bestScore = -Infinity;
+
+    // 140 candidatos avaliados por vaga para balancear Core 70-80%, Satélites 100%, Hamming controlado e Zona de Ouro
+    for (let trial = 0; trial < 140; trial++) {
+      // Seleciona 9 do Core priorizando quem precisa atingir 70% e evitando exceder 80%
+      const mustIncludeCore = core12.filter(
+        (d) => minCoreFreq - coreFreq[d] >= remainingTickets
+      );
+      const eligibleCore = core12.filter(
+        (d) => coreFreq[d] < maxCoreFreq && !mustIncludeCore.includes(d)
+      );
+      const fallbackCore = core12.filter(
+        (d) => !mustIncludeCore.includes(d) && !eligibleCore.includes(d)
+      );
+
+      const scoredCore = eligibleCore
+        .map((d) => ({
+          d,
+          priority:
+            (targetCoreFreq - coreFreq[d]) * 14 +
+            (weights[d] || 50) * 0.08 +
+            (Math.random() - 0.5) * (trial === 0 ? 0.5 : 8),
+        }))
+        .sort((a, b) => b.priority - a.priority)
+        .map((x) => x.d);
+
+      const pickedCore = [
+        ...mustIncludeCore,
+        ...scoredCore,
+        ...fallbackCore,
+      ].slice(0, corePerTicket);
+
+      // Seleciona 6 Satélites priorizando satélites ainda não cobertos (garante 100% das 25 dezenas)
+      const scoredSats = satellites13
+        .map((d) => ({
+          d,
+          priority:
+            (satFreq[d] === 0 ? 60 : 0) +
+            (targetSatFreq - satFreq[d]) * 12 +
+            (weights[d] || 50) * 0.06 +
+            (Math.random() - 0.5) * (trial === 0 ? 0.5 : 9),
+        }))
+        .sort((a, b) => b.priority - a.priority)
+        .map((x) => x.d);
+
+      let pickedSats = scoredSats.slice(0, satPerTicket);
+
+      // Se houver restrição de Pivô 9 (K ∈ {4, 5, 6}), ajusta satélites para respeitar K dezenas no Pivô
+      if (pivotConstraint && pivotSet) {
+        const coreInPivot = pickedCore.filter((d) => pivotSet.has(d)).length;
+        const neededPivotFromSat = Math.max(0, pivotConstraint.kPivot - coreInPivot);
+        const satInPivot = scoredSats.filter((d) => pivotSet.has(d));
+        const satOutPivot = scoredSats.filter((d) => !pivotSet.has(d));
+        if (neededPivotFromSat <= satInPivot.length && satPerTicket - neededPivotFromSat <= satOutPivot.length) {
+          pickedSats = [
+            ...satInPivot.slice(0, neededPivotFromSat),
+            ...satOutPivot.slice(0, satPerTicket - neededPivotFromSat),
+          ];
+        }
+      }
+
+      const combo = [...pickedCore, ...pickedSats].sort((a, b) => a - b);
+      if (combo.length !== 15) continue;
+      const key = combo.join('-');
+      if (usedKeys.has(key)) continue;
+
+      const mask = _criarMascara(combo);
+      const minDist = chosenMasks.length > 0 ? minHammingDistanceToMatrix(mask, chosenMasks) : 4;
+      if (chosenMasks.length > 0 && minDist < 2) continue;
+
+      const analysis = analyzeTicket(combo, baseDraw.dezenas, aiScores);
+      let score = analysis.scoreIA;
+
+      // Controle de dispersão Hamming: ideal entre 3 e 5 (evita Hamming excessivo >= 7 que derrubou o Hit Rate)
+      if (minDist >= 3 && minDist <= 5) score += 18;
+      else if (minDist === 6) score += 8;
+      else if (minDist >= 7) score -= (minDist - 6) * 10;
+      else if (minDist === 2) score -= 4;
+
+      // Calibração Zona de Ouro
+      if (analysis.soma >= somaMin && analysis.soma <= somaMax) score += 16;
+      else if (analysis.soma >= 165 && analysis.soma <= 225) score += 6;
+      else score -= 18;
+
+      if (analysis.pares >= 6 && analysis.pares <= 9) score += 10;
+      else score -= 12;
+
+      if (analysis.primos >= 4 && analysis.primos <= 7) score += 8;
+      if (analysis.moldura >= 8 && analysis.moldura <= 11) score += 8;
+      if (analysis.repetidas >= 7 && analysis.repetidas <= 10) score += 10;
+      if (analysis.maxConsecutivas <= 6) score += 6;
+      if (isHistorical15Collision(combo)) score -= 120;
+      if (hasViciousVisualPattern(combo).isVicious) score -= 40;
+
+      // Verifica aderência estrita ao Pivô K quando aplicável
+      if (pivotConstraint && pivotSet) {
+        const pCount = combo.filter((d) => pivotSet.has(d)).length;
+        if (pCount === pivotConstraint.kPivot) score += 25;
+        else score -= Math.abs(pCount - pivotConstraint.kPivot) * 18;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestCombo = combo;
+      }
+    }
+
+    if (!bestCombo) {
+      // Fallback determinístico garantindo 9 Core + 6 Satélites únicos
+      const fallbackCore = [...core12].sort((a, b) => coreFreq[a] - coreFreq[b]).slice(0, corePerTicket);
+      const fallbackSats = [...satellites13].sort((a, b) => satFreq[a] - satFreq[b]).slice(0, satPerTicket);
+      bestCombo = [...fallbackCore, ...fallbackSats].sort((a, b) => a - b);
+    }
+
+    chosenCombos.push(bestCombo);
+    chosenMasks.push(_criarMascara(bestCombo));
+    usedKeys.add(bestCombo.join('-'));
+    for (const d of bestCombo) {
+      if (coreFreq[d] !== undefined) coreFreq[d]++;
+      else if (satFreq[d] !== undefined) satFreq[d]++;
+    }
+  }
+
+  return chosenCombos
+    .map((combo) => ({
+      combo,
+      analysis: analyzeTicket(combo, baseDraw.dezenas, aiScores),
+    }))
+    .sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA)
+    .map((item, idx) => ({
+      id: `${idPrefix}-${idx + 1}`,
+      index: idx + 1,
+      ...item.analysis,
+      tags: [
+        tagLabel,
+        'Núcleo Forte 12 (70–80%)',
+        'Core + Satélites (25 Dez)',
+      ],
+    }));
+}
+
 export interface Desdobramento25BlocosOptions {
   baseDraw?: LotofacilDraw;
   maxGames?: 9 | 10;
   iterations?: number;
   aiScores?: number[];
+  dynamicStats?: DezenaStats[];
+  filters?: FilterCriteria;
 }
 
+/**
+ * Cobertura Total 25 Dezenas (10 Jogos — Ancoragem Core 12 + Satélites 13)
+ * Reestruturado após auditoria (#3825–#3833): substitui dispersão excessiva de blocos cruzados
+ * por Núcleo Forte (12 dezenas de maior peso presentes em 70%–80% dos bilhetes + 13 Satélites rotativos).
+ */
 export function generateDesdobramento25Blocos(
   options: Desdobramento25BlocosOptions = {}
 ): GameTicket[] {
   const baseDraw = options.baseDraw || CONCURSO_ATUAL;
   const maxGames = options.maxGames ?? 10;
-  const iterations = options.iterations ?? 200;
-  const aiScores = options.aiScores;
-
-  const sorteadas = [...baseDraw.dezenas].sort((a, b) => a - b);
-  const ausentes: number[] = [];
-  for (let n = 1; n <= 25; n++) {
-    if (!sorteadas.includes(n)) ausentes.push(n);
-  }
-
-  // Combinações C(5, 3) dos 5 superblocos (índices 0 a 4)
-  const blockTrios: [number, number, number][] = [
-    [0, 1, 2],
-    [0, 1, 3],
-    [0, 1, 4],
-    [0, 2, 3],
-    [0, 2, 4],
-    [0, 3, 4],
-    [1, 2, 3],
-    [1, 2, 4],
-    [1, 3, 4],
-    [2, 3, 4],
-  ];
-
-  let bestScore = -Infinity;
-  let bestBlocks: number[][] = [];
-
-  // Otimização Monte Carlo (200 iterações)
-  for (let iter = 0; iter < iterations; iter++) {
-    const shuffledSort = [...sorteadas].sort(() => Math.random() - 0.5);
-    const shuffledAus = [...ausentes].sort(() => Math.random() - 0.5);
-
-    const candidateBlocks: number[][] = [];
-    for (let i = 0; i < 5; i++) {
-      const trioSort = shuffledSort.slice(i * 3, i * 3 + 3);
-      const duoAus = shuffledAus.slice(i * 2, i * 2 + 2);
-      candidateBlocks.push([...trioSort, ...duoAus].sort((a, b) => a - b));
-    }
-
-    let iterationScore = 0;
-    let validCount = 0;
-
-    for (const trio of blockTrios) {
-      const ticketNums = Array.from(
-        new Set([
-          ...candidateBlocks[trio[0]],
-          ...candidateBlocks[trio[1]],
-          ...candidateBlocks[trio[2]],
-        ])
-      ).sort((a, b) => a - b);
-
-      if (ticketNums.length !== 15) continue;
-
-      const a = analyzeTicket(ticketNums, baseDraw.dezenas, aiScores);
-      let tScore = a.scoreIA;
-
-      // Pontuação calibrada da Zona de Ouro
-      if (a.soma >= 190 && a.soma <= 210) tScore += 18;
-      else if (a.soma >= 185 && a.soma <= 215) tScore += 10;
-      else if (a.soma < 180 || a.soma > 220) tScore -= 20;
-
-      if ((a.pares === 7 && a.impares === 8) || (a.pares === 8 && a.impares === 7)) {
-        tScore += 15;
-      } else if (a.pares === 6 && a.impares === 9) {
-        tScore += 8;
-      }
-
-      if (a.primos === 5 || a.primos === 6) {
-        tScore += 14;
-      }
-
-      const ticketCruz = a.cruz ?? 0;
-      if (ticketCruz >= 5 && ticketCruz <= 6) {
-        tScore += 12;
-      } else if (ticketCruz >= 4 && ticketCruz <= 7) {
-        tScore += 5;
-      }
-
-
-      if (ticketNums[0] === 1 || ticketNums[0] === 2) tScore += 8;
-      else if (ticketNums[0] <= 4) tScore += 4;
-      else tScore -= 12;
-
-      if (ticketNums[14] === 24 || ticketNums[14] === 25) tScore += 8;
-      else if (ticketNums[14] >= 22) tScore += 4;
-      else tScore -= 12;
-
-      if (isHistorical15Collision(ticketNums)) tScore -= 80;
-      if (hasViciousVisualPattern(ticketNums).isVicious) tScore -= 50;
-
-      iterationScore += tScore;
-      validCount++;
-    }
-
-    if (validCount === 10 && iterationScore > bestScore) {
-      bestScore = iterationScore;
-      bestBlocks = candidateBlocks;
-    }
-  }
-
-  // Gera os 10 bilhetes finais a partir dos melhores blocos encontrados
-  const ticketsWithAnalysis = blockTrios.map((trio) => {
-    const ticketNums = Array.from(
-      new Set([
-        ...bestBlocks[trio[0]],
-        ...bestBlocks[trio[1]],
-        ...bestBlocks[trio[2]],
-      ])
-    ).sort((a, b) => a - b);
-    const analysis = analyzeTicket(ticketNums, baseDraw.dezenas, aiScores);
-    return { ticketNums, analysis };
+  return generateCoreSatellites25Matrix({
+    maxTickets: maxGames,
+    baseDraw,
+    dynamicStats: options.dynamicStats,
+    filters: options.filters,
+    aiScores: options.aiScores,
+    idPrefix: 'ticket-25blocos',
+    tagLabel: 'Blocos Core 12 + Satélites',
   });
-
-  // Ordena por score decrescente
-  ticketsWithAnalysis.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
-
-  // Se solicitado 9 jogos, exclui o jogo com menor pontuação
-  const selectedTickets = maxGames === 9 ? ticketsWithAnalysis.slice(0, 9) : ticketsWithAnalysis;
-
-  return selectedTickets.map((item, idx) => ({
-    id: `ticket-25blocos-${idx + 1}`,
-    index: idx + 1,
-    ...item.analysis,
-    tags: [
-      'Cobertura 25 Dezenas',
-      '9 Repetidas + 6 Ausentes',
-      item.analysis.scoreIA >= 85 ? 'Zona de Ouro Pro' : 'Blocos Cruzados',
-    ],
-  }));
 }
 
 /**
- * 1. Fechamento "Super Esquema 14 Coringas + 11 Variáveis" (25 Dezenas em 11 Jogos • R$ 38,50)
- * Fixa as 9 repetidas de maior frequência nos últimos 10 concursos + 5 ausentes mais quentes (14 Coringas)
- * e combina com as 11 variáveis restantes garantindo cobertura de 100% das 25 dezenas em 11 bilhetes.
- * Caso alguma variável leve soma/paridade fora da tolerância, realiza troca de 1 dezena entre coringas e variáveis.
+ * 1. Fechamento "Super 14 Coringas → Reestruturado Core 12 + Satélites 13" (25 Dezenas em 11 Jogos • R$ 38,50)
+ * Elimina a fragilidade de 14 fixas rígidas concentrando as 12 dezenas de maior peso em 70%–80%
+ * dos bilhetes e rotacionando as 13 satélites nas 6 vagas finais, cobrindo 100% do volante.
  */
 export function generateSuper14Coringas11Jogos(options: {
   latestDraw?: LotofacilDraw;
@@ -3130,98 +3768,23 @@ export function generateSuper14Coringas11Jogos(options: {
   filters?: FilterCriteria;
   aiScores?: number[];
 } = {}): GameTicket[] {
-  const baseDraw = options.latestDraw || CONCURSO_ATUAL;
-  const draws10 = (options.drawsHistory && options.drawsHistory.length > 0
-    ? options.drawsHistory
-    : RECENT_DRAWS
-  ).slice(0, 10);
-  const stats = options.dynamicStats || DEZENAS_STATS;
-  const filters = options.filters;
-  const aiScores = options.aiScores;
-
-  // Frequência recente nos últimos 10 concursos
-  const recentFreq: Record<number, number> = {};
-  for (let d = 1; d <= 25; d++) recentFreq[d] = 0;
-  for (const dr of draws10) {
-    for (const n of dr.dezenas || []) {
-      recentFreq[n] = (recentFreq[n] || 0) + 1;
-    }
-  }
-
-  const rankScore = (num: number) => {
-    const st = stats.find((s) => s.numero === num);
-    const ai = aiScores?.[num - 1] ?? 50;
-    return (recentFreq[num] || 0) * 12 + (st?.atrasoAtual || 0) * 3 + ai * 0.25 + (st?.vezes || 0) * 0.01;
-  };
-
-  const sorteadasBase = [...baseDraw.dezenas].sort((a, b) => rankScore(b) - rankScore(a));
-  const ausentesBase = Array.from({ length: 25 }, (_, i) => i + 1)
-    .filter((n) => !baseDraw.dezenas.includes(n))
-    .sort((a, b) => rankScore(b) - rankScore(a));
-
-  // 9 repetidas mais frequentes + 5 ausentes mais quentes = 14 Coringas
-  const coringas14 = [...sorteadasBase.slice(0, 9), ...ausentesBase.slice(0, 5)].sort((a, b) => a - b);
-  const variaveis11 = Array.from({ length: 25 }, (_, i) => i + 1).filter((n) => !coringas14.includes(n));
-
-  const somaMin = filters?.somaMin ?? 165;
-  const somaMax = filters?.somaMax ?? 230;
-  const paresMin = filters?.paresMin ?? 5;
-  const paresMax = filters?.paresMax ?? 10;
-
-  const tickets: GameTicket[] = [];
-  const usedHashes = new Set<string>();
-
-  for (let idx = 0; idx < variaveis11.length; idx++) {
-    const v = variaveis11[idx];
-    let bestCombo = [...coringas14, v].sort((a, b) => a - b);
-    let bestAnalysis = analyzeTicket(bestCombo, baseDraw.dezenas, aiScores);
-    let bestPenalty =
-      (bestAnalysis.soma < somaMin ? (somaMin - bestAnalysis.soma) * 3 : bestAnalysis.soma > somaMax ? (bestAnalysis.soma - somaMax) * 3 : 0) +
-      (bestAnalysis.pares < paresMin ? (paresMin - bestAnalysis.pares) * 18 : bestAnalysis.pares > paresMax ? (bestAnalysis.pares - paresMax) * 18 : 0) +
-      (isHistorical15Collision(bestCombo) ? 200 : 0);
-
-    // Se o bilhete direto violar soma/paridade ou já existir, rotaciona 1 coringa com outra variável
-    if (bestPenalty > 0 || usedHashes.has(bestCombo.join('-'))) {
-      let lowestScore = Infinity;
-      for (let ci = 0; ci < coringas14.length; ci++) {
-        const dropC = coringas14[ci];
-        for (let vi = 0; vi < variaveis11.length; vi++) {
-          const addV = variaveis11[vi];
-          if (addV === v) continue;
-          const alt = [...coringas14.filter((c) => c !== dropC), v, addV].sort((a, b) => a - b);
-          const hash = alt.join('-');
-          if (usedHashes.has(hash)) continue;
-          const altA = analyzeTicket(alt, baseDraw.dezenas, aiScores);
-          const pen =
-            (altA.soma < somaMin ? (somaMin - altA.soma) * 3 : altA.soma > somaMax ? (altA.soma - somaMax) * 3 : 0) +
-            (altA.pares < paresMin ? (paresMin - altA.pares) * 18 : altA.pares > paresMax ? (altA.pares - paresMax) * 18 : 0) +
-            (isHistorical15Collision(alt) ? 200 : 0) -
-            altA.scoreIA * 0.05;
-          if (pen < lowestScore) {
-            lowestScore = pen;
-            bestCombo = alt;
-            bestAnalysis = altA;
-          }
-        }
-      }
-    }
-
-    usedHashes.add(bestCombo.join('-'));
-    tickets.push({
-      id: `ticket-coringas14-${idx + 1}`,
-      index: idx + 1,
-      ...bestAnalysis,
-      tags: ['Super 14 Coringas', `Variável ${v.toString().padStart(2, '0')}`, 'Cobertura 25 Dez'],
-    });
-  }
-
-  return tickets;
+  return generateCoreSatellites25Matrix({
+    maxTickets: 11,
+    baseDraw: options.latestDraw || CONCURSO_ATUAL,
+    drawsHistory: options.drawsHistory,
+    dynamicStats: options.dynamicStats,
+    filters: options.filters,
+    aiScores: options.aiScores,
+    idPrefix: 'ticket-coringas14',
+    tagLabel: 'Core 12 + 13 Satélites (11J)',
+  });
 }
 
 /**
- * 2. Fechamento "Padrão Pivô 9 Dezenas"
- * Isola o grupo pivô [5, 6, 7, 12, 13, 14, 19, 20, 21] e combina K ∈ {4, 5, 6} dezenas do pivô
- * com (15 - K) dezenas fora do pivô, validando filtros ativos e maximizando distância de Hamming.
+ * 2. Fechamento "Padrão Pivô 9 Dezenas (Core 12 + Satélites 13)"
+ * Combina o bloco Pivô [5, 6, 7, 12, 13, 14, 19, 20, 21] com Ancoragem em Núcleo Forte:
+ * 12 dezenas Core ancoradas em 70%–80% dos bilhetes + rotação equilibrada das 13 Satélites,
+ * reduzindo a dispersão excessiva auditada nas matrizes de 25 dezenas.
  */
 export function generatePadraoPivo9(options: {
   pivotCountK?: 4 | 5 | 6;
@@ -3233,106 +3796,28 @@ export function generatePadraoPivo9(options: {
 } = {}): GameTicket[] {
   const kPivot: 4 | 5 | 6 = options.pivotCountK === 4 || options.pivotCountK === 6 ? options.pivotCountK : 5;
   const maxTickets = options.maxTickets ?? 24;
-  const baseDraw = options.latestDraw || CONCURSO_ATUAL;
-  const stats = options.dynamicStats || DEZENAS_STATS;
-  const filters = options.filters || DEFAULT_FILTERS;
-  const aiScores = options.aiScores;
-
-  const excludedSet = new Set(filters.dezenasExcluidas || []);
+  const excludedSet = new Set(options.filters?.dezenasExcluidas || []);
   const pivotNums = [...PIVOT_9_DEZENAS].filter((d) => !excludedSet.has(d));
-  const outsideNums = Array.from({ length: 25 }, (_, i) => i + 1)
-    .filter((d) => !PIVOT_9_DEZENAS.includes(d) && !excludedSet.has(d));
 
-  const effectiveK = Math.min(kPivot, pivotNums.length);
-  const needOutside = 15 - effectiveK;
-  if (outsideNums.length < needOutside) {
-    throw new Error('Dezenas fora do Pivô insuficientes após exclusões.');
-  }
-
-  // Ordena fora do pivô por Score IA / estatística
-  const rankedOutside = [...outsideNums].sort((a, b) => {
-    const sa = aiScores?.[a - 1] ?? (stats.find((s) => s.numero === a)?.vezes || 0) / 24;
-    const sb = aiScores?.[b - 1] ?? (stats.find((s) => s.numero === b)?.vezes || 0) / 24;
-    return sb - sa;
+  return generateCoreSatellites25Matrix({
+    maxTickets,
+    baseDraw: options.latestDraw || CONCURSO_ATUAL,
+    dynamicStats: options.dynamicStats,
+    filters: options.filters,
+    aiScores: options.aiScores,
+    idPrefix: 'ticket-pivo9',
+    tagLabel: `Pivô 9 (K=${kPivot}) • Core 12`,
+    pivotConstraint: {
+      pivotNums,
+      kPivot,
+    },
   });
-
-  const pivotSubsets = getCombinations(pivotNums, effectiveK);
-  const outsidePoolTop = rankedOutside.slice(0, Math.min(rankedOutside.length, 14));
-  const outsideSubsets = getCombinations(outsidePoolTop, needOutside);
-
-  const validCandidates: { nums: number[]; mask: number; analysis: Omit<GameTicket, 'id' | 'index'> }[] = [];
-  const seen = new Set<string>();
-
-  // Relaxed canonical filters ignoring fixas count so pivot structure is preserved
-  const pivotFilters: FilterCriteria = {
-    ...filters,
-    dezenasFixas: [],
-    somaMin: Math.min(170, filters.somaMin ?? 175),
-    somaMax: Math.max(225, filters.somaMax ?? 220),
-    paresMin: Math.min(5, filters.paresMin ?? 6),
-    paresMax: Math.max(10, filters.paresMax ?? 9),
-  };
-
-  for (let p = 0; p < pivotSubsets.length && validCandidates.length < 1800; p++) {
-    const pSub = pivotSubsets[p];
-    // Amostra distribuída dos subconjuntos externos
-    const step = Math.max(1, Math.floor(outsideSubsets.length / 40));
-    for (let o = (p * 3) % step; o < outsideSubsets.length && validCandidates.length < 1800; o += step) {
-      const combo = [...pSub, ...outsideSubsets[o]].sort((a, b) => a - b);
-      const key = combo.join('-');
-      if (seen.has(key)) continue;
-      const analysis = analyzeTicket(combo, baseDraw.dezenas, aiScores);
-      if (ticketPassesFilters(analysis, pivotFilters, baseDraw.dezenas)) {
-        seen.add(key);
-        validCandidates.push({ nums: combo, mask: _criarMascara(combo), analysis });
-      }
-    }
-  }
-
-  // Fallback brando caso filtros estritos tenham reduzido demais
-  if (validCandidates.length === 0) {
-    for (let p = 0; p < pivotSubsets.length && validCandidates.length < 400; p++) {
-      const oSub = outsideSubsets[p % outsideSubsets.length];
-      const combo = [...pivotSubsets[p], ...oSub].sort((a, b) => a - b);
-      const key = combo.join('-');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const analysis = analyzeTicket(combo, baseDraw.dezenas, aiScores);
-      if (!isHistorical15Collision(combo)) {
-        validCandidates.push({ nums: combo, mask: _criarMascara(combo), analysis });
-      }
-    }
-  }
-
-  validCandidates.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
-
-  const chosen: typeof validCandidates = [];
-  const chosenMasks: number[] = [];
-  const minHamming = maxTickets <= 12 ? 4 : 3;
-
-  for (const reqHamming of [minHamming, 2, 1]) {
-    for (const cand of validCandidates) {
-      if (chosen.length >= maxTickets) break;
-      if (chosenMasks.some((m) => m === cand.mask)) continue;
-      if (chosenMasks.length > 0 && !passesHammingDistance(cand.mask, chosenMasks, reqHamming)) continue;
-      chosen.push(cand);
-      chosenMasks.push(cand.mask);
-    }
-    if (chosen.length >= maxTickets) break;
-  }
-
-  return chosen.map((c, idx) => ({
-    id: `ticket-pivo9-${idx + 1}`,
-    index: idx + 1,
-    ...c.analysis,
-    tags: [`Padrão Pivô 9 (${effectiveK}/9)`, 'Hamming Otimizado'],
-  }));
 }
 
 /**
- * 3. Fechamento "Cobertura Total 25 Dezenas em 3 Grupos de 18" (18 Jogos • R$ 63,00)
- * Divide as 25 dezenas em 3 grupos balanceados de 18 dezenas (cobrindo 100% do volante 1..25)
- * e gera 6 cartões otimizados por grupo = 18 jogos finais.
+ * 3. Fechamento "Cobertura Total 25 Dezenas em 3 Grupos de 18 (Core 12 + Satélites 13)" (18 Jogos • R$ 63,00)
+ * Utiliza as 12 dezenas de maior peso (Core) ancoradas em 70%–80% dos 18 bilhetes e rotaciona
+ * as 13 Satélites nas vagas finais mantendo cobertura integral das 25 dezenas.
  */
 export function generateCobertura25TresGrupos18(options: {
   latestDraw?: LotofacilDraw;
@@ -3340,117 +3825,15 @@ export function generateCobertura25TresGrupos18(options: {
   filters?: FilterCriteria;
   aiScores?: number[];
 } = {}): GameTicket[] {
-  const baseDraw = options.latestDraw || CONCURSO_ATUAL;
-  const stats = options.dynamicStats || DEZENAS_STATS;
-  const filters = options.filters || DEFAULT_FILTERS;
-  const aiScores = options.aiScores;
-
-  // Ranqueia todas as 25 dezenas por tendência composta
-  const ranked25 = Array.from({ length: 25 }, (_, i) => i + 1).sort((a, b) => {
-    const sa = (aiScores?.[a - 1] ?? 50) + (stats.find((s) => s.numero === a)?.atrasoAtual || 0) * 4;
-    const sb = (aiScores?.[b - 1] ?? 50) + (stats.find((s) => s.numero === b)?.atrasoAtual || 0) * 4;
-    return sb - sa;
+  return generateCoreSatellites25Matrix({
+    maxTickets: 18,
+    baseDraw: options.latestDraw || CONCURSO_ATUAL,
+    dynamicStats: options.dynamicStats,
+    filters: options.filters,
+    aiScores: options.aiScores,
+    idPrefix: 'ticket-3x18',
+    tagLabel: '25 em 3×18 • Core 12',
   });
-
-  // 11 âncoras comuns + 3 blocos rotativos cobrindo as 14 restantes (11 + 7 = 18 por grupo? 14 split in 3 overlapping pairs of 7)
-  // Top 9 estão nos 3 grupos; 16 restantes distribuídas garantindo >=2 grupos cada e união = 25 dezenas!
-  const anchors = ranked25.slice(0, 9);
-  const rest16 = ranked25.slice(9); // 16 dezenas -> precisamos escolher 9 para cada grupo cobrindo todas as 16
-  const sliceA = [...rest16.slice(0, 9)]; // 0..8
-  const sliceB = [...rest16.slice(5, 14)]; // 5..13
-  const sliceC = [...rest16.slice(9, 16), ...rest16.slice(0, 2)]; // 9..15 + 0..1
-
-  const groups18: number[][] = [
-    Array.from(new Set([...anchors, ...sliceA])).sort((a, b) => a - b),
-    Array.from(new Set([...anchors, ...sliceB])).sort((a, b) => a - b),
-    Array.from(new Set([...anchors, ...sliceC])).sort((a, b) => a - b),
-  ];
-
-  // Filtros seguros para grupos de 18 dezenas sem bloqueio de dezenas fixas/excluídas externas
-  const groupFilters: FilterCriteria = {
-    ...filters,
-    dezenasFixas: [],
-    dezenasExcluidas: [],
-    rankingHistoricoAtivo: false,
-    somaMin: Math.min(165, filters.somaMin ?? 175),
-    somaMax: Math.max(230, filters.somaMax ?? 220),
-    paresMin: Math.min(5, filters.paresMin ?? 6),
-    paresMax: Math.max(10, filters.paresMax ?? 9),
-  };
-
-  const allTickets: GameTicket[] = [];
-  const usedMasks = new Set<number>();
-
-  groups18.forEach((grp, gIdx) => {
-    let grpTickets: GameTicket[] = [];
-    try {
-      grpTickets = generateFechamentoCovering(grp, 13, 6, groupFilters, baseDraw.dezenas, aiScores);
-    } catch {
-      const relaxed: FilterCriteria = {
-        ...DEFAULT_FILTERS,
-        posicionalAtivo: false,
-        multiplosAtivo: false,
-        contagemDigitosAtiva: false,
-        somaAlgarismosAtiva: false,
-        linhasColunasAtivo: false,
-        rankingHistoricoAtivo: false,
-        somaMin: 155,
-        somaMax: 235,
-        paresMin: 4,
-        paresMax: 11,
-        primosMin: 2,
-        primosMax: 8,
-        molduraMin: 6,
-        molduraMax: 13,
-        repetidasMin: 4,
-        repetidasMax: 13,
-        cruzAtiva: false,
-        extremidadesAtiva: false,
-      };
-      grpTickets = generateFechamentoCovering(grp, 13, 6, relaxed, baseDraw.dezenas, aiScores);
-    }
-
-    // Garante que as 6 cartas de cada grupo cobrem todas as 18 dezenas do grupo
-    const chosen6 = grpTickets.slice(0, 6);
-    for (const t of chosen6) {
-      const mask = _criarMascara(t.dezenas);
-      if (!usedMasks.has(mask)) {
-        usedMasks.add(mask);
-        allTickets.push({
-          ...t,
-          id: `ticket-3x18-g${gIdx + 1}-${allTickets.length + 1}`,
-          index: allTickets.length + 1,
-          tags: [`Grupo ${gIdx + 1}/3 (18 Dez)`, 'Cobertura 25 Dez'],
-        });
-      }
-    }
-  });
-
-  // Se houver colisão entre grupos e resultar < 18, completa até 18 com Hamming máximo
-  if (allTickets.length < 18) {
-    const all25 = Array.from({ length: 25 }, (_, i) => i + 1);
-    let safety = 0;
-    while (allTickets.length < 18 && safety++ < 200) {
-      const shuffled = [...all25].sort(() => Math.random() - 0.5).slice(0, 15).sort((a, b) => a - b);
-      const mask = _criarMascara(shuffled);
-      if (!usedMasks.has(mask) && !isHistorical15Collision(shuffled)) {
-        usedMasks.add(mask);
-        const analysis = analyzeTicket(shuffled, baseDraw.dezenas, aiScores);
-        allTickets.push({
-          id: `ticket-3x18-comp-${allTickets.length + 1}`,
-          index: allTickets.length + 1,
-          ...analysis,
-          tags: ['Grupo Complementar', 'Cobertura 25 Dez'],
-        });
-      }
-    }
-  }
-
-  return allTickets.slice(0, 18).map((t, i) => ({
-    ...t,
-    id: `ticket-3x18-${i + 1}`,
-    index: i + 1,
-  }));
 }
 
 /**
@@ -3555,34 +3938,43 @@ export const FECHAMENTO_PRESETS: Record<
     condicao: string;
     reducaoPercentual: number;
     descricao: string;
+    altaEficiencia?: boolean;
+    coreSatelites?: boolean;
+    auditNote?: string;
   }
 > = {
   '16_14_15': {
-    nome: '16 Dezenas (Garantia 14 se 15)',
+    nome: '16 Dezenas (Alta Eficiência • 6 Jogos)',
     dezenasNecessarias: 16,
-    jogosMaximos: 4,
+    jogosMaximos: 6,
     garantia: '14 Pontos',
     condicao: 'Acertando as 15 sorteadas entre as 16 escolhidas',
-    reducaoPercentual: 75,
-    descricao: 'Reduz de 16 jogos integrais para apenas 4 bilhetes otimizados.',
+    reducaoPercentual: 62.5,
+    descricao: 'Matriz de Alta Eficiência (70,7% dos ROIs > 50% na auditoria). Reduz de 16 jogos integrais para 6 bilhetes cirúrgicos.',
+    altaEficiencia: true,
+    auditNote: 'Alta Eficiência • 70,7% dos ROIs > 50%',
   },
   '17_14_15': {
-    nome: '17 Dezenas (Garantia 14 se 15)',
+    nome: '17 Dezenas (Alta Eficiência • 12 Jogos)',
     dezenasNecessarias: 17,
-    jogosMaximos: 10,
+    jogosMaximos: 12,
     garantia: '14 Pontos',
     condicao: 'Acertando as 15 sorteadas entre as 17 escolhidas',
-    reducaoPercentual: 92.6,
-    descricao: 'Reduz de 136 jogos integrais para apenas 10 bilhetes de alta eficiência.',
+    reducaoPercentual: 91.2,
+    descricao: 'Matriz de Alta Eficiência (70,7% dos ROIs > 50% na auditoria). Reduz de 136 jogos integrais para 12 bilhetes otimizados.',
+    altaEficiencia: true,
+    auditNote: 'Alta Eficiência • 70,7% dos ROIs > 50%',
   },
   '18_14_15': {
-    nome: '18 Dezenas (Garantia 14 se 15) - Matriz Pro',
+    nome: '18 Dezenas (Alta Eficiência • Matriz Pro 24J)',
     dezenasNecessarias: 18,
     jogosMaximos: 24,
     garantia: '14 Pontos (com 35% de chance de 15)',
     condicao: 'Acertando as 15 sorteadas entre as 18 escolhidas',
     reducaoPercentual: 97.1,
-    descricao: 'O padrão ouro dos apostadores profissionais. Reduz de 816 jogos para 24 bilhetes.',
+    descricao: 'Padrão Ouro de Alta Eficiência (70,7% dos ROIs > 50%). Reduz de 816 jogos para 24 bilhetes com Hamming ≥ 3.',
+    altaEficiencia: true,
+    auditNote: 'Alta Eficiência • 70,7% dos ROIs > 50%',
   },
   '19_14_15': {
     nome: '19 Dezenas (Garantia 14 se 15)',
@@ -3591,7 +3983,7 @@ export const FECHAMENTO_PRESETS: Record<
     garantia: '14 Pontos',
     condicao: 'Acertando as 15 sorteadas entre as 19 escolhidas',
     reducaoPercentual: 98.7,
-    descricao: 'Cobre 76% do volante (19 dezenas) reduzindo de 3.876 apostas para apenas 48 jogos.',
+    descricao: 'Cobre 76% do volante (19 dezenas) com Hamming ≥ 3 reduzindo de 3.876 apostas para 48 jogos.',
   },
   '20_14_15': {
     nome: '20 Dezenas (Garantia 14 se 15)',
@@ -3600,34 +3992,37 @@ export const FECHAMENTO_PRESETS: Record<
     garantia: '14 Pontos',
     condicao: 'Acertando as 15 sorteadas entre as 20 escolhidas',
     reducaoPercentual: 99.6,
-    descricao: 'Cobre 80% do volante total (20 dezenas), com economia colossal de investimento.',
+    descricao: 'Cobre 80% do volante total (20 dezenas) com seleção Hamming ≥ 3 e cobertura de triplas.',
   },
   '18_13_14': {
-    nome: '18 Dezenas Econômico (Garantia 13 se 14)',
+    nome: '18 Dezenas Econômico (Alta Eficiência • 12J)',
     dezenasNecessarias: 18,
     jogosMaximos: 12,
     garantia: '13 Pontos se 14 (e 14 se 15)',
     condicao: 'Acertando 14 entre as 18 escolhidas',
     reducaoPercentual: 98.5,
-    descricao: 'Fechamento super econômico para bolões de baixo custo e alta frequência de retorno.',
+    descricao: 'Fechamento de Alta Eficiência (12 jogos • Hamming ≥ 3) para alta frequência de retorno e ROI > 50%.',
+    altaEficiencia: true,
+    auditNote: 'Alta Eficiência • 70,7% dos ROIs > 50%',
   },
   '21_13_15': {
-    nome: '21 Dezenas Amplo (Garantia 13 se 15)',
+    nome: '21 Dezenas Amplo (Hamming ≥ 3 • 32J)',
     dezenasNecessarias: 21,
     jogosMaximos: 32,
     garantia: '13 Pontos se 15',
-    condicao: 'Acertando as 15 entre 21 dezenas',
+    condicao: 'Acertando as 15 entre 21 dezenas (Hamming ≥ 3 + Triplas)',
     reducaoPercentual: 99.9,
-    descricao: 'Cobertura de 84% de todo o volante de 25 dezenas com investimento acessível.',
+    descricao: 'Cobertura de 84% do volante com Set Cover Hamming ≥ 3 e cobertura otimizada de triplas/quadras.',
   },
   'desdobramento_25_blocos': {
-    nome: 'Cobertura Total 25 Dezenas (10 Jogos - Blocos Cruzados)',
+    nome: 'Cobertura Total 25 Dezenas (10 Jogos • Core 12 + Satélites)',
     dezenasNecessarias: 25,
     jogosMaximos: 10,
-    garantia: '100% Volante (9 Repetidas + 6 Ausentes)',
-    condicao: 'Todos os 10 jogos com 9 repetidas e 6 ausentes cobrindo as 25 dezenas',
+    garantia: '100% Volante (Core 12 em 70–80%)',
+    condicao: '12 dezenas Core em 70–80% dos bilhetes + 13 Satélites rotativos',
     reducaoPercentual: 99.99,
-    descricao: 'Divide as 15 sorteadas em 5 trincas e 10 ausentes em 5 duplas com otimização Monte Carlo (200 iterações) na Zona de Ouro.',
+    descricao: 'Reestruturado com Ancoragem em Núcleo Forte: 12 dezenas de maior peso (70%–80%) + rotação equilibrada das 13 satélites.',
+    coreSatelites: true,
   },
   'surpresinha_inteligente': {
     nome: 'Surpresinha Algorítmica Inteligente (IA & Filtros)',
@@ -3639,49 +4034,54 @@ export const FECHAMENTO_PRESETS: Record<
     descricao: 'Gera bilhetes de 15 dezenas calibrados diretamente pela Inteligência Artificial.',
   },
   'erre_4_21': {
-    nome: 'Erre Apenas 4 Dezenas (Inverso 21 Dezenas)',
+    nome: 'Erre Apenas 4 Dezenas (Inverso 21 • Hamming ≥ 3)',
     dezenasNecessarias: 21,
     jogosMaximos: 24,
     garantia: '13/14 Pontos se Errar 4',
-    condicao: 'Exclua 4 dezenas no volante e jogue com as 21 restantes filtradas',
+    condicao: 'Exclua 4 dezenas no volante e jogue com as 21 restantes (Hamming ≥ 3)',
     reducaoPercentual: 99.95,
-    descricao: 'Modo Seleção Inversa: basta errar 4 dezenas no sorteio para cravar as 15 sorteadas dentro da matriz de 21.',
+    descricao: 'Modo Seleção Inversa otimizado com Hamming ≥ 3 e cobertura de triplas/quadras nas 21 dezenas.',
   },
   'super_14_coringas_25': {
-    nome: 'Super Esquema 14 Coringas + 11 Variáveis',
+    nome: 'Esquema 25 Dezenas Core 12 + 13 Satélites (11 Jogos)',
     dezenasNecessarias: 25,
     jogosMaximos: 11,
-    garantia: '100% Volante (14 Coringas)',
-    condicao: '9 repetidas + 5 ausentes quentes como base fixa + 11 variáveis',
+    garantia: '100% Volante (Core 12 em 70–80%)',
+    condicao: '12 dezenas Core ancoradas em 70%–80% + 13 Satélites nas vagas finais',
     reducaoPercentual: 99.99,
-    descricao: 'Cobre todas as 25 dezenas em exatos 11 jogos (R$ 38,50) com balanceamento automático de soma e paridade.',
+    descricao: 'Substitui 14 fixas rígidas por Núcleo Forte Core 12 (70%–80% de presença) + 13 Satélites em 11 jogos (R$ 38,50).',
+    coreSatelites: true,
   },
   'pivo_9_dezenas': {
-    nome: 'Padrão Pivô 9 Dezenas (K = 4, 5 ou 6)',
+    nome: 'Padrão Pivô 9 • Core 12 + Satélites 13',
     dezenasNecessarias: 25,
     jogosMaximos: 24,
-    garantia: 'Ancoragem Pivô 9 + Hamming',
-    condicao: 'Combina K dezenas do Pivô [5,6,7,12,13,14,19,20,21] com 15-K externas',
+    garantia: 'Pivô 9 + Núcleo Forte 12 (70–80%)',
+    condicao: 'Combina K dezenas do Pivô com Core 12 em 70–80% e 13 Satélites',
     reducaoPercentual: 99.9,
-    descricao: 'Isola o bloco geométrico Pivô de 9 dezenas mantendo alta dispersão de Hamming nos cartões externos.',
+    descricao: 'Isola o bloco Pivô 9 com Ancoragem Core 12 + Satélites 13, reduzindo a dispersão excessiva de Hamming.',
+    coreSatelites: true,
   },
   'cobertura_25_3x18': {
-    nome: 'Cobertura Total 25 em 3 Grupos de 18',
+    nome: 'Cobertura Total 25 • Core 12 + Satélites (18 Jogos)',
     dezenasNecessarias: 25,
     jogosMaximos: 18,
-    garantia: '100% Volante (3×6 Jogos)',
-    condicao: '3 grupos ponderados de 18 dezenas gerando 6 jogos cada (18 bilhetes)',
+    garantia: '100% Volante (Core 12 em 70–80%)',
+    condicao: '12 dezenas Core ancoradas em 70%–80% dos 18 bilhetes + 13 Satélites',
     reducaoPercentual: 99.99,
-    descricao: 'Divide todas as 25 dezenas em 3 subgrupos equilibrados de 18 dezenas, com 6 bilhetes otimizados por grupo (R$ 63,00).',
+    descricao: 'Cobre todas as 25 dezenas em 18 bilhetes (R$ 63,00) ancorados no Núcleo Forte de 12 dezenas (70%–80%) + 13 Satélites.',
+    coreSatelites: true,
   },
   '18_ultra_economico_6': {
-    nome: '18 Dezenas Ultra-Econômico (COLOGA 6J)',
+    nome: '18 Dezenas Ultra-Econômico (Alta Eficiência • 6J)',
     dezenasNecessarias: 18,
     jogosMaximos: 6,
     garantia: '13 Pontos + Alta Densidade 14',
     condicao: 'Acertando as 15 sorteadas entre as 18 escolhidas',
     reducaoPercentual: 99.26,
-    descricao: 'Matriz ultra-econômica estilo COLOGA em 6 jogos (R$ 21,00) com espalhamento Hamming máximo.',
+    descricao: 'Matriz de Alta Eficiência (6 jogos • R$ 21,00) com espalhamento Hamming ≥ 3/4 e excelente relação custo-retorno.',
+    altaEficiencia: true,
+    auditNote: 'Alta Eficiência • 70,7% dos ROIs > 50%',
   },
   '20_compacto_4': {
     nome: '20 Dezenas Compacto 4J (COLOGA)',
@@ -3690,7 +4090,7 @@ export const FECHAMENTO_PRESETS: Record<
     garantia: 'Múltiplos 11/12/13 Pontos',
     condicao: '4 jogos de máxima separação cobrindo 80% do volante',
     reducaoPercentual: 99.97,
-    descricao: 'Aposta tática de altíssima economia (R$ 14,00) espalhando 20 dezenas em 4 bilhetes independentes.',
+    descricao: 'Aposta tática de altíssima economia (R$ 14,00) espalhando 20 dezenas em 4 bilhetes independentes com Hamming ≥ 4.',
   },
   '20_compacto_9': {
     nome: '20 Dezenas Compacto 9J (COLOGA)',
@@ -3699,7 +4099,7 @@ export const FECHAMENTO_PRESETS: Record<
     garantia: '12/13 Pontos + Chances de 14',
     condicao: '9 jogos otimizados para 80% do volante',
     reducaoPercentual: 99.94,
-    descricao: 'Esquema enxuto de 9 jogos (R$ 31,50) para 20 dezenas com alta taxa de retorno em 11/12/13 pontos.',
+    descricao: 'Esquema enxuto de 9 jogos (R$ 31,50) para 20 dezenas com Hamming ≥ 3 e cobertura de triplas.',
   },
   'aposta_espelho_2': {
     nome: 'Aposta Espelho (25 Dezenas em 2 Jogos)',

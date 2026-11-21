@@ -517,10 +517,10 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 ? 'bg-blue-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-white'
             }`}
-            title="Máximo de 5 dezenas fixas (com 3+ ativam-se Fixas Rotativas K de N automaticamente)"
+            title="Recomendado: máx. 2–3 fixas (80% dos 13 pts e ROIs de 142%–285%). Limite rígido: 5."
           >
             <Pin className="w-3.5 h-3.5" />
-            <span>Fixar ({fixedNumbers.length}/5)</span>
+            <span>Fixar ({fixedNumbers.length}/5 • Rec. 2–3)</span>
           </button>
           <button
             onClick={() => setClickMode('exclude')}
@@ -620,8 +620,20 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
               </strong>
             </span>
             {fixedNumbers.length > 0 && (
-              <span className="px-2 py-1 rounded-lg bg-blue-950/60 border border-blue-800 text-blue-300 font-semibold">
+              <span
+                className={`px-2 py-1 rounded-lg border font-semibold ${
+                  fixedNumbers.length > 3
+                    ? 'bg-amber-950/60 border-amber-500/60 text-amber-300'
+                    : 'bg-blue-950/60 border-blue-800 text-blue-300'
+                }`}
+                title={
+                  fixedNumbers.length > 3
+                    ? 'Alerta de Risco Combinatório: acima do limite recomendado de 2 a 3 dezenas fixas.'
+                    : 'Faixa recomendada de dezenas fixas (máx. 2–3).'
+                }
+              >
                 Fixas: {fixedNumbers.length}
+                {fixedNumbers.length > 3 ? ' ⚠️ Risco (>3)' : ' ✓'}
               </span>
             )}
             {excludedNumbers.length > 0 && (

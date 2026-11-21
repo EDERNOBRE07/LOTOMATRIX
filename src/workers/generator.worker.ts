@@ -17,6 +17,9 @@ import {
   generateCobertura25TresGrupos18,
   generateApostaEspelho,
   FechamentoPonderadoResult,
+  getTargetHammingDistance,
+  buildProgressiveFallbackFilters,
+  ProgressiveFallbackLevel,
 } from '../services/combinatorics';
 import {
   FilterCriteria,
@@ -219,9 +222,9 @@ export function handleGeneratorWorkerMessage(
         data.selectedNumbers
       );
       const kInfo = resolveRotativeFixedKofN(fixasSanitizadas.length, data.filters?.modoFixas);
-      const targetHamming = Math.min(
-        data.maxTickets <= 6 ? 4 : data.maxTickets <= 32 ? 3 : 2,
-        Math.max(1, data.selectedNumbers.length - 15)
+      const targetHamming = getTargetHammingDistance(
+        data.selectedNumbers.length,
+        data.maxTickets
       );
       const quotas = computeStratifiedQuotasWorker(
         data.maxTickets,
@@ -238,18 +241,64 @@ export function handleGeneratorWorkerMessage(
             : 'Executando poda antecipada D1–D15, M3–M8, Dígitos 63–87, Cruz e Ranking...',
       });
 
-      const tickets: GameTicket[] = generateFechamentoCovering(
-        data.selectedNumbers,
-        data.targetHits,
-        data.maxTickets,
-        {
-          ...data.filters,
-          dezenasFixas: fixasSanitizadas,
-          modoFixas: kInfo.modo,
-        },
-        data.drawDezenas,
-        data.aiScores
-      );
+      const baseSanitizedFilters: FilterCriteria = {
+        ...data.filters,
+        dezenasFixas: fixasSanitizadas,
+        modoFixas: kInfo.modo,
+      };
+
+      // Fallback Progressivo Automático em 3 níveis quando filtros estritos não atingem a meta de bilhetes
+      let tickets: GameTicket[] = [];
+      let appliedFallbackLevel: ProgressiveFallbackLevel = 0;
+      let appliedFallbackLabel = 'Filtros Estritos (Nível 0)';
+      let appliedFallbackDescription = 'Todos os filtros matemáticos originais aplicados.';
+      const levelsToTry: ProgressiveFallbackLevel[] =
+        data.selectedNumbers.length > 15 ? [0, 1, 2, 3] : [0];
+
+      for (const lvl of levelsToTry) {
+        const fb = buildProgressiveFallbackFilters(baseSanitizedFilters, lvl);
+        if (lvl > 0) {
+          postMsg({
+            type: 'PROGRESS',
+            jobId,
+            percent: 25 + lvl * 18,
+            message: `Fallback Progressivo ${fb.label}: ${fb.description}`,
+          });
+        }
+        try {
+          const attempt = generateFechamentoCovering(
+            data.selectedNumbers,
+            data.targetHits,
+            data.maxTickets,
+            fb.filters,
+            data.drawDezenas,
+            data.aiScores,
+            lvl,
+            true
+          );
+          if (attempt.length > tickets.length) {
+            tickets = attempt;
+            appliedFallbackLevel = lvl;
+            appliedFallbackLabel = fb.label;
+            appliedFallbackDescription = fb.description;
+          }
+          if (attempt.length >= data.maxTickets) {
+            tickets = attempt;
+            appliedFallbackLevel = lvl;
+            appliedFallbackLabel = fb.label;
+            appliedFallbackDescription = fb.description;
+            break;
+          }
+        } catch {
+          // Segue para o próximo nível de fallback progressivo
+        }
+      }
+
+      if (tickets.length === 0) {
+        throw new Error(
+          'Nenhuma combinação válida pôde ser gerada mesmo após os 3 níveis de Fallback Progressivo. Verifique dezenas fixas/excluídas.'
+        );
+      }
 
       // Auditoria bitwise rápida de distância mínima de Hamming na matriz resultante
       const masks = tickets.map((t) => encodeTicketMaskBitwise(t.dezenas));
@@ -265,9 +314,9 @@ export function handleGeneratorWorkerMessage(
         type: 'PROGRESS',
         jobId,
         percent: 90,
-        message: `Auditoria bitwise concluída (Hamming mín. observado: ${
+        message: `Auditoria bitwise concluída (Hamming mín.: ${
           masks.length > 1 ? minObservedHamming : 15
-        }, alvo: ≥${targetHamming})...`,
+        }, alvo: ≥${targetHamming}${appliedFallbackLevel > 0 ? ` • Fallback Nível ${appliedFallbackLevel}` : ''})...`,
       });
 
       postMsg({
@@ -283,6 +332,9 @@ export function handleGeneratorWorkerMessage(
             targetHamming,
             minObservedHamming: masks.length > 1 ? minObservedHamming : 15,
             stratifiedQuotas: quotas,
+            fallbackLevel: appliedFallbackLevel,
+            fallbackLabel: appliedFallbackLabel,
+            fallbackDescription: appliedFallbackDescription,
           },
         },
       });
@@ -369,8 +421,10 @@ export function handleGeneratorWorkerMessage(
       } else {
         tickets = generateDesdobramento25Blocos({
           baseDraw: data.latestDraw,
-          maxGames: 10,
+          maxGames: data.maxTickets === 9 ? 9 : 10,
           iterations: 200,
+          dynamicStats: data.dynamicStats,
+          filters: data.filters,
           aiScores: data.aiScores,
         });
       }

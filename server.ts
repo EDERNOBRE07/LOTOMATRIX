@@ -1155,6 +1155,17 @@ app.post('/api/mysql/fechamentos', async (req: Request, res: Response) => {
   if (!f || !f.id) {
     return res.status(400).json({ success: false, error: 'Fechamento inválido' });
   }
+  const validTickets = Array.isArray(f.tickets)
+    ? f.tickets.filter((t: any) => Array.isArray(t?.dezenas) && t.dezenas.length === 15)
+    : [];
+  if (validTickets.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Bloqueio de segurança: fechamento vazio (tickets: []) não pode ser persistido.',
+    });
+  }
+  f.tickets = validTickets;
+  f.totalJogos = validTickets.length;
 
   if (isMysqlConnected && mysqlPool) {
     try {

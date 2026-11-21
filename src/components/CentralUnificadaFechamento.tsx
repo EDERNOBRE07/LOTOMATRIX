@@ -17,7 +17,12 @@ import {
   Cpu,
 } from 'lucide-react';
 import { FechamentoMode, FilterCriteria } from '../types/lotofacil';
-import { FECHAMENTO_PRESETS, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
+import {
+  FECHAMENTO_PRESETS,
+  VALOR_APOSTA_LOTOFACIL,
+  RECOMMENDED_MAX_FIXAS,
+  assessFixedNumbersRisk,
+} from '../services/combinatorics';
 
 export interface MatrixCatalogItem {
   id: string;
@@ -28,6 +33,8 @@ export interface MatrixCatalogItem {
   condicao: string;
   tag?: string;
   popular?: boolean;
+  altaEficiencia?: boolean;
+  coreSatelites?: boolean;
 }
 
 export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
@@ -41,16 +48,26 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     condicao: '15 dezenas calibradas por IA',
     tag: 'Econômico',
   },
-  // 16 Dezenas
+  // 16 Dezenas (Alta Eficiência)
+  {
+    id: 'matriz-16-6',
+    mode: '16_14_15',
+    dezenas: 16,
+    jogos: 6,
+    garantia: '14 se 15',
+    condicao: 'Alta Eficiência auditada: 6 jogos com máxima densidade de 13/14 pontos',
+    tag: 'Alta Eficiência',
+    popular: true,
+    altaEficiencia: true,
+  },
   {
     id: 'matriz-16-4',
     mode: '16_14_15',
     dezenas: 16,
     jogos: 4,
-    garantia: '14 se 15',
+    garantia: '14 se 15 (Enxuto)',
     condicao: 'Acertando as 15 sorteadas entre as 16 escolhidas',
-    tag: 'Alta Eficiência',
-    popular: true,
+    tag: 'Compacto',
   },
   {
     id: 'matriz-16-16',
@@ -61,16 +78,26 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     condicao: 'Fechamento integral 100% matemático',
     tag: 'Garantia Máxima',
   },
-  // 17 Dezenas
+  // 17 Dezenas (Alta Eficiência)
+  {
+    id: 'matriz-17-12',
+    mode: '17_14_15',
+    dezenas: 17,
+    jogos: 12,
+    garantia: '14 se 15',
+    condicao: 'Alta Eficiência auditada: 12 jogos equilibrados entre as 17 escolhidas',
+    tag: 'Alta Eficiência',
+    popular: true,
+    altaEficiencia: true,
+  },
   {
     id: 'matriz-17-8',
     mode: '17_14_15',
     dezenas: 17,
     jogos: 8,
-    garantia: '14 se 15',
+    garantia: '14 se 15 (Enxuto)',
     condicao: 'Acertando as 15 entre as 17 escolhidas',
     tag: 'Equilibrado',
-    popular: true,
   },
   {
     id: 'matriz-17-136',
@@ -81,16 +108,17 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     condicao: 'Desdobramento total de 17 dezenas',
     tag: 'Bolão Master',
   },
-  // 18 Dezenas
+  // 18 Dezenas (Alta Eficiência • 6, 12 e 24 jogos)
   {
     id: 'matriz-18-cologa-6',
     mode: '18_ultra_economico_6',
     dezenas: 18,
     jogos: 6,
     garantia: '13 se 15 (Ultra-Econômico)',
-    condicao: 'Matriz COLOGA em 6 jogos com espalhamento Hamming máximo',
-    tag: 'COLOGA R$ 21',
+    condicao: 'Alta Eficiência: 6 jogos com Hamming ≥ 3 e baixa redundância',
+    tag: 'Alta Eficiência',
     popular: true,
+    altaEficiencia: true,
   },
   {
     id: 'matriz-18-12',
@@ -98,8 +126,10 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     dezenas: 18,
     jogos: 12,
     garantia: '13 se 14 (e 14 se 15)',
-    condicao: 'Fechamento enxuto de alto retorno e baixo custo',
-    tag: 'Econômico',
+    condicao: 'Alta Eficiência: fechamento enxuto de alto ROI com Hamming ≥ 3',
+    tag: 'Alta Eficiência',
+    popular: true,
+    altaEficiencia: true,
   },
   {
     id: 'matriz-18-24',
@@ -107,9 +137,10 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     dezenas: 18,
     jogos: 24,
     garantia: '14 se 15',
-    condicao: '35% de chance de 15 pontos se 15',
-    tag: 'Padrão Ouro',
+    condicao: 'Alta Eficiência: Padrão Ouro com 35% de chance de 15 pontos',
+    tag: 'Alta Eficiência',
     popular: true,
+    altaEficiencia: true,
   },
   {
     id: 'matriz-18-64',
@@ -222,38 +253,40 @@ export const UNIFIED_MATRIX_CATALOG: MatrixCatalogItem[] = [
     mode: 'desdobramento_25_blocos',
     dezenas: 25,
     jogos: 10,
-    garantia: '100% Volante (9 Rep + 6 Aus)',
-    condicao: 'Blocos cruzados de trincas e duplas cobrindo 25 dezenas',
-    tag: 'R$ 35,00',
+    garantia: '100% Volante • Core 12 + Satélites',
+    condicao: 'Ancoragem em Núcleo Forte (12 dezenas em 70%–80% dos bilhetes) + 13 satélites rotativos',
+    tag: 'Core 12 + Satélites',
+    coreSatelites: true,
   },
   {
     id: 'matriz-25-coringas-11',
     mode: 'super_14_coringas_25',
     dezenas: 25,
     jogos: 11,
-    garantia: '14 Coringas + 11 Variáveis',
-    condicao: '9 repetidas + 5 ausentes quentes fixadas em 11 jogos exatos',
-    tag: 'R$ 38,50 • Novo',
-    popular: true,
+    garantia: 'Core 12 (70–80%) + 13 Satélites',
+    condicao: 'Reestruturado sem fixas rígidas: 12 dezenas de maior peso + rotação de 13 satélites',
+    tag: 'Core 12 + Satélites',
+    coreSatelites: true,
   },
   {
     id: 'matriz-25-3x18-18',
     mode: 'cobertura_25_3x18',
     dezenas: 25,
     jogos: 18,
-    garantia: '3 Grupos de 18 (100% Volante)',
-    condicao: 'Divide as 25 dezenas em 3 grupos ponderados de 18 (6 jogos cada)',
-    tag: 'R$ 63,00 • Novo',
+    garantia: 'Core 12 + Satélites (18 Jogos)',
+    condicao: 'Cobertura total das 25 dezenas com dispersão controlada e 70%–80% no núcleo forte',
+    tag: 'Core 12 + Satélites',
+    coreSatelites: true,
   },
   {
     id: 'matriz-25-pivo-9',
     mode: 'pivo_9_dezenas',
     dezenas: 25,
     jogos: 24,
-    garantia: 'Padrão Pivô 9 (K=4,5,6)',
-    condicao: 'Isola o bloco central Pivô [5,6,7,12,13,14,19,20,21] + Hamming',
-    tag: 'Pivô 9 • Novo',
-    popular: true,
+    garantia: 'Pivô 9 • Core 12 + Satélites',
+    condicao: 'Núcleo Forte 12 (70%–80%) integrado ao bloco Pivô [5..21] sem dispersão excessiva',
+    tag: 'Core 12 + Pivô 9',
+    coreSatelites: true,
   },
 ];
 
@@ -680,29 +713,83 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
             </span>
           </div>
 
+          {/* Recomendação Automática — Alta Eficiência (70,7% dos ROIs > 50%) */}
+          <div className="p-3 rounded-xl bg-emerald-950/35 border border-emerald-500/35 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-black text-emerald-300 uppercase tracking-wide">
+                  Recomendação Automática • Alta Eficiência (16, 17 e 18 Dezenas)
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-200/90 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                70,7% dos fechamentos com ROI &gt; 50%
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {UNIFIED_MATRIX_CATALOG.filter((m) => m.altaEficiencia).map((item) => {
+                const isSelected = activeMatrix.id === item.id;
+                return (
+                  <button
+                    key={`rec-${item.id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedUniverseTab(item.dezenas);
+                      setSelectedCatalogId(item.id);
+                      onSelectMode(item.mode, item.dezenas);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-sm'
+                        : 'bg-slate-950/80 text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    {item.dezenas} Dez • {item.jogos} Jogos (R$ {(item.jogos * VALOR_APOSTA_LOTOFACIL).toFixed(2).replace('.', ',')})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Abas de Tamanho de Universo (15 a 25) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => (
-              <button
-                key={size}
-                type="button"
-                onClick={() => {
-                  setSelectedUniverseTab(size);
-                  const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
-                  if (firstMatrix) {
-                    setSelectedCatalogId(firstMatrix.id);
-                    onSelectMode(firstMatrix.mode, size);
-                  }
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border ${
-                  selectedUniverseTab === size
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                }`}
-              >
-                <span>{size === 25 ? '25 (100% Volante)' : `${size} Dezenas`}</span>
-              </button>
-            ))}
+            {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
+              const isHighEffTab = size === 16 || size === 17 || size === 18;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    setSelectedUniverseTab(size);
+                    const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
+                    if (firstMatrix) {
+                      setSelectedCatalogId(firstMatrix.id);
+                      onSelectMode(firstMatrix.mode, size);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
+                    selectedUniverseTab === size
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                      : isHighEffTab
+                      ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
+                  {isHighEffTab && (
+                    <span
+                      className={`text-[9px] font-mono uppercase px-1 py-0.2 rounded font-black ${
+                        selectedUniverseTab === size
+                          ? 'bg-slate-950/20 text-slate-950'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                      }`}
+                    >
+                      Top ROI
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Cards de Matrizes para o Universo Selecionado */}
@@ -720,21 +807,35 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
                   className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
                     isSelected
                       ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-2 ring-emerald-400/20 shadow-xl shadow-emerald-500/10'
+                      : item.altaEficiencia
+                      ? 'bg-emerald-950/15 hover:bg-emerald-950/30 border-emerald-500/35 hover:border-emerald-400/60'
                       : 'bg-slate-950/80 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  {item.popular && (
+                  {item.altaEficiencia ? (
+                    <span className="absolute -top-2.5 right-3 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
+                      ALTA EFICIÊNCIA
+                    </span>
+                  ) : item.popular ? (
                     <span className="absolute -top-2.5 right-3 text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
                       MAIS JOGADO
                     </span>
-                  )}
+                  ) : null}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-mono font-bold text-white">
                         {item.dezenas} Dezenas • {item.jogos} {item.jogos === 1 ? 'Jogo' : 'Jogos'}
                       </span>
                       {item.tag && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                            item.altaEficiencia
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : item.coreSatelites
+                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}
+                        >
                           {item.tag}
                         </span>
                       )}
@@ -858,12 +959,31 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
                 </span>
               </div>
 
-              <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block font-medium">Fixas</span>
-                <span className="font-mono font-bold text-cyan-300 text-xs sm:text-sm">
-                  {fixedNumbers.length} dezenas
-                </span>
-              </div>
+              {(() => {
+                const risk = assessFixedNumbersRisk(fixedNumbers.length);
+                const isRisky = fixedNumbers.length > RECOMMENDED_MAX_FIXAS;
+                return (
+                  <div
+                    className={`p-2 rounded-xl border ${
+                      isRisky
+                        ? 'bg-amber-950/40 border-amber-500/50'
+                        : 'bg-slate-900 border-slate-800'
+                    }`}
+                    title={risk.message}
+                  >
+                    <span className="text-[10px] text-slate-400 block font-medium">
+                      Fixas (Rec. máx 2–3)
+                    </span>
+                    <span
+                      className={`font-mono font-bold text-xs sm:text-sm ${
+                        isRisky ? 'text-amber-300' : 'text-cyan-300'
+                      }`}
+                    >
+                      {fixedNumbers.length} {isRisky ? '⚠️ Risco' : 'dezenas'}
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-[10px] text-slate-400 block font-medium">Qtd Jogos</span>

@@ -33,6 +33,8 @@ import {
   criarMascara,
   IndicadorGarantiaPayload,
   MAX_DEZENAS_FIXAS,
+  RECOMMENDED_MAX_FIXAS,
+  assessFixedNumbersRisk,
   sanitizeDezenasFixas,
   calibrarFaixaSomaUniverso,
   getRotatedFixedBounds,
@@ -1397,7 +1399,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setTimeout(() => setDocumentMessage(null), 4500);
         return;
       }
-      setFixedNumbers([...fixedNumbers, n].sort((a, b) => a - b));
+      const nextFixed = [...fixedNumbers, n].sort((a, b) => a - b);
+      setFixedNumbers(nextFixed);
+      if (nextFixed.length > RECOMMENDED_MAX_FIXAS) {
+        setDocumentMessage(
+          `⚠️ Alerta de Risco Combinatório (${nextFixed.length} fixas): o padrão auditado recomenda no máximo 2 a 3 dezenas fixas (80% dos jogos de 13 pts e ROIs de 142% a 285%).`
+        );
+        setTimeout(() => setDocumentMessage(null), 6000);
+      }
       if (!selectedNumbers.includes(n)) {
         const nextSelected = [...selectedNumbers, n].sort((a, b) => a - b);
         setSelectedNumbers(nextSelected.slice(0, Math.max(targetCount, nextSelected.length)));
@@ -1513,8 +1522,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     fechamentoType: string,
     metaData: FechamentoExportMeta,
     activePool: number[]
-  ): { success: boolean; isDuplicate?: boolean; reason?: string } => {
+  ): { success: boolean; isDuplicate?: boolean; isEmpty?: boolean; reason?: string } => {
     try {
+      const validTicketsToSave = Array.isArray(ticketsToSave)
+        ? ticketsToSave.filter((t) => Array.isArray(t?.dezenas) && t.dezenas.length === 15)
+        : [];
+      if (validTicketsToSave.length === 0) {
+        return {
+          success: false,
+          isEmpty: true,
+          reason: 'Bloqueio de segurança: fechamento vazio (0 bilhetes) não pode ser salvo.',
+        };
+      }
+      ticketsToSave = validTicketsToSave;
       const f = metaData.filters || filters;
       const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, 3824);
       const concursoAlvo = Number(concursoBase) + 1;
@@ -1752,6 +1772,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         seenHashes.add(hash);
         return true;
       });
+
+      // Trava de Segurança Pós-Sanitização: nunca salvar ou registrar custo se tickets ficar vazio
+      if (tickets.length === 0) {
+        const diag = diagnoseGenerationFailure(
+          selectedNumbers,
+          fixedNumbers,
+          excludedNumbers,
+          fullFilters,
+          targetCount,
+          latestDraw
+        );
+        setGenerationError(diag);
+        setGeneratedTickets([]);
+        return;
+      }
 
       // Auditoria de conformidade preenchendo auditoriaAnomalias
       auditarTicketsGerados(tickets, fullFilters);
@@ -2527,12 +2562,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5">
           {(
             [
-              'surpresinha_inteligente',
               '16_14_15',
               '17_14_15',
               '18_ultra_economico_6',
               '18_13_14',
               '18_14_15',
+              'surpresinha_inteligente',
               '19_14_15',
               '20_compacto_4',
               '20_compacto_9',
@@ -2554,22 +2589,34 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 key={key}
                 type="button"
                 onClick={() => handleSelectClosingStrategy(key)}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
                   isSelected
                     ? 'bg-emerald-500/15 border-emerald-400 shadow-md shadow-emerald-500/10 ring-1 ring-emerald-400'
+                    : p.altaEficiencia
+                    ? 'bg-emerald-950/20 border-emerald-500/35 hover:border-emerald-400/70 text-slate-200'
                     : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
                 }`}
               >
+                {p.altaEficiencia && (
+                  <span className="inline-block mb-1 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-400 text-slate-950 tracking-wide">
+                    ALTA EFICIÊNCIA
+                  </span>
+                )}
+                {p.coreSatelites && (
+                  <span className="inline-block mb-1 text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                    Core 12 + Satélites
+                  </span>
+                )}
                 <div className="flex items-start justify-between gap-1">
                   <span className="font-bold text-xs text-white leading-tight">
                     {key === 'erre_4_21'
                       ? 'Erre Apenas 4'
                       : key === 'super_14_coringas_25'
-                      ? '14 Coringas'
+                      ? 'Core 12 (11J)'
                       : key === 'pivo_9_dezenas'
-                      ? 'Padrão Pivô 9'
+                      ? 'Pivô 9 • Core 12'
                       : key === 'cobertura_25_3x18'
-                      ? '25 em 3×18'
+                      ? '25 Core (18J)'
                       : key === 'aposta_espelho_2'
                       ? 'Espelho (25)'
                       : key === '18_ultra_economico_6'
@@ -2593,7 +2640,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   {p.garantia}
                 </div>
                 <div className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
-                  Redução {p.reducaoPercentual}%
+                  {p.altaEficiencia ? '70,7% dos ROIs > 50%' : `Redução ${p.reducaoPercentual}%`}
                 </div>
               </button>
             );
@@ -3158,29 +3205,83 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </span>
             </div>
 
+            {/* Destaque Recomendação Automática — Alta Eficiência */}
+            <div className="p-2.5 rounded-xl bg-emerald-950/35 border border-emerald-500/35 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-emerald-400" />
+                  Recomendação Automática • Alta Eficiência (16, 17 e 18 Dez • 6, 12 ou 24 Jogos)
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                  70,7% dos ROIs &gt; 50%
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {UNIFIED_MATRIX_CATALOG.filter((m) => m.altaEficiencia).map((item) => {
+                  const isActiveRec = selectedCatalogId
+                    ? selectedCatalogId === item.id && mode === item.mode
+                    : mode === item.mode && targetCount === item.dezenas;
+                  return (
+                    <button
+                      key={`fast-${item.id}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCatalogUniverse(item.dezenas);
+                        setSelectedCatalogId(item.id);
+                        handleSelectClosingStrategy(item.mode);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        isActiveRec
+                          ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-sm'
+                          : 'bg-slate-950/80 text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      {item.dezenas} Dez • {item.jogos}J
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Abas de Universo 15 a 25 */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-              {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCatalogUniverse(size);
-                    const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
-                    if (firstMatrix) {
-                      setSelectedCatalogId(firstMatrix.id);
-                      handleSelectClosingStrategy(firstMatrix.mode);
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border ${
-                    selectedCatalogUniverse === size
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
-                      : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                  }`}
-                >
-                  {size === 25 ? '25 (100% Volante)' : `${size} Dezenas`}
-                </button>
-              ))}
+              {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
+                const isHighEffTab = size === 16 || size === 17 || size === 18;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCatalogUniverse(size);
+                      const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
+                      if (firstMatrix) {
+                        setSelectedCatalogId(firstMatrix.id);
+                        handleSelectClosingStrategy(firstMatrix.mode);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
+                      selectedCatalogUniverse === size
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                        : isHighEffTab
+                        ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
+                    {isHighEffTab && (
+                      <span
+                        className={`text-[9px] font-mono uppercase px-1 py-0.2 rounded font-black ${
+                          selectedCatalogUniverse === size
+                            ? 'bg-slate-950/20 text-slate-950'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                      >
+                        Alta Efic.
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Cards de Matrizes para o Universo Selecionado */}
@@ -3200,6 +3301,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
                       isSelected
                         ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-2 ring-emerald-400/20 shadow-lg shadow-emerald-500/10'
+                        : item.altaEficiencia
+                        ? 'bg-emerald-950/15 hover:bg-emerald-950/30 border-emerald-500/35 hover:border-emerald-400/60'
                         : 'bg-slate-950/80 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
                     }`}
                   >
@@ -3209,7 +3312,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           {item.dezenas} Dez • {item.jogos} {item.jogos === 1 ? 'Jogo' : 'Jogos'}
                         </span>
                         {item.tag && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          <span
+                            className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold ${
+                              item.altaEficiencia
+                                ? 'bg-emerald-400 text-slate-950 border-emerald-300'
+                                : item.coreSatelites
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                : 'bg-slate-800 text-slate-300 border-slate-700'
+                            }`}
+                          >
                             {item.tag}
                           </span>
                         )}
@@ -3329,84 +3440,132 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </button>
             </div>
 
-            {/* Barra de Controle Direto: Fixas Rotativas (K de N) & Auto-Calibração Universo */}
+            {/* Barra de Controle Direto: Fixas Rotativas (K de N), Alerta de Risco Combinatório & Auto-Calibração Universo */}
             {(() => {
               const uniCal = calibrarFaixaSomaUniverso(selectedNumbers);
               const kBounds = getRotatedFixedBounds(fixedNumbers.length, filters.modoFixas);
               const activeModoFixas = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
+              const fixasRisk = assessFixedNumbersRisk(fixedNumbers.length, activeModoFixas);
+              const showRiskAlert = fixasRisk.level === 'atencao' || fixasRisk.level === 'critico';
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
-                  <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
-                    <div className="min-w-0">
-                      <span className="text-[11px] font-bold text-slate-200 block">
-                        Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400 block truncate">
-                        {fixedNumbers.length >= 3 && kBounds.modo === 'rotativas'
-                          ? `Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedNumbers.length} por cartão)`
-                          : fixedNumbers.length > 0 && activeModoFixas === 'rigidas'
-                          ? 'Rígidas (100% em todos os bilhetes)'
-                          : 'Marque 3–5 fixas para Rotativas K de N'}
-                      </span>
+                <div className="space-y-2.5 pt-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    <div
+                      className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 border ${
+                        showRiskAlert
+                          ? 'bg-amber-950/35 border-amber-500/50'
+                          : 'bg-slate-950/80 border-slate-800'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
+                          <span>Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            Rec. máx. 2–3
+                          </span>
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 block truncate">
+                          {fixedNumbers.length >= 3 && kBounds.modo === 'rotativas'
+                            ? `Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedNumbers.length} por cartão)`
+                            : fixedNumbers.length > 0 && activeModoFixas === 'rigidas'
+                            ? 'Rígidas (100% em todos os bilhetes)'
+                            : 'Padrão auditado: até 2–3 fixas (80% dos 13 pts)'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rotativas' }, false)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                            activeModoFixas === 'rotativas'
+                              ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          Rotativas (K/N)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rigidas' }, false)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                            activeModoFixas === 'rigidas'
+                              ? 'bg-amber-500 text-slate-950 border-amber-400'
+                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          Rígidas
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+
+                    <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-bold text-slate-200 block">
+                          Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 block truncate">
+                          Central: {filters.somaMin}–{filters.somaMax} {preset.jogosMaximos >= 10 ? '• Caudas: 155–235 (75/15/10%)' : ''}
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rotativas' }, false)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          activeModoFixas === 'rotativas'
-                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                        onClick={() => {
+                          const nextAuto = filters.autoCalibrarSomaUniverso === false;
+                          handleFiltersChange(
+                            {
+                              ...filters,
+                              autoCalibrarSomaUniverso: nextAuto,
+                              somaMin: nextAuto ? uniCal.somaMin : filters.somaMin,
+                              somaMax: nextAuto ? uniCal.somaMax : filters.somaMax,
+                            },
+                            false
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0 ${
+                          filters.autoCalibrarSomaUniverso !== false
+                            ? 'bg-indigo-500 text-white border-indigo-400'
                             : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
                         }`}
                       >
-                        Rotativas (K/N)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rigidas' }, false)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                          activeModoFixas === 'rigidas'
-                            ? 'bg-amber-500 text-slate-950 border-amber-400'
-                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
-                        }`}
-                      >
-                        Rígidas
+                        {filters.autoCalibrarSomaUniverso !== false ? 'μ_U ± 20 Auto ✓' : 'Manual'}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
-                    <div className="min-w-0">
-                      <span className="text-[11px] font-bold text-slate-200 block">
-                        Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400 block truncate">
-                        Central: {filters.somaMin}–{filters.somaMax} {preset.jogosMaximos >= 10 ? '• Caudas: 155–235 (75/15/10%)' : ''}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextAuto = filters.autoCalibrarSomaUniverso === false;
-                        handleFiltersChange(
-                          {
-                            ...filters,
-                            autoCalibrarSomaUniverso: nextAuto,
-                            somaMin: nextAuto ? uniCal.somaMin : filters.somaMin,
-                            somaMax: nextAuto ? uniCal.somaMax : filters.somaMax,
-                          },
-                          false
-                        );
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0 ${
-                        filters.autoCalibrarSomaUniverso !== false
-                          ? 'bg-indigo-500 text-white border-indigo-400'
-                          : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                  {showRiskAlert && (
+                    <div
+                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                        fixasRisk.level === 'critico'
+                          ? 'bg-rose-950/45 border-rose-500/50 text-rose-100'
+                          : 'bg-amber-950/40 border-amber-500/45 text-amber-100'
                       }`}
                     >
-                      {filters.autoCalibrarSomaUniverso !== false ? 'μ_U ± 20 Auto ✓' : 'Manual'}
-                    </button>
-                  </div>
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            fixasRisk.level === 'critico' ? 'text-rose-400' : 'text-amber-400'
+                          }`}
+                        />
+                        <div className="text-[11px] leading-snug">
+                          <strong className="block font-black">{fixasRisk.title}</strong>
+                          <span className="text-slate-300">{fixasRisk.message}</span>
+                        </div>
+                      </div>
+                      {fixedNumbers.length > RECOMMENDED_MAX_FIXAS && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const trimmed = fixedNumbers.slice(0, RECOMMENDED_MAX_FIXAS);
+                            setFixedNumbers(trimmed);
+                            setFilters((prev) => ({ ...prev, dezenasFixas: trimmed }));
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] shrink-0 transition cursor-pointer"
+                        >
+                          Reduzir para {RECOMMENDED_MAX_FIXAS} Fixas
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -3465,11 +3624,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </span>
                 </div>
 
-                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Fixas</span>
-                  <span className="font-mono font-bold text-amber-400 text-xs">
+                <div
+                  className={`p-2 rounded-xl border ${
+                    fixedNumbers.length > RECOMMENDED_MAX_FIXAS
+                      ? 'bg-amber-950/40 border-amber-500/50'
+                      : 'bg-slate-900 border-slate-800'
+                  }`}
+                >
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                    Fixas (Rec. 2–3)
+                  </span>
+                  <span
+                    className={`font-mono font-bold text-xs ${
+                      fixedNumbers.length > RECOMMENDED_MAX_FIXAS ? 'text-amber-300' : 'text-amber-400'
+                    }`}
+                  >
                     {fixedNumbers.length}/{MAX_DEZENAS_FIXAS}{' '}
-                    {fixedNumbers.length >= 3 && filters.modoFixas !== 'rigidas' ? '(Rotativas)' : 'Dezenas'}
+                    {fixedNumbers.length > RECOMMENDED_MAX_FIXAS
+                      ? '⚠️ Risco'
+                      : fixedNumbers.length >= 3 && filters.modoFixas !== 'rigidas'
+                      ? '(Rotativas)'
+                      : 'Dezenas'}
                   </span>
                 </div>
 

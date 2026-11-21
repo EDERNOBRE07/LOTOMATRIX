@@ -135,6 +135,9 @@ export interface FechamentoPreset {
   condicao: string;
   reducaoPercentual: number;
   descricao: string;
+  altaEficiencia?: boolean;
+  coreSatelites?: boolean;
+  auditNote?: string;
 }
 
 export interface GameTicket {
@@ -237,5 +240,7 @@ export interface FechamentoExportMeta {
     faixaSomaCalibrada: [number, number];
     estratificacaoAplicada: boolean;
     freqIdealVariavel: number;
+    fallbackLevel?: 0 | 1 | 2 | 3;
+    fallbackDescription?: string;
   };
 }

@@ -1277,8 +1277,8 @@ function normalizeSavedFechamento(item, fallbackIndex = 0) {
   }
   const dezenasFixas = Array.isArray(item.dezenasFixas) ? item.dezenasFixas.filter((n) => typeof n === "number" && universoDezenas.includes(n)) : [];
   const dezenasExcluidas = Array.isArray(item.dezenasExcluidas) ? item.dezenasExcluidas.filter((n) => typeof n === "number") : [];
-  const totalJogos = typeof item.totalJogos === "number" && item.totalJogos > 0 ? item.totalJogos : tickets.length > 0 ? tickets.length : 1;
-  const custoTotal = typeof item.custoTotal === "number" && item.custoTotal > 0 ? item.custoTotal : totalJogos * VALOR_APOSTA_LOTOFACIL;
+  const totalJogos = tickets.length;
+  const custoTotal = totalJogos > 0 ? typeof item.custoTotal === "number" && item.custoTotal > 0 ? item.custoTotal : totalJogos * VALOR_APOSTA_LOTOFACIL : 0;
   const faixaSoma = {
     min: typeof item.faixaSoma?.min === "number" ? item.faixaSoma.min : 180,
     max: typeof item.faixaSoma?.max === "number" ? item.faixaSoma.max : 215,
@@ -1373,11 +1373,16 @@ function getSavedFechamentos() {
     }
     if (!Array.isArray(parsed)) return [];
     let needsRepair = false;
-    const normalized = parsed.filter((p) => p && typeof p === "object").map((item, idx) => {
+    const rawNormalized = parsed.filter((p) => p && typeof p === "object").map((item, idx) => {
       if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz || !item.concursoAlvo || !item.nomeFechamento) {
         needsRepair = true;
       }
       return normalizeSavedFechamento(item, idx);
+    });
+    const normalized = rawNormalized.filter((f) => {
+      const valid = Array.isArray(f.tickets) && f.tickets.length > 0;
+      if (!valid) needsRepair = true;
+      return valid;
     });
     if (needsRepair && typeof localStorage !== "undefined") {
       try {
@@ -2037,6 +2042,124 @@ function countMatches(arr1, arr2) {
   return matches;
 }
 var MAX_DEZENAS_FIXAS = 5;
+function buildProgressiveFallbackFilters(baseFilters, level) {
+  const base = baseFilters ? { ...baseFilters } : { ...DEFAULT_FILTERS };
+  if (level === 0) {
+    return {
+      level: 0,
+      filters: base,
+      label: "N\xEDvel 0 (Estrito)",
+      description: "100% dos filtros estritos ativos.",
+      bypassCanonicalAnomaly: false
+    };
+  }
+  if (level === 1) {
+    return {
+      level: 1,
+      filters: {
+        ...base,
+        maxConsecutivas: Math.max(6, base.maxConsecutivas ?? 5),
+        repetidasMin: Math.min(7, base.repetidasMin ?? 8),
+        repetidasMax: Math.max(10, base.repetidasMax ?? 10)
+      },
+      label: "Fallback N\xEDvel 1",
+      description: "Relaxamento autom\xE1tico N\xEDvel 1: maxConsecutivas liberado at\xE9 6 e repetidas para 7\u201310.",
+      bypassCanonicalAnomaly: false
+    };
+  }
+  if (level === 2) {
+    const somaMin = Math.min(165, base.somaMin ?? 180);
+    const somaMax = Math.max(225, base.somaMax ?? 215);
+    const molduraMin = Math.min(8, base.molduraMin ?? 9);
+    const molduraMax = Math.max(11, base.molduraMax ?? 11);
+    return {
+      level: 2,
+      filters: {
+        ...base,
+        maxConsecutivas: Math.max(6, base.maxConsecutivas ?? 6),
+        repetidasMin: Math.min(7, base.repetidasMin ?? 7),
+        repetidasMax: Math.max(10, base.repetidasMax ?? 10),
+        somaMin,
+        somaMax,
+        minSoma: somaMin,
+        maxSoma: somaMax,
+        molduraMin,
+        molduraMax,
+        minMoldura: molduraMin,
+        maxMoldura: molduraMax,
+        autoCalibrarSomaUniverso: false,
+        robustez50SomaMin: Math.min(somaMin, base.robustez50SomaMin ?? somaMin),
+        robustez50SomaMax: Math.max(somaMax, base.robustez50SomaMax ?? somaMax),
+        robustez50MolduraMin: Math.min(molduraMin, base.robustez50MolduraMin ?? molduraMin),
+        robustez50MolduraMax: Math.max(molduraMax, base.robustez50MolduraMax ?? molduraMax),
+        apenasZonaDeOuroPrimos: false,
+        strictValidation: false,
+        validacaoEstritaCruz: false
+      },
+      label: "Fallback N\xEDvel 2",
+      description: "Relaxamento autom\xE1tico N\xEDvel 2: soma expandida para 165\u2013225 e moldura para 8\u201311 (mantendo N\xEDvel 1).",
+      bypassCanonicalAnomaly: false
+    };
+  }
+  return {
+    level: 3,
+    filters: {
+      ...base,
+      paresMin: 0,
+      paresMax: 15,
+      minPares: 0,
+      maxPares: 15,
+      primosMin: 0,
+      primosMax: 9,
+      minPrimos: 0,
+      maxPrimos: 9,
+      somaMin: 120,
+      somaMax: 285,
+      minSoma: 120,
+      maxSoma: 285,
+      molduraMin: 0,
+      molduraMax: 16,
+      minMoldura: 0,
+      maxMoldura: 16,
+      fibonacciMin: 0,
+      fibonacciMax: 7,
+      repetidasMin: 0,
+      repetidasMax: 15,
+      maxConsecutivas: 15,
+      autoCalibrarSomaUniverso: false,
+      cruzAtiva: false,
+      validacaoEstritaCruz: false,
+      strictValidation: false,
+      extremidadesAtiva: false,
+      apenasZonaDeOuroPrimos: false,
+      antiColisaoHistoricaAtiva: false,
+      antiPadraoViciadoAtivo: false,
+      curvaAbcAtiva: false,
+      vaziosAtivos: false,
+      robustezEstatisticaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      rankingHistoricoAtivo: false,
+      palpiteIneditoAtivo: false
+    },
+    label: "Fallback N\xEDvel 3",
+    description: "Relaxamento autom\xE1tico N\xEDvel 3: filtros secund\xE1rios desativados, mantendo cobertura combinat\xF3ria + Hamming.",
+    bypassCanonicalAnomaly: true
+  };
+}
+function getTargetHammingDistance(universeSize, maxTickets) {
+  const maxPossibleDiff = Math.max(1, universeSize - 15);
+  if (universeSize >= 18 && universeSize <= 21) {
+    return Math.min(maxTickets <= 6 ? 4 : 3, maxPossibleDiff);
+  }
+  return Math.min(
+    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
+    maxPossibleDiff
+  );
+}
 function sanitizeDezenasFixas(rawFixas = [], pool) {
   const poolSet = pool && pool.length > 0 ? new Set(pool) : null;
   const clean = Array.from(
@@ -2607,7 +2730,9 @@ function generateMinimumSetCoverFechamento({
   maxTickets = 48,
   filters,
   concursoAnterior = CONCURSO_ATUAL.dezenas,
-  aiScores
+  aiScores,
+  fallbackLevel = 0,
+  disableAutoFallback = false
 }) {
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
   const sortedPool = [...new Set(selectedNumbers)].filter((d) => !excludedSet.has(d)).sort((a, b) => a - b);
@@ -2615,10 +2740,45 @@ function generateMinimumSetCoverFechamento({
   if (n < 15) {
     throw new Error("\xC9 necess\xE1rio selecionar pelo menos 15 dezenas.");
   }
+  if (!disableAutoFallback && fallbackLevel === 0) {
+    let bestTickets = [];
+    for (const lvl of [0, 1, 2, 3]) {
+      const fb = buildProgressiveFallbackFilters(filters, lvl);
+      try {
+        const attemptTickets = generateMinimumSetCoverFechamento({
+          selectedNumbers: sortedPool,
+          targetHits,
+          maxTickets,
+          filters: fb.filters,
+          concursoAnterior,
+          aiScores,
+          fallbackLevel: lvl,
+          disableAutoFallback: true
+        });
+        if (attemptTickets.length > bestTickets.length) {
+          bestTickets = attemptTickets;
+        }
+        if (attemptTickets.length >= maxTickets) {
+          return attemptTickets;
+        }
+      } catch {
+      }
+    }
+    if (bestTickets.length > 0) {
+      return bestTickets;
+    }
+    throw new Error(
+      "Nenhum jogo compat\xEDvel com os filtros selecionados mesmo ap\xF3s o Fallback Progressivo de 3 n\xEDveis."
+    );
+  }
+  const fallbackMeta = buildProgressiveFallbackFilters(filters, fallbackLevel);
+  const bypassAnomaly = fallbackMeta.bypassCanonicalAnomaly;
   const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
   const effectiveFixedSet = new Set(effectiveFixas);
   const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
-  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  const sumCal = resolveCentralSumBounds(sortedPool, filters);
+  const centralMin = fallbackLevel === 3 ? 120 : fallbackLevel === 2 ? Math.min(165, sumCal.centralMin) : sumCal.centralMin;
+  const centralMax = fallbackLevel === 3 ? 285 : fallbackLevel === 2 ? Math.max(225, sumCal.centralMax) : sumCal.centralMax;
   const effectiveCoreFilters = filters ? {
     ...filters,
     dezenasFixas: effectiveFixas,
@@ -2638,11 +2798,14 @@ function generateMinimumSetCoverFechamento({
   const universeMasks = universeSubsets.map(criarMascara);
   const totalUniverse = universeMasks.length;
   const canonicalSumOverride = {
-    somaMin: Math.min(180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
     somaMax: Math.max(225, centralMax)
   };
   const isCandidateValid = (nums) => {
     if (!checkFixasCompliance(nums)) return false;
+    if (bypassAnomaly) {
+      return true;
+    }
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
@@ -2651,7 +2814,7 @@ function generateMinimumSetCoverFechamento({
     if (a.soma < centralMin || a.soma > centralMax) return false;
     return true;
   };
-  const enableStratification = maxTickets >= 10 && n >= 16;
+  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
   const lowerTailMax = Math.max(155, centralMin - 1);
   const upperTailMin = Math.min(235, centralMax + 1);
   const isLowerTailCandidate = (nums) => {
@@ -2705,7 +2868,19 @@ function generateMinimumSetCoverFechamento({
   }
   const rankingMasks = getHistoricalRankingMasks();
   const coreSeenMasks = /* @__PURE__ */ new Set();
-  const coreBranchFilters = {
+  const coreBranchFilters = bypassAnomaly ? {
+    somaMin: 120,
+    somaMax: 285,
+    paresMin: 0,
+    paresMax: 15,
+    posicionalAtivo: false,
+    multiplosAtivo: false,
+    somaAlgarismosAtiva: false,
+    cruzAtiva: false,
+    strictValidation: false,
+    validacaoEstritaCruz: false,
+    rankingHistoricoAtivo: false
+  } : {
     somaMin: centralMin,
     somaMax: centralMax,
     paresMin: effectiveCoreFilters?.paresMin ?? 5,
@@ -2845,10 +3020,8 @@ function generateMinimumSetCoverFechamento({
   const chosenIndices = [];
   const chosenMasks = [];
   const chosenSet = /* @__PURE__ */ new Set();
-  const targetHammingDist = Math.min(
-    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
-    Math.max(1, n - 15)
-  );
+  const is18to21 = n >= 18 && n <= 21;
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -2882,8 +3055,9 @@ function generateMinimumSetCoverFechamento({
         }
       }
       const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
-      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
-        continue;
+      if (chosenMasks.length > 0) {
+        if (minDist === 0) continue;
+        if (minHammingReq > 0 && minDist < minHammingReq) continue;
       }
       const covers = candCoverLists[i];
       let newCovers = 0;
@@ -2926,13 +3100,13 @@ function generateMinimumSetCoverFechamento({
       }
       const candKey = cand.join("-");
       const savedPenalty = savedTicketsSet.has(candKey) ? 45 : 0;
-      const hammingBonus = Math.min(minDist, 6) * 6;
+      const hammingBonus = Math.min(minDist, 6) * (is18to21 ? 10 : 6);
       let winningBonus = 0;
       const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
       const nucleoHits = cand.filter((num) => nucleoVencedor.includes(num)).length;
       if (nucleoHits >= 8) winningBonus += 0.8;
       const jitter = Math.random() * 0.2;
-      const combinedGain = newCovers * 10 + candScores[i] / 100 + hammingBonus + freqBalanceScore + rotationBonus + winningBonus + jitter - savedPenalty;
+      const combinedGain = newCovers * 12 + candScores[i] / 100 + hammingBonus + freqBalanceScore + rotationBonus + winningBonus + jitter - savedPenalty;
       if (combinedGain > bestCombinedGain) {
         bestCombinedGain = combinedGain;
         bestCandIdx = i;
@@ -2975,19 +3149,27 @@ function generateMinimumSetCoverFechamento({
   while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
     let idx = pickBestCandidate(targetHammingDist, true, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, false);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    if (idx === -1 && (!is18to21 || n === 18 && fallbackLevel === 0 && candCount >= maxTickets)) {
+      idx = pickBestCandidate(1, false, false);
+    }
     if (idx === -1) break;
     commitCandidate(idx);
   }
   while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
     let idx = pickBestCandidate(targetHammingDist, false, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
     if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    if (idx === -1) idx = pickBestCandidate(1, false, false);
+    if (idx === -1 && (!is18to21 || n === 18 && fallbackLevel === 0 && candCount >= maxTickets)) {
+      idx = pickBestCandidate(1, false, false);
+    }
     if (idx === -1) break;
     commitCandidate(idx);
   }
@@ -3035,28 +3217,69 @@ function generateMinimumSetCoverFechamento({
   if (!isValidUniverse) {
     throw new Error("Falha de integridade: bilhetes gerados cont\xEAm dezenas fora do universoDezenas selecionado.");
   }
-  return finalEntries.map((entry, idx) => ({
-    id: `ticket-setcover-${idx + 1}`,
-    index: idx + 1,
-    ...entry.analysis,
-    faixaSoma: entry.faixaSoma,
-    tags: [
-      entry.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : entry.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : `Central (${centralMin}\u2013${centralMax})`,
-      fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : "Hamming Otimizado"
-    ]
-  }));
+  return finalEntries.map((entry, idx) => {
+    const tags = [
+      entry.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : entry.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : fallbackLevel === 3 ? "Cobertura Combinat\xF3ria + Hamming" : `Central (${centralMin}\u2013${centralMax})`,
+      fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : `Hamming \u2265${targetHammingDist}`
+    ];
+    if (fallbackLevel > 0) {
+      tags.push(fallbackMeta.label);
+    }
+    return {
+      id: `ticket-setcover-${idx + 1}`,
+      index: idx + 1,
+      ...entry.analysis,
+      faixaSoma: entry.faixaSoma,
+      tags
+    };
+  });
 }
-function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets = 32, filters, concursoAnterior = CONCURSO_ATUAL.dezenas, aiScores) {
+function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets = 32, filters, concursoAnterior = CONCURSO_ATUAL.dezenas, aiScores, fallbackLevel = 0, disableAutoFallback = false) {
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
   const sortedPool = [...new Set(selectedNumbers)].filter((d) => !excludedSet.has(d)).sort((a, b) => a - b);
   const n = sortedPool.length;
   if (n < 15) {
     throw new Error("\xC9 necess\xE1rio selecionar pelo menos 15 dezenas.");
   }
+  if (!disableAutoFallback && fallbackLevel === 0 && n > 15) {
+    let bestTickets = [];
+    for (const lvl of [0, 1, 2, 3]) {
+      const fb = buildProgressiveFallbackFilters(filters, lvl);
+      try {
+        const attempt = generateFechamentoCovering(
+          sortedPool,
+          targetHits,
+          maxTickets,
+          fb.filters,
+          concursoAnterior,
+          aiScores,
+          lvl,
+          true
+        );
+        if (attempt.length > bestTickets.length) {
+          bestTickets = attempt;
+        }
+        if (attempt.length >= maxTickets) {
+          return attempt;
+        }
+      } catch {
+      }
+    }
+    if (bestTickets.length > 0) {
+      return bestTickets;
+    }
+    throw new Error(
+      "Nenhum jogo compat\xEDvel com os filtros selecionados mesmo ap\xF3s o Fallback Progressivo de 3 n\xEDveis."
+    );
+  }
+  const fallbackMeta = buildProgressiveFallbackFilters(filters, fallbackLevel);
+  const bypassAnomaly = fallbackMeta.bypassCanonicalAnomaly;
   const effectiveFixas = sanitizeDezenasFixas(filters?.dezenasFixas || [], sortedPool);
   const effectiveFixedSet = new Set(effectiveFixas);
   const fixedBounds = getRotatedFixedBounds(effectiveFixas.length, filters?.modoFixas);
-  const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, filters);
+  const sumCal = resolveCentralSumBounds(sortedPool, filters);
+  const centralMin = fallbackLevel === 3 ? 120 : fallbackLevel === 2 ? Math.min(165, sumCal.centralMin) : sumCal.centralMin;
+  const centralMax = fallbackLevel === 3 ? 285 : fallbackLevel === 2 ? Math.max(225, sumCal.centralMax) : sumCal.centralMax;
   const effectiveCoreFilters = filters ? {
     ...filters,
     dezenasFixas: effectiveFixas,
@@ -3077,7 +3300,9 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
         somaMax: centralMax
       },
       concursoAnterior,
-      aiScores
+      aiScores,
+      fallbackLevel,
+      disableAutoFallback: true
     });
   }
   const checkFixasCompliance = (nums) => {
@@ -3089,11 +3314,12 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     return present >= fixedBounds.minK && present <= fixedBounds.maxK;
   };
   const canonicalSumOverride = {
-    somaMin: Math.min(180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
     somaMax: Math.max(225, centralMax)
   };
   const isCandidateValid = (nums) => {
     if (!checkFixasCompliance(nums)) return false;
+    if (bypassAnomaly) return true;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
@@ -3129,7 +3355,7 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     const analysis = analyzeTicket(final15, concursoAnterior, aiScores);
     return [{ id: "ticket-1", index: 1, ...analysis, faixaSoma: "ouro" }];
   }
-  const enableStratification = maxTickets >= 10 && n >= 16;
+  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
   const lowerTailMax = Math.max(155, centralMin - 1);
   const upperTailMin = Math.min(235, centralMax + 1);
   const isLowerTailCandidate = (nums) => {
@@ -3172,7 +3398,7 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   const lowerTailCandidates = [];
   const upperTailCandidates = [];
   const candidateSeen = /* @__PURE__ */ new Set();
-  const maxCorePool = n <= 17 ? 2e3 : 3500;
+  const maxCorePool = n <= 17 ? 2e3 : 4e3;
   const maxTailPool = 600;
   const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
   const nonFixedBits = nonFixedPool.map((d) => 1 << d - 1);
@@ -3187,8 +3413,20 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     fixedSubsets.push([...effectiveFixas]);
   }
   const rankingMasks = getHistoricalRankingMasks();
-  if (n <= 17) {
-    const coreBranchFilters = {
+  if (n <= 18) {
+    const coreBranchFilters = bypassAnomaly ? {
+      somaMin: 120,
+      somaMax: 285,
+      paresMin: 0,
+      paresMax: 15,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      somaAlgarismosAtiva: false,
+      cruzAtiva: false,
+      strictValidation: false,
+      validacaoEstritaCruz: false,
+      rankingHistoricoAtivo: false
+    } : {
       somaMin: centralMin,
       somaMax: centralMax,
       paresMin: effectiveCoreFilters?.paresMin ?? 5,
@@ -3303,10 +3541,11 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       }
     }
   } else {
-    const totalAttempts = 16e3;
+    const totalAttempts = bypassAnomaly ? 8e3 : 18e3;
     const workingNonFixed = [...nonFixedPool];
     const nfLen = workingNonFixed.length;
     const fastEarlyExitCoreCheck = (combo) => {
+      if (bypassAnomaly) return true;
       const soma = combo.reduce((a, b) => a + b, 0);
       if (soma < centralMin || soma > centralMax) return false;
       const mask = criarMascara(combo);
@@ -3412,15 +3651,55 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   if (lowerTailCandidates.length === 0) lowerQuota = 0;
   if (upperTailCandidates.length === 0) upperQuota = 0;
   const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
-  const testSubsetMasks = unifiedCandidates.slice(0, Math.min(unifiedCandidates.length, 600)).map((c) => c.mask);
+  const is18to21 = n >= 18 && n <= 21;
+  const testSubsetMasks = [];
+  if (is18to21) {
+    const targetSampleSize = 900;
+    const seenTestMasks = /* @__PURE__ */ new Set();
+    const sampleWork = [...sortedPool];
+    for (let s = 0; s < targetSampleSize * 2 && testSubsetMasks.length < targetSampleSize; s++) {
+      for (let i = 0; i < 15; i++) {
+        const r = i + Math.floor(Math.random() * (n - i));
+        const tmp = sampleWork[i];
+        sampleWork[i] = sampleWork[r];
+        sampleWork[r] = tmp;
+      }
+      const m = criarMascara(sampleWork.slice(0, 15));
+      if (!seenTestMasks.has(m)) {
+        seenTestMasks.add(m);
+        testSubsetMasks.push(m);
+      }
+    }
+  } else {
+    for (let i = 0; i < Math.min(unifiedCandidates.length, 600); i++) {
+      testSubsetMasks.push(unifiedCandidates[i].mask);
+    }
+  }
   const uncovered = new Set(testSubsetMasks.map((_, idx) => idx));
+  const pairCoverageCounts = new Uint16Array(26 * 26);
+  const tripleMasksForCoverage = [];
+  const tripleCoveredFlags = new Uint8Array(is18to21 ? 400 : 0);
+  if (is18to21 && nonFixedPool.length >= 3) {
+    const nfLen = nonFixedPool.length;
+    const allTriplesCount = nfLen * (nfLen - 1) * (nfLen - 2) / 6;
+    const step = Math.max(1, Math.floor(allTriplesCount / 400));
+    let idxCounter = 0;
+    for (let a = 0; a < nfLen - 2 && tripleMasksForCoverage.length < 400; a++) {
+      for (let b = a + 1; b < nfLen - 1 && tripleMasksForCoverage.length < 400; b++) {
+        for (let c = b + 1; c < nfLen && tripleMasksForCoverage.length < 400; c++) {
+          if (idxCounter++ % step === 0) {
+            tripleMasksForCoverage.push(
+              1 << nonFixedPool[a] - 1 | 1 << nonFixedPool[b] - 1 | 1 << nonFixedPool[c] - 1
+            );
+          }
+        }
+      }
+    }
+  }
   const chosen = [];
   const chosenMasks = [];
   const chosenKeySet = /* @__PURE__ */ new Set();
-  const targetHammingDist = Math.min(
-    maxTickets <= 6 ? 4 : maxTickets <= 32 ? 3 : 2,
-    Math.max(1, n - 15)
-  );
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -3438,7 +3717,7 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     let bestIdx = -1;
     let bestWeight = -9999999;
     let bestCovered = [];
-    const searchLimit = Math.min(unifiedCandidates.length, 650);
+    const searchLimit = Math.min(unifiedCandidates.length, is18to21 ? 950 : 650);
     for (let i = 0; i < unifiedCandidates.length; i++) {
       const cand = unifiedCandidates[i];
       if (chosenKeySet.has(cand.key)) continue;
@@ -3449,8 +3728,9 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
         if (cand.faixaSoma === "ouro" && coreChosen >= coreQuota) continue;
       }
       const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
-      if (minHammingReq > 0 && chosenMasks.length > 0 && minDist < minHammingReq) {
-        continue;
+      if (chosenMasks.length > 0) {
+        if (minDist === 0) continue;
+        if (minHammingReq > 0 && minDist < minHammingReq) continue;
       }
       if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === "ouro") continue;
       let coverCount = 0;
@@ -3464,6 +3744,27 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
         }
       }
       if (requireUncoveredGain && uncovered.size > 0 && coverCount === 0) continue;
+      let tripleNoveltyBonus = 0;
+      if (is18to21 && tripleMasksForCoverage.length > 0) {
+        let newTriples = 0;
+        for (let t = 0; t < tripleMasksForCoverage.length; t++) {
+          if (tripleCoveredFlags[t] === 0 && (cand.mask & tripleMasksForCoverage[t]) === tripleMasksForCoverage[t]) {
+            newTriples++;
+          }
+        }
+        tripleNoveltyBonus += newTriples * 1.1;
+        let pairNovelty = 0;
+        for (let p1 = 0; p1 < cand.nums.length; p1++) {
+          const d1 = cand.nums[p1];
+          if (effectiveFixedSet.has(d1)) continue;
+          for (let p2 = p1 + 1; p2 < cand.nums.length; p2++) {
+            const d2 = cand.nums[p2];
+            if (effectiveFixedSet.has(d2)) continue;
+            if (pairCoverageCounts[d1 * 26 + d2] === 0) pairNovelty += 0.35;
+          }
+        }
+        tripleNoveltyBonus += pairNovelty;
+      }
       let freqScore = 0;
       let saturatedCount = 0;
       for (let idxD = 0; idxD < cand.nums.length; idxD++) {
@@ -3494,14 +3795,14 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
         if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 28;
       }
       const savedPenalty = savedTicketsSet.has(cand.key) ? 25 : 0;
-      const hammingBonus = Math.min(minDist, 6) * 5;
+      const hammingBonus = Math.min(minDist, 6) * (is18to21 ? 9 : 5);
       const jitter = Math.random() * 0.2;
       const analysis = analyzeTicket(cand.nums, concursoAnterior, aiScores);
       let winningBonus = 0;
       const nucleoVencedor = REGRA_VENCEDORA_CONCURSO_3822.nucleoOuroVencedor;
       if (cand.nums.filter((num) => nucleoVencedor.includes(num)).length >= 8) winningBonus += 0.35;
       if (analysis.pares === 7 && analysis.impares === 8) winningBonus += 0.25;
-      const weight = coverCount * 2 + cand.scoreIA / 100 * 0.8 + hammingBonus + freqScore + rotationBonus + winningBonus + jitter - savedPenalty;
+      const weight = coverCount * 2.5 + tripleNoveltyBonus + cand.scoreIA / 100 * 0.8 + hammingBonus + freqScore + rotationBonus + winningBonus + jitter - savedPenalty;
       if (weight > bestWeight) {
         bestWeight = weight;
         bestIdx = i;
@@ -3526,18 +3827,31 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       if (effectiveFixedSet.has(d)) fixedFreq[d] = (fixedFreq[d] || 0) + 1;
       else numberFreq[d] = (numberFreq[d] || 0) + 1;
     }
+    if (is18to21) {
+      for (let t = 0; t < tripleMasksForCoverage.length; t++) {
+        if (tripleCoveredFlags[t] === 0 && (cand.mask & tripleMasksForCoverage[t]) === tripleMasksForCoverage[t]) {
+          tripleCoveredFlags[t] = 1;
+        }
+      }
+      for (let p1 = 0; p1 < cand.nums.length; p1++) {
+        const d1 = cand.nums[p1];
+        for (let p2 = p1 + 1; p2 < cand.nums.length; p2++) {
+          pairCoverageCounts[d1 * 26 + cand.nums[p2]]++;
+        }
+      }
+    }
     for (const coveredIdx of coveredHere) {
       uncovered.delete(coveredIdx);
     }
   };
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
-      const hit = selectNextFromPool("baixa", targetHammingDist, false, true) || selectNextFromPool("baixa", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("baixa", 2, false, false) : null) || selectNextFromPool("baixa", 1, false, false);
+      const hit = selectNextFromPool("baixa", targetHammingDist, false, true) || selectNextFromPool("baixa", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("baixa", 3, false, false) : null) || (targetHammingDist > 2 ? selectNextFromPool("baixa", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("baixa", 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
     }
     while (upperChosen < upperQuota && chosen.length < maxTickets) {
-      const hit = selectNextFromPool("alta", targetHammingDist, false, true) || selectNextFromPool("alta", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("alta", 2, false, false) : null) || selectNextFromPool("alta", 1, false, false);
+      const hit = selectNextFromPool("alta", targetHammingDist, false, true) || selectNextFromPool("alta", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("alta", 3, false, false) : null) || (targetHammingDist > 2 ? selectNextFromPool("alta", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("alta", 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
     }
@@ -3545,12 +3859,12 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   let greedyLoop = 0;
   const maxGreedyLoops = Math.min(maxTickets * 2, 220);
   while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
-    const hit = selectNextFromPool("ouro", targetHammingDist, true, true) || selectNextFromPool("ouro", targetHammingDist, true, false) || selectNextFromPool("ouro", targetHammingDist, false, true) || selectNextFromPool("ouro", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("ouro", 2, false, false) : null) || selectNextFromPool("ouro", 1, false, false);
+    const hit = selectNextFromPool("ouro", targetHammingDist, true, true) || selectNextFromPool("ouro", targetHammingDist, true, false) || (targetHammingDist > 3 ? selectNextFromPool("ouro", 3, true, false) : null) || selectNextFromPool("ouro", targetHammingDist, false, true) || selectNextFromPool("ouro", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("ouro", 3, false, false) : null) || (targetHammingDist > 2 ? selectNextFromPool("ouro", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("ouro", 1, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
   while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
-    const hit = selectNextFromPool("any", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("any", 2, false, false) : null) || selectNextFromPool("any", 1, false, false);
+    const hit = selectNextFromPool("any", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("any", 3, false, false) : null) || (targetHammingDist > 2 ? selectNextFromPool("any", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("any", 1, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
@@ -3562,15 +3876,19 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   }
   return chosen.map((item, index) => {
     const analysis = analyzeTicket(item.nums, concursoAnterior, aiScores);
+    const tags = [
+      item.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : item.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : fallbackLevel === 3 ? "Cobertura Combinat\xF3ria + Hamming" : `Central (${centralMin}\u2013${centralMax})`,
+      fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : `Hamming \u2265${targetHammingDist}`
+    ];
+    if (fallbackLevel > 0) {
+      tags.push(fallbackMeta.label);
+    }
     return {
       id: `ticket-${index + 1}`,
       index: index + 1,
       ...analysis,
       faixaSoma: item.faixaSoma,
-      tags: [
-        item.faixaSoma === "baixa" ? "Cauda Baixa (155+)" : item.faixaSoma === "alta" ? "Cauda Alta (\u2264235)" : `Central (${centralMin}\u2013${centralMax})`,
-        fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3 ? `Fixas Rotativas (${fixedBounds.minK}\u2013${fixedBounds.maxK}/${effectiveFixas.length})` : "Hamming Otimizado"
-      ]
+      tags
     };
   });
 }
@@ -4725,6 +5043,15 @@ app.post("/api/mysql/fechamentos", async (req, res) => {
   if (!f || !f.id) {
     return res.status(400).json({ success: false, error: "Fechamento inv\xE1lido" });
   }
+  const validTickets = Array.isArray(f.tickets) ? f.tickets.filter((t) => Array.isArray(t?.dezenas) && t.dezenas.length === 15) : [];
+  if (validTickets.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Bloqueio de seguran\xE7a: fechamento vazio (tickets: []) n\xE3o pode ser persistido."
+    });
+  }
+  f.tickets = validTickets;
+  f.totalJogos = validTickets.length;
   if (isMysqlConnected && mysqlPool) {
     try {
       await mysqlPool.query(

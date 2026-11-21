@@ -8,7 +8,13 @@ import {
   criarMascara,
   validarIntegridadeFechamento,
   buildOptimal18Pool,
+  generateDesdobramento25Blocos,
+  generateSuper14Coringas11Jogos,
+  generatePadraoPivo9,
+  selectCoreAndSatellites25,
+  hammingDistanceBitwise,
 } from './combinatorics';
+import { saveFechamentoPrognostico } from './savedFechamentosStorage';
 import { FilterCriteria, GameTicket } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
 
@@ -165,32 +171,34 @@ export function runCombinatoricsValidationAssertions(): {
     record('Conformidade Estrita da Matriz Gerada', false, `Exceção: ${err.message}`);
   }
 
-  // 7. Caso de Teste: Tratamento de Sobre-Restrição Excessiva
+  // 7. Caso de Teste: Fallback Progressivo Automático em 3 Níveis sob Sobre-Restrição
   try {
     const testPool18 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-    // Soma mínima inalcançável (245 a 250) em um pool até a dezena 18
+    // Soma mínima inalcançável (245 a 250) em um pool até a dezena 18 -> deve acionar Fallback Progressivo até Nível 3
     const impossibleFilters: FilterCriteria = {
       ...DEFAULT_FILTERS,
       somaMin: 245,
       somaMax: 250,
     };
 
-    let caughtExpectedError = false;
-    try {
-      generateFechamentoCovering(testPool18, 14, 8, impossibleFilters, CONCURSO_ATUAL.dezenas);
-    } catch (e: any) {
-      if (e.message && e.message.includes('Nenhum jogo compatível com os filtros selecionados')) {
-        caughtExpectedError = true;
-      }
-    }
+    const recovered = generateFechamentoCovering(
+      testPool18,
+      14,
+      8,
+      impossibleFilters,
+      CONCURSO_ATUAL.dezenas
+    );
+    const taggedFallback = recovered.some((t) =>
+      (t.tags || []).some((tag) => tag.includes('Fallback Nível'))
+    );
 
     record(
-      'Tratamento de Sobre-Restrição Combinatória',
-      caughtExpectedError,
-      'Filtros impossíveis dispararam erro controlado com diagnóstico claro sem travar a thread.'
+      'Fallback Progressivo Automático (3 Níveis)',
+      recovered.length === 8 && taggedFallback,
+      `Sob filtros impossíveis (soma 245–250 em [1..18]), o Fallback Progressivo recuperou ${recovered.length}/8 bilhetes válidos sem retornar fechamento vazio.`
     );
   } catch (err: any) {
-    record('Tratamento de Sobre-Restrição Combinatória', false, `Exceção: ${err.message}`);
+    record('Fallback Progressivo Automático (3 Níveis)', false, `Exceção: ${err.message}`);
   }
 
   // 8. Caso de Teste OBRIGATÓRIO (a): Matriz Sem Filtros = 100% de Garantia Auditada C(18, 15, 14)
@@ -226,6 +234,126 @@ export function runCombinatoricsValidationAssertions(): {
     );
   } catch (err: any) {
     record('Auditoria de Cobertura LJCR', false, `Exceção: ${err.message}`);
+  }
+
+  // 11. Caso de Teste: Hamming >= 3 em Universo de 18 e 21 Dezenas (incluindo 2 Fixas)
+  try {
+    const pool21 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22];
+    const tickets21 = generateFechamentoCovering(
+      pool21,
+      13,
+      24,
+      { ...DEFAULT_FILTERS, dezenasFixas: [10, 20], modoFixas: 'rigidas' },
+      CONCURSO_ATUAL.dezenas
+    );
+    const masks21 = tickets21.map((t) => criarMascara(t.dezenas));
+    let minHamming21 = 15;
+    for (let i = 0; i < masks21.length; i++) {
+      for (let j = i + 1; j < masks21.length; j++) {
+        const d = hammingDistanceBitwise(masks21[i], masks21[j]);
+        if (d < minHamming21) minHamming21 = d;
+      }
+    }
+    const allHave2Fixas = tickets21.every((t) => t.dezenas.includes(10) && t.dezenas.includes(20));
+
+    record(
+      'Otimização Hamming ≥ 3 (21 Dezenas + 2 Fixas)',
+      tickets21.length === 24 && minHamming21 >= 3 && allHave2Fixas,
+      `Matriz de 21 dezenas (24 jogos, 2 fixas) alcançou Hamming mínimo de ${minHamming21} (alvo ≥ 3) sem jogos redundantes.`
+    );
+  } catch (err: any) {
+    record('Otimização Hamming ≥ 3 (21 Dezenas + 2 Fixas)', false, `Exceção: ${err.message}`);
+  }
+
+  // 12. Caso de Teste: Ancoragem Core 12 (70%-80%) + 13 Satélites nas Matrizes de 25 Dezenas
+  try {
+    const basePartition = selectCoreAndSatellites25({
+      latestDraw: CONCURSO_ATUAL,
+      dynamicStats: DEZENAS_STATS,
+    });
+    const pivoPartition = selectCoreAndSatellites25({
+      latestDraw: CONCURSO_ATUAL,
+      dynamicStats: DEZENAS_STATS,
+      pivotBoost: [5, 6, 7, 12, 13, 14, 19, 20, 21],
+    });
+    const matrices25 = [
+      {
+        name: 'Blocos 10J',
+        core12: basePartition.core12,
+        tickets: generateDesdobramento25Blocos({ baseDraw: CONCURSO_ATUAL, dynamicStats: DEZENAS_STATS }),
+      },
+      {
+        name: 'Coringas 11J',
+        core12: basePartition.core12,
+        tickets: generateSuper14Coringas11Jogos({ latestDraw: CONCURSO_ATUAL, dynamicStats: DEZENAS_STATS }),
+      },
+      {
+        name: 'Pivô 9 24J',
+        core12: pivoPartition.core12,
+        tickets: generatePadraoPivo9({ latestDraw: CONCURSO_ATUAL, dynamicStats: DEZENAS_STATS, maxTickets: 24 }),
+      },
+    ];
+
+    let allValid = true;
+    const summaryParts: string[] = [];
+
+    for (const m of matrices25) {
+      const covered = new Set<number>();
+      const counts = new Array(26).fill(0);
+      m.tickets.forEach((t) => {
+        t.dezenas.forEach((d) => {
+          covered.add(d);
+          counts[d]++;
+        });
+      });
+      const minCorePct = Math.min(...m.core12.map((d) => (counts[d] / m.tickets.length) * 100));
+      const maxCorePct = Math.max(...m.core12.map((d) => (counts[d] / m.tickets.length) * 100));
+      const ok = covered.size === 25 && minCorePct >= 66 && maxCorePct <= 85;
+      if (!ok) allValid = false;
+      summaryParts.push(`${m.name}: ${covered.size}/25 dez, Core ${minCorePct.toFixed(0)}%–${maxCorePct.toFixed(0)}%`);
+    }
+
+    record(
+      'Matrizes 25 Dezenas (Core 12 + Satélites 13)',
+      allValid,
+      summaryParts.join(' | ')
+    );
+  } catch (err: any) {
+    record('Matrizes 25 Dezenas (Core 12 + Satélites 13)', false, `Exceção: ${err.message}`);
+  }
+
+  // 13. Caso de Teste: Trava de Segurança contra Salvamento de Fechamento Vazio (tickets: [])
+  try {
+    const emptySaveRes = saveFechamentoPrognostico({
+      id: 'test-empty-block',
+      timestamp: Date.now(),
+      dataCriacao: new Date().toLocaleString('pt-BR'),
+      concurso: CONCURSO_ATUAL.concurso,
+      tipoFechamento: 'Teste Vazio',
+      modalidadeMatriz: '18 Dezenas',
+      universoDezenas: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+      dezenasFixas: [],
+      dezenasExcluidas: [],
+      faixaSoma: { min: 180, max: 215 },
+      paridade: { minPares: 6, maxPares: 9 },
+      maxConsecutivas: 5,
+      auditoriaAnomalias: '',
+      repetidas: { min: 8, max: 10 },
+      moldura: { min: 8, max: 11 },
+      primos: { min: 4, max: 7 },
+      fibonacci: { min: 3, max: 5 },
+      tickets: [],
+      totalJogos: 0,
+      custoTotal: 0,
+    });
+
+    record(
+      'Trava de Segurança contra Fechamentos Vazios',
+      emptySaveRes.success === false && emptySaveRes.isEmpty === true,
+      `Tentativa de salvar fechamento com tickets: [] bloqueada (${emptySaveRes.reason}).`
+    );
+  } catch (err: any) {
+    record('Trava de Segurança contra Fechamentos Vazios', false, `Exceção: ${err.message}`);
   }
 
   const passedCount = results.filter((r) => r.passed).length;

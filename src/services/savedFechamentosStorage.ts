@@ -1,6 +1,6 @@
 import { GameTicket, FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { MOLDURA, PRIMOS } from '../data/lotofacilData';
-import { VALOR_APOSTA_LOTOFACIL, auditarTicketsGerados, analyzeTicket } from './combinatorics';
+import { VALOR_APOSTA_LOTOFACIL, MAX_DEZENAS_FIXAS, auditarTicketsGerados, analyzeTicket } from './combinatorics';
 
 export const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
 
@@ -313,17 +313,14 @@ export function normalizeSavedFechamento(
     ? item.dezenasExcluidas.filter((n: any) => typeof n === 'number')
     : [];
 
-  const totalJogos =
-    typeof item.totalJogos === 'number' && item.totalJogos > 0
-      ? item.totalJogos
-      : tickets.length > 0
-      ? tickets.length
-      : 1;
+  const totalJogos = tickets.length;
 
   const custoTotal =
-    typeof item.custoTotal === 'number' && item.custoTotal > 0
-      ? item.custoTotal
-      : totalJogos * VALOR_APOSTA_LOTOFACIL;
+    totalJogos > 0
+      ? typeof item.custoTotal === 'number' && item.custoTotal > 0
+        ? item.custoTotal
+        : totalJogos * VALOR_APOSTA_LOTOFACIL
+      : 0;
 
   const faixaSoma = {
     min: typeof item.faixaSoma?.min === 'number' ? item.faixaSoma.min : 180,
@@ -441,7 +438,7 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
     if (!Array.isArray(parsed)) return [];
 
     let needsRepair = false;
-    const normalized = parsed
+    const rawNormalized = parsed
       .filter((p) => p && typeof p === 'object')
       .map((item, idx) => {
         if (!item.tipoFechamento || !Array.isArray(item.tickets) || !item.modalidadeMatriz || !item.concursoAlvo || !item.nomeFechamento) {
@@ -450,7 +447,14 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
         return normalizeSavedFechamento(item, idx);
       });
 
-    // Se encontramos dados corrompidos ou não normalizados, corrigimos imediatamente no localStorage
+    // Purgar fechamentos vazios (tickets: []) que registravam custo indevido
+    const normalized = rawNormalized.filter((f) => {
+      const valid = Array.isArray(f.tickets) && f.tickets.length > 0;
+      if (!valid) needsRepair = true;
+      return valid;
+    });
+
+    // Se encontramos dados corrompidos, vazios ou não normalizados, corrigimos imediatamente no localStorage
     if (needsRepair && typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -626,19 +630,43 @@ export function checkFechamentoDuplicateStatus(tickets: GameTicket[]): {
 export function saveFechamentoPrognostico(
   fechamento: SavedFechamentoPrognostico,
   options: { force?: boolean } = {}
-): { success: boolean; isDuplicate?: boolean; reason?: string } {
+): { success: boolean; isDuplicate?: boolean; isEmpty?: boolean; reason?: string } {
   try {
-    localStorage.setItem(INITIALIZED_KEY, 'true');
+    // Trava de Segurança: bloquear salvamento de fechamentos vazios (tickets: [])
+    const validTickets = Array.isArray(fechamento?.tickets)
+      ? fechamento.tickets.filter(
+          (t) => Array.isArray(t?.dezenas) && t.dezenas.length === 15
+        )
+      : [];
+
+    if (validTickets.length === 0) {
+      const msg =
+        'Bloqueio de segurança: não é permitido salvar fechamento vazio (0 bilhetes válidos).';
+      console.warn(`[LotoSniper Segurança] ${msg}`);
+      return {
+        success: false,
+        isEmpty: true,
+        reason: msg,
+      };
+    }
+
+    fechamento.tickets = validTickets;
+    fechamento.totalJogos = validTickets.length;
+    fechamento.custoTotal = validTickets.length * VALOR_APOSTA_LOTOFACIL;
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(INITIALIZED_KEY, 'true');
+    }
     const list = getSavedFechamentos();
 
-    // Sanitização estrita de universoDezenas e dezenasFixas
+    // Sanitização estrita de universoDezenas e dezenasFixas (limite máximo MAX_DEZENAS_FIXAS = 5)
     const universe = [...new Set(fechamento.universoDezenas || [])].sort((a, b) => a - b);
     const universeSet = new Set(universe);
     const rawFixas = (fechamento.dezenasFixas || []).filter((d) => universeSet.has(d));
-    const maxFixas = Math.min(12, Math.max(0, universe.length - 3));
+    const maxFixas = Math.min(MAX_DEZENAS_FIXAS, Math.max(0, universe.length - 3));
     fechamento.dezenasFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
     fechamento.universoDezenas = universe;
-    fechamento.auditoriaAnomalias = auditarTicketsGerados(fechamento.tickets || []).resumo;
+    fechamento.auditoriaAnomalias = auditarTicketsGerados(validTickets).resumo;
 
     // Garantia explícita do Concurso Alvo e Nomenclatura Padronizada
     const concursoBase = resolveConcursoBase(fechamento.concurso);
@@ -1101,16 +1129,25 @@ export function createSavedFechamentoFromCurrent({
   concurso?: number;
   dataConcurso?: string;
 }): SavedFechamentoPrognostico {
-  const totalJogos = tickets.length;
+  const validTickets = Array.isArray(tickets)
+    ? tickets.filter((t) => Array.isArray(t?.dezenas) && t.dezenas.length === 15)
+    : [];
+  if (validTickets.length === 0) {
+    throw new Error(
+      'Bloqueio de segurança: não é possível salvar um fechamento vazio (0 bilhetes válidos).'
+    );
+  }
+
+  const totalJogos = validTickets.length;
   const custoTotal = totalJogos * VALOR_APOSTA_LOTOFACIL;
   const now = new Date();
 
   const universe = [...new Set(universoDezenas)].sort((a, b) => a - b);
   const universeSet = new Set(universe);
   const rawFixas = (dezenasFixas || []).filter((d) => universeSet.has(d));
-  const maxFixas = Math.min(12, Math.max(0, universe.length - 3));
+  const maxFixas = Math.min(MAX_DEZENAS_FIXAS, Math.max(0, universe.length - 3));
   const sanitizedFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
-  const auditRes = auditarTicketsGerados(tickets);
+  const auditRes = auditarTicketsGerados(validTickets);
 
   const concursoBase = resolveConcursoBase(concurso, 3824);
   const concursoAlvo = Number(concursoBase) + 1;
@@ -1183,7 +1220,7 @@ export function createSavedFechamentoFromCurrent({
     moldura: molduraObj,
     primos: primosObj,
     fibonacci: fibonacciObj,
-    tickets,
+    tickets: validTickets,
     totalJogos,
     custoTotal,
   };
