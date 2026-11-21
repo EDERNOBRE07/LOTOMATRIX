@@ -19,6 +19,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { BackupRestoreCenterModal } from './components/BackupRestoreCenterModal';
 import { FechamentoSavedToastAlert } from './components/FechamentoSavedToastAlert';
 import { LegalInfoPages, PublicInfoRoute } from './components/LegalInfoPages';
+import { HistoricoFechamentosRecentes } from './components/HistoricoFechamentosRecentes';
+import {
+  getSavedCycleThreshold,
+  getSavedCycleVisualAlertEnabled,
+  CYCLE_THRESHOLD_UPDATED_EVENT,
+} from './components/AlertaFimCicloConfigPanel';
 import {
   saveLocalSnapshot,
   isAutoDownloadOnSaveEnabled,
@@ -207,6 +213,27 @@ export default function App() {
     concurso: number;
   } | null>(null);
 
+  // Limite configurável de dezenas ausentes para disparar o alerta visual de fim de ciclo
+  const [cycleVisualThreshold, setCycleVisualThreshold] = useState<number>(() =>
+    getSavedCycleThreshold()
+  );
+  const [cycleVisualAlertEnabled, setCycleVisualAlertEnabled] = useState<boolean>(() =>
+    getSavedCycleVisualAlertEnabled()
+  );
+
+  useEffect(() => {
+    const handleSyncCycleConfig = () => {
+      setCycleVisualThreshold(getSavedCycleThreshold());
+      setCycleVisualAlertEnabled(getSavedCycleVisualAlertEnabled());
+    };
+    window.addEventListener(CYCLE_THRESHOLD_UPDATED_EVENT, handleSyncCycleConfig);
+    window.addEventListener('storage', handleSyncCycleConfig);
+    return () => {
+      window.removeEventListener(CYCLE_THRESHOLD_UPDATED_EVENT, handleSyncCycleConfig);
+      window.removeEventListener('storage', handleSyncCycleConfig);
+    };
+  }, []);
+
   // Dynamic Contest State (Loaded automatically every time the app opens)
   const [latestDraw, setLatestDraw] = useState<LotofacilDraw>(CONCURSO_ATUAL);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
@@ -308,10 +335,12 @@ export default function App() {
     return computeDynamicStats(latestDraw, RECENT_DRAWS);
   }, [latestDraw]);
 
-  // Efeito disparado na carga do concurso para detectar brinde/status de ciclo
+  // Efeito disparado na carga do concurso ou ajuste de limite para detectar alerta visual de fim de ciclo
   useEffect(() => {
     if (!latestDraw) return;
-    if (dezenasPendentesCiclo.length === 0) {
+    if (!cycleVisualAlertEnabled) {
+      setCycleToast(null);
+    } else if (dezenasPendentesCiclo.length === 0) {
       setCycleToast({
         type: 'closed',
         title: '🎉 Brinde de Ciclo: FECHAMENTO COMPLETO DAS 25 DEZENAS!',
@@ -325,13 +354,19 @@ export default function App() {
         description: `O Concurso #${latestDraw.concurso} iniciou um novo ciclo. 15 dezenas saíram e 10 dezenas ausentes entram com alta propensão de saída.`,
         concurso: latestDraw.concurso,
       });
-    } else if (dezenasPendentesCiclo.length <= 2) {
+    } else if (dezenasPendentesCiclo.length <= cycleVisualThreshold) {
       setCycleToast({
         type: 'urgent',
-        title: `⚡ Ciclo Quase Fechado (${concursosNoCiclo}º Concurso)`,
-        description: `Faltam apenas as dezenas [${dezenasPendentesCiclo.map(d => d.toString().padStart(2, '0')).join(', ')}] para completar todas as 25! Forte pressão estatística.`,
+        title: `⚡ Alerta de Fim de Ciclo (${concursosNoCiclo}º Concurso · limite ≤ ${cycleVisualThreshold} ausentes)`,
+        description: `Faltam apenas ${dezenasPendentesCiclo.length} ${
+          dezenasPendentesCiclo.length === 1 ? 'dezena' : 'dezenas'
+        } [${dezenasPendentesCiclo
+          .map((d) => d.toString().padStart(2, '0'))
+          .join(', ')}] para completar todas as 25! Forte pressão estatística.`,
         concurso: latestDraw.concurso,
       });
+    } else {
+      setCycleToast((prev) => (prev?.type === 'urgent' ? null : prev));
     }
 
     // Dispara auditoria de Notificações Push Inteligentes (Radar > 90% e Início de Ciclos)
@@ -339,7 +374,16 @@ export default function App() {
 
     // Dispara auditoria das Regras de Alerta Híbrido (E / OU: Radar + Atrasos Críticos)
     auditAndTriggerHybridAlerts(latestDraw, dynamicStats, dezenasPendentesCiclo);
-  }, [latestDraw.concurso, dezenasPendentesCiclo.length, concursosNoCiclo, latestDraw, dynamicStats, dezenasPendentesCiclo]);
+  }, [
+    latestDraw.concurso,
+    dezenasPendentesCiclo.length,
+    concursosNoCiclo,
+    latestDraw,
+    dynamicStats,
+    dezenasPendentesCiclo,
+    cycleVisualThreshold,
+    cycleVisualAlertEnabled,
+  ]);
 
   // Listener para navegação rápida entre abas acionada por componentes filhos
   useEffect(() => {
@@ -1263,18 +1307,27 @@ export default function App() {
               </div>
 
               {jogosSubView === 'salvos' ? (
-                <GamesManagerTab
-                  savedTickets={savedTickets}
-                  latestDraw={latestDraw}
-                  fechamentoMeta={activeFechamentoMeta}
-                  onClearTickets={() => {
-                    setSavedTickets([]);
-                    try {
-                      localStorage.setItem('lotosniper_saved_tickets', '[]');
-                    } catch {}
-                  }}
-                  onGoToGenerator={() => setActiveTab('fechamento')}
-                />
+                <div className="space-y-6">
+                  <HistoricoFechamentosRecentes
+                    latestDraw={latestDraw}
+                    maxItems={5}
+                    onApplyFilters={setActiveFilterConfig}
+                    onGoToFechamento={() => setActiveTab('fechamento')}
+                  />
+
+                  <GamesManagerTab
+                    savedTickets={savedTickets}
+                    latestDraw={latestDraw}
+                    fechamentoMeta={activeFechamentoMeta}
+                    onClearTickets={() => {
+                      setSavedTickets([]);
+                      try {
+                        localStorage.setItem('lotosniper_saved_tickets', '[]');
+                      } catch {}
+                    }}
+                    onGoToGenerator={() => setActiveTab('fechamento')}
+                  />
+                </div>
               ) : (
                 <div className="space-y-6">
                   <VolanteSelector
@@ -1308,6 +1361,9 @@ export default function App() {
               latestDraw={latestDraw}
               savedTickets={savedTickets}
               onRestoreTickets={(t) => setSavedTickets(normalizeGameTickets(t, latestDraw.dezenas))}
+              filters={activeFilterConfig}
+              onRestoreFilters={setActiveFilterConfig}
+              onGoToFechamento={() => setActiveTab('fechamento')}
               onSyncNow={() => runAutoUpdate(true)}
               isSyncing={isSyncing}
               statsList={dynamicStats}

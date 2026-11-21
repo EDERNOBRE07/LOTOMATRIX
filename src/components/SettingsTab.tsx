@@ -26,6 +26,7 @@ import {
   Info,
   Flame,
   Timer,
+  Sliders,
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
@@ -55,6 +56,9 @@ import { sendNativeTop5TrendNotification } from '../services/nativeNotificationS
 import { auditAndNotifySavedGames } from '../services/savedGamesAuditorService';
 import { getHistorical100Draws } from '../services/historical100Draws';
 import { DezenaStats } from '../types/lotofacil';
+import { PresetsAuditoriaSettingsPanel } from './PresetsAuditoriaSettingsPanel';
+import { HistoricoFechamentosRecentes } from './HistoricoFechamentosRecentes';
+import { AlertaFimCicloConfigPanel } from './AlertaFimCicloConfigPanel';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
 export type CheckInterval = 'startup_only' | '1h' | '4h' | '12h';
@@ -67,6 +71,7 @@ interface SettingsTabProps {
   onRestoreTickets: (tickets: GameTicket[]) => void;
   filters?: FilterCriteria;
   onRestoreFilters?: (filters: FilterCriteria) => void;
+  onGoToFechamento?: () => void;
   onSyncNow?: () => void;
   isSyncing?: boolean;
   statsList?: DezenaStats[];
@@ -80,6 +85,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onRestoreTickets,
   filters = DEFAULT_FILTERS,
   onRestoreFilters,
+  onGoToFechamento,
   onSyncNow,
   isSyncing = false,
   statsList = [],
@@ -87,13 +93,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'geral' | 'regras_push' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
-  >('geral');
+    'presets_filtros' | 'alerta_fim_ciclo' | 'geral' | 'regras_push' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
+  >('presets_filtros');
 
   useEffect(() => {
     const handleOpenBackup = () => setActiveSubTab('backup_cloud');
+    const handleOpenPresets = () => setActiveSubTab('presets_filtros');
+    const handleOpenCycleAlert = () => setActiveSubTab('alerta_fim_ciclo');
     window.addEventListener('lotosniper-open-backup', handleOpenBackup);
-    return () => window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
+    window.addEventListener('lotosniper-open-presets', handleOpenPresets);
+    window.addEventListener('lotosniper-open-cycle-alert', handleOpenCycleAlert);
+    return () => {
+      window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
+      window.removeEventListener('lotosniper-open-presets', handleOpenPresets);
+      window.removeEventListener('lotosniper-open-cycle-alert', handleOpenCycleAlert);
+    };
   }, []);
 
   // 1. Modo de Conexão
@@ -491,6 +505,28 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         {/* Subtab Navigation Pills */}
         <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
           <button
+            onClick={() => setActiveSubTab('presets_filtros')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'presets_filtros'
+                ? 'bg-sky-400 text-slate-950 shadow-sm'
+                : 'text-sky-300 hover:text-white'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Presets de Filtro</span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('alerta_fim_ciclo')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'alerta_fim_ciclo'
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'text-amber-300 hover:text-white'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5" />
+            <span>Alerta Fim de Ciclo</span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('geral')}
             className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
               activeSubTab === 'geral'
@@ -690,10 +726,69 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUBTAB 0: PRESETS DE FILTROS AUDITADOS & HISTÓRICO DE FECHAMENTOS         */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'presets_filtros' && (
+        <div className="space-y-6">
+          <PresetsAuditoriaSettingsPanel
+            filters={filters}
+            onApplyFilters={(nextFilters) => {
+              onRestoreFilters?.(nextFilters);
+            }}
+            onGoToFechamento={onGoToFechamento}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+
+          <HistoricoFechamentosRecentes
+            latestDraw={latestDraw}
+            maxItems={5}
+            onApplyFilters={(nextFilters) => {
+              onRestoreFilters?.(nextFilters);
+            }}
+            onGoToFechamento={onGoToFechamento}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SUBTAB 0B: ALERTA VISUAL DE FIM DE CICLO (LIMITE DE DEZENAS AUSENTES)     */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'alerta_fim_ciclo' && (
+        <div className="space-y-6">
+          <AlertaFimCicloConfigPanel
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* SUBTAB 1: CONEXÃO, SINCRONIZAÇÃO & NOTIFICAÇÕES                             */}
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
         <div className="space-y-5">
+          {/* Painel de Configuração do Alerta Visual de Fim de Ciclo */}
+          <AlertaFimCicloConfigPanel
+            latestDraw={latestDraw}
+            cyclePendingNumbers={cyclePendingNumbers}
+            concursosNoCiclo={concursosNoCiclo}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 4500);
+            }}
+          />
           {/* Painel Detalhado de Regras de Notificação Push & Alerta Sonoro */}
           <PushNotificationRulesPanel
             latestDraw={latestDraw}

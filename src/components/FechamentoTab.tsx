@@ -46,6 +46,7 @@ import { IndicadorGarantiaLJCR } from './IndicadorGarantiaLJCR';
 import { HistogramaDistribuicaoAcertos } from './HistogramaDistribuicaoAcertos';
 import { SeletorPresetsEstatisticos, StatisticalPresetOption } from './SeletorPresetsEstatisticos';
 import { PRESETS_LOTOFACIL } from '../services/presetsFiltros';
+import { HistoricoFechamentosRecentes } from './HistoricoFechamentosRecentes';
 import { gerarRelatorioAuditoriaPDF } from '../services/relatorioAuditoriaPdf';
 import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
@@ -4713,6 +4714,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
         </>
       )}
+
+      {/* Histórico dos Últimos 5 Fechamentos Gerados (Filtros + Performance Estimada) */}
+      <div className="pt-2">
+        <HistoricoFechamentosRecentes
+          latestDraw={latestDraw}
+          maxItems={5}
+          onApplyFilters={(restoredFilters) => {
+            handleFiltersChange(restoredFilters, true);
+            if (restoredFilters.dezenasFixas && restoredFilters.dezenasFixas.length > 0) {
+              setFixedNumbers(sanitizeDezenasFixas(restoredFilters.dezenasFixas));
+            }
+            if (restoredFilters.dezenasExcluidas && restoredFilters.dezenasExcluidas.length > 0) {
+              setExcludedNumbers(restoredFilters.dezenasExcluidas);
+            }
+            setDocumentMessage('✓ Filtros do fechamento histórico aplicados ao motor atual.');
+            setTimeout(() => setDocumentMessage(null), 4000);
+          }}
+        />
+      </div>
 
       {/* Modal de Histórico de Auto-Save (Últimas 10 Gerações) */}
       {isAutoSaveModalOpen && (

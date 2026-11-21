@@ -114,7 +114,7 @@ export const PRESETS_LOTOFACIL: Record<'conservador' | 'balanceado' | 'agressivo
   },
   agressivo: {
     id: 'agressivo',
-    nome: 'Agressivo (Sniper)',
+    nome: 'Ousado (Sniper)',
     badge: '±1σ (180–215)',
     desvio: '±1σ',
     coberturaConcursos: '~72% dos sorteios',
@@ -171,3 +171,40 @@ export function getPresetFilters(
 ): Partial<FilterCriteria> {
   return PRESETS_LOTOFACIL[presetKey]?.filtros || PRESETS_LOTOFACIL.balanceado.filtros;
 }
+
+/**
+ * Identifica qual preset auditado corresponde exatamente às faixas principais do FilterCriteria ativo
+ */
+export function detectActivePreset(
+  filters?: FilterCriteria
+): 'balanceado' | 'agressivo' | 'conservador' | 'personalizado' {
+  if (!filters) return 'balanceado';
+  const keys: Array<'balanceado' | 'agressivo' | 'conservador'> = [
+    'balanceado',
+    'agressivo',
+    'conservador',
+  ];
+
+  for (const key of keys) {
+    const p = PRESETS_LOTOFACIL[key].filtros;
+    const matchesCore =
+      filters.somaMin === p.somaMin &&
+      filters.somaMax === p.somaMax &&
+      filters.paresMin === p.paresMin &&
+      filters.paresMax === p.paresMax &&
+      filters.molduraMin === p.molduraMin &&
+      filters.molduraMax === p.molduraMax &&
+      filters.primosMin === p.primosMin &&
+      filters.primosMax === p.primosMax &&
+      filters.fibonacciMin === p.fibonacciMin &&
+      filters.fibonacciMax === p.fibonacciMax &&
+      filters.repetidasMin === p.repetidasMin &&
+      filters.repetidasMax === p.repetidasMax &&
+      filters.maxConsecutivas === p.maxConsecutivas;
+
+    if (matchesCore) return key;
+  }
+
+  return 'personalizado';
+}
+

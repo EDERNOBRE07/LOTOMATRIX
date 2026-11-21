@@ -44,7 +44,7 @@ export const CycleMonitoringCard: React.FC<CycleMonitoringCardProps> = ({
       const stored = localStorage.getItem('lotosniper_cycle_threshold');
       if (stored) {
         const val = parseInt(stored, 10);
-        if (!isNaN(val) && val >= 1 && val <= 5) return val;
+        if (!isNaN(val) && val >= 1 && val <= 6) return val;
       }
     } catch {}
     return 3; // Padrão: 3 dezenas
@@ -82,9 +82,20 @@ export const CycleMonitoringCard: React.FC<CycleMonitoringCardProps> = ({
     const handlePermChange = (e: any) => {
       setNotificationPermission(e.detail || getNotificationPermission());
     };
+    const handleThresholdSync = () => {
+      try {
+        const stored = localStorage.getItem('lotosniper_cycle_threshold');
+        if (stored) {
+          const val = parseInt(stored, 10);
+          if (!isNaN(val) && val >= 1 && val <= 6) setAbsenceThreshold(val);
+        }
+      } catch {}
+    };
     window.addEventListener('lotosniper-notification-perm-changed', handlePermChange);
+    window.addEventListener('lotosniper-cycle-threshold-updated', handleThresholdSync);
     return () => {
       window.removeEventListener('lotosniper-notification-perm-changed', handlePermChange);
+      window.removeEventListener('lotosniper-cycle-threshold-updated', handleThresholdSync);
     };
   }, []);
 
@@ -96,6 +107,11 @@ export const CycleMonitoringCard: React.FC<CycleMonitoringCardProps> = ({
     setAbsenceThreshold(threshold);
     try {
       localStorage.setItem('lotosniper_cycle_threshold', threshold.toString());
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-cycle-threshold-updated', {
+          detail: { threshold },
+        })
+      );
     } catch {}
     soundService.playTick();
     setFeedbackNotice(`Limite de ausência do ciclo ajustado para ${threshold} ${threshold === 1 ? 'dezena' : 'dezenas'}!`);
@@ -189,6 +205,11 @@ export const CycleMonitoringCard: React.FC<CycleMonitoringCardProps> = ({
       localStorage.setItem('lotosniper_cycle_threshold', absenceThreshold.toString());
       localStorage.setItem('lotosniper_cycle_sound_enabled', String(soundEnabled));
       localStorage.setItem('lotosniper_cycle_push_enabled', String(pushEnabled));
+      window.dispatchEvent(
+        new CustomEvent('lotosniper-cycle-threshold-updated', {
+          detail: { threshold: absenceThreshold },
+        })
+      );
       soundService.playSuccess();
       setFeedbackNotice('Configurações de Monitoramento de Ciclo salvas com sucesso!');
       setTimeout(() => setFeedbackNotice(null), 3500);
