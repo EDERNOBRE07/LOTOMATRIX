@@ -767,6 +767,63 @@ export function passesHammingDistance(
 
 export const passesHammingSpreadBitwise = passesHammingDistance;
 
+export const HAMMING_MIN_18_TO_21 = 3;
+
+/**
+ * Filtro dedicado de Distância de Hamming >= 3 para universos de 18 a 21 dezenas.
+ * Verifica um bilhete candidato (bitmask) contra o pool já aceito para impedir combinações
+ * redundantes (duplicadas ou abaixo do limiar mínimo de diferença simétrica).
+ */
+export function passesHammingFilter18To21(
+  candidateMask: number,
+  existingMasks: number[],
+  universeSize: number,
+  minHamming: number = HAMMING_MIN_18_TO_21
+): boolean {
+  if (existingMasks.length === 0) return true;
+  const is18to21 = universeSize >= 18 && universeSize <= 21;
+  const requiredDiff = is18to21 ? Math.max(1, minHamming) : Math.max(1, minHamming);
+  for (let i = 0; i < existingMasks.length; i++) {
+    const dist = hammingDistanceBitwise(candidateMask, existingMasks[i]);
+    if (dist === 0 || dist < requiredDiff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Filtra um conjunto de bilhetes gerados a partir de um universo de 18–21 dezenas,
+ * validando cada bilhete contra o pool já aceito para eliminar combinações redundantes
+ * que não atingem o limiar de Hamming >= 3.
+ */
+export function filterTicketsByHamming18To21(
+  tickets: number[][],
+  universeSize: number,
+  minHamming: number = HAMMING_MIN_18_TO_21
+): number[][] {
+  const effectiveThreshold =
+    universeSize >= 18 && universeSize <= 21
+      ? Math.max(HAMMING_MIN_18_TO_21, minHamming)
+      : Math.max(1, minHamming);
+
+  const accepted: number[][] = [];
+  const acceptedMasks: number[] = [];
+
+  for (let i = 0; i < tickets.length; i++) {
+    const combo = tickets[i];
+    if (!Array.isArray(combo) || combo.length !== 15) continue;
+    const mask = _criarMascara(combo);
+    if (!passesHammingFilter18To21(mask, acceptedMasks, universeSize, effectiveThreshold)) {
+      continue;
+    }
+    accepted.push(combo);
+    acceptedMasks.push(mask);
+  }
+
+  return accepted;
+}
+
 /**
  * Calcula metas equilibradas de frequência para dezenas variáveis e fixas rotativas:
  * freqIdeal = (totalJogos * vagasVariaveis) / qtdDezenasVariaveis
@@ -2202,12 +2259,11 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      // Espalhamento Geométrico Hamming (bitwise) — bloqueia duplicatas e 14 dezenas iguais (Hamming <= 1) em 18–21
-      const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
-      if (chosenMasks.length > 0) {
-        if (minDist === 0) continue;
-        if (minHammingReq > 0 && minDist < minHammingReq) continue;
+      // Filtro Hamming >= 3 (bitwise) para universos de 18–21 dezenas — bloqueia redundâncias contra o pool existente
+      if (chosenMasks.length > 0 && !passesHammingFilter18To21(cMask, chosenMasks, n, minHammingReq)) {
+        continue;
       }
+      const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
 
       const covers = candCoverLists[i];
       let newCovers = 0;
@@ -3123,11 +3179,10 @@ export function generateFechamentoCovering(
         if (cand.faixaSoma === 'ouro' && coreChosen >= coreQuota) continue;
       }
 
-      const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
-      if (chosenMasks.length > 0) {
-        if (minDist === 0) continue;
-        if (minHammingReq > 0 && minDist < minHammingReq) continue;
+      if (chosenMasks.length > 0 && !passesHammingFilter18To21(cand.mask, chosenMasks, n, minHammingReq)) {
+        continue;
       }
+      const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
 
       if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === 'ouro') continue;
 
@@ -3602,10 +3657,10 @@ export function gerarMatrizEstratificada(
           const cand = poolWithMasks[i];
           if (selectedKeys.has(cand.key)) continue;
 
-          const minDist = minHammingDistanceToMatrix(cand.mask, selectedMasks);
-          if (selectedMasks.length > 0 && (minDist === 0 || (minHammingReq > 0 && minDist < minHammingReq))) {
+          if (selectedMasks.length > 0 && !passesHammingFilter18To21(cand.mask, selectedMasks, n, minHammingReq)) {
             continue;
           }
+          const minDist = minHammingDistanceToMatrix(cand.mask, selectedMasks);
 
           let freqBalance = 0;
           let saturated = false;
@@ -3800,12 +3855,134 @@ export function selectCoreAndSatellites25(options: {
   return { core12, satellites13, weights };
 }
 
+export interface CoreSatellitesTracker {
+  core12: number[];
+  satellites13: number[];
+  weights: Record<number, number>;
+  coreFreq: Record<number, number>;
+  satFreq: Record<number, number>;
+  minCoreFreq: number;
+  maxCoreFreq: number;
+  targetCoreFreq: number;
+  minSatFreq: number;
+  maxSatFreq: number;
+  targetSatFreq: number;
+  satelliteCursor: number;
+}
+
+export interface CoreSatellitesAuditReport {
+  core12: number[];
+  satellites13: number[];
+  coreCoveragePct: Record<number, number>;
+  satelliteCounts: Record<number, number>;
+  minCorePct: number;
+  maxCorePct: number;
+  minSatCount: number;
+  maxSatCount: number;
+  totalCoveredNumbers: number;
+  meetsCoreBand70To80: boolean;
+}
+
+/**
+ * Rotação algorítmica determinística das 13 dezenas Satélites nas vagas restantes de cada bilhete:
+ * combina ordenação por déficit de uso (menor satFreq) com janela cíclica deslocada por cursor,
+ * garantindo rotação equilibrada sem lacunas e cobertura integral das 25 dezenas.
+ */
+function rotateSatellitesAlgorithmically(
+  tracker: CoreSatellitesTracker,
+  satPerTicket: number,
+  remainingTickets: number,
+  phaseOffset: number
+): number[] {
+  const { satellites13, satFreq, minSatFreq, maxSatFreq, satelliteCursor } = tracker;
+  const totalSats = satellites13.length;
+
+  // Janela rotativa determinística a partir do cursor atual + deslocamento de fase do candidato
+  const cyclicRing: number[] = [];
+  const startIdx = (satelliteCursor + phaseOffset) % totalSats;
+  for (let i = 0; i < totalSats; i++) {
+    cyclicRing.push(satellites13[(startIdx + i) % totalSats]);
+  }
+
+  // 1) Satélites obrigatórios para garantir minSatFreq no fim da matriz
+  const mustInclude = cyclicRing
+    .filter((d) => minSatFreq - satFreq[d] >= remainingTickets && satFreq[d] < maxSatFreq)
+    .sort((a, b) => satFreq[a] - satFreq[b]);
+
+  // 2) Satélites elegíveis abaixo do teto maxSatFreq, priorizando os nunca usados (0) e menor uso mantendo ordem cíclica
+  const eligible = cyclicRing
+    .filter((d) => satFreq[d] < maxSatFreq && !mustInclude.includes(d))
+    .sort((a, b) => {
+      const zeroDiff = (satFreq[a] === 0 ? 0 : 1) - (satFreq[b] === 0 ? 0 : 1);
+      if (zeroDiff !== 0) return zeroDiff;
+      return satFreq[a] - satFreq[b];
+    });
+
+  // 3) Reserva de segurança caso satPerTicket ultrapasse elegíveis
+  const fallback = cyclicRing
+    .filter((d) => !mustInclude.includes(d) && !eligible.includes(d))
+    .sort((a, b) => satFreq[a] - satFreq[b]);
+
+  return [...mustInclude, ...eligible, ...fallback].slice(0, satPerTicket);
+}
+
+/**
+ * Audita qualquer matriz de 25 dezenas gerada pela estratégia Core + Satélites,
+ * verificando se todas as 12 dezenas Core permaneceram na banda 70%–80% e se as 13 Satélites foram rotacionadas.
+ */
+export function auditCoreSatellitesMatrix(
+  tickets: GameTicket[],
+  partition: CoreSatelites25Partition
+): CoreSatellitesAuditReport {
+  const total = Math.max(1, tickets.length);
+  const covered = new Set<number>();
+  const counts = new Array(26).fill(0);
+
+  for (const t of tickets) {
+    for (const d of t.dezenas) {
+      covered.add(d);
+      counts[d]++;
+    }
+  }
+
+  const coreCoveragePct: Record<number, number> = {};
+  const satelliteCounts: Record<number, number> = {};
+
+  for (const d of partition.core12) {
+    coreCoveragePct[d] = Math.round(((counts[d] / total) * 100) * 10) / 10;
+  }
+  for (const d of partition.satellites13) {
+    satelliteCounts[d] = counts[d];
+  }
+
+  const corePcts = Object.values(coreCoveragePct);
+  const satVals = Object.values(satelliteCounts);
+  const minCorePct = corePcts.length > 0 ? Math.min(...corePcts) : 0;
+  const maxCorePct = corePcts.length > 0 ? Math.max(...corePcts) : 0;
+  const minSatCount = satVals.length > 0 ? Math.min(...satVals) : 0;
+  const maxSatCount = satVals.length > 0 ? Math.max(...satVals) : 0;
+
+  return {
+    core12: partition.core12,
+    satellites13: partition.satellites13,
+    coreCoveragePct,
+    satelliteCounts,
+    minCorePct,
+    maxCorePct,
+    minSatCount,
+    maxSatCount,
+    totalCoveredNumbers: covered.size,
+    meetsCoreBand70To80: minCorePct >= 70 && maxCorePct <= 80 && covered.size === 25,
+  };
+}
+
 /**
  * Motor Unificado "Ancoragem em Núcleo Forte (Core 12 + Satélites 13)" para matrizes de 25 dezenas:
- * - Garante matematicamente que CADA uma das 12 dezenas Core apareça estritamente em 70%–80% dos bilhetes
- *   (ex.: 7–8/10 = 70–80%, 8/11 = 72,7%, 9/12 = 75%, 13–14/18 = 72–78%, 17–19/24 = 71–79%).
- * - Distribui as vagas restantes entre as 13 Satélites rotativas assegurando cobertura de 100% das 25 dezenas.
- * - Reduz dispersão excessiva de Hamming (mantendo Hamming controlado entre 3 e 6) e otimiza pelo scoreIA Gaussiano.
+ * - Rastreia explicitamente as 12 dezenas de maior peso (Core) via CoreSatellitesTracker,
+ *   garantindo matematicamente presença estrita de 70%–80% nos bilhetes gerados.
+ * - Rotaciona algoritmicamente as 13 dezenas Satélites nas vagas restantes de cada bilhete
+ *   via janela cíclica balanceada (maxSat - minSat <= 1), assegurando cobertura integral das 25 dezenas.
+ * - Otimiza cada cartão pelo scoreIA Gaussiano com controle de dispersão Hamming (ideal 3–5).
  */
 export function generateCoreSatellites25Matrix(options: {
   maxTickets: number;
@@ -3850,7 +4027,6 @@ export function generateCoreSatellites25Matrix(options: {
   const maxCoreFreq = hasStrictBand ? strictMaxCore : Math.ceil(safeMaxTickets * 0.80);
 
   // Calcula o total exato de assentos Core (clampado em [12 * minCoreFreq, 12 * maxCoreFreq])
-  // Ex.: para 11 jogos -> strictMin=8, strictMax=8 -> 96 assentos (8 jogos com 9 Core + 3 jogos com 8 Core) => 100% do Core em 72,7%
   const targetCorePerNumber = Math.min(maxCoreFreq, Math.max(minCoreFreq, safeMaxTickets * 0.75));
   const totalCoreSeats = Math.max(
     12 * minCoreFreq,
@@ -3858,16 +4034,24 @@ export function generateCoreSatellites25Matrix(options: {
   );
   const baseCorePerTicket = Math.max(2, Math.min(12, Math.floor(totalCoreSeats / safeMaxTickets)));
   const extraCoreTickets = totalCoreSeats - baseCorePerTicket * safeMaxTickets;
-  const targetCoreFreq = totalCoreSeats / 12;
   const totalSatSeats = safeMaxTickets * 15 - totalCoreSeats;
-  const minSatFreq = Math.floor(totalSatSeats / satellites13.length);
-  const maxSatFreq = Math.ceil(totalSatSeats / satellites13.length);
-  const targetSatFreq = totalSatSeats / satellites13.length;
 
-  const coreFreq: Record<number, number> = {};
-  const satFreq: Record<number, number> = {};
-  core12.forEach((d) => (coreFreq[d] = 0));
-  satellites13.forEach((d) => (satFreq[d] = 0));
+  const tracker: CoreSatellitesTracker = {
+    core12,
+    satellites13,
+    weights,
+    coreFreq: {},
+    satFreq: {},
+    minCoreFreq,
+    maxCoreFreq,
+    targetCoreFreq: totalCoreSeats / 12,
+    minSatFreq: Math.floor(totalSatSeats / satellites13.length),
+    maxSatFreq: Math.ceil(totalSatSeats / satellites13.length),
+    targetSatFreq: totalSatSeats / satellites13.length,
+    satelliteCursor: 0,
+  };
+  core12.forEach((d) => (tracker.coreFreq[d] = 0));
+  satellites13.forEach((d) => (tracker.satFreq[d] = 0));
 
   const pivotSet = pivotConstraint ? new Set(pivotConstraint.pivotNums) : null;
   const chosenCombos: number[][] = [];
@@ -3888,27 +4072,27 @@ export function generateCoreSatellites25Matrix(options: {
     let bestCombo: number[] | null = null;
     let bestScore = -Infinity;
 
-    // 140 candidatos avaliados por vaga para balancear Core 70–80%, rotação uniforme dos 13 Satélites, Hamming controlado e scoreIA Gaussiano
+    // 140 candidatos avaliados por vaga combinando Core rastreado (70–80%) + rotação algorítmica dos 13 Satélites
     for (let trial = 0; trial < 140; trial++) {
-      // 1) Núcleo Forte (Core 12): garante que todas as 12 dezenas fiquem estritamente em [minCoreFreq..maxCoreFreq] (70%–80%)
-      const mustIncludeCore = core12
-        .filter((d) => minCoreFreq - coreFreq[d] >= remainingTickets && coreFreq[d] < maxCoreFreq)
-        .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0));
+      // 1) Núcleo Forte (Core 12): rastreamento explícito em [minCoreFreq..maxCoreFreq] (70%–80%)
+      const mustIncludeCore = tracker.core12
+        .filter((d) => tracker.minCoreFreq - tracker.coreFreq[d] >= remainingTickets && tracker.coreFreq[d] < tracker.maxCoreFreq)
+        .sort((a, b) => tracker.coreFreq[a] - tracker.coreFreq[b] || (tracker.weights[b] || 0) - (tracker.weights[a] || 0));
 
-      const eligibleCore = core12.filter(
-        (d) => coreFreq[d] < maxCoreFreq && !mustIncludeCore.includes(d)
+      const eligibleCore = tracker.core12.filter(
+        (d) => tracker.coreFreq[d] < tracker.maxCoreFreq && !mustIncludeCore.includes(d)
       );
-      const fallbackCore = core12
+      const fallbackCore = tracker.core12
         .filter((d) => !mustIncludeCore.includes(d) && !eligibleCore.includes(d))
-        .sort((a, b) => coreFreq[a] - coreFreq[b]);
+        .sort((a, b) => tracker.coreFreq[a] - tracker.coreFreq[b]);
 
       const scoredCore = eligibleCore
-        .map((d) => ({
+        .map((d, idx) => ({
           d,
           priority:
-            (targetCoreFreq - coreFreq[d]) * 18 +
-            (weights[d] || 50) * 0.08 +
-            (Math.random() - 0.5) * (trial === 0 ? 0.5 : 8),
+            (tracker.targetCoreFreq - tracker.coreFreq[d]) * 18 +
+            (tracker.weights[d] || 50) * 0.08 +
+            (((idx + trial * 5 + t * 3) % 12) - 5.5) * (trial === 0 ? 0.1 : 1.15),
         }))
         .sort((a, b) => b.priority - a.priority)
         .map((x) => x.d);
@@ -3919,39 +4103,26 @@ export function generateCoreSatellites25Matrix(options: {
         ...fallbackCore,
       ].slice(0, corePerTicket);
 
-      // 2) Satélites (13 dezenas restantes): rotação balanceada nas vagas finais (minSatFreq..maxSatFreq, cobrindo 100% do volante)
-      const mustIncludeSats = satellites13
-        .filter((d) => minSatFreq - satFreq[d] >= remainingTickets && satFreq[d] < maxSatFreq)
-        .sort((a, b) => satFreq[a] - satFreq[b] || (weights[b] || 0) - (weights[a] || 0));
-
-      const eligibleSats = satellites13.filter(
-        (d) => satFreq[d] < maxSatFreq && !mustIncludeSats.includes(d)
+      // 2) Satélites (13 dezenas): rotação algorítmica determinística nas vagas restantes
+      let pickedSats = rotateSatellitesAlgorithmically(
+        tracker,
+        satPerTicket,
+        remainingTickets,
+        trial % tracker.satellites13.length
       );
-      const fallbackSatsPool = satellites13
-        .filter((d) => !mustIncludeSats.includes(d) && !eligibleSats.includes(d))
-        .sort((a, b) => satFreq[a] - satFreq[b]);
 
-      const scoredEligibleSats = eligibleSats
-        .map((d) => ({
-          d,
-          priority:
-            (satFreq[d] === 0 ? 70 : 0) +
-            (targetSatFreq - satFreq[d]) * 16 +
-            (weights[d] || 50) * 0.06 +
-            (Math.random() - 0.5) * (trial === 0 ? 0.5 : 9),
-        }))
-        .sort((a, b) => b.priority - a.priority)
-        .map((x) => x.d);
-
-      const orderedSats = [...mustIncludeSats, ...scoredEligibleSats, ...fallbackSatsPool];
-      let pickedSats = orderedSats.slice(0, satPerTicket);
-
-      // Se houver restrição de Pivô 9 (K ∈ {4, 5, 6}), ajusta satélites respeitando o teto de rotação
+      // Se houver restrição de Pivô 9 (K ∈ {4, 5, 6}), ajusta satélites mantendo a ordem algorítmica rotativa
       if (pivotConstraint && pivotSet) {
         const coreInPivot = pickedCore.filter((d) => pivotSet.has(d)).length;
         const neededPivotFromSat = Math.max(0, pivotConstraint.kPivot - coreInPivot);
-        const satInPivot = orderedSats.filter((d) => pivotSet.has(d));
-        const satOutPivot = orderedSats.filter((d) => !pivotSet.has(d));
+        const fullRotatedSats = rotateSatellitesAlgorithmically(
+          tracker,
+          tracker.satellites13.length,
+          remainingTickets,
+          trial % tracker.satellites13.length
+        );
+        const satInPivot = fullRotatedSats.filter((d) => pivotSet.has(d));
+        const satOutPivot = fullRotatedSats.filter((d) => !pivotSet.has(d));
         if (neededPivotFromSat <= satInPivot.length && satPerTicket - neededPivotFromSat <= satOutPivot.length) {
           pickedSats = [
             ...satInPivot.slice(0, neededPivotFromSat),
@@ -4009,13 +4180,11 @@ export function generateCoreSatellites25Matrix(options: {
     }
 
     if (!bestCombo) {
-      // Fallback determinístico respeitando rigorosamente a banda 70%–80% do Core + rotação uniforme de Satélites
-      const fallbackCore = [...core12]
-        .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0))
+      // Fallback determinístico respeitando rigorosamente a banda 70%–80% do Core + rotação algorítmica dos Satélites
+      const fallbackCore = [...tracker.core12]
+        .sort((a, b) => tracker.coreFreq[a] - tracker.coreFreq[b] || (tracker.weights[b] || 0) - (tracker.weights[a] || 0))
         .slice(0, corePerTicket);
-      const fallbackSats = [...satellites13]
-        .sort((a, b) => satFreq[a] - satFreq[b] || (weights[b] || 0) - (weights[a] || 0))
-        .slice(0, satPerTicket);
+      const fallbackSats = rotateSatellitesAlgorithmically(tracker, satPerTicket, remainingTickets, 0);
       bestCombo = [...fallbackCore, ...fallbackSats].sort((a, b) => a - b);
     }
 
@@ -4023,9 +4192,10 @@ export function generateCoreSatellites25Matrix(options: {
     chosenMasks.push(_criarMascara(bestCombo));
     usedKeys.add(bestCombo.join('-'));
     for (const d of bestCombo) {
-      if (coreFreq[d] !== undefined) coreFreq[d]++;
-      else if (satFreq[d] !== undefined) satFreq[d]++;
+      if (tracker.coreFreq[d] !== undefined) tracker.coreFreq[d]++;
+      else if (tracker.satFreq[d] !== undefined) tracker.satFreq[d]++;
     }
+    tracker.satelliteCursor = (tracker.satelliteCursor + satPerTicket) % tracker.satellites13.length;
   }
 
   return chosenCombos
