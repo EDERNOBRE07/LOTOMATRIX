@@ -1784,6 +1784,21 @@ export function generateMinimumSetCoverFechamento({
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
   }
 
+  // Estratégia Core + Satélites obrigatória para matrizes de 25 dezenas (12 dezenas Core em 70%–80% dos bilhetes)
+  if (n === 25) {
+    return generateCoreSatellites25Matrix({
+      maxTickets,
+      baseDraw: {
+        ...CONCURSO_ATUAL,
+        dezenas: concursoAnterior,
+      },
+      filters,
+      aiScores,
+      idPrefix: 'ticket-setcover-25',
+      tagLabel: 'Core 12 + 13 Satélites (25 Dez)',
+    });
+  }
+
   // Se o fallback automático estiver habilitado na chamada raiz, executa cascata de 3 níveis até atingir maxTickets
   if (!disableAutoFallback && fallbackLevel === 0) {
     let bestTickets: GameTicket[] = [];
@@ -2305,38 +2320,60 @@ export function generateMinimumSetCoverFechamento({
 
   let greedyStep = 0;
   const maxGreedySteps = Math.min(maxTickets * 2, 250);
+  const strictMinHamming = is18to21 ? 3 : 1;
   while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
-    let idx = pickBestCandidate(targetHammingDist, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false);
-    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, true);
-    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, false);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
-    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    // Em universos de 18-21 dezenas, prioriza Hamming >= 3 (e >= 2); só recorre a Hamming = 1 em pool 18 muito restrito para não descartar filtros estritos válidos
-    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets))) {
-      idx = pickBestCandidate(1, false, false);
+    let idx = pickBestCandidate(targetHammingDist, true, true, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, true, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, true, false, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false, true);
+    // Para universos de 18–21 dezenas, tenta exaurir Hamming >= 3 em todo o pool antes de aceitar relaxamento
+    if (idx === -1 && is18to21 && (bypassAnomaly || coreChosen >= coreQuota)) {
+      idx = pickBestCandidate(targetHammingDist, false, false, false);
+      if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false, false);
+    }
+    if (idx === -1 && !is18to21) {
+      if (targetHammingDist > 2) idx = pickBestCandidate(2, true, false, true);
+      if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, true);
+      if (idx === -1) idx = pickBestCandidate(1, false, false, true);
     }
     if (idx === -1) break;
     commitCandidate(idx);
   }
 
-  // Preenchimento complementar até maxTickets mantendo prioridade Hamming >= 3 em 18–21
+  // Preenchimento complementar estrito em Hamming >= 3 para 18–21 dezenas (antes de qualquer relaxamento para 2)
   while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
     let idx = pickBestCandidate(targetHammingDist, false, true, true);
     if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
     if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false, true);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, true);
     const allowQuotaOverflow = bypassAnomaly || coreChosen >= coreQuota;
     if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(targetHammingDist, false, false, false);
-    if (idx === -1 && allowQuotaOverflow && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, false);
-    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets && allowQuotaOverflow))) {
-      idx = pickBestCandidate(1, false, false, false);
+    if (idx === -1 && allowQuotaOverflow && targetHammingDist > 3) idx = pickBestCandidate(3, false, false, false);
+    if (idx === -1 && strictMinHamming < 3) {
+      if (targetHammingDist > 2) idx = pickBestCandidate(2, false, false, true);
+      if (idx === -1 && allowQuotaOverflow && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, false);
+      if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(1, false, false, false);
     }
     if (idx === -1) break;
     commitCandidate(idx);
+  }
+
+  // Fallback matemático final (ex.: n = 18 acima do teto combinatório de 6 jogos em Hamming >= 3): relaxa para Hamming >= 2
+  if (is18to21 && chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
+    while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
+      const allowQuotaOverflow = bypassAnomaly || coreChosen >= coreQuota;
+      let idx = pickBestCandidate(2, false, true, true);
+      if (idx === -1) idx = pickBestCandidate(2, false, false, true);
+      if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(2, false, false, false);
+      // Somente em n = 18 sob filtros estritos (lvl 0) com pool reduzido após esgotar Hamming >= 3 e >= 2
+      if (idx === -1 && n === 18 && fallbackLevel === 0 && candCount >= maxTickets) {
+        idx = pickBestCandidate(1, false, false, !allowQuotaOverflow);
+      }
+      if (idx === -1) break;
+      commitCandidate(idx);
+    }
   }
 
   // 7. Varredura 2-opt de Eliminação de Redundâncias (preservando estratos Anti-Cisne Negro e target maxTickets)
@@ -2448,6 +2485,21 @@ export function generateFechamentoCovering(
 
   if (n < 15) {
     throw new Error('É necessário selecionar pelo menos 15 dezenas.');
+  }
+
+  // Estratégia Core + Satélites obrigatória para matrizes de 25 dezenas (12 dezenas Core em 70%–80% dos bilhetes)
+  if (n === 25) {
+    return generateCoreSatellites25Matrix({
+      maxTickets,
+      baseDraw: {
+        ...CONCURSO_ATUAL,
+        dezenas: concursoAnterior,
+      },
+      filters,
+      aiScores,
+      idPrefix: 'ticket-core25',
+      tagLabel: 'Core 12 + 13 Satélites (25 Dez)',
+    });
   }
 
   // Fallback Progressivo Automático em 3 níveis quando filtros estritos não atingem a meta de bilhetes
@@ -3053,7 +3105,8 @@ export function generateFechamentoCovering(
     allowedFaixa: 'ouro' | 'baixa' | 'alta' | 'any',
     minHammingReq: number,
     requireUncoveredGain: boolean,
-    enforceSoftFreqCap: boolean
+    enforceSoftFreqCap: boolean,
+    enforceQuota: boolean = true
   ): { idx: number; coveredHere: number[] } | null => {
     let bestIdx = -1;
     let bestWeight = -9999999;
@@ -3064,7 +3117,7 @@ export function generateFechamentoCovering(
       const cand = unifiedCandidates[i];
       if (chosenKeySet.has(cand.key)) continue;
       if (allowedFaixa !== 'any' && cand.faixaSoma !== allowedFaixa) continue;
-      if (allowedFaixa === 'any') {
+      if (allowedFaixa === 'any' && enforceQuota) {
         if (cand.faixaSoma === 'baixa' && lowerChosen >= lowerQuota) continue;
         if (cand.faixaSoma === 'alta' && upperChosen >= upperQuota) continue;
         if (cand.faixaSoma === 'ouro' && coreChosen >= coreQuota) continue;
@@ -3217,14 +3270,14 @@ export function generateFechamentoCovering(
     }
   };
 
-  // Fase 1: Preencher estratos protegidos (15% Cauda Alta 216–230, 10% Cauda Baixa 155–179) mantendo Hamming >= targetHammingDist
+  // Fase 1: Preencher estratos protegidos (15% Cauda Alta 216–230, 10% Cauda Baixa 155–179) aplicando filtro estrito Hamming >= 3 em 18–21
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
       const hit =
         selectNextFromPool('baixa', targetHammingDist, false, true) ||
         selectNextFromPool('baixa', targetHammingDist, false, false) ||
         (targetHammingDist > 3 ? selectNextFromPool('baixa', 3, false, false) : null) ||
-        (targetHammingDist > 2 ? selectNextFromPool('baixa', 2, false, false) : null) ||
+        (!is18to21 && targetHammingDist > 2 ? selectNextFromPool('baixa', 2, false, false) : null) ||
         (!is18to21 ? selectNextFromPool('baixa', 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
@@ -3234,14 +3287,14 @@ export function generateFechamentoCovering(
         selectNextFromPool('alta', targetHammingDist, false, true) ||
         selectNextFromPool('alta', targetHammingDist, false, false) ||
         (targetHammingDist > 3 ? selectNextFromPool('alta', 3, false, false) : null) ||
-        (targetHammingDist > 2 ? selectNextFromPool('alta', 2, false, false) : null) ||
+        (!is18to21 && targetHammingDist > 2 ? selectNextFromPool('alta', 2, false, false) : null) ||
         (!is18to21 ? selectNextFromPool('alta', 1, false, false) : null);
       if (!hit) break;
       commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
     }
   }
 
-  // Fase 2: Seleção gulosa de cobertura combinatória na Zona Central (priorizando Hamming >= 3 em 18–21)
+  // Fase 2: Seleção gulosa de cobertura combinatória na Zona Central com filtro estrito Hamming >= 3 em 18–21
   let greedyLoop = 0;
   const maxGreedyLoops = Math.min(maxTickets * 2, 220);
   while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
@@ -3252,19 +3305,29 @@ export function generateFechamentoCovering(
       selectNextFromPool('ouro', targetHammingDist, false, true) ||
       selectNextFromPool('ouro', targetHammingDist, false, false) ||
       (targetHammingDist > 3 ? selectNextFromPool('ouro', 3, false, false) : null) ||
-      (targetHammingDist > 2 ? selectNextFromPool('ouro', 2, false, false) : null) ||
+      (!is18to21 && targetHammingDist > 2 ? selectNextFromPool('ouro', 2, false, false) : null) ||
       (!is18to21 ? selectNextFromPool('ouro', 1, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
 
-  // Fase 3: Fallback final respeitando Hamming >= 3 (e nunca <= 1 em 18–21)
+  // Fase 3A: Complemento estrito em Hamming >= 3 em qualquer estrato antes de qualquer relaxamento
   while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
     const hit =
-      selectNextFromPool('any', targetHammingDist, false, false) ||
-      (targetHammingDist > 3 ? selectNextFromPool('any', 3, false, false) : null) ||
-      (targetHammingDist > 2 ? selectNextFromPool('any', 2, false, false) : null) ||
-      (!is18to21 ? selectNextFromPool('any', 1, false, false) : null);
+      selectNextFromPool('any', targetHammingDist, false, false, true) ||
+      (targetHammingDist > 3 ? selectNextFromPool('any', 3, false, false, true) : null) ||
+      selectNextFromPool('any', targetHammingDist, false, false, false) ||
+      (targetHammingDist > 3 ? selectNextFromPool('any', 3, false, false, false) : null);
+    if (!hit) break;
+    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+  }
+
+  // Fase 3B: Fallback matemático apenas se o espaço Hamming >= 3 se esgotar (nunca <= 1 em 18–21)
+  while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
+    const hit =
+      selectNextFromPool('any', 2, false, false, true) ||
+      selectNextFromPool('any', 2, false, false, false) ||
+      (!is18to21 ? selectNextFromPool('any', 1, false, false, false) : null);
     if (!hit) break;
     commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
   }
@@ -3377,6 +3440,21 @@ export function gerarMatrizEstratificada(
 
   if (n < 15) {
     throw new Error('É necessário fornecer pelo menos 15 dezenas no universoDezenas.');
+  }
+
+  // Estratégia Core + Satélites obrigatória para matrizes de 25 dezenas (12 dezenas Core em 70%–80% dos bilhetes)
+  if (n === 25) {
+    return generateCoreSatellites25Matrix({
+      maxTickets: totalJogos,
+      baseDraw: {
+        ...CONCURSO_ATUAL,
+        dezenas: options.concursoAnterior || CONCURSO_ATUAL.dezenas,
+      },
+      filters: options.filters,
+      aiScores: options.aiScores,
+      idPrefix: 'ticket-estratificado-25',
+      tagLabel: 'Core 12 + 13 Satélites (25 Dez)',
+    });
   }
 
   // 1. Sanitização estrita de dezenas fixas (máx. 5) e Fixas Rotativas Inteligentes (K de N)
@@ -3583,7 +3661,8 @@ export function gerarMatrizEstratificada(
 
     runPass(targetHammingDist, true);
     if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false);
-    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 2) runPass(2, false);
+    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 3) runPass(3, false);
+    if (picked < quota && selectedEntries.length < totalJogos && !is18to21 && targetHammingDist > 2) runPass(2, false);
     if (picked < quota && selectedEntries.length < totalJogos && !is18to21) runPass(1, false);
   };
 
@@ -3595,6 +3674,29 @@ export function gerarMatrizEstratificada(
     pickFromPool(candidatosOuro, totalJogos - selectedEntries.length, 'ouro');
     if (selectedEntries.length < totalJogos) {
       pickFromPool(rawCombos, totalJogos - selectedEntries.length, 'ouro');
+    }
+  }
+
+  // Fallback de relaxamento para Hamming >= 2 em 18–21 apenas se o espaço Hamming >= 3 se esgotar
+  if (is18to21 && selectedEntries.length < totalJogos) {
+    const fallbackPools: Array<{ pool: number[][]; faixa: 'ouro' | 'baixa' | 'alta' }> = [
+      { pool: candidatosOuro, faixa: 'ouro' },
+      { pool: candidatosCaudaAlta, faixa: 'alta' },
+      { pool: candidatosCaudaBaixa, faixa: 'baixa' },
+      { pool: rawCombos, faixa: 'ouro' },
+    ];
+    for (const { pool, faixa } of fallbackPools) {
+      for (const nums of pool) {
+        if (selectedEntries.length >= totalJogos) break;
+        const key = nums.join('-');
+        if (selectedKeys.has(key)) continue;
+        const mask = _criarMascara(nums);
+        if (selectedMasks.length > 0 && minHammingDistanceToMatrix(mask, selectedMasks) < 2) continue;
+        selectedEntries.push({ nums, faixaSoma: faixa });
+        selectedMasks.push(mask);
+        selectedKeys.add(key);
+      }
+      if (selectedEntries.length >= totalJogos) break;
     }
   }
 
@@ -3626,16 +3728,9 @@ export function gerarMatrizEstratificada(
 }
 
 /**
- * Desdobramento Total 25 Dezenas (Blocos Cruzados 5x3 + 5x2)
- *
- * Algoritmo Canônico:
- * 1. Divide as 15 sorteadas do concurso base em 5 trincas: S1..S5
- * 2. Divide as 10 ausentes do concurso base em 5 duplas: A1..A5
- * 3. Cria 5 superblocos de 5 dezenas fundindo Bloco[i] = Si + Ai
- * 4. Combina os 5 blocos 3 a 3: C(5, 3) = 10 jogos de 15 dezenas (ou 9 se excluído o menor score)
- * 5. Garante matematicamente 100% das 25 dezenas, exatamente 9 repetidas + 6 ausentes por bilhete
- * 6. Otimização Monte Carlo (200 iterações) na montagem dos blocos para maximizar a Zona de Ouro
- *    (Soma 190-210, Paridade 7P/8I ou 8P/7I, Primos 5-6, Cruz 5-6, Bola 1 <= 2 e Bola 15 >= 24)
+ * Partição estratégica "Core + Satélites" para matrizes de 25 dezenas:
+ * - Core (12 dezenas de maior peso composto): ancoradas em 70%–80% dos bilhetes.
+ * - Satélites (13 dezenas restantes): rotacionadas nas vagas finais garantindo 100% do volante.
  */
 export interface CoreSatelites25Partition {
   core12: number[];
@@ -3644,12 +3739,9 @@ export interface CoreSatelites25Partition {
 }
 
 /**
- * Particiona as 25 dezenas do volante em:
- * - Core (12 dezenas de maior peso composto: IA + frequência recente + pressão de ciclo + equilíbrio rep/aus)
- * - Satélites (13 dezenas restantes)
- *
- * Reduz a dispersão excessiva (Hamming muito alto) nas matrizes de 25 dezenas ao concentrar
- * o Núcleo Forte em 70%–80% dos bilhetes (9 dezenas Core + 6 Satélites por cartão = 75% médio).
+ * Particiona as 25 dezenas do volante selecionando rigorosamente as 12 dezenas de maior peso
+ * (IA + frequência recente + pressão de ciclo + peso histórico + fixas prioritárias) como Core,
+ * e as 13 restantes como Satélites rotativos.
  */
 export function selectCoreAndSatellites25(options: {
   latestDraw?: LotofacilDraw;
@@ -3659,7 +3751,6 @@ export function selectCoreAndSatellites25(options: {
   priorityFixed?: number[];
   pivotBoost?: number[];
 } = {}): CoreSatelites25Partition {
-  const baseDraw = options.latestDraw || CONCURSO_ATUAL;
   const draws10 = (options.drawsHistory && options.drawsHistory.length > 0
     ? options.drawsHistory
     : RECENT_DRAWS
@@ -3689,46 +3780,32 @@ export function selectCoreAndSatellites25(options: {
     weights[d] = Math.round((ai * 0.55 + freqScore + delayScore + histScore + fixedBoost + pivotBonus) * 100) / 100;
   }
 
-  const sorteadasSet = new Set(baseDraw.dezenas || []);
-  const rankedRepetidas = Array.from({ length: 25 }, (_, i) => i + 1)
-    .filter((d) => sorteadasSet.has(d))
-    .sort((a, b) => weights[b] - weights[a] || a - b);
-  const rankedAusentes = Array.from({ length: 25 }, (_, i) => i + 1)
-    .filter((d) => !sorteadasSet.has(d))
-    .sort((a, b) => weights[b] - weights[a] || a - b);
+  // Ordenação direta das 25 dezenas por peso composto decrescente (top 12 = Core, demais 13 = Satélites)
+  const rankedAll = Array.from({ length: 25 }, (_, i) => i + 1).sort(
+    (a, b) => weights[b] - weights[a] || a - b
+  );
 
-  // Equilibra o Core 12 com 7 repetidas fortes + 5 ausentes fortes (ou respeitando fixas do usuário)
   const coreSet = new Set<number>();
   for (const fx of priorityFixedSet) {
     if (coreSet.size < 12) coreSet.add(fx);
   }
-  for (const r of rankedRepetidas) {
+  for (const d of rankedAll) {
     if (coreSet.size >= 12) break;
-    const repInCore = Array.from(coreSet).filter((x) => sorteadasSet.has(x)).length;
-    if (repInCore < 7) coreSet.add(r);
-  }
-  for (const a of rankedAusentes) {
-    if (coreSet.size >= 12) break;
-    coreSet.add(a);
-  }
-  for (const r of rankedRepetidas) {
-    if (coreSet.size >= 12) break;
-    coreSet.add(r);
+    coreSet.add(d);
   }
 
   const core12 = Array.from(coreSet).sort((a, b) => a - b);
-  const satellites13 = Array.from({ length: 25 }, (_, i) => i + 1)
-    .filter((d) => !coreSet.has(d))
-    .sort((a, b) => weights[b] - weights[a] || a - b);
+  const satellites13 = rankedAll.filter((d) => !coreSet.has(d));
 
   return { core12, satellites13, weights };
 }
 
 /**
  * Motor Unificado "Ancoragem em Núcleo Forte (Core 12 + Satélites 13)" para matrizes de 25 dezenas:
- * - Cada uma das 12 dezenas Core aparece em 70%–80% dos bilhetes (ex: 7–8 de 10, 8–9 de 11, 17–19 de 24).
- * - Cada bilhete combina 9 dezenas Core (75% de presença média) + 6 Satélites rotacionados.
- * - Reduz a dispersão excessiva (Hamming controlado entre 3 e 6) mantendo 100% das 25 dezenas cobertas.
+ * - Garante matematicamente que CADA uma das 12 dezenas Core apareça estritamente em 70%–80% dos bilhetes
+ *   (ex.: 7–8/10 = 70–80%, 8/11 = 72,7%, 9/12 = 75%, 13–14/18 = 72–78%, 17–19/24 = 71–79%).
+ * - Distribui as vagas restantes entre as 13 Satélites rotativas assegurando cobertura de 100% das 25 dezenas.
+ * - Reduz dispersão excessiva de Hamming (mantendo Hamming controlado entre 3 e 6) e otimiza pelo scoreIA Gaussiano.
  */
 export function generateCoreSatellites25Matrix(options: {
   maxTickets: number;
@@ -3753,6 +3830,7 @@ export function generateCoreSatellites25Matrix(options: {
     pivotConstraint,
   } = options;
 
+  const safeMaxTickets = Math.max(1, maxTickets);
   const partition = selectCoreAndSatellites25({
     latestDraw: baseDraw,
     drawsHistory,
@@ -3763,13 +3841,26 @@ export function generateCoreSatellites25Matrix(options: {
   });
 
   const { core12, satellites13, weights } = partition;
-  const corePerTicket = 9; // 9 / 12 = 75% exato por bilhete -> faixa 70%–80% garantida
-  const satPerTicket = 6; // 6 / 13 = rotação uniforme cobrindo 100% das 13 satélites
 
-  const minCoreFreq = Math.floor(maxTickets * 0.70);
-  const maxCoreFreq = Math.ceil(maxTickets * 0.80);
-  const targetCoreFreq = maxTickets * 0.75;
-  const targetSatFreq = (maxTickets * satPerTicket) / satellites13.length;
+  // Limites inteiros estritos dentro da banda [70%, 80%] sempre que matematicamente possível
+  const strictMinCore = Math.ceil(safeMaxTickets * 0.70 - 1e-9);
+  const strictMaxCore = Math.floor(safeMaxTickets * 0.80 + 1e-9);
+  const hasStrictBand = strictMinCore <= strictMaxCore;
+  const minCoreFreq = hasStrictBand ? strictMinCore : Math.floor(safeMaxTickets * 0.70);
+  const maxCoreFreq = hasStrictBand ? strictMaxCore : Math.ceil(safeMaxTickets * 0.80);
+
+  // Calcula o total exato de assentos Core (clampado em [12 * minCoreFreq, 12 * maxCoreFreq])
+  // Ex.: para 11 jogos -> strictMin=8, strictMax=8 -> 96 assentos (8 jogos com 9 Core + 3 jogos com 8 Core) => 100% do Core em 72,7%
+  const targetCorePerNumber = Math.min(maxCoreFreq, Math.max(minCoreFreq, safeMaxTickets * 0.75));
+  const totalCoreSeats = Math.max(
+    12 * minCoreFreq,
+    Math.min(12 * maxCoreFreq, Math.round(targetCorePerNumber * 12))
+  );
+  const baseCorePerTicket = Math.max(2, Math.min(12, Math.floor(totalCoreSeats / safeMaxTickets)));
+  const extraCoreTickets = totalCoreSeats - baseCorePerTicket * safeMaxTickets;
+  const targetCoreFreq = totalCoreSeats / 12;
+  const totalSatSeats = safeMaxTickets * 15 - totalCoreSeats;
+  const targetSatFreq = totalSatSeats / satellites13.length;
 
   const coreFreq: Record<number, number> = {};
   const satFreq: Record<number, number> = {};
@@ -3784,29 +3875,32 @@ export function generateCoreSatellites25Matrix(options: {
   const somaMin = Math.min(175, filters?.somaMin ?? 180);
   const somaMax = Math.max(220, filters?.somaMax ?? 215);
 
-  for (let t = 0; t < maxTickets; t++) {
-    const remainingTickets = maxTickets - t;
+  for (let t = 0; t < safeMaxTickets; t++) {
+    const remainingTickets = safeMaxTickets - t;
+    const corePerTicket = Math.min(12, baseCorePerTicket + (t < extraCoreTickets ? 1 : 0));
+    const satPerTicket = 15 - corePerTicket;
     let bestCombo: number[] | null = null;
     let bestScore = -Infinity;
 
-    // 140 candidatos avaliados por vaga para balancear Core 70-80%, Satélites 100%, Hamming controlado e Zona de Ouro
+    // 140 candidatos avaliados por vaga para balancear Core 70–80%, Satélites 100%, Hamming controlado e scoreIA Gaussiano
     for (let trial = 0; trial < 140; trial++) {
-      // Seleciona 9 do Core priorizando quem precisa atingir 70% e evitando exceder 80%
-      const mustIncludeCore = core12.filter(
-        (d) => minCoreFreq - coreFreq[d] >= remainingTickets
-      );
+      // Seleciona dezenas Core garantindo que todas atinjam >= minCoreFreq (70%) e nenhuma exceda maxCoreFreq (80%)
+      const mustIncludeCore = core12
+        .filter((d) => minCoreFreq - coreFreq[d] >= remainingTickets && coreFreq[d] < maxCoreFreq)
+        .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0));
+
       const eligibleCore = core12.filter(
         (d) => coreFreq[d] < maxCoreFreq && !mustIncludeCore.includes(d)
       );
-      const fallbackCore = core12.filter(
-        (d) => !mustIncludeCore.includes(d) && !eligibleCore.includes(d)
-      );
+      const fallbackCore = core12
+        .filter((d) => !mustIncludeCore.includes(d) && !eligibleCore.includes(d))
+        .sort((a, b) => coreFreq[a] - coreFreq[b]);
 
       const scoredCore = eligibleCore
         .map((d) => ({
           d,
           priority:
-            (targetCoreFreq - coreFreq[d]) * 14 +
+            (targetCoreFreq - coreFreq[d]) * 18 +
             (weights[d] || 50) * 0.08 +
             (Math.random() - 0.5) * (trial === 0 ? 0.5 : 8),
         }))
@@ -3819,7 +3913,7 @@ export function generateCoreSatellites25Matrix(options: {
         ...fallbackCore,
       ].slice(0, corePerTicket);
 
-      // Seleciona 6 Satélites priorizando satélites ainda não cobertos (garante 100% das 25 dezenas)
+      // Seleciona Satélites priorizando satélites ainda não cobertos (garante 100% das 25 dezenas)
       const scoredSats = satellites13
         .map((d) => ({
           d,
@@ -3866,18 +3960,20 @@ export function generateCoreSatellites25Matrix(options: {
       else if (minDist >= 7) score -= (minDist - 6) * 10;
       else if (minDist === 2) score -= 4;
 
-      // Calibração Zona de Ouro
+      // Calibração Zona Central (180–215) com proteção de caudas
       if (analysis.soma >= somaMin && analysis.soma <= somaMax) score += 16;
       else if (analysis.soma >= 165 && analysis.soma <= 225) score += 6;
       else score -= 18;
 
-      if (analysis.pares >= 6 && analysis.pares <= 9) score += 10;
-      else score -= 12;
+      if (analysis.pares >= 6 && analysis.pares <= 8) score += 10;
+      else if (analysis.pares === 9 || analysis.pares === 5) score += 2;
+      else score -= 10;
 
       if (analysis.primos >= 4 && analysis.primos <= 7) score += 8;
       if (analysis.moldura >= 8 && analysis.moldura <= 11) score += 8;
+      if (analysis.fibonacci >= 3 && analysis.fibonacci <= 6) score += 6;
       if (analysis.repetidas >= 7 && analysis.repetidas <= 10) score += 10;
-      if (analysis.maxConsecutivas <= 6) score += 6;
+      if (analysis.maxConsecutivas <= 5) score += 6;
       if (isHistorical15Collision(combo)) score -= 120;
       if (hasViciousVisualPattern(combo).isVicious) score -= 40;
 
@@ -3895,9 +3991,13 @@ export function generateCoreSatellites25Matrix(options: {
     }
 
     if (!bestCombo) {
-      // Fallback determinístico garantindo 9 Core + 6 Satélites únicos
-      const fallbackCore = [...core12].sort((a, b) => coreFreq[a] - coreFreq[b]).slice(0, corePerTicket);
-      const fallbackSats = [...satellites13].sort((a, b) => satFreq[a] - satFreq[b]).slice(0, satPerTicket);
+      // Fallback determinístico respeitando rigorosamente a banda 70%–80% do Core + rotação de Satélites
+      const fallbackCore = [...core12]
+        .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0))
+        .slice(0, corePerTicket);
+      const fallbackSats = [...satellites13]
+        .sort((a, b) => satFreq[a] - satFreq[b] || (weights[b] || 0) - (weights[a] || 0))
+        .slice(0, satPerTicket);
       bestCombo = [...fallbackCore, ...fallbackSats].sort((a, b) => a - b);
     }
 

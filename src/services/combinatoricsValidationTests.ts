@@ -301,6 +301,16 @@ export function runCombinatoricsValidationAssertions(): {
         core12: pivoPartition.core12,
         tickets: generatePadraoPivo9({ latestDraw: CONCURSO_ATUAL, dynamicStats: DEZENAS_STATS, maxTickets: 24 }),
       },
+      {
+        name: 'Covering 25 (10J)',
+        core12: basePartition.core12,
+        tickets: generateFechamentoCovering(
+          Array.from({ length: 25 }, (_, i) => i + 1),
+          14,
+          10,
+          DEFAULT_FILTERS
+        ),
+      },
     ];
 
     let allValid = true;
@@ -317,7 +327,7 @@ export function runCombinatoricsValidationAssertions(): {
       });
       const minCorePct = Math.min(...m.core12.map((d) => (counts[d] / m.tickets.length) * 100));
       const maxCorePct = Math.max(...m.core12.map((d) => (counts[d] / m.tickets.length) * 100));
-      const ok = covered.size === 25 && minCorePct >= 66 && maxCorePct <= 85;
+      const ok = covered.size === 25 && minCorePct >= 70 && maxCorePct <= 80;
       if (!ok) allValid = false;
       summaryParts.push(`${m.name}: ${covered.size}/25 dez, Core ${minCorePct.toFixed(0)}%–${maxCorePct.toFixed(0)}%`);
     }
