@@ -81,6 +81,7 @@ export interface FilterCriteria {
   presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'custom';
   modoFixas?: 'rotativas' | 'rigidas'; // Proteção K de N (padrão quando fixas >= 3) vs Rígidas 100%
   autoCalibrarSomaUniverso?: boolean; // Auto-calibra faixa de soma pelo universo selecionado (μ_U ± 20)
+  estratificacaoCaudaAtiva?: boolean; // Força estratificação de cauda (75% Central 180-215 / 15% Alta 216-230 / 10% Baixa 155-179) em >= 10 jogos
   // 6 Novos Filtros Matemáticos (Poda Combinatória & Bitwise)
   posicionalAtivo?: boolean; // Intervalos posicionais por bola D1..D15 + Branch & Bound
   multiplosAtivo?: boolean; // Máscaras bitwise M(3)..M(8)

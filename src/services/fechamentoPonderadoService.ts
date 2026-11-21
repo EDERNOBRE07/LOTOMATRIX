@@ -934,11 +934,11 @@ export function generateFechamentoInteligentePonderado({
   // Modo de Fixas: Rotativas Inteligentes (K de N) ativo por padrão se N >= 3
   const kBounds = getRotatedFixedBounds(fixedList.length, filters?.modoFixas);
 
-  // Auto-Calibração da Faixa de Soma pelo Universo Selecionado + Anti-Cisne Negro (75/15/10 em >= 10 jogos)
+  // Auto-Calibração da Faixa de Soma pelo Universo Selecionado + Estratificação de Caudas (75% Central 180–215 / 15% Alta 216–230 / 10% Baixa 155–179 em >= 10 jogos)
   const sumBounds = resolveCentralSumBounds(sortedPool, filters);
-  const useStratifiedAntiCisne = maxTickets >= 10 && n >= 16;
-  const lowTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
-  const highTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
+  const useStratifiedAntiCisne = maxTickets >= 10 && n >= 16 && filters?.estratificacaoCaudaAtiva !== false;
+  const highTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
+  const lowTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
   const coreQuota = Math.max(1, maxTickets - lowTailQuota - highTailQuota);
 
   // Alvo de Espalhamento Geométrico: prioriza Hamming >= 3 para universos de 18 a 21 dezenas
@@ -1046,12 +1046,12 @@ export function generateFechamentoInteligentePonderado({
     const isLowTail =
       useStratifiedAntiCisne &&
       analysis.soma >= 155 &&
-      analysis.soma < effectiveCentralMin &&
+      analysis.soma <= Math.min(179, effectiveCentralMin - 1) &&
       analysis.maxConsecutivas <= 8;
     const isHighTail =
       useStratifiedAntiCisne &&
-      analysis.soma > effectiveCentralMax &&
-      analysis.soma <= 235 &&
+      analysis.soma >= Math.max(216, effectiveCentralMax + 1) &&
+      analysis.soma <= 230 &&
       analysis.maxConsecutivas <= 8;
 
     if (tier < 4 && !isCore && !isLowTail && !isHighTail) {
@@ -1383,7 +1383,7 @@ export function generateFechamentoInteligentePonderado({
     ? Array.from(new Set([minHammingTarget, Math.max(3, minHammingTarget - 1), 2]))
     : Array.from(new Set([minHammingTarget, Math.min(2, minHammingTarget), 1]));
 
-  // Fase 1: Preencher estratos Anti-Cisne Negro (15% Cauda Baixa e 10% Cauda Alta) quando maxTickets >= 10
+  // Fase 1: Preencher estratos de Proteção de Cauda (15% Cauda Alta 216–230 e 10% Cauda Baixa 155–179) quando maxTickets >= 10
   const selectQuotaStratum = (stratum: SumStratum, targetCount: number) => {
     if (targetCount <= 0) return;
     let added = 0;
@@ -1491,7 +1491,7 @@ export function generateFechamentoInteligentePonderado({
       const reqDiff = attempt < 220 ? synthesisHamming : is18to21Universe ? 2 : 1;
       if (!passesHammingDistance(mask, chosenMasks, reqDiff)) continue;
       const soma = candidate.reduce((acc, v) => acc + v, 0);
-      if (tierApplied < 4 && (soma < 155 || soma > 235)) continue;
+      if (tierApplied < 4 && (soma < 155 || soma > 230)) continue;
       const slotType: SumStratum =
         soma < sumBounds.centralMin ? 'baixa' : soma > sumBounds.centralMax ? 'alta' : 'ouro';
       registerChosen({

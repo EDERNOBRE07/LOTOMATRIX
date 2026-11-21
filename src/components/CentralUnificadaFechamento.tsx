@@ -447,7 +447,7 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
                 Padrões Fibonacci
               </h4>
               <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                ≥ 3 Fibo • Regra de Ouro (190–210)
+                ≥ 3 Fibo • Zona Central (180–215)
               </p>
             </div>
             <div className="pt-3 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
@@ -901,7 +901,7 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
               }`}
             >
               <div className="text-xs font-bold text-emerald-400">🛡️ Conservador</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Soma 190–210 • 7P/8I</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">Soma 165–225 • ±2σ</div>
             </button>
 
             <button
@@ -913,8 +913,8 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
                   : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
               }`}
             >
-              <div className="text-xs font-bold text-cyan-400">⚖️ Balanceado</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Soma 180–215 • Amplo</div>
+              <div className="text-xs font-bold text-cyan-400">⚖️ Equilíbrio Pro</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">Soma 175–220 • Recomendado</div>
             </button>
 
             <button
@@ -927,7 +927,7 @@ export const CentralUnificadaFechamento: React.FC<CentralUnificadaFechamentoProp
               }`}
             >
               <div className="text-xs font-bold text-purple-400">⚡ Agressivo</div>
-              <div className="text-[10px] text-slate-400 mt-0.5">Foco em Prêmios Altos</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">Central 180–215 • Sniper</div>
             </button>
 
             <button

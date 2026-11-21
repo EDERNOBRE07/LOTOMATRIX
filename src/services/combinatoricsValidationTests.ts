@@ -13,7 +13,16 @@ import {
   generatePadraoPivo9,
   selectCoreAndSatellites25,
   hammingDistanceBitwise,
+  calculateGaussianScoreIA,
+  gerarMatrizEstratificada,
+  ZONA_CENTRAL_SOMA_MIN,
+  ZONA_CENTRAL_SOMA_MAX,
+  CAUDA_BAIXA_SOMA_MIN,
+  CAUDA_BAIXA_SOMA_MAX,
+  CAUDA_ALTA_SOMA_MIN,
+  CAUDA_ALTA_SOMA_MAX,
 } from './combinatorics';
+import { PRESETS_LOTOFACIL } from './presetsFiltros';
 import { saveFechamentoPrognostico } from './savedFechamentosStorage';
 import { FilterCriteria, GameTicket } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
@@ -48,9 +57,9 @@ export function runCombinatoricsValidationAssertions(): {
     results.push({ name, passed, message, details });
   }
 
-  // 1. Caso de Teste: Combinação Canônica Válida
+  // 1. Caso de Teste: Combinação Canônica Válida (Preset Equilíbrio Pro)
   try {
-    const validCombo = [2, 3, 4, 5, 7, 8, 9, 10, 14, 16, 18, 22, 23, 24, 25];
+    const validCombo = [1, 2, 4, 5, 6, 7, 9, 13, 14, 15, 16, 18, 23, 24, 25];
     const res = validateFilters(validCombo, DEFAULT_FILTERS, CONCURSO_ATUAL.dezenas);
     record(
       'Combinação Canônica Equilibrada',
@@ -354,6 +363,137 @@ export function runCombinatoricsValidationAssertions(): {
     );
   } catch (err: any) {
     record('Trava de Segurança contra Fechamentos Vazios', false, `Exceção: ${err.message}`);
+  }
+
+  // 14. Caso de Teste (Bloco B.1): Recalibração Gaussiana do scoreIA (Inversão Corrigida)
+  try {
+    const winner13Profile = calculateGaussianScoreIA(
+      {
+        soma: 217,
+        moldura: 10,
+        primos: 6,
+        fibonacci: 5,
+        pares: 7,
+        repetidas: 7,
+        maxConsecutivas: 5,
+        cruz: 5,
+        bola1: 1,
+        bola15: 25,
+      },
+      78
+    );
+    const rigidOffCenterProfile = calculateGaussianScoreIA(
+      {
+        soma: 198,
+        moldura: 12,
+        primos: 4,
+        fibonacci: 3,
+        pares: 9,
+        repetidas: 10,
+        maxConsecutivas: 3,
+        cruz: 5,
+        bola1: 1,
+        bola15: 25,
+      },
+      78
+    );
+    const consec3 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 3, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
+    const consec5 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 5, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
+    const consec6 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 6, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
+    const rep7 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 7, maxConsecutivas: 4, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
+    const rep8 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 4, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
+
+    const zeroPen3to5 = consec3.consecutivasPenalty === 0 && consec5.consecutivasPenalty === 0 && consec3.scoreIA === consec5.scoreIA;
+    const softPenAt6 = consec6.consecutivasPenalty > 0 && consec6.consecutivasPenalty < 1.0;
+    const noPenaltyRep7 = rep7.scoreIA === rep8.scoreIA;
+    const winnerBeatsRigid = winner13Profile.scoreIA > rigidOffCenterProfile.scoreIA;
+
+    record(
+      'Recalibração Gaussiana do scoreIA (Bloco B.1)',
+      zeroPen3to5 && softPenAt6 && noPenaltyRep7 && winnerBeatsRigid,
+      `Vencedor 13 pts (${winner13Profile.scoreIA}) > Rígido fora do pico (${rigidOffCenterProfile.scoreIA}); penalidade 3–5 consec = 0, em 6 = -${consec6.consecutivasPenalty}; 7 repetidas sem penalidade (${rep7.scoreIA} == ${rep8.scoreIA}).`
+    );
+  } catch (err: any) {
+    record('Recalibração Gaussiana do scoreIA (Bloco B.1)', false, `Exceção: ${err.message}`);
+  }
+
+  // 15. Caso de Teste (Bloco B.2): Estratificação de Soma (75% Central 180-215 / 15% Alta 216-230 / 10% Baixa 155-179)
+  try {
+    const balancedPool20 = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 16, 17, 19, 20, 21, 22, 24, 25];
+    const stratTickets = gerarMatrizEstratificada(balancedPool20, 20, {
+      concursoAnterior: CONCURSO_ATUAL.dezenas,
+      filters: DEFAULT_FILTERS,
+    });
+    const centralCount = stratTickets.filter((t) => t.soma >= ZONA_CENTRAL_SOMA_MIN && t.soma <= ZONA_CENTRAL_SOMA_MAX).length;
+    const upperCount = stratTickets.filter((t) => t.soma >= CAUDA_ALTA_SOMA_MIN && t.soma <= CAUDA_ALTA_SOMA_MAX).length;
+    const lowerCount = stratTickets.filter((t) => t.soma >= CAUDA_BAIXA_SOMA_MIN && t.soma <= CAUDA_BAIXA_SOMA_MAX).length;
+
+    const okStrat = stratTickets.length === 20 && centralCount === 15 && upperCount === 3 && lowerCount === 2;
+    record(
+      'Estratificação de Soma 75/15/10 (Bloco B.2)',
+      okStrat,
+      `20 jogos estratificados: ${centralCount} Zona Central (180–215 = ${(centralCount / 20) * 100}%), ${upperCount} Cauda Alta (216–230 = ${(upperCount / 20) * 100}%), ${lowerCount} Cauda Baixa (155–179 = ${(lowerCount / 20) * 100}%).`
+    );
+  } catch (err: any) {
+    record('Estratificação de Soma 75/15/10 (Bloco B.2)', false, `Exceção: ${err.message}`);
+  }
+
+  // 16. Caso de Teste (Bloco B.3): Preset Equilíbrio Pro (presetsFiltros.ts & DEFAULT_FILTERS)
+  try {
+    const eq = PRESETS_LOTOFACIL.balanceado.filtros;
+    const presetMatches =
+      eq.somaMin === 175 &&
+      eq.somaMax === 220 &&
+      eq.paresMin === 6 &&
+      eq.paresMax === 8 &&
+      eq.molduraMin === 8 &&
+      eq.molduraMax === 11 &&
+      eq.primosMin === 4 &&
+      eq.primosMax === 7 &&
+      eq.fibonacciMin === 3 &&
+      eq.fibonacciMax === 6 &&
+      eq.repetidasMin === 7 &&
+      eq.repetidasMax === 10 &&
+      eq.maxConsecutivas === 6 &&
+      eq.estratificacaoCaudaAtiva === true;
+
+    const defaultMatches =
+      DEFAULT_FILTERS.somaMin === 175 &&
+      DEFAULT_FILTERS.somaMax === 220 &&
+      DEFAULT_FILTERS.paresMin === 6 &&
+      DEFAULT_FILTERS.paresMax === 8 &&
+      DEFAULT_FILTERS.molduraMin === 8 &&
+      DEFAULT_FILTERS.molduraMax === 11 &&
+      DEFAULT_FILTERS.primosMin === 4 &&
+      DEFAULT_FILTERS.primosMax === 7 &&
+      DEFAULT_FILTERS.fibonacciMin === 3 &&
+      DEFAULT_FILTERS.fibonacciMax === 6 &&
+      DEFAULT_FILTERS.repetidasMin === 7 &&
+      DEFAULT_FILTERS.repetidasMax === 10 &&
+      DEFAULT_FILTERS.maxConsecutivas === 6;
+
+    record(
+      'Preset Equilíbrio Pro Auditado (Bloco B.3)',
+      presetMatches && defaultMatches,
+      `Preset "${PRESETS_LOTOFACIL.balanceado.nome}" e DEFAULT_FILTERS validados: Soma 175–220, Pares 6–8, Moldura 8–11, Primos 4–7, Fibonacci 3–6, Repetidas 7–10, MaxConsecutivas 6.`
+    );
+  } catch (err: any) {
+    record('Preset Equilíbrio Pro Auditado (Bloco B.3)', false, `Exceção: ${err.message}`);
   }
 
   const passedCount = results.filter((r) => r.passed).length;

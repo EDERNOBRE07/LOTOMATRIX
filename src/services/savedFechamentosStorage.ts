@@ -95,12 +95,12 @@ export function buildStandardFilterSummary(item: {
   dezenasExcluidas?: number[];
 }): string {
   const tokens: string[] = [
-    `Soma ${item.faixaSoma?.min ?? 180}-${item.faixaSoma?.max ?? 215}`,
-    `Pares ${item.paridade?.minPares ?? 6}-${item.paridade?.maxPares ?? 9}`,
-    `Moldura ${item.moldura?.min ?? 8}-${item.moldura?.max ?? 12}`,
-    `Primos ${item.primos?.min ?? 4}-${item.primos?.max ?? 6}`,
-    `Fib ${item.fibonacci?.min ?? 3}-${item.fibonacci?.max ?? 5}`,
-    `Rep ${item.repetidas?.min ?? 6}-${item.repetidas?.max ?? 10}`,
+    `Soma ${item.faixaSoma?.min ?? 175}-${item.faixaSoma?.max ?? 220}`,
+    `Pares ${item.paridade?.minPares ?? 6}-${item.paridade?.maxPares ?? 8}`,
+    `Moldura ${item.moldura?.min ?? 8}-${item.moldura?.max ?? 11}`,
+    `Primos ${item.primos?.min ?? 4}-${item.primos?.max ?? 7}`,
+    `Fib ${item.fibonacci?.min ?? 3}-${item.fibonacci?.max ?? 6}`,
+    `Rep ${item.repetidas?.min ?? 7}-${item.repetidas?.max ?? 10}`,
   ];
   if (Array.isArray(item.dezenasFixas) && item.dezenasFixas.length > 0) {
     tokens.push(`Fixas: [${[...item.dezenasFixas].sort((a, b) => a - b).join(',')}]`);
@@ -147,7 +147,7 @@ export function formatStandardFechamentoTitle(params: {
   }
 
   const resumoMatriz = `${params.universoCount} Dezenas (${params.totalJogos} Jogos • ${garantiaText})`;
-  const resumoFiltros = params.filterSummary || 'Filtros: Soma 180-215 | Pares 6-9 | Moldura 8-12 | Primos 4-6 | Fib 3-5 | Rep 6-10';
+  const resumoFiltros = params.filterSummary || 'Filtros: Soma 175-220 | Pares 6-8 | Moldura 8-11 | Primos 4-7 | Fib 3-6 | Rep 7-10';
 
   return `Concurso Alvo #${concursoAlvo} (Base #${concursoBase}) • ${tipoClean} • ${resumoMatriz} [${resumoFiltros}]`;
 }
@@ -323,19 +323,19 @@ export function normalizeSavedFechamento(
       : 0;
 
   const faixaSoma = {
-    min: typeof item.faixaSoma?.min === 'number' ? item.faixaSoma.min : 180,
-    max: typeof item.faixaSoma?.max === 'number' ? item.faixaSoma.max : 215,
-    zonaOuro: item.faixaSoma?.zonaOuro ? String(item.faixaSoma.zonaOuro) : '190 a 210',
+    min: typeof item.faixaSoma?.min === 'number' ? item.faixaSoma.min : 175,
+    max: typeof item.faixaSoma?.max === 'number' ? item.faixaSoma.max : 220,
+    zonaOuro: item.faixaSoma?.zonaOuro ? String(item.faixaSoma.zonaOuro) : '180 a 215',
   };
 
   const paridade = {
     minPares: typeof item.paridade?.minPares === 'number' ? item.paridade.minPares : 6,
-    maxPares: typeof item.paridade?.maxPares === 'number' ? item.paridade.maxPares : 9,
-    canonico: item.paridade?.canonico ? String(item.paridade.canonico) : '7P/8I ou 8P/7I',
+    maxPares: typeof item.paridade?.maxPares === 'number' ? item.paridade.maxPares : 8,
+    canonico: item.paridade?.canonico ? String(item.paridade.canonico) : '6 a 8 Pares (Pico 6–7)',
   };
 
   const repetidas = {
-    min: typeof item.repetidas?.min === 'number' ? item.repetidas.min : 8,
+    min: typeof item.repetidas?.min === 'number' ? item.repetidas.min : 7,
     max: typeof item.repetidas?.max === 'number' ? item.repetidas.max : 10,
     concursoRef:
       typeof item.repetidas?.concursoRef === 'number'
@@ -1036,12 +1036,12 @@ export function createInitialSampleFechamento(): SavedFechamentoPrognostico {
 
   const sampleConcurso = 3815;
   const sampleConcursoAlvo = sampleConcurso + 1;
-  const sampleFaixaSoma = { min: 175, max: 220, zonaOuro: '190 a 210' };
-  const sampleParidade = { minPares: 7, maxPares: 8, canonico: '7P/8I ou 8P/7I' };
+  const sampleFaixaSoma = { min: 175, max: 220, zonaOuro: '180 a 215' };
+  const sampleParidade = { minPares: 6, maxPares: 8, canonico: '6 a 8 Pares (Pico 6–7)' };
   const sampleMoldura = { min: 8, max: 11 };
   const samplePrimos = { min: 4, max: 7 };
-  const sampleFibonacci = { min: 3, max: 5 };
-  const sampleRepetidas = { min: 8, max: 10, concursoRef: sampleConcurso };
+  const sampleFibonacci = { min: 3, max: 6 };
+  const sampleRepetidas = { min: 7, max: 10, concursoRef: sampleConcurso };
   const sampleTipo = 'Gerador Turbo (Força Bruta 14 Pts • 17ms)';
   const sampleModalidade = '21 Dezenas Amplo (18 Jogos • Garantia 14 se 15)';
 
@@ -1152,18 +1152,18 @@ export function createSavedFechamentoFromCurrent({
   const concursoBase = resolveConcursoBase(concurso, 3824);
   const concursoAlvo = Number(concursoBase) + 1;
   const faixaSomaObj = {
-    min: filters?.somaMin ?? 180,
+    min: filters?.somaMin ?? 175,
     max: filters?.somaMax ?? 220,
-    zonaOuro: '190 a 210',
+    zonaOuro: '180 a 215',
   };
   const paridadeObj = {
     minPares: filters?.paresMin ?? 6,
-    maxPares: filters?.paresMax ?? 9,
-    canonico: '6 a 9 Pares (Banda Flexível)',
+    maxPares: filters?.paresMax ?? 8,
+    canonico: '6 a 8 Pares (Equilíbrio Pro)',
   };
   const repetidasObj = {
-    min: filters?.repetidasMin ?? 6,
-    max: filters?.repetidasMax ?? 11,
+    min: filters?.repetidasMin ?? 7,
+    max: filters?.repetidasMax ?? 10,
     concursoRef: concursoBase,
   };
   const molduraObj = {

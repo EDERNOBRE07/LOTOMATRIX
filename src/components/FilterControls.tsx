@@ -78,19 +78,20 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
 
     const fullPresetFilters: FilterCriteria = {
       ...filters,
-      paresMin: 6, // Tolerância Dinâmica Ampla (6 a 9 pares absorve oscilações atípicas)
-      paresMax: 9,
-      primosMin: 4,
-      primosMax: 6,
-      somaMin: 185, // Regra de Ouro da Soma na Zona de Ouro Expandida (185 a 215)
-      somaMax: 215,
-      molduraMin: 8,
-      molduraMax: 12, // Limite superior expandido para 12 evitando overfitting estatístico
-      fibonacciMin: 3,
-      fibonacciMax: 5,
-      repetidasMin: 6, // Piso de 6 repetidas alargado para transição de ciclos
+      paresMin: 6, // Equilíbrio Pro Auditado: 6 a 8 pares
+      paresMax: 8,
+      primosMin: 4, // Auditado: 4 a 7 primos
+      primosMax: 7,
+      somaMin: 175, // Auditado: 175 a 220 com estratificação de cauda ativa (75% 180–215 / 15% 216–230 / 10% 155–179)
+      somaMax: 220,
+      molduraMin: 8, // Auditado: 8 a 11 na moldura
+      molduraMax: 11,
+      fibonacciMin: 3, // Auditado: 3 a 6 Fibonacci
+      fibonacciMax: 6,
+      repetidasMin: 7, // Auditado: 7 a 10 repetidas
       repetidasMax: 10,
-      maxConsecutivas: 6, // Autoriza sequências de até 6 números consecutivos
+      maxConsecutivas: 6, // Auditado: até 6 consecutivas
+      estratificacaoCaudaAtiva: true,
       curvaAbcAtiva: true,
       minDezenasClasseA: 11,
       vaziosAtivos: true,
@@ -132,7 +133,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     }
 
     setAppliedNotice(
-      `✓ Todos os Filtros Presetados carregados: Zona de Ouro (185–215), Tolerância Dinâmica (6–9 Pares), 4–6 Primos, 8–12 Moldura, 3–5 Fibonacci, 6–10 Repetidas e Sequências até 6!`
+      `✓ Equilíbrio Pro (Auditado) carregado: Soma 175–220 (Zona Central 180–215 + Caudas 75/15/10), 6–8 Pares, 4–7 Primos, 8–11 Moldura, 3–6 Fibonacci, 7–10 Repetidas e até 6 consecutivas!`
     );
     setTimeout(() => setAppliedNotice(null), 6000);
   };
@@ -140,38 +141,40 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
   const applyStrictPreset = () => {
     onChange({
       ...filters,
-      paresMin: 7,
+      paresMin: 6,
       paresMax: 8,
       primosMin: 5,
       primosMax: 6,
-      somaMin: 185,
+      somaMin: 180,
       somaMax: 215,
-      molduraMin: 8,
-      molduraMax: 12,
-      fibonacciMin: 3,
-      fibonacciMax: 5,
+      molduraMin: 9,
+      molduraMax: 11,
+      fibonacciMin: 4,
+      fibonacciMax: 6,
       repetidasMin: 7,
-      repetidasMax: 10,
+      repetidasMax: 9,
       maxConsecutivas: 5,
+      estratificacaoCaudaAtiva: true,
     });
   };
 
   const applyWidePreset = () => {
     onChange({
       ...filters,
-      paresMin: 6,
+      paresMin: 5,
       paresMax: 9,
-      primosMin: 4,
+      primosMin: 3,
       primosMax: 7,
-      somaMin: 180, // Vetar somas < 180
+      somaMin: 165,
       somaMax: 225,
       molduraMin: 8,
       molduraMax: 12,
       fibonacciMin: 3,
       fibonacciMax: 6,
-      repetidasMin: 6, // Piso dinâmico 6
+      repetidasMin: 7,
       repetidasMax: 11,
-      maxConsecutivas: 6, // Sequências até 6
+      maxConsecutivas: 6,
+      estratificacaoCaudaAtiva: true,
     });
   };
 
@@ -213,7 +216,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   ? 'bg-amber-500/20 border-amber-400/60 text-amber-300'
                   : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white'
               }`}
-              title="Avisa sonoramente quando um jogo gerado estiver fora da Zona de Ouro (soma 190-210)"
+              title="Avisa sonoramente quando um jogo gerado estiver fora da Zona Central (soma 180-215)"
             >
               {soundAlertEnabled ? (
                 <Volume2 className="w-3.5 h-3.5 text-amber-400" />
@@ -228,7 +231,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             type="button"
             onClick={applyAIDailyInsightsPreset}
             className="px-3 py-1.5 text-xs rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-slate-950 font-black hover:opacity-95 transition shadow-sm shadow-emerald-500/25 cursor-pointer flex items-center gap-1.5"
-            title="Aplica os Insights Diários da IA nos Filtros Matemáticos: Zona de Ouro (190–210), 4–6 Primos, 3–5 Fibonacci e 8–10 Repetidas"
+            title="Aplica o preset Equilíbrio Pro auditado: Soma 175–220 (Zona Central 180–215 + Caudas 75/15/10), 6–8 Pares, 8–11 Moldura, 4–7 Primos, 3–6 Fibonacci, 7–10 Repetidas e até 6 consecutivas"
           >
             <Sparkles className="w-3.5 h-3.5 text-slate-950 fill-slate-950" />
             <span>Insights Diários da IA</span>
@@ -317,7 +320,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                       <span>Faixa de Soma das 15 Dezenas</span>
                     </h4>
                     <span className="text-[11px] text-indigo-300/80 font-mono">
-                      Zona de Ouro: 190 a 210 (~68% dos concursos)
+                      Zona Central: 180 a 215 (75%) • Cauda Alta: 216–230 (15%) • Cauda Baixa: 155–179 (10%)
                     </span>
                   </div>
                 </div>
@@ -331,7 +334,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed">
-                A soma das 15 dezenas sorteadas historicamente se concentra na faixa de 175 a 220. Somas entre 190 e 210 representam o centro matemático de maior probabilidade.
+                O preset Equilíbrio Pro utiliza Soma 175–220 com estratificação de cauda ativa em fechamentos com 10+ jogos: 75% na Zona Central (180–215), 15% na Cauda Alta (216–230) e 10% na Cauda Baixa (155–179).
               </p>
 
               <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-2.5">

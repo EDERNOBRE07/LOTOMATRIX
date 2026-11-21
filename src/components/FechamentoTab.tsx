@@ -1550,7 +1550,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       const faixaSomaObj = {
         min: f.somaMin,
         max: f.somaMax,
-        zonaOuro: '190 a 210',
+        zonaOuro: '180 a 215',
       };
       const paridadeObj = {
         minPares: f.paresMin,
@@ -2330,7 +2330,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       }
 
       setGenerationError(null);
-      const stratName = `🛡️ Matriz Estratificada Anti-Cisne Negro (75% Ouro • 15% Cauda Baixa • 10% Cauda Alta)`;
+      const stratName = `🛡️ Matriz Estratificada (75% Central 180–215 • 15% Cauda Alta 216–230 • 10% Cauda Baixa 155–179)`;
       const exportMeta: FechamentoExportMeta = {
         strategyName: stratName,
         modeName: `${preset.nome} - Estratificado (${tickets.length} Jogos - Quotas 75/15/10)`,
@@ -2397,7 +2397,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       }
 
       setDocumentMessage(
-        `✓ Matriz Estratificada gerada com sucesso! ${tickets.length} bilhetes distribuídos em 75% Zona de Ouro (Soma 180–215), 15% Proteção Cauda Baixa (Soma 155–179) e 10% Cauda Alta (Soma 216–230).`
+        `✓ Matriz Estratificada gerada com sucesso! ${tickets.length} bilhetes distribuídos em 75% Zona Central (Soma 180–215), 15% Cauda Alta (Soma 216–230) e 10% Cauda Baixa (Soma 155–179).`
       );
       setTimeout(() => setDocumentMessage(null), 6000);
 
@@ -3387,20 +3387,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 }`}
               >
                 <div className="text-xs font-bold text-emerald-400">🛡️ Conservador</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Soma 190–210 • 7P/8I</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Soma 165–225 • ±2σ</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.balanceado)}
                 className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.presetEstatistico === 'balanceado' || (!filters.presetEstatistico && filters.somaMin === 180)
+                  filters.presetEstatistico === 'balanceado' || (!filters.presetEstatistico && filters.somaMin === 175)
                     ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md shadow-cyan-500/20'
                     : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
                 }`}
               >
-                <div className="text-xs font-bold text-cyan-400">⚖️ Balanceado</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Soma 180–215 • Amplo</div>
+                <div className="text-xs font-bold text-cyan-400">⚖️ Equilíbrio Pro</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Soma 175–220 • Recomendado</div>
               </button>
 
               <button
@@ -3413,7 +3413,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 }`}
               >
                 <div className="text-xs font-bold text-purple-400">⚡ Agressivo</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Foco Prêmios Altos</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Central 180–215 • Sniper</div>
               </button>
 
               <button
@@ -3421,22 +3421,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 onClick={() => {
                   setFilters((prev) => ({
                     ...prev,
-                    somaMin: 155,
-                    somaMax: 235,
-                    maxConsecutivas: 8,
-                    autoCalibrarSomaUniverso: false,
+                    somaMin: 175,
+                    somaMax: 220,
+                    maxConsecutivas: 6,
+                    autoCalibrarSomaUniverso: true,
+                    estratificacaoCaudaAtiva: true,
                     presetEstatistico: 'custom',
                   }));
                   soundService.playFilterClick();
                 }}
                 className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.somaMin === 155 && filters.somaMax === 235
+                  filters.presetEstatistico === 'custom' && filters.estratificacaoCaudaAtiva !== false
                     ? 'bg-amber-500/20 border-amber-400 text-white shadow-md shadow-amber-500/20'
                     : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
                 }`}
               >
-                <div className="text-xs font-bold text-amber-400">👑 Anti-Cisne Negro</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">75 / 15 / 10% (155–235)</div>
+                <div className="text-xs font-bold text-amber-400">👑 Proteção Caudas</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">75% Central / 15% Alta / 10% Baixa</div>
               </button>
             </div>
 
@@ -3504,7 +3505,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
                         </span>
                         <span className="text-[10px] font-mono text-slate-400 block truncate">
-                          Central: {filters.somaMin}–{filters.somaMax} {preset.jogosMaximos >= 10 ? '• Caudas: 155–235 (75/15/10%)' : ''}
+                          Central: 180–215 {preset.jogosMaximos >= 10 ? '• Caudas: 155–179 (10%) / 216–230 (15%)' : ''}
                         </span>
                       </div>
                       <button
@@ -4015,7 +4016,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 )}
                 {generationType === 'fibonacci' && (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                    Regra de Ouro (190–210) Ativa
+                    Zona Central (180–215) Ativa
                   </span>
                 )}
                 <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -4029,7 +4030,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     {filters.modoFixas === 'rigidas' && fixedNumbers.length >= 3
                       ? 'Fixas Rígidas (100%)'
                       : 'Fixas Rotativas ✓'}{' '}
-                    | Proteção 155–235 ✓
+                    | Proteção 155–230 ✓
                   </span>
                 </span>
                 <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -4041,7 +4042,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </div>
               <p className="text-xs text-slate-400 mt-1">
                 {generationType === 'fibonacci' || generatedTickets.length === 5
-                  ? 'Jogos calibrados com distribuições de Fibonacci (3 a 5 dezenas) e garantia de que pelo menos 3 jogos residem na Zona de Ouro de soma (190–210).'
+                  ? 'Jogos calibrados com distribuições de Fibonacci (3 a 6 dezenas) e garantia de que pelo menos 3 jogos residem na Zona Central de soma (180–215).'
                   : `Todos os bilhetes atendem estritamente aos filtros matemáticos e à garantia de ${preset.garantia}.`}
               </p>
             </div>

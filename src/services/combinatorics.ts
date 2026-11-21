@@ -627,9 +627,41 @@ export function getRotatedFixedBounds(
 }
 
 /**
+ * Constantes Canônicas da Estratificação de Soma (Proteção de Caudas Auditada):
+ * - Zona Central (75%): 180 a 215
+ * - Cauda Alta (15%): 216 a 230
+ * - Cauda Baixa (10%): 155 a 179
+ */
+export const ZONA_CENTRAL_SOMA_MIN = 180;
+export const ZONA_CENTRAL_SOMA_MAX = 215;
+export const CAUDA_BAIXA_SOMA_MIN = 155;
+export const CAUDA_BAIXA_SOMA_MAX = 179;
+export const CAUDA_ALTA_SOMA_MIN = 216;
+export const CAUDA_ALTA_SOMA_MAX = 230;
+
+/**
+ * Calcula quotas obrigatórias de Estratificação de Cauda para fechamentos com >= 10 jogos:
+ * - 75% Zona Central (180–215)
+ * - 15% Cauda Alta (216–230)
+ * - 10% Cauda Baixa (155–179)
+ */
+export function computeTailStratificationQuotas(
+  maxTickets: number,
+  enabled: boolean
+): { coreQuota: number; upperQuota: number; lowerQuota: number } {
+  if (!enabled || maxTickets < 10) {
+    return { coreQuota: Math.max(0, maxTickets), upperQuota: 0, lowerQuota: 0 };
+  }
+  const upperQuota = Math.max(1, Math.round(maxTickets * 0.15));
+  const lowerQuota = Math.max(1, Math.round(maxTickets * 0.10));
+  const coreQuota = Math.max(1, maxTickets - upperQuota - lowerQuota);
+  return { coreQuota, upperQuota, lowerQuota };
+}
+
+/**
  * Auto-calibra a faixa de soma esperada a partir do universoDezenas selecionado:
  * mediaUniverso = (somaDeTodasDezenasDoUniverso / universoDezenas.length) * 15
- * Retorna intervalo central sugerido [round(mediaUniverso - 20), round(mediaUniverso + 20)] dentro de [155, 235].
+ * Para universos equilibrados (μ_U ~ 195), converge exatamente para a Zona Central 180–215.
  */
 export function calibrarFaixaSomaUniverso(universoDezenas: number[]): {
   mediaUniverso: number;
@@ -638,18 +670,23 @@ export function calibrarFaixaSomaUniverso(universoDezenas: number[]): {
 } {
   const clean = Array.from(new Set(universoDezenas.filter((n) => n >= 1 && n <= 25)));
   if (clean.length === 0) {
-    return { mediaUniverso: 195, somaMin: 180, somaMax: 220 };
+    return { mediaUniverso: 195, somaMin: ZONA_CENTRAL_SOMA_MIN, somaMax: ZONA_CENTRAL_SOMA_MAX };
   }
   const somaTotal = clean.reduce((acc, v) => acc + v, 0);
   const mediaExata = (somaTotal / clean.length) * 15;
   const mediaUniverso = Math.round(mediaExata * 10) / 10;
-  const somaMin = Math.max(155, Math.min(220, Math.round(mediaExata - 20)));
-  const somaMax = Math.min(235, Math.max(somaMin + 10, Math.round(mediaExata + 20)));
+  // Para universos centrados na distribuição natural da Lotofácil, usa a Zona Central auditada (180–215)
+  if (mediaExata >= 186 && mediaExata <= 204) {
+    return { mediaUniverso, somaMin: ZONA_CENTRAL_SOMA_MIN, somaMax: ZONA_CENTRAL_SOMA_MAX };
+  }
+  const somaMin = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(215, Math.round(mediaExata - 17)));
+  const somaMax = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(somaMin + 10, Math.round(mediaExata + 18)));
   return { mediaUniverso, somaMin, somaMax };
 }
 
 /**
- * Resolve os limites centrais de soma combinando filtros explícitos do usuário com auto-calibração por universo.
+ * Resolve os limites centrais de soma combinando filtros explícitos do usuário com a Zona Central 180–215
+ * e auto-calibração para universos assimétricos.
  */
 export function resolveCentralSumBounds(
   universoDezenas: number[],
@@ -669,8 +706,12 @@ export function resolveCentralSumBounds(
       wasAutoCalibrated: true,
     };
   }
-  const isDefaultSum = filters.somaMin === 180 && filters.somaMax === 220;
-  if (filters.autoCalibrarSomaUniverso !== false && isDefaultSum) {
+  const isStandardDefaultSum =
+    (filters.somaMin === 175 && filters.somaMax === 220) ||
+    (filters.somaMin === 180 && filters.somaMax === 215) ||
+    (filters.somaMin === 180 && filters.somaMax === 220);
+
+  if (filters.autoCalibrarSomaUniverso !== false && isStandardDefaultSum) {
     return {
       mediaUniverso: cal.mediaUniverso,
       centralMin: cal.somaMin,
@@ -893,8 +934,9 @@ export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean
     return { isVicious: true, reason: 'Diagonal secundária completa (05-09-13-17-21) no volante 5x5' };
   }
 
-  // 4. Progressões aritméticas óbvias de 5 ou mais dezenas (passos r = 1, 2, 3, 4, 5)
+  // 4. Progressões aritméticas óbvias: para r=1 exige 7+ consecutivas (5 e 6 são naturais; linhas cheias 5x5 já são vetadas acima); para r>=2 exige 5+
   for (let r = 1; r <= 5; r++) {
+    const threshold = r === 1 ? 7 : 5;
     for (const start of sorted) {
       let count = 1;
       let curr = start;
@@ -904,7 +946,7 @@ export function hasViciousVisualPattern(numbers: number[]): { isVicious: boolean
         seq.push(curr);
         count++;
       }
-      if (count >= 5) {
+      if (count >= threshold) {
         const desc = r === 1 ? 'consecutivas' : `em passo de ${r} em ${r}`;
         return {
           isVicious: true,
@@ -971,7 +1013,130 @@ export function auditoriaAnomaliasEstatisticas(
 }
 
 
-// Analyze a 15-number ticket with Cruz, Extremas e Métricas Canônicas
+/**
+ * Curva Gaussiana Suave com platô no intervalo de pico [peakMin, peakMax].
+ * Retorna 1.0 dentro do platô e decai suavemente segundo exp(-0.5 * (dist / sigma)^2) fora dele.
+ */
+export function computeGaussianPlateauScore(
+  value: number,
+  peakMin: number,
+  peakMax: number,
+  sigma: number
+): number {
+  if (value >= peakMin && value <= peakMax) return 1.0;
+  const dist = value < peakMin ? peakMin - value : value - peakMax;
+  return Math.exp(-0.5 * Math.pow(dist / Math.max(0.001, sigma), 2));
+}
+
+export interface GaussianScoreIAMetrics {
+  soma: number;
+  moldura: number;
+  primos: number;
+  fibonacci: number;
+  pares: number;
+  repetidas: number;
+  maxConsecutivas: number;
+  cruz: number;
+  bola1: number;
+  bola15: number;
+  isHistoricalCollision?: boolean;
+  isViciousVisual?: boolean;
+}
+
+/**
+ * Recalibração Gaussiana do scoreIA (Auditoria 9 Concursos #3825–#3833):
+ * Substitui hard cutoffs por Curvas Gaussianas Suaves centradas nos vencedores de 13 pts:
+ * - moldura: pico 9–10 (8 e 11 com penalidade leve)
+ * - primos: pico 5–6 (média 13 pts: 5.8)
+ * - fibonacci: pico 4–6 (média 13 pts: 5.0)
+ * - pares: pico 6–7 (média 13 pts: 6.6)
+ * - repetidas: pico 7–9 (média 13 pts: 7.8 — sem penalidade severa para 7 repetidas)
+ * - maxConsecutivas: penalidade ZERO entre 3 e 5 (média 13 pts: 5.2); penalidade suave apenas a partir de 6
+ * - soma: platô na Zona Central 180–215 com decaimento suave nas caudas (155–179 e 216–230)
+ */
+export function calculateGaussianScoreIA(
+  metrics: GaussianScoreIAMetrics,
+  baseDezenasScore: number = 78
+): {
+  scoreIA: number;
+  consecutivasPenalty: number;
+  components: {
+    moldura: number;
+    primos: number;
+    fibonacci: number;
+    pares: number;
+    repetidas: number;
+    soma: number;
+    cruz: number;
+    extremidades: number;
+    consecutivas: number;
+  };
+} {
+  const gMoldura = computeGaussianPlateauScore(metrics.moldura, 9, 10, 1.8);
+  const gPrimos = computeGaussianPlateauScore(metrics.primos, 5, 6, 1.5);
+  const gFibonacci = computeGaussianPlateauScore(metrics.fibonacci, 4, 6, 1.5);
+  const gPares = computeGaussianPlateauScore(metrics.pares, 6, 7, 1.5);
+  const gRepetidas = computeGaussianPlateauScore(metrics.repetidas, 7, 9, 1.8);
+  const gSoma = computeGaussianPlateauScore(metrics.soma, ZONA_CENTRAL_SOMA_MIN, ZONA_CENTRAL_SOMA_MAX, 22);
+  const gCruz = computeGaussianPlateauScore(metrics.cruz, 5, 6, 1.6);
+  const gBola1 = computeGaussianPlateauScore(metrics.bola1, 1, 2, 2.0);
+  const gBola15 = computeGaussianPlateauScore(metrics.bola15, 24, 25, 2.0);
+
+  // Mapeia cada Gaussiana [0..1] para contribuição suave [-weight .. +weight]
+  const molduraDelta = 1.6 * (2 * gMoldura - 1);
+  const primosDelta = 1.5 * (2 * gPrimos - 1);
+  const fibonacciDelta = 1.4 * (2 * gFibonacci - 1);
+  const paresDelta = 1.6 * (2 * gPares - 1);
+  const repetidasDelta = 1.6 * (2 * gRepetidas - 1);
+  const somaDelta = 1.8 * (2 * gSoma - 1);
+  const cruzDelta = 0.8 * (2 * gCruz - 1);
+  const extremidadesDelta = 0.4 * (2 * gBola1 - 1) + 0.4 * (2 * gBola15 - 1);
+
+  // Penalidade ZERO para maxConsecutivas <= 5 (incluindo 3, 4 e 5); decaimento Gaussiano suave somente a partir de 6
+  const consecutivasPenalty =
+    metrics.maxConsecutivas <= 5
+      ? 0
+      : (1 - Math.exp(-0.5 * Math.pow((metrics.maxConsecutivas - 5) / 2.2, 2))) * 4.0;
+
+  let rawScore =
+    baseDezenasScore +
+    molduraDelta +
+    primosDelta +
+    fibonacciDelta +
+    paresDelta +
+    repetidasDelta +
+    somaDelta +
+    cruzDelta +
+    extremidadesDelta -
+    consecutivasPenalty;
+
+  if (metrics.isHistoricalCollision) {
+    rawScore -= 15.0;
+  }
+  if (metrics.isViciousVisual) {
+    rawScore -= 12.0;
+  }
+
+  const scoreIA = Math.round(Math.max(30, Math.min(100, rawScore)) * 10) / 10;
+
+  return {
+    scoreIA,
+    consecutivasPenalty: Math.round(consecutivasPenalty * 1000) / 1000,
+    components: {
+      moldura: molduraDelta,
+      primos: primosDelta,
+      fibonacci: fibonacciDelta,
+      pares: paresDelta,
+      repetidas: repetidasDelta,
+      soma: somaDelta,
+      cruz: cruzDelta,
+      extremidades: extremidadesDelta,
+      consecutivas: -consecutivasPenalty,
+    },
+  };
+}
+
+// Analyze a 15-number ticket with Cruz, Extremas e Score IA Gaussiano Suave
 export function analyzeTicket(
   numbers: number[],
   concursoAnterior: number[] = CONCURSO_ATUAL.dezenas,
@@ -1011,66 +1176,25 @@ export function analyzeTicket(
   const bola1 = sorted[0];
   const bola15 = sorted[sorted.length - 1];
   const maxConsecutivas = getMaxConsecutiveSequence(sorted);
-  let baseScore = scoreSum / 15;
+  const baseDezenasScore = scoreSum / 15;
 
-  // Calibração Suavizada da Zona de Ouro (185 a 215):
-  if (soma >= 185 && soma <= 215) {
-    baseScore += 3.0; // Zona de Ouro integral (185 a 215)
-  } else if (soma >= 180 && soma < 185) {
-    baseScore -= 1.0;
-  } else if (soma > 215 && soma <= 222) {
-    baseScore -= (soma - 215) * 0.8;
-  } else if (soma > 222) {
-    baseScore -= 6.0 + (soma - 222) * 1.5;
-  }
-
-  // Bônus de Moldura Expandida (8 a 12 dezenas na borda)
-  if (moldura >= 8 && moldura <= 12) {
-    baseScore += 1.5;
-  }
-
-  // Bônus / Calibração da Cruz da Lotofácil (Zona de Ouro: 5 a 6 dezenas na Cruz)
-  if (cruz >= 5 && cruz <= 6) {
-    baseScore += 2.0; // Zona de Ouro da Cruz
-  } else if (cruz === 4 || cruz === 7) {
-    baseScore += 0.5; // Intervalo padrão aceitável
-  } else {
-    baseScore -= 2.5; // Desvio extremo na Cruz
-  }
-
-  // Bônus / Calibração de Bolas Extremas (Bola 1 e Bola 15)
-  if (bola1 === 1 || bola1 === 2) {
-    baseScore += 1.0; // Ponta inicial ideal
-  } else if (BOLAS_EXTREMAS_INICIO.includes(bola1)) {
-    baseScore += 0.4;
-  } else {
-    baseScore -= 2.0; // Bola 1 muito alta (>= 5)
-  }
-
-  if (bola15 === 24 || bola15 === 25) {
-    baseScore += 1.0; // Ponta final ideal
-  } else if (BOLAS_EXTREMAS_FIM.includes(bola15)) {
-    baseScore += 0.4;
-  } else {
-    baseScore -= 2.0; // Bola 15 muito baixa (<= 21)
-  }
-
-  // Refinamento Zona de Ouro de Primos (5 a 6 números primos > 70% histórico)
-  if (primos === 5 || primos === 6) {
-    baseScore += 1.5;
-  } else if (primos === 4 || primos === 7) {
-    baseScore += 0.3;
-  }
-
-  // Penalização severa de colisão histórica de 15 pontos ou padrões viciados
-  if (isHistorical15Collision(sorted)) {
-    baseScore -= 15.0;
-  }
-  if (hasViciousVisualPattern(sorted).isVicious) {
-    baseScore -= 12.0;
-  }
-
-  const scoreIA = Math.round(Math.max(30, Math.min(100, baseScore)) * 10) / 10;
+  const { scoreIA } = calculateGaussianScoreIA(
+    {
+      soma,
+      moldura,
+      primos,
+      fibonacci,
+      pares,
+      repetidas,
+      maxConsecutivas,
+      cruz,
+      bola1,
+      bola15,
+      isHistoricalCollision: isHistorical15Collision(sorted),
+      isViciousVisual: hasViciousVisualPattern(sorted).isVicious,
+    },
+    baseDezenasScore
+  );
 
   // Auditoria Bitwise dos 6 novos filtros matemáticos
   const ticketMask = _criarMascara(sorted);
@@ -1530,7 +1654,7 @@ export function isCanonicalAnomaly(
   const bola1 = sorted[0];
   const bola15 = sorted[sorted.length - 1];
 
-  const minSoma = sumBoundsOverride?.somaMin ?? 180;
+  const minSoma = sumBoundsOverride?.somaMin ?? 175;
   const maxSoma = sumBoundsOverride?.somaMax ?? 225;
 
   // Canonical constraints - descarta fechamentos matematicamente improváveis
@@ -1575,8 +1699,8 @@ export function isJogoPlauzivelLotofacil(
   const bola1 = sorted[0];
   const bola15 = sorted[sorted.length - 1];
 
-  if (soma < 180 || soma > 225) {
-    return { valido: false, motivoDescarte: `Soma (${soma}) fora da faixa permitida (180 a 225)` };
+  if (soma < 175 || soma > 225) {
+    return { valido: false, motivoDescarte: `Soma (${soma}) fora da faixa permitida (175 a 225)` };
   }
   if (pares < 5 || pares > 10) {
     return { valido: false, motivoDescarte: `Paridade extrema (${pares}P / ${impares}I) com chance inferior a 0.4%` };
@@ -1733,7 +1857,7 @@ export function generateMinimumSetCoverFechamento({
 
   // 3. Validador de filtros canônicos estritos (respeitando o nível de Fallback Progressivo)
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
     somaMax: Math.max(225, centralMax),
   };
 
@@ -1752,16 +1876,21 @@ export function generateMinimumSetCoverFechamento({
     return true;
   };
 
-  // Candidatos de cota de borda (Anti-Cisne Negro 75/15/10) ativados para >= 10 jogos (exceto Nível 3 onde tudo é cobertura livre)
-  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
-  const lowerTailMax = Math.max(155, centralMin - 1);
-  const upperTailMin = Math.min(235, centralMax + 1);
+  // Candidatos de Proteção de Caudas (75% Central 180–215 / 15% Cauda Alta 216–230 / 10% Cauda Baixa 155–179) obrigatória em >= 10 jogos
+  const enableStratification =
+    maxTickets >= 10 && n >= 16 && effectiveCoreFilters?.estratificacaoCaudaAtiva !== false;
+  const stratCentralMin = bypassAnomaly ? ZONA_CENTRAL_SOMA_MIN : centralMin;
+  const stratCentralMax = bypassAnomaly ? ZONA_CENTRAL_SOMA_MAX : centralMax;
+  const lowerTailMax = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(CAUDA_BAIXA_SOMA_MAX, stratCentralMin - 1));
+  const upperTailMin = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(CAUDA_ALTA_SOMA_MIN, stratCentralMax + 1));
 
   const isLowerTailCandidate = (nums: number[]): boolean => {
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < 155 || soma > lowerTailMax) return false;
+    if (soma < CAUDA_BAIXA_SOMA_MIN || soma > lowerTailMax) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    if (bypassAnomaly) return true;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 8) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -1771,7 +1900,6 @@ export function generateMinimumSetCoverFechamento({
     if (bola1 > 4 || bola15 < 20) return false;
     if (pares < 4 || pares > 11) return false;
     if (primos < 3 || primos > 8) return false;
-    if (isHistorical15Collision(sorted)) return false;
     return true;
   };
 
@@ -1779,7 +1907,9 @@ export function generateMinimumSetCoverFechamento({
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < upperTailMin || soma > 235) return false;
+    if (soma < upperTailMin || soma > CAUDA_ALTA_SOMA_MAX) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    if (bypassAnomaly) return true;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 7) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -1789,7 +1919,6 @@ export function generateMinimumSetCoverFechamento({
     if (bola1 > 5 || bola15 < 22) return false;
     if (pares < 4 || pares > 11) return false;
     if (primos < 3 || primos > 8) return false;
-    if (isHistorical15Collision(sorted)) return false;
     return true;
   };
 
@@ -1797,6 +1926,7 @@ export function generateMinimumSetCoverFechamento({
   const coreCombos: number[][] = [];
   const lowerTailCombos: number[][] = [];
   const upperTailCombos: number[][] = [];
+  const overflowCombos: number[][] = [];
 
   const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
   const nonFixedBits = nonFixedPool.map((d) => 1 << (d - 1));
@@ -1868,6 +1998,21 @@ export function generateMinimumSetCoverFechamento({
       (fullMask) => {
         if (coreSeenMasks.has(fullMask)) return;
         const combo = _mascaraParaDezenas(fullMask);
+        if (bypassAnomaly && enableStratification) {
+          if (!checkFixasCompliance(combo)) return;
+          const s = combo.reduce((a, b) => a + b, 0);
+          coreSeenMasks.add(fullMask);
+          if (s >= stratCentralMin && s <= stratCentralMax) {
+            coreCombos.push(combo);
+          } else if (s >= CAUDA_BAIXA_SOMA_MIN && s <= lowerTailMax) {
+            lowerTailCombos.push(combo);
+          } else if (s >= upperTailMin && s <= CAUDA_ALTA_SOMA_MAX) {
+            upperTailCombos.push(combo);
+          } else {
+            overflowCombos.push(combo);
+          }
+          return;
+        }
         if (isCandidateValid(combo)) {
           coreSeenMasks.add(fullMask);
           coreCombos.push(combo);
@@ -1876,9 +2021,13 @@ export function generateMinimumSetCoverFechamento({
     );
   }
 
-  if (enableStratification) {
+  if (bypassAnomaly && enableStratification && coreCombos.length < maxTickets && overflowCombos.length > 0) {
+    coreCombos.push(...overflowCombos);
+  }
+
+  if (enableStratification && !bypassAnomaly) {
     const lowerTailFilters: PodaDinamicaFiltros = {
-      somaMin: 155,
+      somaMin: CAUDA_BAIXA_SOMA_MIN,
       somaMax: lowerTailMax,
       paresMin: 4,
       paresMax: 11,
@@ -1886,7 +2035,7 @@ export function generateMinimumSetCoverFechamento({
     };
     const upperTailFilters: PodaDinamicaFiltros = {
       somaMin: upperTailMin,
-      somaMax: 235,
+      somaMax: CAUDA_ALTA_SOMA_MAX,
       paresMin: 4,
       paresMax: 11,
       posicionalAtivo: false,
@@ -1943,9 +2092,10 @@ export function generateMinimumSetCoverFechamento({
     }
   }
 
-  // Quotas de estratificação Anti-Cisne Negro: 75% Central / 15% Cauda Baixa / 10% Cauda Alta
-  let lowerTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
-  let upperTailQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
+  // Quotas de Estratificação de Cauda: 75% Zona Central (180–215) / 15% Cauda Alta (216–230) / 10% Cauda Baixa (155–179)
+  const stratQuotas = computeTailStratificationQuotas(maxTickets, enableStratification);
+  let lowerTailQuota = stratQuotas.lowerQuota;
+  let upperTailQuota = stratQuotas.upperQuota;
   if (lowerTailCombos.length === 0) lowerTailQuota = 0;
   if (upperTailCombos.length === 0) upperTailQuota = 0;
   const coreQuota = Math.max(1, maxTickets - lowerTailQuota - upperTailQuota);
@@ -2009,7 +2159,8 @@ export function generateMinimumSetCoverFechamento({
   const pickBestCandidate = (
     minHammingReq: number,
     requireUncoveredGain: boolean,
-    enforceSoftFreqCap: boolean
+    enforceSoftFreqCap: boolean,
+    enforceQuota: boolean = true
   ): number => {
     let bestCandIdx = -1;
     let bestCombinedGain = -9999999;
@@ -2023,14 +2174,16 @@ export function generateMinimumSetCoverFechamento({
       const isUpper = i >= coreCombos.length + lowerTailCombos.length;
 
       // Respeita quotas de estratificação
-      if (isLower && lowerTailChosen >= lowerTailQuota) continue;
-      if (isUpper && upperTailChosen >= upperTailQuota) continue;
-      if (!isLower && !isUpper && coreChosen >= coreQuota) {
-        const lowerNeeded = Math.max(0, lowerTailQuota - lowerTailChosen);
-        const upperNeeded = Math.max(0, upperTailQuota - upperTailChosen);
-        const remainingSlots = maxTickets - chosenIndices.length;
-        if (remainingSlots <= lowerNeeded + upperNeeded && (lowerTailCombos.length > 0 || upperTailCombos.length > 0)) {
-          continue;
+      if (enforceQuota) {
+        if (isLower && lowerTailChosen >= lowerTailQuota) continue;
+        if (isUpper && upperTailChosen >= upperTailQuota) continue;
+        if (!isLower && !isUpper && coreChosen >= coreQuota) {
+          const lowerNeeded = Math.max(0, lowerTailQuota - lowerTailChosen);
+          const upperNeeded = Math.max(0, upperTailQuota - upperTailChosen);
+          const remainingSlots = maxTickets - chosenIndices.length;
+          if (remainingSlots <= lowerNeeded + upperNeeded && (lowerTailCombos.length > 0 || upperTailCombos.length > 0)) {
+            continue;
+          }
         }
       }
 
@@ -2172,12 +2325,15 @@ export function generateMinimumSetCoverFechamento({
 
   // Preenchimento complementar até maxTickets mantendo prioridade Hamming >= 3 em 18–21
   while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
-    let idx = pickBestCandidate(targetHammingDist, false, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false);
-    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false);
-    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets))) {
-      idx = pickBestCandidate(1, false, false);
+    let idx = pickBestCandidate(targetHammingDist, false, true, true);
+    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
+    if (idx === -1 && targetHammingDist > 3) idx = pickBestCandidate(3, false, false, true);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, true);
+    const allowQuotaOverflow = bypassAnomaly || coreChosen >= coreQuota;
+    if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(targetHammingDist, false, false, false);
+    if (idx === -1 && allowQuotaOverflow && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, false);
+    if (idx === -1 && (!is18to21 || (n === 18 && fallbackLevel === 0 && candCount >= maxTickets && allowQuotaOverflow))) {
+      idx = pickBestCandidate(1, false, false, false);
     }
     if (idx === -1) break;
     commitCandidate(idx);
@@ -2243,12 +2399,12 @@ export function generateMinimumSetCoverFechamento({
   return finalEntries.map((entry, idx) => {
     const tags = [
       entry.faixaSoma === 'baixa'
-        ? 'Cauda Baixa (155+)'
+        ? 'Cauda Baixa (155–179)'
         : entry.faixaSoma === 'alta'
-        ? 'Cauda Alta (≤235)'
+        ? 'Cauda Alta (216–230)'
         : fallbackLevel === 3
         ? 'Cobertura Combinatória + Hamming'
-        : `Central (${centralMin}–${centralMax})`,
+        : `Zona Central (${centralMin}–${centralMax})`,
       fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
         ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
         : `Hamming ≥${targetHammingDist}`,
@@ -2381,7 +2537,7 @@ export function generateFechamentoCovering(
   };
 
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 180, centralMin),
+    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
     somaMax: Math.max(225, centralMax),
   };
 
@@ -2430,17 +2586,22 @@ export function generateFechamentoCovering(
     return [{ id: 'ticket-1', index: 1, ...analysis, faixaSoma: 'ouro' }];
   }
 
-  // Estratificação Anti-Cisne Negro (75/15/10) ativada para fechamentos >= 10 jogos (exceto Nível 3)
-  const enableStratification = maxTickets >= 10 && n >= 16 && !bypassAnomaly;
-  const lowerTailMax = Math.max(155, centralMin - 1);
-  const upperTailMin = Math.min(235, centralMax + 1);
+  // Estratificação de Cauda obrigatória em >= 10 jogos: 75% Zona Central (180–215) / 15% Cauda Alta (216–230) / 10% Cauda Baixa (155–179)
+  const enableStratification =
+    maxTickets >= 10 && n >= 16 && effectiveCoreFilters?.estratificacaoCaudaAtiva !== false;
+  const stratCentralMin = bypassAnomaly ? ZONA_CENTRAL_SOMA_MIN : centralMin;
+  const stratCentralMax = bypassAnomaly ? ZONA_CENTRAL_SOMA_MAX : centralMax;
+  const lowerTailMax = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(CAUDA_BAIXA_SOMA_MAX, stratCentralMin - 1));
+  const upperTailMin = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(CAUDA_ALTA_SOMA_MIN, stratCentralMax + 1));
 
   const isLowerTailCandidate = (nums: number[]): boolean => {
     if (!enableStratification) return false;
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < 155 || soma > lowerTailMax) return false;
+    if (soma < CAUDA_BAIXA_SOMA_MIN || soma > lowerTailMax) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    if (bypassAnomaly) return true;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 8) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -2450,7 +2611,6 @@ export function generateFechamentoCovering(
     if (bola1 > 4 || bola15 < 20) return false;
     if (pares < 4 || pares > 11) return false;
     if (primos < 3 || primos > 8) return false;
-    if (isHistorical15Collision(sorted)) return false;
     return true;
   };
 
@@ -2459,7 +2619,9 @@ export function generateFechamentoCovering(
     if (!checkFixasCompliance(nums)) return false;
     const sorted = [...nums].sort((x, y) => x - y);
     const soma = sorted.reduce((a, b) => a + b, 0);
-    if (soma < upperTailMin || soma > 235) return false;
+    if (soma < upperTailMin || soma > CAUDA_ALTA_SOMA_MAX) return false;
+    if (isHistorical15Collision(sorted)) return false;
+    if (bypassAnomaly) return true;
     const maxSeq = getMaxConsecutiveSequence(sorted);
     if (maxSeq > 7) return false;
     const pares = sorted.filter((d) => d % 2 === 0).length;
@@ -2469,7 +2631,6 @@ export function generateFechamentoCovering(
     if (bola1 > 5 || bola15 < 22) return false;
     if (pares < 4 || pares > 11) return false;
     if (primos < 3 || primos > 8) return false;
-    if (isHistorical15Collision(sorted)) return false;
     return true;
   };
 
@@ -2477,6 +2638,7 @@ export function generateFechamentoCovering(
   const coreCandidates: number[][] = [];
   const lowerTailCandidates: number[][] = [];
   const upperTailCandidates: number[][] = [];
+  const overflowCandidates: number[][] = [];
   const candidateSeen = new Set<string>();
 
   const maxCorePool = n <= 17 ? 2000 : 4000;
@@ -2552,10 +2714,28 @@ export function generateFechamentoCovering(
         coreBranchFilters,
         fMask,
         (fullMask) => {
-          if (coreCandidates.length >= maxCorePool) return;
           const combo = _mascaraParaDezenas(fullMask);
           const key = combo.join('-');
           if (candidateSeen.has(key)) return;
+          if (bypassAnomaly && enableStratification) {
+            if (!checkFixasCompliance(combo)) return;
+            const s = combo.reduce((a, b) => a + b, 0);
+            if (s >= stratCentralMin && s <= stratCentralMax && coreCandidates.length < maxCorePool) {
+              candidateSeen.add(key);
+              coreCandidates.push(combo);
+            } else if (s >= CAUDA_BAIXA_SOMA_MIN && s <= lowerTailMax && lowerTailCandidates.length < maxTailPool) {
+              candidateSeen.add(key);
+              lowerTailCandidates.push(combo);
+            } else if (s >= upperTailMin && s <= CAUDA_ALTA_SOMA_MAX && upperTailCandidates.length < maxTailPool) {
+              candidateSeen.add(key);
+              upperTailCandidates.push(combo);
+            } else if (overflowCandidates.length < maxCorePool) {
+              candidateSeen.add(key);
+              overflowCandidates.push(combo);
+            }
+            return;
+          }
+          if (coreCandidates.length >= maxCorePool) return;
           if (isCandidateValid(combo)) {
             candidateSeen.add(key);
             coreCandidates.push(combo);
@@ -2564,9 +2744,13 @@ export function generateFechamentoCovering(
       );
     }
 
-    if (enableStratification) {
+    if (bypassAnomaly && enableStratification && coreCandidates.length < maxTickets && overflowCandidates.length > 0) {
+      coreCandidates.push(...overflowCandidates);
+    }
+
+    if (enableStratification && !bypassAnomaly) {
       const lowerTailFilters: PodaDinamicaFiltros = {
-        somaMin: 155,
+        somaMin: CAUDA_BAIXA_SOMA_MIN,
         somaMax: lowerTailMax,
         paresMin: 4,
         paresMax: 11,
@@ -2574,7 +2758,7 @@ export function generateFechamentoCovering(
       };
       const upperTailFilters: PodaDinamicaFiltros = {
         somaMin: upperTailMin,
-        somaMax: 235,
+        somaMax: CAUDA_ALTA_SOMA_MAX,
         paresMin: 4,
         paresMax: 11,
         posicionalAtivo: false,
@@ -2699,7 +2883,22 @@ export function generateFechamentoCovering(
       const key = combo.join('-');
       if (candidateSeen.has(key)) continue;
 
-      if (coreCandidates.length < maxCorePool && fastEarlyExitCoreCheck(combo) && isCandidateValid(combo)) {
+      if (bypassAnomaly && enableStratification) {
+        const s = combo.reduce((a, b) => a + b, 0);
+        if (s >= stratCentralMin && s <= stratCentralMax && coreCandidates.length < maxCorePool) {
+          candidateSeen.add(key);
+          coreCandidates.push(combo);
+        } else if (s >= CAUDA_BAIXA_SOMA_MIN && s <= lowerTailMax && lowerTailCandidates.length < maxTailPool) {
+          candidateSeen.add(key);
+          lowerTailCandidates.push(combo);
+        } else if (s >= upperTailMin && s <= CAUDA_ALTA_SOMA_MAX && upperTailCandidates.length < maxTailPool) {
+          candidateSeen.add(key);
+          upperTailCandidates.push(combo);
+        } else if (overflowCandidates.length < maxCorePool) {
+          candidateSeen.add(key);
+          overflowCandidates.push(combo);
+        }
+      } else if (coreCandidates.length < maxCorePool && fastEarlyExitCoreCheck(combo) && isCandidateValid(combo)) {
         candidateSeen.add(key);
         coreCandidates.push(combo);
       } else if (isLowerTailCandidate(combo) && lowerTailCandidates.length < maxTailPool) {
@@ -2709,6 +2908,10 @@ export function generateFechamentoCovering(
         candidateSeen.add(key);
         upperTailCandidates.push(combo);
       }
+    }
+
+    if (bypassAnomaly && enableStratification && coreCandidates.length < maxTickets && overflowCandidates.length > 0) {
+      coreCandidates.push(...overflowCandidates);
     }
   }
 
@@ -2764,9 +2967,10 @@ export function generateFechamentoCovering(
     })),
   ];
 
-  // Quotas Anti-Cisne Negro (75% Central / 15% Cauda Baixa / 10% Cauda Alta)
-  let lowerQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
-  let upperQuota = enableStratification ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
+  // Quotas de Estratificação de Cauda: 75% Zona Central (180–215) / 15% Cauda Alta (216–230) / 10% Cauda Baixa (155–179)
+  const stratQuotas = computeTailStratificationQuotas(maxTickets, enableStratification);
+  let lowerQuota = stratQuotas.lowerQuota;
+  let upperQuota = stratQuotas.upperQuota;
   if (lowerTailCandidates.length === 0) lowerQuota = 0;
   if (upperTailCandidates.length === 0) upperQuota = 0;
   const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
@@ -3013,7 +3217,7 @@ export function generateFechamentoCovering(
     }
   };
 
-  // Fase 1: Preencher estratos protegidos (15% Cauda Baixa, 10% Cauda Alta) mantendo Hamming >= targetHammingDist
+  // Fase 1: Preencher estratos protegidos (15% Cauda Alta 216–230, 10% Cauda Baixa 155–179) mantendo Hamming >= targetHammingDist
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
       const hit =
@@ -3078,12 +3282,12 @@ export function generateFechamentoCovering(
     const analysis = analyzeTicket(item.nums, concursoAnterior, aiScores);
     const tags = [
       item.faixaSoma === 'baixa'
-        ? 'Cauda Baixa (155+)'
+        ? 'Cauda Baixa (155–179)'
         : item.faixaSoma === 'alta'
-        ? 'Cauda Alta (≤235)'
+        ? 'Cauda Alta (216–230)'
         : fallbackLevel === 3
         ? 'Cobertura Combinatória + Hamming'
-        : `Central (${centralMin}–${centralMax})`,
+        : `Zona Central (${centralMin}–${centralMax})`,
       fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
         ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
         : `Hamming ≥${targetHammingDist}`,
@@ -3185,13 +3389,11 @@ export function gerarMatrizEstratificada(
   const aiScores = options.aiScores;
   const { centralMin, centralMax } = resolveCentralSumBounds(sortedPool, options.filters);
 
-  // 2. Cálculo das cotas estratificadas (75% Central, 15% Cauda Baixa, 10% Cauda Alta quando >= 10 jogos)
-  let qtdOuro = totalJogos >= 10 ? Math.round(totalJogos * 0.75) : totalJogos;
-  let qtdCaudaBaixa = totalJogos >= 10 ? Math.max(1, Math.round(totalJogos * 0.15)) : 0;
-  let qtdCaudaAlta = totalJogos >= 10 ? Math.max(1, totalJogos - qtdOuro - qtdCaudaBaixa) : 0;
-  if (totalJogos >= 10) {
-    qtdOuro = Math.max(1, totalJogos - qtdCaudaBaixa - qtdCaudaAlta);
-  }
+  // 2. Cálculo das cotas estratificadas (75% Zona Central 180–215, 15% Cauda Alta 216–230, 10% Cauda Baixa 155–179 quando >= 10 jogos)
+  const stratQuotas = computeTailStratificationQuotas(totalJogos, totalJogos >= 10);
+  const qtdOuro = stratQuotas.coreQuota;
+  const qtdCaudaAlta = stratQuotas.upperQuota;
+  const qtdCaudaBaixa = stratQuotas.lowerQuota;
 
   // 3. Geração de combinações candidatas com suporte a K de N fixas rotativas
   const nonFixedPool = sortedPool.filter((d) => !effectiveFixedSet.has(d));
@@ -3257,12 +3459,12 @@ export function gerarMatrizEstratificada(
     }
   }
 
-  // 4. Classificação dos candidatos por estrato estatístico (155–235)
+  // 4. Classificação dos candidatos por estrato estatístico (Cauda Baixa 155–179 / Central 180–215 / Cauda Alta 216–230)
   const candidatosOuro: number[][] = [];
   const candidatosCaudaBaixa: number[][] = [];
   const candidatosCaudaAlta: number[][] = [];
-  const lowerTailMax = Math.max(155, centralMin - 1);
-  const upperTailMin = Math.min(235, centralMax + 1);
+  const lowerTailMax = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(CAUDA_BAIXA_SOMA_MAX, centralMin - 1));
+  const upperTailMin = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(CAUDA_ALTA_SOMA_MIN, centralMax + 1));
 
   for (const combo of rawCombos) {
     const soma = combo.reduce((a, b) => a + b, 0);
@@ -3270,10 +3472,10 @@ export function gerarMatrizEstratificada(
 
     if (soma >= centralMin && soma <= centralMax) {
       candidatosOuro.push(combo);
-    } else if (soma >= 155 && soma <= lowerTailMax) {
+    } else if (soma >= CAUDA_BAIXA_SOMA_MIN && soma <= lowerTailMax) {
       const maxSeq = getMaxConsecutiveSequence(combo);
       if (maxSeq <= 8) candidatosCaudaBaixa.push(combo);
-    } else if (soma >= upperTailMin && soma <= 235) {
+    } else if (soma >= upperTailMin && soma <= CAUDA_ALTA_SOMA_MAX) {
       const maxSeq = getMaxConsecutiveSequence(combo);
       if (maxSeq <= 7) candidatosCaudaAlta.push(combo);
     }
@@ -3411,10 +3613,10 @@ export function gerarMatrizEstratificada(
       faixaSoma: entry.faixaSoma,
       tags: [
         entry.faixaSoma === 'baixa'
-          ? 'Cauda Baixa (155+)'
+          ? 'Cauda Baixa (155–179)'
           : entry.faixaSoma === 'alta'
-          ? 'Cauda Alta (≤235)'
-          : `Central (${centralMin}–${centralMax})`,
+          ? 'Cauda Alta (216–230)'
+          : `Zona Central (${centralMin}–${centralMax})`,
         fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3
           ? `Fixas Rotativas (${fixedBounds.minK}–${fixedBounds.maxK}/${effectiveFixas.length})`
           : 'Hamming Otimizado',
@@ -4211,19 +4413,19 @@ export function runSimulation(
  * Adjusted to prevent premature pruning of high-scoring combinations
  */
 export const DEFAULT_FILTERS: FilterCriteria = {
-  paresMin: 6, // Tolerância Dinâmica Ampla: absorve variações de 6 a 9 pares (incluindo atípicos como concurso #3816)
-  paresMax: 9,
-  primosMin: 4, // Calibrated: 4 a 7 primos cobre >86% dos sorteios
+  paresMin: 6, // Preset Equilíbrio Pro Auditado: 6 a 8 pares (pico 13 pts em 6–7)
+  paresMax: 8,
+  primosMin: 4, // Auditado: 4 a 7 primos (pico 5–6)
   primosMax: 7,
-  somaMin: 180, // Vetar somas < 180 (Alerta Estatístico), concentrando na Zona de Ouro Expandida (185 a 215)
+  somaMin: 175, // Auditado: 175 a 220 com estratificação de cauda ativa (75% 180–215 / 15% 216–230 / 10% 155–179)
   somaMax: 220,
-  molduraMin: 8, // Moldura canônica expandida (8 a 12 externas): evita overfitting estatístico que elimina resultados reais
-  molduraMax: 12,
-  fibonacciMin: 3,
-  fibonacciMax: 5,
-  repetidasMin: 6, // Alargamento da janela de repetidas para 6 a 10 dezenas (absorve quebras e transições de ciclo)
+  molduraMin: 8, // Auditado: 8 a 11 dezenas na moldura (pico 9–10)
+  molduraMax: 11,
+  fibonacciMin: 3, // Auditado: 3 a 6 dezenas Fibonacci (pico 4–6)
+  fibonacciMax: 6,
+  repetidasMin: 7, // Auditado: 7 a 10 repetidas do concurso anterior (pico 7–9)
   repetidasMax: 10,
-  maxConsecutivas: 6, // Permite sequências de até 6 números consecutivos (ex: blocos 01-04, 16-18, 14-19)
+  maxConsecutivas: 6, // Auditado: até 6 consecutivas (penalidade zero entre 3 e 5)
   cruzMin: 4, // Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
   cruzMax: 7,
   cruzAtiva: true,
@@ -4242,18 +4444,19 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   combinacoesVazioExcluidas: [],
   vaziosAtivos: false,
   robustezEstatisticaAtiva: false,
-  robustez50SomaMin: 180,
+  robustez50SomaMin: 175,
   robustez50SomaMax: 220,
   robustez50ParesMin: 6,
-  robustez50ParesMax: 9,
+  robustez50ParesMax: 8,
   robustez50MolduraMin: 8,
-  robustez50MolduraMax: 12, // Limite superior expandido para 12 dezenas na moldura
+  robustez50MolduraMax: 11,
   fechamentoPonderadoAtivo: false,
   validacaoEstritaCruz: false,
   strictValidation: false,
   presetEstatistico: 'balanceado',
   modoFixas: 'rotativas',
   autoCalibrarSomaUniverso: true,
+  estratificacaoCaudaAtiva: true,
   posicionalAtivo: true,
   multiplosAtivo: true,
   contagemDigitosAtiva: true,

@@ -149,7 +149,7 @@ export function generateKofNFixedSubsets(
 }
 
 /**
- * Calcula cotas Anti-Cisne Negro (75% Central / 15% Cauda Baixa / 10% Cauda Alta).
+ * Calcula cotas de Estratificação de Cauda (75% Zona Central 180–215 / 15% Cauda Alta 216–230 / 10% Cauda Baixa 155–179).
  */
 export function computeStratifiedQuotasWorker(
   maxTickets: number,
@@ -158,9 +158,9 @@ export function computeStratifiedQuotasWorker(
   if (!enableStratification || maxTickets < 10) {
     return { coreQuota: maxTickets, lowerQuota: 0, upperQuota: 0 };
   }
-  const lowerQuota = Math.max(1, Math.round(maxTickets * 0.15));
-  const upperQuota = Math.max(1, Math.round(maxTickets * 0.1));
-  const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
+  const upperQuota = Math.max(1, Math.round(maxTickets * 0.15));
+  const lowerQuota = Math.max(1, Math.round(maxTickets * 0.10));
+  const coreQuota = Math.max(1, maxTickets - upperQuota - lowerQuota);
   return { coreQuota, lowerQuota, upperQuota };
 }
 
