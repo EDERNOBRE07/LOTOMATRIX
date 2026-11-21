@@ -3860,6 +3860,8 @@ export function generateCoreSatellites25Matrix(options: {
   const extraCoreTickets = totalCoreSeats - baseCorePerTicket * safeMaxTickets;
   const targetCoreFreq = totalCoreSeats / 12;
   const totalSatSeats = safeMaxTickets * 15 - totalCoreSeats;
+  const minSatFreq = Math.floor(totalSatSeats / satellites13.length);
+  const maxSatFreq = Math.ceil(totalSatSeats / satellites13.length);
   const targetSatFreq = totalSatSeats / satellites13.length;
 
   const coreFreq: Record<number, number> = {};
@@ -3877,14 +3879,18 @@ export function generateCoreSatellites25Matrix(options: {
 
   for (let t = 0; t < safeMaxTickets; t++) {
     const remainingTickets = safeMaxTickets - t;
-    const corePerTicket = Math.min(12, baseCorePerTicket + (t < extraCoreTickets ? 1 : 0));
+    // Aloca os bilhetes com +1 vaga Core no final da sequência (garante factibilidade de Gale-Ryser para mustIncludeCore)
+    const corePerTicket = Math.min(
+      12,
+      baseCorePerTicket + (t >= safeMaxTickets - extraCoreTickets ? 1 : 0)
+    );
     const satPerTicket = 15 - corePerTicket;
     let bestCombo: number[] | null = null;
     let bestScore = -Infinity;
 
-    // 140 candidatos avaliados por vaga para balancear Core 70–80%, Satélites 100%, Hamming controlado e scoreIA Gaussiano
+    // 140 candidatos avaliados por vaga para balancear Core 70–80%, rotação uniforme dos 13 Satélites, Hamming controlado e scoreIA Gaussiano
     for (let trial = 0; trial < 140; trial++) {
-      // Seleciona dezenas Core garantindo que todas atinjam >= minCoreFreq (70%) e nenhuma exceda maxCoreFreq (80%)
+      // 1) Núcleo Forte (Core 12): garante que todas as 12 dezenas fiquem estritamente em [minCoreFreq..maxCoreFreq] (70%–80%)
       const mustIncludeCore = core12
         .filter((d) => minCoreFreq - coreFreq[d] >= remainingTickets && coreFreq[d] < maxCoreFreq)
         .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0));
@@ -3913,27 +3919,39 @@ export function generateCoreSatellites25Matrix(options: {
         ...fallbackCore,
       ].slice(0, corePerTicket);
 
-      // Seleciona Satélites priorizando satélites ainda não cobertos (garante 100% das 25 dezenas)
-      const scoredSats = satellites13
+      // 2) Satélites (13 dezenas restantes): rotação balanceada nas vagas finais (minSatFreq..maxSatFreq, cobrindo 100% do volante)
+      const mustIncludeSats = satellites13
+        .filter((d) => minSatFreq - satFreq[d] >= remainingTickets && satFreq[d] < maxSatFreq)
+        .sort((a, b) => satFreq[a] - satFreq[b] || (weights[b] || 0) - (weights[a] || 0));
+
+      const eligibleSats = satellites13.filter(
+        (d) => satFreq[d] < maxSatFreq && !mustIncludeSats.includes(d)
+      );
+      const fallbackSatsPool = satellites13
+        .filter((d) => !mustIncludeSats.includes(d) && !eligibleSats.includes(d))
+        .sort((a, b) => satFreq[a] - satFreq[b]);
+
+      const scoredEligibleSats = eligibleSats
         .map((d) => ({
           d,
           priority:
-            (satFreq[d] === 0 ? 60 : 0) +
-            (targetSatFreq - satFreq[d]) * 12 +
+            (satFreq[d] === 0 ? 70 : 0) +
+            (targetSatFreq - satFreq[d]) * 16 +
             (weights[d] || 50) * 0.06 +
             (Math.random() - 0.5) * (trial === 0 ? 0.5 : 9),
         }))
         .sort((a, b) => b.priority - a.priority)
         .map((x) => x.d);
 
-      let pickedSats = scoredSats.slice(0, satPerTicket);
+      const orderedSats = [...mustIncludeSats, ...scoredEligibleSats, ...fallbackSatsPool];
+      let pickedSats = orderedSats.slice(0, satPerTicket);
 
-      // Se houver restrição de Pivô 9 (K ∈ {4, 5, 6}), ajusta satélites para respeitar K dezenas no Pivô
+      // Se houver restrição de Pivô 9 (K ∈ {4, 5, 6}), ajusta satélites respeitando o teto de rotação
       if (pivotConstraint && pivotSet) {
         const coreInPivot = pickedCore.filter((d) => pivotSet.has(d)).length;
         const neededPivotFromSat = Math.max(0, pivotConstraint.kPivot - coreInPivot);
-        const satInPivot = scoredSats.filter((d) => pivotSet.has(d));
-        const satOutPivot = scoredSats.filter((d) => !pivotSet.has(d));
+        const satInPivot = orderedSats.filter((d) => pivotSet.has(d));
+        const satOutPivot = orderedSats.filter((d) => !pivotSet.has(d));
         if (neededPivotFromSat <= satInPivot.length && satPerTicket - neededPivotFromSat <= satOutPivot.length) {
           pickedSats = [
             ...satInPivot.slice(0, neededPivotFromSat),
@@ -3991,7 +4009,7 @@ export function generateCoreSatellites25Matrix(options: {
     }
 
     if (!bestCombo) {
-      // Fallback determinístico respeitando rigorosamente a banda 70%–80% do Core + rotação de Satélites
+      // Fallback determinístico respeitando rigorosamente a banda 70%–80% do Core + rotação uniforme de Satélites
       const fallbackCore = [...core12]
         .sort((a, b) => coreFreq[a] - coreFreq[b] || (weights[b] || 0) - (weights[a] || 0))
         .slice(0, corePerTicket);
@@ -4016,16 +4034,25 @@ export function generateCoreSatellites25Matrix(options: {
       analysis: analyzeTicket(combo, baseDraw.dezenas, aiScores),
     }))
     .sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA)
-    .map((item, idx) => ({
-      id: `${idPrefix}-${idx + 1}`,
-      index: idx + 1,
-      ...item.analysis,
-      tags: [
-        tagLabel,
-        'Núcleo Forte 12 (70–80%)',
-        'Core + Satélites (25 Dez)',
-      ],
-    }));
+    .map((item, idx) => {
+      const faixaSoma: 'ouro' | 'baixa' | 'alta' =
+        item.analysis.soma < ZONA_CENTRAL_SOMA_MIN
+          ? 'baixa'
+          : item.analysis.soma > ZONA_CENTRAL_SOMA_MAX
+          ? 'alta'
+          : 'ouro';
+      return {
+        id: `${idPrefix}-${idx + 1}`,
+        index: idx + 1,
+        ...item.analysis,
+        faixaSoma,
+        tags: [
+          tagLabel,
+          'Núcleo Forte 12 (70–80%)',
+          'Core + Satélites (25 Dez)',
+        ],
+      };
+    });
 }
 
 export interface Desdobramento25BlocosOptions {
