@@ -3796,12 +3796,12 @@ export function gerarMatrizEstratificada(
     let picked = 0;
     const poolWithMasks = pool.map((nums) => ({ nums, mask: _criarMascara(nums), key: nums.join('-') }));
 
-    const runPass = (minHammingReq: number, enforceFreqCap: boolean) => {
+    const runPass = (minHammingReq: number, enforceFreqCap: boolean, maxScan: number = 600) => {
       while (picked < quota && selectedEntries.length < totalJogos) {
         let bestIdx = -1;
         let bestPenaltyScore = -Infinity;
 
-        const scanLimit = Math.min(poolWithMasks.length, 450);
+        const scanLimit = Math.min(poolWithMasks.length, maxScan);
         for (let i = 0; i < scanLimit; i++) {
           const cand = poolWithMasks[i];
           if (selectedKeys.has(cand.key)) continue;
@@ -3863,11 +3863,23 @@ export function gerarMatrizEstratificada(
       }
     };
 
-    runPass(targetHammingDist, true);
-    if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false);
-    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 3) runPass(3, false);
-    if (picked < quota && selectedEntries.length < totalJogos && !is18to21 && targetHammingDist > 2) runPass(2, false);
-    if (picked < quota && selectedEntries.length < totalJogos && !is18to21) runPass(1, false);
+    runPass(targetHammingDist, true, 600);
+    if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false, 600);
+    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 600) {
+      runPass(targetHammingDist, true, poolWithMasks.length);
+    }
+    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 600) {
+      runPass(targetHammingDist, false, poolWithMasks.length);
+    }
+    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 3) {
+      runPass(3, false, poolWithMasks.length);
+    }
+    if (picked < quota && selectedEntries.length < totalJogos && !is18to21 && targetHammingDist > 2) {
+      runPass(2, false, poolWithMasks.length);
+    }
+    if (picked < quota && selectedEntries.length < totalJogos && !is18to21) {
+      runPass(1, false, poolWithMasks.length);
+    }
   };
 
   pickFromPool(candidatosOuro, qtdOuro, 'ouro');

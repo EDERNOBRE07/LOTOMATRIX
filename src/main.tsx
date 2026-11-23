@@ -36,6 +36,7 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
+        registration.update().catch(() => {});
         console.log('LotoSniper ServiceWorker registrado com sucesso:', registration.scope);
       })
       .catch((error) => {

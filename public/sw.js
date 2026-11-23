@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lotosniper-cache-v2';
+const CACHE_NAME = 'lotosniper-cache-v3';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -36,16 +36,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Stale-While-Revalidate / Cache-First for assets, Network-First for navigation
+// Fetch: Stale-While-Revalidate for static assets, Network-First for navigation, never cache Vite dev modules
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Skip non-GET requests, browser extensions, API calls, and agent discovery endpoints
+  // Skip non-GET requests, browser extensions, API calls, Vite dev modules, and agent discovery endpoints
   if (
     request.method !== 'GET' ||
     !url.protocol.startsWith('http') ||
     url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.endsWith('.ts') ||
+    url.pathname.endsWith('.tsx') ||
     url.pathname.startsWith('/.well-known/') ||
     url.pathname === '/robots.txt' ||
     url.pathname === '/sitemap.xml' ||
