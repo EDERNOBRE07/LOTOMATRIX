@@ -62,6 +62,7 @@ import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
 import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
 import { ComparacaoTendenciasConcursos } from './ComparacaoTendenciasConcursos';
+import { DashboardRoiHistoricoEstimado } from './DashboardRoiHistoricoEstimado';
 import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50ConcursosRecharts';
 import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRecharts';
 import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard';
@@ -138,6 +139,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   aiPrediction,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'roi_historico_estimado'
     | 'comparacao_tendencias'
     | 'resumo_financeiro'
     | 'mapa_calor_dezenas'
@@ -451,6 +453,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('roi_historico_estimado')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
+              activeSubTab === 'roi_historico_estimado'
+                ? 'bg-gradient-to-r from-emerald-400 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/25 font-black ring-1 ring-emerald-300'
+                : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>ROI Histórico Estimado</span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('comparacao_tendencias')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
@@ -1275,6 +1289,19 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </span>
         </div>
       </div>
+
+      {/* SUBTAB: ROI HISTÓRICO ESTIMADO (SIMULAÇÃO ANUAL COM SALDO LÍQUIDO ACUMULADO) */}
+      {activeSubTab === 'roi_historico_estimado' && (
+        <div className="space-y-6">
+          <DashboardRoiHistoricoEstimado
+            latestDraw={latestDraw}
+            statsList={dynamicWindowStats}
+            savedTickets={savedTickets}
+            filters={filters}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
+      )}
 
       {/* SUBTAB: COMPARAÇÃO DE TENDÊNCIAS (FREQUÊNCIA DAS 25 DEZENAS ENTRE DOIS CONCURSOS) */}
       {activeSubTab === 'comparacao_tendencias' && (

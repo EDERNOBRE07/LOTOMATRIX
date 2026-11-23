@@ -98,6 +98,10 @@ export interface FilterCriteria {
   maxColunasCheias?: number;
   rankingHistoricoAtivo?: boolean; // Equilíbrio Top 5, 10, 15, 20 mais sorteadas
   palpiteIneditoAtivo?: boolean; // Anti-repetição O(1) contra todos os sorteios oficiais
+  // Filtro Avançado: Distância de Hamming Dinâmica (baseada nos últimos 5 resultados)
+  hammingDinamicoAtivo?: boolean;
+  hammingModo?: 'auto' | 'manual';
+  hammingMinimoPersonalizado?: number;
   // Aliases canônicos de limites de filtros
   minSoma?: number;
   maxSoma?: number;

@@ -51,6 +51,7 @@ import { gerarRelatorioAuditoriaPDF } from '../services/relatorioAuditoriaPdf';
 import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
+import { FiltroHammingDinamicoCard } from './FiltroHammingDinamicoCard';
 
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import {
@@ -3612,6 +3613,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </div>
               );
             })()}
+
+            {/* Filtro Avançado: Distância de Hamming Dinâmica (baseado nos últimos 5 resultados) */}
+            <FiltroHammingDinamicoCard
+              filters={filters}
+              onChange={(f) => handleFiltersChange(f, false)}
+              latestDraw={latestDraw}
+              universeSize={selectedNumbers.length || targetCount}
+              maxTickets={preset.jogosMaximos}
+              generatedTickets={generatedTickets}
+            />
 
             {/* Drawer Expandível de Ajuste Fino */}
             {isAdvancedFiltersOpen && (

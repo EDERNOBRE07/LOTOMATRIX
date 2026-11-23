@@ -561,12 +561,147 @@ export function buildProgressiveFallbackFilters(
   };
 }
 
+export interface DynamicHammingDrawPoint {
+  concurso: number;
+  data: string;
+  distanceToPrev: number | null;
+  repeatedFromPrev: number | null;
+}
+
+export interface DynamicHammingRecommendation {
+  suggestedMinHamming: number;
+  maxPossibleHamming: number;
+  avgConsecutiveDistance: number;
+  avgPairwiseDistance: number;
+  avgRepeated: number;
+  volatilityLevel: 'baixa' | 'moderada' | 'alta';
+  rationale: string;
+  analyzedDraws: DynamicHammingDrawPoint[];
+}
+
+/**
+ * Analisa os últimos 5 concursos oficiais e calcula a distância de Hamming dinâmica ideal
+ * (tolerância de proximidade entre os jogos gerados), respeitando o limite matemático do universo.
+ */
+export function calculateDynamicHammingSuggestion(
+  recentDraws: LotofacilDraw[],
+  universeSize: number = 18,
+  maxTickets: number = 24
+): DynamicHammingRecommendation {
+  const sorted = [...recentDraws]
+    .filter((d) => Array.isArray(d.dezenas) && d.dezenas.length === 15)
+    .sort((a, b) => b.concurso - a.concurso)
+    .slice(0, 5);
+
+  const maxPossibleHamming = Math.max(1, Math.min(6, universeSize - 15));
+
+  if (sorted.length < 2) {
+    const fallbackSuggested = Math.min(3, maxPossibleHamming);
+    return {
+      suggestedMinHamming: fallbackSuggested,
+      maxPossibleHamming,
+      avgConsecutiveDistance: 6.0,
+      avgPairwiseDistance: 6.0,
+      avgRepeated: 9.0,
+      volatilityLevel: 'moderada',
+      rationale:
+        'Histórico curto disponível; mantendo limiar equilibrado padrão para preservar diversidade entre os cartões.',
+      analyzedDraws: sorted.map((d) => ({
+        concurso: d.concurso,
+        data: d.data,
+        distanceToPrev: null,
+        repeatedFromPrev: null,
+      })),
+    };
+  }
+
+  const masks = sorted.map((d) => _criarMascara(d.dezenas));
+  const consecutiveDistances: number[] = [];
+  const analyzedDraws: DynamicHammingDrawPoint[] = sorted.map((draw, idx) => {
+    if (idx === sorted.length - 1) {
+      return {
+        concurso: draw.concurso,
+        data: draw.data,
+        distanceToPrev: null,
+        repeatedFromPrev: null,
+      };
+    }
+    const repeated = _popcount(masks[idx] & masks[idx + 1]);
+    const dist = 15 - repeated;
+    consecutiveDistances.push(dist);
+    return {
+      concurso: draw.concurso,
+      data: draw.data,
+      distanceToPrev: dist,
+      repeatedFromPrev: repeated,
+    };
+  });
+
+  // Distância média par-a-par entre todos os pares dos últimos 5 sorteios
+  let pairwiseSum = 0;
+  let pairwiseCount = 0;
+  for (let i = 0; i < masks.length; i++) {
+    for (let j = i + 1; j < masks.length; j++) {
+      pairwiseSum += 15 - _popcount(masks[i] & masks[j]);
+      pairwiseCount++;
+    }
+  }
+
+  const avgConsecutiveDistance =
+    consecutiveDistances.reduce((acc, v) => acc + v, 0) / consecutiveDistances.length;
+  const avgPairwiseDistance = pairwiseCount > 0 ? pairwiseSum / pairwiseCount : avgConsecutiveDistance;
+  const avgRepeated = 15 - avgConsecutiveDistance;
+
+  let volatilityLevel: 'baixa' | 'moderada' | 'alta' = 'moderada';
+  let rawSuggested = 3;
+  let rationale = '';
+
+  if (avgConsecutiveDistance <= 5.25) {
+    volatilityLevel = 'baixa';
+    rawSuggested = maxTickets <= 8 ? 3 : 2;
+    rationale = `Os últimos ${sorted.length} resultados tiveram alta retenção (média de ${avgRepeated.toFixed(1)} repetidas e troca de ${avgConsecutiveDistance.toFixed(1)} dezenas). Um limiar mais compacto concentra apostas ao redor do núcleo forte.`;
+  } else if (avgConsecutiveDistance >= 6.45) {
+    volatilityLevel = 'alta';
+    rawSuggested = maxTickets > 32 ? 3 : 4;
+    rationale = `Os últimos ${sorted.length} resultados mostraram renovação acelerada (média de ${avgConsecutiveDistance.toFixed(1)} dezenas trocadas por sorteio). Um limiar maior amplia a separação entre cartões para cobrir variações bruscas.`;
+  } else {
+    volatilityLevel = 'moderada';
+    rawSuggested = maxTickets <= 6 ? 4 : 3;
+    rationale = `Os últimos ${sorted.length} resultados seguiram a zona de equilíbrio histórico (média de ${avgRepeated.toFixed(1)} repetidas e distância média de ${avgConsecutiveDistance.toFixed(1)}). O limiar equilibrado evita cartões redundantes sem pulverizar o fechamento.`;
+  }
+
+  const suggestedMinHamming = Math.max(1, Math.min(maxPossibleHamming, rawSuggested));
+
+  return {
+    suggestedMinHamming,
+    maxPossibleHamming,
+    avgConsecutiveDistance: Math.round(avgConsecutiveDistance * 100) / 100,
+    avgPairwiseDistance: Math.round(avgPairwiseDistance * 100) / 100,
+    avgRepeated: Math.round(avgRepeated * 100) / 100,
+    volatilityLevel,
+    rationale,
+    analyzedDraws,
+  };
+}
+
 /**
  * Calcula a distância de Hamming alvo garantindo prioridade Hamming >= 3 para universos de 18 a 21 dezenas,
  * evitando que jogos idênticos ou com 14 dezenas iguais (Hamming = 1) consumam o orçamento da matriz.
+ * Quando o filtro avançado de Distância de Hamming Dinâmica estiver ativo, honra o limiar definido.
  */
-export function getTargetHammingDistance(universeSize: number, maxTickets: number): number {
+export function getTargetHammingDistance(
+  universeSize: number,
+  maxTickets: number,
+  filters?: FilterCriteria
+): number {
   const maxPossibleDiff = Math.max(1, universeSize - 15);
+  if (
+    filters?.hammingDinamicoAtivo &&
+    typeof filters.hammingMinimoPersonalizado === 'number' &&
+    Number.isFinite(filters.hammingMinimoPersonalizado)
+  ) {
+    return Math.max(1, Math.min(maxPossibleDiff, Math.round(filters.hammingMinimoPersonalizado)));
+  }
   if (universeSize >= 18 && universeSize <= 21) {
     return Math.min(maxTickets <= 6 ? 4 : 3, maxPossibleDiff);
   }
@@ -3289,8 +3424,8 @@ export function generateFechamentoCovering(
   const chosenMasks: number[] = [];
   const chosenKeySet = new Set<string>();
 
-  // Prioriza estritamente Hamming >= 3 em universos de 18 a 21 dezenas
-  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
+  // Prioriza distância de Hamming alvo (dinâmica quando ativada ou >= 3 em 18-21)
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets, filters);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -3775,9 +3910,9 @@ export function gerarMatrizEstratificada(
   sortByScore(candidatosCaudaBaixa);
   sortByScore(candidatosCaudaAlta);
 
-  // 5. Seleção com Espalhamento Hamming Bitwise (priorizando >= 3 em 18-21) + Frequency Cap [0.85x..1.15x]
+  // 5. Seleção com Espalhamento Hamming Bitwise (dinâmico quando ativado ou >= 3 em 18-21) + Frequency Cap [0.85x..1.15x]
   const is18to21 = n >= 18 && n <= 21;
-  const targetHammingDist = getTargetHammingDistance(n, totalJogos);
+  const targetHammingDist = getTargetHammingDistance(n, totalJogos, options.filters);
   const freqBounds = calculateVariableFrequencyBounds(
     totalJogos,
     n,
@@ -4930,6 +5065,9 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   maxColunasCheias: 1,
   rankingHistoricoAtivo: true,
   palpiteIneditoAtivo: true,
+  hammingDinamicoAtivo: false,
+  hammingModo: 'auto',
+  hammingMinimoPersonalizado: 3,
 };
 
 /**

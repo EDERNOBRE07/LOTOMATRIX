@@ -68,6 +68,12 @@ export function normalizeActiveFilterConfig(
     maxLinhasCheias: merged.maxLinhasCheias ?? 1,
     maxColunasCheias: merged.maxColunasCheias ?? 1,
     palpiteIneditoAtivo: merged.palpiteIneditoAtivo ?? true,
+    hammingDinamicoAtivo: merged.hammingDinamicoAtivo ?? false,
+    hammingModo: merged.hammingModo === 'manual' ? 'manual' : 'auto',
+    hammingMinimoPersonalizado: Math.max(
+      1,
+      Math.min(6, Math.round(merged.hammingMinimoPersonalizado ?? 3))
+    ),
     antiColisaoHistoricaAtiva: merged.antiColisaoHistoricaAtiva ?? true,
     antiPadraoViciadoAtivo: merged.antiPadraoViciadoAtivo ?? true,
     autoCalibrarSomaUniverso: merged.autoCalibrarSomaUniverso ?? true,
