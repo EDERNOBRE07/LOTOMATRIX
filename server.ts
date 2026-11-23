@@ -190,22 +190,26 @@ const LATEST_DRAW = {
 // Cache in memory for recent draws
 let cachedLatestDraw: any = LATEST_DRAW;
 let lastFetchTime = 0;
+let caixaUnavailableUntil = 0;
 const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache to keep data fresh
 
 async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
+  if (!targetConcurso && Date.now() < caixaUnavailableUntil) {
+    return null;
+  }
+
   const url = targetConcurso
     ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}`
     : 'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil';
 
-  const maxRetries = 3;
+  // Consultas por número específico não devem repetir em caso de 404/500 (concurso futuro ainda não sorteado)
+  const maxRetries = targetConcurso ? 1 : 2;
   let attempt = 0;
 
   while (attempt < maxRetries) {
     attempt++;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    console.log(`[Caixa Server API] [Tentativa ${attempt}/${maxRetries}] Consultando Caixa: ${url}`);
 
     try {
       const res = await fetch(url, {
@@ -221,29 +225,29 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
 
       clearTimeout(timeoutId);
 
-      const headersObj: Record<string, string> = {};
-      try {
-        res.headers.forEach((v, k) => {
-          headersObj[k] = v;
-        });
-      } catch {}
-
-      console.log(`[Caixa Server API] [Tentativa ${attempt}/${maxRetries}] HTTP ${res.status} ${res.statusText}`, {
-        headers: headersObj,
-      });
+      // A API da Caixa retorna HTTP 404 ou 500 quando um concurso futuro ainda não existe
+      if (targetConcurso && (res.status === 404 || res.status === 500)) {
+        return null;
+      }
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+        if (!targetConcurso) {
+          caixaUnavailableUntil = Date.now() + 2 * 60 * 1000;
+        }
+        return null;
       }
 
       const data = await res.json();
       if (!data || !data.numero || !Array.isArray(data.listaDezenas)) {
-        throw new Error('Payload da Caixa não contém numero ou listaDezenas válidos');
+        return null;
       }
 
       // Never accept stale draw numbers older than our baseline
       if (data.numero < LATEST_DRAW.concurso) {
-        console.warn(`[Caixa Server API] Concurso retornado (#${data.numero}) é anterior à baseline (#${LATEST_DRAW.concurso})`);
         return null;
       }
 
@@ -253,7 +257,7 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
         .sort((a: number, b: number) => a - b);
 
       if (dezenas.length !== 15) {
-        throw new Error(`Quantidade de dezenas inválida: ${dezenas.length}`);
+        return null;
       }
 
       // Rateios
@@ -266,7 +270,8 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
         };
       };
 
-      console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) obtido com sucesso na tentativa ${attempt}!`);
+      caixaUnavailableUntil = 0;
+      console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
 
       return {
         source: 'caixa-oficial',
@@ -275,6 +280,7 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
         dezenas,
         acumulou: !!data.acumulado,
         proximoEstimado: data.valorEstimadoProximoConcurso || 2000000,
+        dataProximoConcurso: data.dataProximoConcurso || undefined,
         premiacoes: {
           faixa15: getFaixa(1),
           faixa14: getFaixa(2),
@@ -283,12 +289,12 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
           faixa11: getFaixa(5),
         },
       };
-    } catch (err: any) {
+    } catch {
       clearTimeout(timeoutId);
-      console.warn(`[Caixa Server API] Tentativa ${attempt}/${maxRetries} falhou: ${err?.message || err}`);
       if (attempt < maxRetries) {
-        const wait = 600 * Math.pow(2, attempt - 1);
-        await new Promise((r) => setTimeout(r, wait));
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+      } else if (!targetConcurso) {
+        caixaUnavailableUntil = Date.now() + 2 * 60 * 1000;
       }
     }
   }
@@ -363,23 +369,15 @@ async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
     return cachedLatestDraw;
   }
 
-  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa (sempre o mais recente real)
+  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa (sempre retorna o concurso publicado mais recente)
   let draw = await fetchFromCaixa();
 
-  // 2. Caso o endpoint padrão retorne igual ao baseline, sonda explicitamente o próximo concurso (+1)
-  if (!draw || draw.concurso === LATEST_DRAW.concurso) {
-    const nextProbe = await fetchFromCaixa(LATEST_DRAW.concurso + 1);
-    if (nextProbe && nextProbe.concurso > (draw?.concurso || LATEST_DRAW.concurso)) {
-      draw = nextProbe;
-    }
-  }
-
-  // 3. Tenta espelhos públicos somente se retornarem concurso >= baseline
+  // 2. Tenta espelhos públicos somente se a Caixa falhar ou retornar anterior à baseline
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = await fetchFromMirror();
   }
 
-  // 4. Fallback seguro para LATEST_DRAW (#3835) caso offline/bloqueado — nunca regredir concurso
+  // 3. Fallback seguro para LATEST_DRAW (#3835) caso offline/bloqueado — nunca regredir concurso
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
