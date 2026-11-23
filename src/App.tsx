@@ -66,7 +66,12 @@ import {
   shouldMuteBackgroundAudio,
   shouldMuteBackgroundPush,
 } from './services/notificationService';
-import { auditAndNotifySavedGames, SavedGamesAuditResult } from './services/savedGamesAuditorService';
+import {
+  auditAndNotifySavedGames,
+  SavedGamesAuditResult,
+  CUSTOM_PRIZE_ALERT_TRIGGERED_EVENT,
+  CustomPrizeAlertTriggeredPayload,
+} from './services/savedGamesAuditorService';
 import {
   Layers,
   Sparkles,
@@ -84,6 +89,7 @@ import {
   HelpCircle,
   Flame,
   ArrowRight,
+  Trophy,
 } from 'lucide-react';
 
 export type TabType =
@@ -310,6 +316,9 @@ export default function App() {
     };
   }, [latestDraw?.concurso]);
 
+  const [customPrizeAlertNotice, setCustomPrizeAlertNotice] =
+    useState<CustomPrizeAlertTriggeredPayload | null>(null);
+
   const [jackpotHitNotice, setJackpotHitNotice] = useState<{
     concurso: number;
     maxHits: number;
@@ -532,8 +541,18 @@ export default function App() {
         setSavedGamesAuditNotice(e.detail);
       }
     };
+    const handleCustomPrizeAlert = (e: Event) => {
+      const detail = (e as CustomEvent<CustomPrizeAlertTriggeredPayload>).detail;
+      if (detail) {
+        setCustomPrizeAlertNotice(detail);
+      }
+    };
     window.addEventListener('lotosniper-saved-games-audited', handleAudited);
-    return () => window.removeEventListener('lotosniper-saved-games-audited', handleAudited);
+    window.addEventListener(CUSTOM_PRIZE_ALERT_TRIGGERED_EVENT, handleCustomPrizeAlert);
+    return () => {
+      window.removeEventListener('lotosniper-saved-games-audited', handleAudited);
+      window.removeEventListener(CUSTOM_PRIZE_ALERT_TRIGGERED_EVENT, handleCustomPrizeAlert);
+    };
   }, []);
 
   // Escuta atualizações de concurso em tempo real para sincronização global
@@ -1041,6 +1060,111 @@ export default function App() {
                 onClick={() => setJackpotHitNotice(null)}
                 className="p-2 rounded-xl bg-slate-950/20 hover:bg-slate-950/40 text-slate-950 transition cursor-pointer"
                 title="Fechar notificação"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Alerta Visual Específico — Regra Personalizada de Prêmio Mínimo Estimado */}
+        {customPrizeAlertNotice && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className={`rounded-2xl p-4 sm:p-5 shadow-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+              customPrizeAlertNotice.alertStyle === 'emerald_banner'
+                ? 'bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border-emerald-400/70 text-white'
+                : customPrizeAlertNotice.alertStyle === 'high_priority_modal'
+                ? 'bg-gradient-to-r from-rose-950 via-amber-950/90 to-slate-950 border-amber-400 text-white ring-2 ring-amber-400/40'
+                : 'bg-gradient-to-r from-amber-950 via-slate-900 to-yellow-950/90 border-amber-400/80 text-white'
+            }`}
+          >
+            <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+              <div
+                className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-lg ${
+                  customPrizeAlertNotice.alertStyle === 'emerald_banner'
+                    ? 'bg-emerald-400 text-slate-950'
+                    : customPrizeAlertNotice.alertStyle === 'high_priority_modal'
+                    ? 'bg-gradient-to-br from-amber-300 to-rose-400 text-slate-950'
+                    : 'bg-amber-400 text-slate-950'
+                }`}
+              >
+                <Trophy className="w-5 h-5" />
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono">
+                  <span
+                    className={`font-bold uppercase tracking-wider ${
+                      customPrizeAlertNotice.alertStyle === 'emerald_banner'
+                        ? 'text-emerald-300'
+                        : 'text-amber-300'
+                    }`}
+                  >
+                    Alerta de Prêmio Personalizado
+                  </span>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-300">Concurso #{customPrizeAlertNotice.concurso}</span>
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-400">{customPrizeAlertNotice.dataConcurso}</span>
+                  {customPrizeAlertNotice.isSimulatedTest && (
+                    <>
+                      <span className="text-slate-500">·</span>
+                      <span className="text-sky-300 font-semibold">Simulação de Teste</span>
+                    </>
+                  )}
+                </div>
+
+                <h3 className="text-sm sm:text-base font-bold text-white mt-0.5">
+                  Prêmio estimado de{' '}
+                  <span className="font-mono tabular-nums text-amber-300">
+                    R${' '}
+                    {customPrizeAlertNotice.premioEstimadoTotal.toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>{' '}
+                  atingiu sua meta mínima (R${' '}
+                  {customPrizeAlertNotice.minEstimatedPrizeBRL.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  )
+                </h3>
+
+                <p className="text-xs text-slate-300 mt-0.5 truncate">
+                  {customPrizeAlertNotice.totalWinningTickets} bilhete(s) premiado(s) · Melhor:{' '}
+                  <span className="font-mono font-bold text-white">
+                    {customPrizeAlertNotice.maxHits} acertos
+                  </span>{' '}
+                  · {customPrizeAlertNotice.bestFechamentoTitle}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('jogos');
+                  setCustomPrizeAlertNotice(null);
+                }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                  customPrizeAlertNotice.alertStyle === 'emerald_banner'
+                    ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950'
+                    : 'bg-amber-400 hover:bg-amber-300 text-slate-950'
+                }`}
+              >
+                <span>Ver Jogos Premiados</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomPrizeAlertNotice(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                title="Fechar alerta de prêmio"
+                aria-label="Fechar alerta de prêmio"
               >
                 <X className="w-4 h-4" />
               </button>

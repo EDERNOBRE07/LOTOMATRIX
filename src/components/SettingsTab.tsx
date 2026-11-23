@@ -27,6 +27,7 @@ import {
   Flame,
   Timer,
   Sliders,
+  BellRing,
 } from 'lucide-react';
 import { JackpotAlertConfigModule } from './JackpotAlertConfigModule';
 import { OpportunityAlertsPanel } from './OpportunityAlertsPanel';
@@ -59,6 +60,7 @@ import { DezenaStats } from '../types/lotofacil';
 import { PresetsAuditoriaSettingsPanel } from './PresetsAuditoriaSettingsPanel';
 import { HistoricoFechamentosRecentes } from './HistoricoFechamentosRecentes';
 import { AlertaFimCicloConfigPanel } from './AlertaFimCicloConfigPanel';
+import { AlertasApostaPersonalizadosPanel } from './AlertasApostaPersonalizadosPanel';
 
 export type ConnectionMode = 'direta' | 'cache_preferencial' | 'offline_first';
 export type CheckInterval = 'startup_only' | '1h' | '4h' | '12h';
@@ -93,20 +95,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   concursosNoCiclo = 3,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    'presets_filtros' | 'alerta_fim_ciclo' | 'geral' | 'regras_push' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
+    'presets_filtros' | 'alertas_aposta_personalizados' | 'alerta_fim_ciclo' | 'geral' | 'regras_push' | 'seguranca_auth' | 'alertas_agendados' | 'relatorio_eficiencia' | 'cronjobs_s3' | 'seguranca_avancada' | 'monitoramento_ciclo' | 'mysql_hostinger' | 'regras_hibridas' | 'backtesting' | 'dados' | 'cache' | 'backup_cloud'
   >('presets_filtros');
 
   useEffect(() => {
     const handleOpenBackup = () => setActiveSubTab('backup_cloud');
     const handleOpenPresets = () => setActiveSubTab('presets_filtros');
     const handleOpenCycleAlert = () => setActiveSubTab('alerta_fim_ciclo');
+    const handleOpenCustomBetAlerts = () => setActiveSubTab('alertas_aposta_personalizados');
     window.addEventListener('lotosniper-open-backup', handleOpenBackup);
     window.addEventListener('lotosniper-open-presets', handleOpenPresets);
     window.addEventListener('lotosniper-open-cycle-alert', handleOpenCycleAlert);
+    window.addEventListener('lotosniper-open-custom-bet-alerts', handleOpenCustomBetAlerts);
     return () => {
       window.removeEventListener('lotosniper-open-backup', handleOpenBackup);
       window.removeEventListener('lotosniper-open-presets', handleOpenPresets);
       window.removeEventListener('lotosniper-open-cycle-alert', handleOpenCycleAlert);
+      window.removeEventListener('lotosniper-open-custom-bet-alerts', handleOpenCustomBetAlerts);
     };
   }, []);
 
@@ -506,7 +511,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setActiveSubTab('presets_filtros')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'presets_filtros'
                 ? 'bg-sky-400 text-slate-950 shadow-sm'
                 : 'text-sky-300 hover:text-white'
@@ -516,8 +521,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <span>Presets de Filtro</span>
           </button>
           <button
+            onClick={() => setActiveSubTab('alertas_aposta_personalizados')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeSubTab === 'alertas_aposta_personalizados'
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'text-amber-300 hover:text-white'
+            }`}
+          >
+            <BellRing className="w-3.5 h-3.5" />
+            <span>Alertas de Aposta Personalizados</span>
+          </button>
+          <button
             onClick={() => setActiveSubTab('alerta_fim_ciclo')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'alerta_fim_ciclo'
                 ? 'bg-amber-400 text-slate-950 shadow-sm'
                 : 'text-amber-300 hover:text-white'
@@ -758,6 +774,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* SUBTAB 0A: ALERTAS DE APOSTA PERSONALIZADOS (PRÊMIO MÍNIMO ESTIMADO)       */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'alertas_aposta_personalizados' && (
+        <div className="space-y-6">
+          <AlertasApostaPersonalizadosPanel
+            latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 5000);
+            }}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* SUBTAB 0B: ALERTA VISUAL DE FIM DE CICLO (LIMITE DE DEZENAS AUSENTES)     */}
       {/* ========================================================================= */}
       {activeSubTab === 'alerta_fim_ciclo' && (
@@ -779,6 +810,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'geral' && (
         <div className="space-y-5">
+          {/* Painel Alertas de Aposta Personalizados (Prêmio Mínimo Estimado) */}
+          <AlertasApostaPersonalizadosPanel
+            latestDraw={latestDraw}
+            onNotice={(msg) => {
+              setNotificationSuccessNotice(msg);
+              setTimeout(() => setNotificationSuccessNotice(null), 5000);
+            }}
+          />
           {/* Painel de Configuração do Alerta Visual de Fim de Ciclo */}
           <AlertaFimCicloConfigPanel
             latestDraw={latestDraw}

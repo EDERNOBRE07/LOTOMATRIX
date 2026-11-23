@@ -61,6 +61,7 @@ import { HistoricoROISavedGamesChart } from './HistoricoROISavedGamesChart';
 import { MapaCalorFrequenciaHistorica } from './MapaCalorFrequenciaHistorica';
 import { LinhaDoTempo100ConcursosComponent } from './LinhaDoTempo100ConcursosComponent';
 import { ComparadorDoisConcursosComponent } from './ComparadorDoisConcursosComponent';
+import { ComparacaoTendenciasConcursos } from './ComparacaoTendenciasConcursos';
 import { DashboardFrequencia50ConcursosRecharts } from './DashboardFrequencia50ConcursosRecharts';
 import { ScatterAtrasoFrequenciaRecharts } from './ScatterAtrasoFrequenciaRecharts';
 import { TaxaDiversidadeFechamentosCard } from './TaxaDiversidadeFechamentosCard';
@@ -137,6 +138,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   aiPrediction,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
+    | 'comparacao_tendencias'
     | 'resumo_financeiro'
     | 'mapa_calor_dezenas'
     | 'correlacao_custo_retorno'
@@ -449,6 +451,18 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* Subtab Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('comparacao_tendencias')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
+              activeSubTab === 'comparacao_tendencias'
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/25 font-black ring-1 ring-amber-300'
+                : 'text-amber-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <GitCompare className="w-4 h-4" />
+            <span>Comparação de Tendências</span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('resumo_financeiro')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
@@ -1261,6 +1275,16 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </span>
         </div>
       </div>
+
+      {/* SUBTAB: COMPARAÇÃO DE TENDÊNCIAS (FREQUÊNCIA DAS 25 DEZENAS ENTRE DOIS CONCURSOS) */}
+      {activeSubTab === 'comparacao_tendencias' && (
+        <div className="space-y-6">
+          <ComparacaoTendenciasConcursos
+            latestDraw={latestDraw}
+            onApplyNumbers={onApplyNumbers}
+          />
+        </div>
+      )}
 
       {/* SUBTAB: TAXA DE DIVERSIDADE DOS FECHAMENTOS (HASH & AUDITORIA DE VARIÂNCIA) */}
       {activeSubTab === 'taxa_diversidade' && (

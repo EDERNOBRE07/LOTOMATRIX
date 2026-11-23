@@ -42,11 +42,150 @@ export interface SavedGamesAuditResult {
   notificationDispatched: boolean;
   timestamp: number;
   jogosVencedores: AuditedWinningGame[];
+  customPrizeAlertTriggered?: boolean;
+  customPrizeAlertThreshold?: number;
+}
+
+export type CustomPrizeAlertStyle = 'gold_banner' | 'emerald_banner' | 'high_priority_modal';
+
+export interface CustomPrizeAlertConfig {
+  enabled: boolean;
+  minEstimatedPrizeBRL: number;
+  alertStyle: CustomPrizeAlertStyle;
+  includeIndividualPrizeCheck: boolean;
+}
+
+export interface CustomPrizeAlertTriggeredPayload {
+  concurso: number;
+  dataConcurso: string;
+  premioEstimadoTotal: number;
+  maiorPremioIndividual: number;
+  minEstimatedPrizeBRL: number;
+  totalWinningTickets: number;
+  maxHits: number;
+  bestFechamentoTitle: string;
+  alertStyle: CustomPrizeAlertStyle;
+  isSimulatedTest?: boolean;
+  timestamp: number;
 }
 
 export const STORAGE_LAST_AUDITED_CONCURSO = 'lotosniper_last_audited_concurso';
 export const STORAGE_PUSH_ENABLED = 'lotosniper_push_saved_games_enabled';
 export const STORAGE_AUDITED_WINNING_GAMES = 'lotosniper_audited_winning_games';
+export const STORAGE_CUSTOM_PRIZE_ALERT_CONFIG = 'lotosniper_custom_prize_alert_config';
+export const CUSTOM_PRIZE_ALERT_CONFIG_EVENT = 'lotosniper-custom-prize-alert-config-changed';
+export const CUSTOM_PRIZE_ALERT_TRIGGERED_EVENT = 'lotosniper-custom-prize-alert-triggered';
+
+export const DEFAULT_CUSTOM_PRIZE_ALERT_CONFIG: CustomPrizeAlertConfig = {
+  enabled: true,
+  minEstimatedPrizeBRL: 50,
+  alertStyle: 'gold_banner',
+  includeIndividualPrizeCheck: true,
+};
+
+/**
+ * Lê a configuração de Alerta de Aposta Personalizado (valor mínimo de prêmio estimado)
+ */
+export function getCustomPrizeAlertConfig(): CustomPrizeAlertConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_CUSTOM_PRIZE_ALERT_CONFIG);
+    if (!raw) return { ...DEFAULT_CUSTOM_PRIZE_ALERT_CONFIG };
+    const parsed = JSON.parse(raw);
+    const minVal = Number(parsed?.minEstimatedPrizeBRL);
+    return {
+      enabled: parsed?.enabled !== false,
+      minEstimatedPrizeBRL: Number.isFinite(minVal) && minVal >= 0 ? minVal : 50,
+      alertStyle:
+        parsed?.alertStyle === 'emerald_banner' || parsed?.alertStyle === 'high_priority_modal'
+          ? parsed.alertStyle
+          : 'gold_banner',
+      includeIndividualPrizeCheck: parsed?.includeIndividualPrizeCheck !== false,
+    };
+  } catch {
+    return { ...DEFAULT_CUSTOM_PRIZE_ALERT_CONFIG };
+  }
+}
+
+/**
+ * Persiste a configuração de Alerta de Aposta Personalizado e notifica ouvintes
+ */
+export function saveCustomPrizeAlertConfig(config: CustomPrizeAlertConfig): void {
+  const sanitized: CustomPrizeAlertConfig = {
+    enabled: Boolean(config.enabled),
+    minEstimatedPrizeBRL: Math.max(0, Number(config.minEstimatedPrizeBRL) || 0),
+    alertStyle:
+      config.alertStyle === 'emerald_banner' || config.alertStyle === 'high_priority_modal'
+        ? config.alertStyle
+        : 'gold_banner',
+    includeIndividualPrizeCheck: Boolean(config.includeIndividualPrizeCheck),
+  };
+  try {
+    localStorage.setItem(STORAGE_CUSTOM_PRIZE_ALERT_CONFIG, JSON.stringify(sanitized));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(CUSTOM_PRIZE_ALERT_CONFIG_EVENT, { detail: sanitized })
+      );
+    }
+  } catch {}
+}
+
+/**
+ * Avalia se o resultado de uma auditoria atinge o valor mínimo de prêmio estimado configurado
+ */
+export function evaluateCustomPrizeAlert(
+  auditResult: Pick<
+    SavedGamesAuditResult,
+    | 'concurso'
+    | 'dataConcurso'
+    | 'premioEstimadoTotal'
+    | 'totalWinningTickets'
+    | 'maxHits'
+    | 'bestFechamentoTitle'
+    | 'jogosVencedores'
+  >,
+  configOverride?: CustomPrizeAlertConfig
+): CustomPrizeAlertTriggeredPayload | null {
+  const config = configOverride ?? getCustomPrizeAlertConfig();
+  if (!config.enabled) return null;
+
+  const maiorPremioIndividual = (auditResult.jogosVencedores || []).reduce(
+    (max, g) => Math.max(max, Number(g.premioEstimado) || 0),
+    0
+  );
+
+  const hitsTotal = auditResult.premioEstimadoTotal >= config.minEstimatedPrizeBRL;
+  const hitsIndividual =
+    config.includeIndividualPrizeCheck && maiorPremioIndividual >= config.minEstimatedPrizeBRL;
+
+  if (!hitsTotal && !hitsIndividual) return null;
+  if (auditResult.premioEstimadoTotal <= 0 && maiorPremioIndividual <= 0) return null;
+
+  return {
+    concurso: auditResult.concurso,
+    dataConcurso: auditResult.dataConcurso,
+    premioEstimadoTotal: auditResult.premioEstimadoTotal,
+    maiorPremioIndividual,
+    minEstimatedPrizeBRL: config.minEstimatedPrizeBRL,
+    totalWinningTickets: auditResult.totalWinningTickets,
+    maxHits: auditResult.maxHits,
+    bestFechamentoTitle: auditResult.bestFechamentoTitle,
+    alertStyle: config.alertStyle,
+    timestamp: Date.now(),
+  };
+}
+
+/**
+ * Dispara o evento global de alerta visual personalizado (usado pela auditoria ou simulação de teste)
+ */
+export function dispatchCustomPrizeVisualAlert(
+  payload: CustomPrizeAlertTriggeredPayload
+): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(CUSTOM_PRIZE_ALERT_TRIGGERED_EVENT, { detail: payload })
+    );
+  }
+}
 
 /**
  * Recupera do armazenamento local a lista de jogos vencedores auditados pelo Service Worker
@@ -412,6 +551,20 @@ export async function auditAndNotifySavedGames(
     }
   }
 
+  const customAlertConfig = getCustomPrizeAlertConfig();
+  const customAlertPayload = evaluateCustomPrizeAlert(
+    {
+      concurso: draw.concurso,
+      dataConcurso: draw.data,
+      premioEstimadoTotal,
+      totalWinningTickets,
+      maxHits,
+      bestFechamentoTitle,
+      jogosVencedores: winningGames,
+    },
+    customAlertConfig
+  );
+
   const result: SavedGamesAuditResult = {
     concurso: draw.concurso,
     dataConcurso: draw.data,
@@ -430,7 +583,37 @@ export async function auditAndNotifySavedGames(
     notificationDispatched,
     timestamp: Date.now(),
     jogosVencedores: winningGames,
+    customPrizeAlertTriggered: Boolean(customAlertPayload),
+    customPrizeAlertThreshold: customAlertConfig.minEstimatedPrizeBRL,
   };
+
+  // Dispara alerta visual específico quando o valor mínimo de prêmio estimado configurado é atingido
+  if (customAlertPayload) {
+    try {
+      const existing = getAlertsHistory();
+      const formattedVal = customAlertPayload.premioEstimadoTotal.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      });
+      const formattedMin = customAlertPayload.minEstimatedPrizeBRL.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      });
+      const thresholdAlert: IntelligentAlert = {
+        id: `custom_prize_alert_${draw.concurso}_${Date.now()}`,
+        timestamp: Date.now(),
+        dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        type: 'system',
+        title: `Meta de Prêmio Atingida (${formattedVal}) · Concurso #${draw.concurso}`,
+        body: `Os jogos salvos atingiram ${formattedVal} em prêmio estimado, superando o limite mínimo de ${formattedMin}.`,
+        concurso: draw.concurso,
+        read: false,
+      };
+      saveAlertsHistory([thresholdAlert, ...existing]);
+    } catch {}
+
+    dispatchCustomPrizeVisualAlert(customAlertPayload);
+  }
 
   // Dispatch custom in-app event so UI components can display toast or banner
   if (typeof window !== 'undefined') {
