@@ -1071,6 +1071,26 @@ export function auditoriaAnomaliasEstatisticas(
 
 
 /**
+ * Faixas ideais auditadas para Soft Scoring Gaussiano com declínio quadrático
+ * à medida que os valores se distanciam do centro da faixa ideal.
+ */
+export const GAUSSIAN_IDEAL_RANGES = {
+  moldura: { min: 9, max: 10, center: 9.5, sigma: 1.8, maxBonus: 1.8, quadraticRate: 0.55 },
+  primos: { min: 5, max: 6, center: 5.5, sigma: 1.5, maxBonus: 1.7, quadraticRate: 0.6 },
+  fibonacci: { min: 4, max: 6, center: 5.0, sigma: 1.5, maxBonus: 1.6, quadraticRate: 0.55 },
+  pares: { min: 6, max: 7, center: 6.5, sigma: 1.5, maxBonus: 1.8, quadraticRate: 0.6 },
+  repetidas: { min: 7, max: 9, center: 8.0, sigma: 1.8, maxBonus: 1.6, quadraticRate: 0.45 },
+  soma: {
+    min: ZONA_CENTRAL_SOMA_MIN,
+    max: ZONA_CENTRAL_SOMA_MAX,
+    center: (ZONA_CENTRAL_SOMA_MIN + ZONA_CENTRAL_SOMA_MAX) / 2,
+    sigma: 22,
+    maxBonus: 2.0,
+    quadraticRate: 0.008,
+  },
+} as const;
+
+/**
  * Curva Gaussiana Suave com platô no intervalo de pico [peakMin, peakMax].
  * Retorna 1.0 dentro do platô e decai suavemente segundo exp(-0.5 * (dist / sigma)^2) fora dele.
  */
@@ -1083,6 +1103,58 @@ export function computeGaussianPlateauScore(
   if (value >= peakMin && value <= peakMax) return 1.0;
   const dist = value < peakMin ? peakMin - value : value - peakMax;
   return Math.exp(-0.5 * Math.pow(dist / Math.max(0.001, sigma), 2));
+}
+
+/**
+ * Soft Scoring Gaussiano com declínio quadrático explícito:
+ * - Dentro da faixa ideal [idealMin, idealMax]: pontuação máxima (+maxBonus) e penalidade 0.
+ * - Fora da faixa ideal: combina afinidade Gaussiana exp(-0.5 * (d / sigma)^2)
+ *   com penalidade quadrática crescente quadraticRate * d^2 conforme se distancia do centro.
+ */
+export function computeGaussianSoftQuadraticDelta(
+  value: number,
+  idealMin: number,
+  idealMax: number,
+  sigma: number,
+  maxBonus: number,
+  quadraticRate: number,
+  maxPenalty: number = 10.0
+): {
+  gaussian: number;
+  distanceFromBand: number;
+  distanceFromCenter: number;
+  quadraticPenalty: number;
+  delta: number;
+} {
+  const center = (idealMin + idealMax) / 2;
+  const distanceFromCenter = Math.abs(value - center);
+  const distanceFromBand =
+    value >= idealMin && value <= idealMax
+      ? 0
+      : value < idealMin
+      ? idealMin - value
+      : value - idealMax;
+
+  const gaussian =
+    distanceFromBand === 0
+      ? 1.0
+      : Math.exp(-0.5 * Math.pow(distanceFromBand / Math.max(0.001, sigma), 2));
+
+  // Declínio quadrático suave proporcional ao quadrado da distância além da faixa ideal
+  const quadraticPenalty =
+    distanceFromBand === 0
+      ? 0
+      : Math.min(maxPenalty, quadraticRate * distanceFromBand * distanceFromBand);
+
+  const delta = maxBonus * gaussian - quadraticPenalty;
+
+  return {
+    gaussian,
+    distanceFromBand,
+    distanceFromCenter,
+    quadraticPenalty: Math.round(quadraticPenalty * 1000) / 1000,
+    delta: Math.round(delta * 1000) / 1000,
+  };
 }
 
 export interface GaussianScoreIAMetrics {
@@ -1101,15 +1173,16 @@ export interface GaussianScoreIAMetrics {
 }
 
 /**
- * Recalibração Gaussiana do scoreIA (Auditoria 9 Concursos #3825–#3833):
- * Substitui hard cutoffs por Curvas Gaussianas Suaves centradas nos vencedores de 13 pts:
- * - moldura: pico 9–10 (8 e 11 com penalidade leve)
- * - primos: pico 5–6 (média 13 pts: 5.8)
- * - fibonacci: pico 4–6 (média 13 pts: 5.0)
- * - pares: pico 6–7 (média 13 pts: 6.6)
- * - repetidas: pico 7–9 (média 13 pts: 7.8 — sem penalidade severa para 7 repetidas)
- * - maxConsecutivas: penalidade ZERO entre 3 e 5 (média 13 pts: 5.2); penalidade suave apenas a partir de 6
- * - soma: platô na Zona Central 180–215 com decaimento suave nas caudas (155–179 e 216–230)
+ * Recalibração Gaussiana com Soft Scoring Quadrático do scoreIA:
+ * Substitui hard cutoffs por Curvas Gaussianas Suaves com declínio quadrático (d²)
+ * centradas nas faixas ideais auditadas:
+ * - moldura: [9–10] (centro 9.5)
+ * - primos: [5–6] (centro 5.5)
+ * - fibonacci: [4–6] (centro 5.0)
+ * - pares: [6–7] (centro 6.5)
+ * - repetidas: [7–9] (centro 8.0 — sem penalidade severa para 7 repetidas)
+ * - maxConsecutivas: penalidade ZERO entre 3 e 5; declínio quadrático suave a partir de 6
+ * - soma: Zona Central 180–215 com declínio quadrático suave nas caudas
  */
 export function calculateGaussianScoreIA(
   metrics: GaussianScoreIAMetrics,
@@ -1117,6 +1190,16 @@ export function calculateGaussianScoreIA(
 ): {
   scoreIA: number;
   consecutivasPenalty: number;
+  quadraticPenalties: {
+    moldura: number;
+    primos: number;
+    fibonacci: number;
+    pares: number;
+    repetidas: number;
+    soma: number;
+    consecutivas: number;
+    total: number;
+  };
   components: {
     moldura: number;
     primos: number;
@@ -1129,40 +1212,85 @@ export function calculateGaussianScoreIA(
     consecutivas: number;
   };
 } {
-  const gMoldura = computeGaussianPlateauScore(metrics.moldura, 9, 10, 1.8);
-  const gPrimos = computeGaussianPlateauScore(metrics.primos, 5, 6, 1.5);
-  const gFibonacci = computeGaussianPlateauScore(metrics.fibonacci, 4, 6, 1.5);
-  const gPares = computeGaussianPlateauScore(metrics.pares, 6, 7, 1.5);
-  const gRepetidas = computeGaussianPlateauScore(metrics.repetidas, 7, 9, 1.8);
-  const gSoma = computeGaussianPlateauScore(metrics.soma, ZONA_CENTRAL_SOMA_MIN, ZONA_CENTRAL_SOMA_MAX, 22);
+  const rMoldura = GAUSSIAN_IDEAL_RANGES.moldura;
+  const rPrimos = GAUSSIAN_IDEAL_RANGES.primos;
+  const rFibonacci = GAUSSIAN_IDEAL_RANGES.fibonacci;
+  const rPares = GAUSSIAN_IDEAL_RANGES.pares;
+  const rRepetidas = GAUSSIAN_IDEAL_RANGES.repetidas;
+  const rSoma = GAUSSIAN_IDEAL_RANGES.soma;
+
+  const molduraSoft = computeGaussianSoftQuadraticDelta(
+    metrics.moldura,
+    rMoldura.min,
+    rMoldura.max,
+    rMoldura.sigma,
+    rMoldura.maxBonus,
+    rMoldura.quadraticRate
+  );
+  const primosSoft = computeGaussianSoftQuadraticDelta(
+    metrics.primos,
+    rPrimos.min,
+    rPrimos.max,
+    rPrimos.sigma,
+    rPrimos.maxBonus,
+    rPrimos.quadraticRate
+  );
+  const fibonacciSoft = computeGaussianSoftQuadraticDelta(
+    metrics.fibonacci,
+    rFibonacci.min,
+    rFibonacci.max,
+    rFibonacci.sigma,
+    rFibonacci.maxBonus,
+    rFibonacci.quadraticRate
+  );
+  const paresSoft = computeGaussianSoftQuadraticDelta(
+    metrics.pares,
+    rPares.min,
+    rPares.max,
+    rPares.sigma,
+    rPares.maxBonus,
+    rPares.quadraticRate
+  );
+  const repetidasSoft = computeGaussianSoftQuadraticDelta(
+    metrics.repetidas,
+    rRepetidas.min,
+    rRepetidas.max,
+    rRepetidas.sigma,
+    rRepetidas.maxBonus,
+    rRepetidas.quadraticRate
+  );
+  const somaSoft = computeGaussianSoftQuadraticDelta(
+    metrics.soma,
+    rSoma.min,
+    rSoma.max,
+    rSoma.sigma,
+    rSoma.maxBonus,
+    rSoma.quadraticRate,
+    8.0
+  );
+
   const gCruz = computeGaussianPlateauScore(metrics.cruz, 5, 6, 1.6);
   const gBola1 = computeGaussianPlateauScore(metrics.bola1, 1, 2, 2.0);
   const gBola15 = computeGaussianPlateauScore(metrics.bola15, 24, 25, 2.0);
 
-  // Mapeia cada Gaussiana [0..1] para contribuição suave [-weight .. +weight]
-  const molduraDelta = 1.6 * (2 * gMoldura - 1);
-  const primosDelta = 1.5 * (2 * gPrimos - 1);
-  const fibonacciDelta = 1.4 * (2 * gFibonacci - 1);
-  const paresDelta = 1.6 * (2 * gPares - 1);
-  const repetidasDelta = 1.6 * (2 * gRepetidas - 1);
-  const somaDelta = 1.8 * (2 * gSoma - 1);
   const cruzDelta = 0.8 * (2 * gCruz - 1);
   const extremidadesDelta = 0.4 * (2 * gBola1 - 1) + 0.4 * (2 * gBola15 - 1);
 
-  // Penalidade ZERO para maxConsecutivas <= 5 (incluindo 3, 4 e 5); decaimento Gaussiano suave somente a partir de 6
+  // Penalidade ZERO para maxConsecutivas <= 5 (incluindo 3, 4 e 5); declínio quadrático suave a partir de 6
+  const consecExcess = Math.max(0, metrics.maxConsecutivas - 5);
   const consecutivasPenalty =
-    metrics.maxConsecutivas <= 5
+    consecExcess === 0
       ? 0
-      : (1 - Math.exp(-0.5 * Math.pow((metrics.maxConsecutivas - 5) / 2.2, 2))) * 4.0;
+      : Math.min(8.0, 0.55 * consecExcess * consecExcess);
 
   let rawScore =
     baseDezenasScore +
-    molduraDelta +
-    primosDelta +
-    fibonacciDelta +
-    paresDelta +
-    repetidasDelta +
-    somaDelta +
+    molduraSoft.delta +
+    primosSoft.delta +
+    fibonacciSoft.delta +
+    paresSoft.delta +
+    repetidasSoft.delta +
+    somaSoft.delta +
     cruzDelta +
     extremidadesDelta -
     consecutivasPenalty;
@@ -1175,17 +1303,38 @@ export function calculateGaussianScoreIA(
   }
 
   const scoreIA = Math.round(Math.max(30, Math.min(100, rawScore)) * 10) / 10;
+  const totalQuadraticPenalty =
+    Math.round(
+      (molduraSoft.quadraticPenalty +
+        primosSoft.quadraticPenalty +
+        fibonacciSoft.quadraticPenalty +
+        paresSoft.quadraticPenalty +
+        repetidasSoft.quadraticPenalty +
+        somaSoft.quadraticPenalty +
+        consecutivasPenalty) *
+        1000
+    ) / 1000;
 
   return {
     scoreIA,
     consecutivasPenalty: Math.round(consecutivasPenalty * 1000) / 1000,
+    quadraticPenalties: {
+      moldura: molduraSoft.quadraticPenalty,
+      primos: primosSoft.quadraticPenalty,
+      fibonacci: fibonacciSoft.quadraticPenalty,
+      pares: paresSoft.quadraticPenalty,
+      repetidas: repetidasSoft.quadraticPenalty,
+      soma: somaSoft.quadraticPenalty,
+      consecutivas: Math.round(consecutivasPenalty * 1000) / 1000,
+      total: totalQuadraticPenalty,
+    },
     components: {
-      moldura: molduraDelta,
-      primos: primosDelta,
-      fibonacci: fibonacciDelta,
-      pares: paresDelta,
-      repetidas: repetidasDelta,
-      soma: somaDelta,
+      moldura: molduraSoft.delta,
+      primos: primosSoft.delta,
+      fibonacci: fibonacciSoft.delta,
+      pares: paresSoft.delta,
+      repetidas: repetidasSoft.delta,
+      soma: somaSoft.delta,
       cruz: cruzDelta,
       extremidades: extremidadesDelta,
       consecutivas: -consecutivasPenalty,

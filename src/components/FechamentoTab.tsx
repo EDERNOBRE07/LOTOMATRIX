@@ -229,6 +229,34 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   });
 
+  // Sincroniza alterações vindas dos Presets na aba Configurações (activeFilterConfig) em tempo real
+  useEffect(() => {
+    if (!activeFilterConfig) return;
+    setFilters((prev) => {
+      const changed =
+        prev.somaMin !== activeFilterConfig.somaMin ||
+        prev.somaMax !== activeFilterConfig.somaMax ||
+        prev.paresMin !== activeFilterConfig.paresMin ||
+        prev.paresMax !== activeFilterConfig.paresMax ||
+        prev.molduraMin !== activeFilterConfig.molduraMin ||
+        prev.molduraMax !== activeFilterConfig.molduraMax ||
+        prev.primosMin !== activeFilterConfig.primosMin ||
+        prev.primosMax !== activeFilterConfig.primosMax ||
+        prev.fibonacciMin !== activeFilterConfig.fibonacciMin ||
+        prev.fibonacciMax !== activeFilterConfig.fibonacciMax ||
+        prev.repetidasMin !== activeFilterConfig.repetidasMin ||
+        prev.repetidasMax !== activeFilterConfig.repetidasMax ||
+        prev.maxConsecutivas !== activeFilterConfig.maxConsecutivas ||
+        prev.presetEstatistico !== activeFilterConfig.presetEstatistico ||
+        prev.autoCalibrarSomaUniverso !== activeFilterConfig.autoCalibrarSomaUniverso;
+      if (!changed) return prev;
+      return {
+        ...prev,
+        ...activeFilterConfig,
+      };
+    });
+  }, [activeFilterConfig]);
+
   // Auto-Calibração contínua da Faixa de Soma pelo Universo Selecionado (μ_U ± 20)
   useEffect(() => {
     if (selectedNumbers.length < 15) return;

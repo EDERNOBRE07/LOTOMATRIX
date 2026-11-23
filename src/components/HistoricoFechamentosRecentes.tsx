@@ -25,11 +25,11 @@ import {
 
 const CRUZ_NUMBERS = new Set([3, 8, 11, 12, 13, 14, 15, 18, 23]);
 
-// Premiação média de referência Caixa por faixa de acerto (Lotofácil 15 dezenas)
+// Premiação média de referência Caixa por faixa de acerto (Lotofácil 15 dezenas — aposta R$ 3,50)
 const PRIZE_TABLE_ESTIMATE: Record<number, number> = {
-  11: 6,
-  12: 12,
-  13: 30,
+  11: 7,
+  12: 14,
+  13: 35,
   14: 1500,
   15: 1500000,
 };
@@ -285,10 +285,12 @@ export const HistoricoFechamentosRecentes: React.FC<HistoricoFechamentosRecentes
   useEffect(() => {
     const handleUpdate = () => reloadHistory();
     window.addEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+    window.addEventListener('lotosniper-saved-tickets-updated', handleUpdate);
     window.addEventListener('lotosniper-backup-restored', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('lotosniper-saved-fechamentos-updated', handleUpdate);
+      window.removeEventListener('lotosniper-saved-tickets-updated', handleUpdate);
       window.removeEventListener('lotosniper-backup-restored', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
@@ -355,7 +357,7 @@ export const HistoricoFechamentosRecentes: React.FC<HistoricoFechamentosRecentes
           <div className="flex items-center gap-2 text-slate-100">
             <History className="w-4 h-4 text-emerald-400 shrink-0" />
             <h3 className="text-base font-semibold tracking-tight">
-              Histórico de Fechamentos
+              Histórico de Fechamentos Recentes
             </h3>
           </div>
           <p className="mt-1 text-sm text-slate-400">
@@ -422,6 +424,23 @@ export const HistoricoFechamentosRecentes: React.FC<HistoricoFechamentosRecentes
                       <span className="text-xs text-slate-500 font-mono tabular-nums">
                         · {formatShortDate(item)}
                       </span>
+                    </div>
+
+                    {/* Compact Inline Filter Config Summary */}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400 font-mono tabular-nums">
+                      <span>Soma {item.faixaSoma.min}–{item.faixaSoma.max}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Pares {item.paridade.minPares}–{item.paridade.maxPares}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Moldura {item.moldura.min}–{item.moldura.max}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Primos {item.primos.min}–{item.primos.max}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Fib {item.fibonacci.min}–{item.fibonacci.max}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Rep {item.repetidas.min}–{item.repetidas.max}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>Consec ≤ {item.maxConsecutivas}</span>
                     </div>
 
                     {/* Historical Backtest + Engine Metrics Line */}

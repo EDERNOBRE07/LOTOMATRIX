@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Plus,
   Check,
+  Share2,
 } from 'lucide-react';
 
 interface HeatmapTabProps {
@@ -22,7 +23,22 @@ interface PairMetric {
   a: number;
   b: number;
   coOccurrence: number;
+  jointPct: number;
+  pBGivenA: number;
+  pAGivenB: number;
+  conditionalAffinityPct: number; // Média condicional: (P(B|A) + P(A|B)) / 2
+  mutualMinPct: number; // Mínimo bilateral: min(P(B|A), P(A|B))
   correlation: number; // Pearson phi in [-1, 1]
+}
+
+interface CorrelationCluster {
+  id: number;
+  name: string;
+  color: string;
+  members: number[];
+  avgAffinityPct: number;
+  internalPairsCount: number;
+  strongestPair: PairMetric | null;
 }
 
 interface NumberFreqSummary {
@@ -39,12 +55,18 @@ interface NumberFreqSummary {
 const MOLDURA_SET = new Set(MOLDURA);
 const PRIMOS_SET = new Set(PRIMOS);
 
+const CLUSTER_COLORS = ['#38bdf8', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#2dd4bf'];
+
 export const HeatmapTab: React.FC<HeatmapTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   onSendToFechamento,
 }) => {
   const [matrixMode, setMatrixMode] = useState<'correlacao' | 'coocorrencia'>('correlacao');
   const [freqSortMode, setFreqSortMode] = useState<'numero' | 'frequencia'>('frequencia');
+  const [clusterThreshold, setClusterThreshold] = useState<60 | 65 | 70>(60);
+  const [clusterMetricMode, setClusterMetricMode] = useState<'media' | 'bilateral'>('media');
+  const [hoveredClusterNode, setHoveredClusterNode] = useState<number | null>(null);
+  const [hoveredClusterLink, setHoveredClusterLink] = useState<PairMetric | null>(null);
   const [focusedNumber, setFocusedNumber] = useState<number>(13);
   const [hoveredCell, setHoveredCell] = useState<{
     row: number;
@@ -58,6 +80,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
   const freqSvgRef = useRef<SVGSVGElement | null>(null);
   const cumulativeSvgRef = useRef<SVGSVGElement | null>(null);
   const matrixSvgRef = useRef<SVGSVGElement | null>(null);
+  const clusterSvgRef = useRef<SVGSVGElement | null>(null);
 
   // Últimos 100 concursos em ordem cronológica crescente para frequência acumulada e correlação
   const analytics = useMemo(() => {
@@ -111,16 +134,32 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
           const rounded = Number(phi.toFixed(3));
           corrMatrix[i][j] = rounded;
           corrMatrix[j][i] = rounded;
+          const pBGivenA = counts[i] > 0 ? (both / counts[i]) * 100 : 0;
+          const pAGivenB = counts[j] > 0 ? (both / counts[j]) * 100 : 0;
+          const conditionalAffinityPct = Number((((pBGivenA + pAGivenB) / 2)).toFixed(1));
+          const mutualMinPct = Number(Math.min(pBGivenA, pAGivenB).toFixed(1));
+          const jointPct = Number(((both / N) * 100).toFixed(1));
           topPairs.push({
             a: i + 1,
             b: j + 1,
             coOccurrence: both,
+            jointPct,
+            pBGivenA: Number(pBGivenA.toFixed(1)),
+            pAGivenB: Number(pAGivenB.toFixed(1)),
+            conditionalAffinityPct,
+            mutualMinPct,
             correlation: rounded,
           });
         }
       }
     }
 
+    const pairsByAffinity = [...topPairs].sort(
+      (p1, p2) =>
+        p2.conditionalAffinityPct - p1.conditionalAffinityPct ||
+        p2.correlation - p1.correlation ||
+        p2.coOccurrence - p1.coOccurrence
+    );
     topPairs.sort((p1, p2) => p2.correlation - p1.correlation || p2.coOccurrence - p1.coOccurrence);
 
     const freqList: NumberFreqSummary[] = Array.from({ length: 25 }, (_, i) => ({
@@ -144,12 +183,158 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       sortedByFreq,
       coMatrix,
       corrMatrix,
+      allPairs: topPairs,
+      pairsByAffinity,
       topPositivePairs: topPairs.slice(0, 8),
       topNegativePairs: [...topPairs].reverse().slice(0, 5),
       hottest: sortedByFreq[0],
       coldest: sortedByFreq[sortedByFreq.length - 1],
     };
   }, [latestDraw]);
+
+  // Detecção determinística de Clusters de Correlação (>60% de frequência conjunta condicional)
+  const clusterAnalysis = useMemo(() => {
+    const getScore = (p: PairMetric) =>
+      clusterMetricMode === 'bilateral' ? p.mutualMinPct : p.conditionalAffinityPct;
+
+    const qualifyingPairs = analytics.pairsByAffinity
+      .filter((p) => getScore(p) > clusterThreshold)
+      .sort((a, b) => getScore(b) - getScore(a) || b.correlation - a.correlation);
+
+    // Mapeia adjacências ponderadas para particionamento em clusters coesos (até 5 dezenas/cluster)
+    const adj = new Map<number, Map<number, PairMetric>>();
+    for (const pair of qualifyingPairs) {
+      if (!adj.has(pair.a)) adj.set(pair.a, new Map());
+      if (!adj.has(pair.b)) adj.set(pair.b, new Map());
+      adj.get(pair.a)!.set(pair.b, pair);
+      adj.get(pair.b)!.set(pair.a, pair);
+    }
+
+    const unassigned = new Set<number>(Array.from(adj.keys()));
+    const clusters: CorrelationCluster[] = [];
+    const nodeClusterMap = new Map<number, number>();
+    const MAX_CLUSTER_SIZE = 5;
+
+    for (const seedPair of qualifyingPairs) {
+      if (clusters.length >= CLUSTER_COLORS.length) break;
+      if (!unassigned.has(seedPair.a) || !unassigned.has(seedPair.b)) continue;
+
+      const members = [seedPair.a, seedPair.b];
+      unassigned.delete(seedPair.a);
+      unassigned.delete(seedPair.b);
+
+      // Expande o cluster adicionando dezenas com maior afinidade média com os membros atuais
+      while (members.length < MAX_CLUSTER_SIZE) {
+        let bestCandidate = -1;
+        let bestAvgScore = -1;
+
+        for (const cand of unassigned) {
+          const candEdges = adj.get(cand);
+          if (!candEdges) continue;
+          let sumScore = 0;
+          let linkedCount = 0;
+          for (const m of members) {
+            const edge = candEdges.get(m);
+            if (edge) {
+              sumScore += getScore(edge);
+              linkedCount++;
+            }
+          }
+          // Exige conexão forte com pelo menos metade dos membros do cluster
+          const minLinks = Math.max(1, Math.ceil(members.length * 0.5));
+          if (linkedCount >= minLinks) {
+            const avg = sumScore / linkedCount;
+            if (avg > bestAvgScore) {
+              bestAvgScore = avg;
+              bestCandidate = cand;
+            }
+          }
+        }
+
+        if (bestCandidate === -1) break;
+        members.push(bestCandidate);
+        unassigned.delete(bestCandidate);
+      }
+
+      members.sort((x, y) => x - y);
+      const internalPairs = qualifyingPairs.filter(
+        (p) => members.includes(p.a) && members.includes(p.b)
+      );
+      const avgAffinityPct =
+        internalPairs.length > 0
+          ? Number(
+              (
+                internalPairs.reduce((acc, p) => acc + getScore(p), 0) /
+                internalPairs.length
+              ).toFixed(1)
+            )
+          : getScore(seedPair);
+
+      const clusterId = clusters.length;
+      for (const m of members) {
+        nodeClusterMap.set(m, clusterId);
+      }
+
+      clusters.push({
+        id: clusterId,
+        name: `Cluster ${String.fromCharCode(65 + clusterId)}`,
+        color: CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length],
+        members,
+        avgAffinityPct,
+        internalPairsCount: internalPairs.length,
+        strongestPair: internalPairs[0] ?? seedPair,
+      });
+    }
+
+    // Dezenas remanescentes com arestas >threshold entram no cluster de maior afinidade conectada
+    for (const leftover of Array.from(unassigned)) {
+      const edges = adj.get(leftover);
+      if (!edges || clusters.length === 0) continue;
+      let bestClusterId = -1;
+      let bestScore = -1;
+      for (const [neighbor, pair] of edges.entries()) {
+        const cId = nodeClusterMap.get(neighbor);
+        if (cId !== undefined && getScore(pair) > bestScore) {
+          bestScore = getScore(pair);
+          bestClusterId = cId;
+        }
+      }
+      if (bestClusterId !== -1) {
+        nodeClusterMap.set(leftover, bestClusterId);
+      }
+    }
+
+    const activeNumbers = Array.from(adj.keys()).sort((a, b) => a - b);
+    // Limita arestas exibidas no grafo para clareza visual (mantendo todas internas dos clusters + top globais)
+    const internalKeys = new Set<string>();
+    const graphLinks: PairMetric[] = [];
+    for (const pair of qualifyingPairs) {
+      const cA = nodeClusterMap.get(pair.a);
+      const cB = nodeClusterMap.get(pair.b);
+      const isInternal = cA !== undefined && cA === cB;
+      const key = `${pair.a}-${pair.b}`;
+      if (isInternal) {
+        internalKeys.add(key);
+        graphLinks.push(pair);
+      }
+    }
+    for (const pair of qualifyingPairs) {
+      if (graphLinks.length >= 42) break;
+      const key = `${pair.a}-${pair.b}`;
+      if (!internalKeys.has(key)) {
+        graphLinks.push(pair);
+      }
+    }
+
+    return {
+      qualifyingPairs,
+      clusters,
+      nodeClusterMap,
+      activeNumbers,
+      graphLinks,
+      getScore,
+    };
+  }, [analytics, clusterThreshold, clusterMetricMode]);
 
   const toggleManualNumber = (num: number) => {
     setManualSelection((prev) => {
@@ -164,6 +349,17 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       const next = new Set(prev);
       if (next.size < 21) next.add(a);
       if (next.size < 21) next.add(b);
+      return Array.from(next).sort((x, y) => x - y);
+    });
+  };
+
+  const addClusterToSelection = (members: number[]) => {
+    setManualSelection((prev) => {
+      const next = new Set(prev);
+      for (const n of members) {
+        if (next.size >= 21) break;
+        next.add(n);
+      }
       return Array.from(next).sort((x, y) => x - y);
     });
   };
@@ -579,6 +775,290 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .text((d) => d.coOccurrence);
   }, [analytics, matrixMode, hoveredCell]);
 
+  // D3 Render 4: Grafo Force-Directed de Cluster de Correlação (>60% nos últimos 100 concursos)
+  useEffect(() => {
+    const svgEl = clusterSvgRef.current;
+    if (!svgEl) return;
+
+    const width = 760;
+    const height = 400;
+    const svg = d3.select(svgEl);
+    svg.selectAll('*').remove();
+    svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+    const { clusters, nodeClusterMap, activeNumbers, graphLinks, getScore } = clusterAnalysis;
+    if (activeNumbers.length === 0 || graphLinks.length === 0) {
+      svg
+        .append('text')
+        .attr('x', width / 2)
+        .attr('y', height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#94a3b8')
+        .attr('font-size', 13)
+        .text(`Nenhum par atingiu frequência superior a ${clusterThreshold}% neste critério.`);
+      return;
+    }
+
+    interface ClusterNode extends d3.SimulationNodeDatum {
+      id: number;
+      clusterId: number;
+      color: string;
+      freqCount: number;
+      isSelected: boolean;
+      targetX: number;
+      targetY: number;
+    }
+
+    interface ClusterLink extends d3.SimulationLinkDatum<ClusterNode> {
+      pair: PairMetric;
+      weight: number;
+      sameCluster: boolean;
+    }
+
+    const totalClusters = Math.max(1, clusters.length);
+    const clusterCentroids = clusters.map((c, idx) => {
+      const angle = (idx / totalClusters) * Math.PI * 2 - Math.PI / 2;
+      const rx = totalClusters === 1 ? 0 : 230;
+      const ry = totalClusters === 1 ? 0 : 112;
+      return {
+        id: c.id,
+        x: width / 2 + Math.cos(angle) * rx,
+        y: height / 2 + Math.sin(angle) * ry,
+      };
+    });
+
+    const nodes: ClusterNode[] = activeNumbers.map((num, idx) => {
+      const cId = nodeClusterMap.get(num) ?? 0;
+      const centroid = clusterCentroids[cId] ?? { x: width / 2, y: height / 2 };
+      const jitterAngle = (idx * 2.39996) % (Math.PI * 2);
+      return {
+        id: num,
+        clusterId: cId,
+        color: CLUSTER_COLORS[cId % CLUSTER_COLORS.length],
+        freqCount: analytics.freqList[num - 1]?.count ?? 50,
+        isSelected: manualSelection.includes(num),
+        targetX: centroid.x,
+        targetY: centroid.y,
+        x: centroid.x + Math.cos(jitterAngle) * 32,
+        y: centroid.y + Math.sin(jitterAngle) * 32,
+      };
+    });
+
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const links: ClusterLink[] = graphLinks
+      .filter((p) => nodeById.has(p.a) && nodeById.has(p.b))
+      .map((pair) => {
+        const s = nodeById.get(pair.a)!;
+        const t = nodeById.get(pair.b)!;
+        return {
+          source: s,
+          target: t,
+          pair,
+          weight: getScore(pair),
+          sameCluster: s.clusterId === t.clusterId,
+        };
+      });
+
+    const simulation = d3
+      .forceSimulation<ClusterNode>(nodes)
+      .force(
+        'link',
+        d3
+          .forceLink<ClusterNode, ClusterLink>(links)
+          .id((d) => d.id)
+          .distance((l) => (l.sameCluster ? 64 : 135))
+          .strength((l) => (l.sameCluster ? 0.65 : 0.12))
+      )
+      .force('charge', d3.forceManyBody<ClusterNode>().strength(-140))
+      .force('x', d3.forceX<ClusterNode>((d) => d.targetX).strength(0.32))
+      .force('y', d3.forceY<ClusterNode>((d) => d.targetY).strength(0.36))
+      .force('collide', d3.forceCollide<ClusterNode>(24))
+      .stop();
+
+    for (let i = 0; i < 220; i++) {
+      simulation.tick();
+    }
+
+    // Clamp positions safely inside viewport padding
+    const padX = 36;
+    const padY = 36;
+    for (const n of nodes) {
+      n.x = Math.max(padX, Math.min(width - padX, n.x ?? width / 2));
+      n.y = Math.max(padY, Math.min(height - padY, n.y ?? height / 2));
+    }
+
+    const root = svg.append('g');
+
+    // Draw subtle convex hulls around clusters with >= 3 members
+    const hullGroup = root.append('g').attr('class', 'cluster-hulls');
+    clusters.forEach((cluster) => {
+      const memberNodes = nodes.filter((n) => cluster.members.includes(n.id));
+      if (memberNodes.length < 2) return;
+
+      const cx = d3.mean(memberNodes, (n) => n.x ?? 0) ?? width / 2;
+      const cy = d3.mean(memberNodes, (n) => n.y ?? 0) ?? height / 2;
+
+      if (memberNodes.length >= 3) {
+        const pts: [number, number][] = memberNodes.map((n) => [n.x ?? cx, n.y ?? cy]);
+        const hull = d3.polygonHull(pts);
+        if (hull) {
+          const expanded = hull.map(([px, py]): [number, number] => {
+            const vx = px - cx;
+            const vy = py - cy;
+            const len = Math.hypot(vx, vy) || 1;
+            return [px + (vx / len) * 26, py + (vy / len) * 26];
+          });
+          const hullPath =
+            d3
+              .line<[number, number]>()
+              .curve(d3.curveCardinalClosed.tension(0.65))(expanded) ?? '';
+
+          hullGroup
+            .append('path')
+            .attr('d', hullPath)
+            .attr('fill', cluster.color)
+            .attr('fill-opacity', 0.07)
+            .attr('stroke', cluster.color)
+            .attr('stroke-opacity', 0.32)
+            .attr('stroke-width', 1.2)
+            .attr('stroke-dasharray', '4,3');
+        }
+      }
+
+      const topY = d3.min(memberNodes, (n) => n.y ?? cy) ?? cy;
+      hullGroup
+        .append('text')
+        .attr('x', cx)
+        .attr('y', Math.max(16, topY - 28))
+        .attr('text-anchor', 'middle')
+        .attr('fill', cluster.color)
+        .attr('font-size', 10.5)
+        .attr('font-weight', '600')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
+        .text(`${cluster.name} · ${cluster.avgAffinityPct.toFixed(1)}%`);
+    });
+
+    const maxWeight = d3.max(links, (l) => l.weight) ?? 75;
+    const strokeScale = d3
+      .scaleLinear()
+      .domain([clusterThreshold, Math.max(clusterThreshold + 5, maxWeight)])
+      .range([1.1, 3.6]);
+
+    // Draw weighted links (>60% pairs)
+    const linkSel = root
+      .append('g')
+      .selectAll('line.cluster-link')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('class', 'cluster-link')
+      .attr('x1', (d) => (d.source as ClusterNode).x ?? 0)
+      .attr('y1', (d) => (d.source as ClusterNode).y ?? 0)
+      .attr('x2', (d) => (d.target as ClusterNode).x ?? 0)
+      .attr('y2', (d) => (d.target as ClusterNode).y ?? 0)
+      .attr('stroke', (d) => {
+        const s = d.source as ClusterNode;
+        return d.sameCluster ? s.color : '#64748b';
+      })
+      .attr('stroke-width', (d) => strokeScale(d.weight))
+      .attr('stroke-opacity', (d) => {
+        if (hoveredClusterLink) {
+          return hoveredClusterLink.a === d.pair.a && hoveredClusterLink.b === d.pair.b
+            ? 0.95
+            : 0.12;
+        }
+        if (hoveredClusterNode !== null) {
+          return d.pair.a === hoveredClusterNode || d.pair.b === hoveredClusterNode ? 0.92 : 0.1;
+        }
+        return d.sameCluster ? 0.52 : 0.18;
+      })
+      .style('cursor', 'pointer')
+      .on('mouseenter', (_e, d) => {
+        setHoveredClusterLink(d.pair);
+        setHoveredClusterNode(null);
+      })
+      .on('mouseleave', () => {
+        setHoveredClusterLink(null);
+      })
+      .on('click', (_e, d) => {
+        addPairToSelection(d.pair.a, d.pair.b);
+      });
+
+    void linkSel;
+
+    // Draw cluster nodes
+    const minFreq = d3.min(nodes, (n) => n.freqCount) ?? 40;
+    const maxFreq = d3.max(nodes, (n) => n.freqCount) ?? 70;
+    const radiusScale = d3
+      .scaleLinear()
+      .domain([minFreq, Math.max(minFreq + 1, maxFreq)])
+      .range([13, 18]);
+
+    const connectedToHovered = new Set<number>();
+    if (hoveredClusterNode !== null) {
+      connectedToHovered.add(hoveredClusterNode);
+      for (const l of links) {
+        if (l.pair.a === hoveredClusterNode) connectedToHovered.add(l.pair.b);
+        if (l.pair.b === hoveredClusterNode) connectedToHovered.add(l.pair.a);
+      }
+    }
+
+    const nodeG = root
+      .append('g')
+      .selectAll('g.cluster-node')
+      .data(nodes)
+      .enter()
+      .append('g')
+      .attr('class', 'cluster-node')
+      .attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
+      .style('cursor', 'pointer')
+      .attr('opacity', (d) => {
+        if (hoveredClusterNode !== null) {
+          return connectedToHovered.has(d.id) ? 1 : 0.25;
+        }
+        if (hoveredClusterLink) {
+          return d.id === hoveredClusterLink.a || d.id === hoveredClusterLink.b ? 1 : 0.3;
+        }
+        return 1;
+      })
+      .on('mouseenter', (_e, d) => {
+        setHoveredClusterNode(d.id);
+        setHoveredClusterLink(null);
+        setFocusedNumber(d.id);
+      })
+      .on('mouseleave', () => {
+        setHoveredClusterNode(null);
+      })
+      .on('click', (_e, d) => {
+        toggleManualNumber(d.id);
+      });
+
+    nodeG
+      .append('circle')
+      .attr('r', (d) => radiusScale(d.freqCount))
+      .attr('fill', (d) => (d.isSelected ? '#064e3b' : '#0f172a'))
+      .attr('stroke', (d) => (d.isSelected ? '#34d399' : d.color))
+      .attr('stroke-width', (d) => (d.isSelected ? 2.6 : 1.8));
+
+    nodeG
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .attr('fill', (d) => (d.isSelected ? '#6ee7b7' : '#f8fafc'))
+      .attr('font-size', 10.5)
+      .attr('font-weight', '700')
+      .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
+      .style('pointer-events', 'none')
+      .text((d) => String(d.id).padStart(2, '0'));
+  }, [
+    analytics,
+    clusterAnalysis,
+    clusterThreshold,
+    manualSelection,
+    hoveredClusterNode,
+    hoveredClusterLink,
+  ]);
+
   const focusedStats = analytics.freqList[focusedNumber - 1];
   const expectedFinal = analytics.drawsCount * 0.6;
   const focusedDelta = focusedStats ? Number((focusedStats.count - expectedFinal).toFixed(1)) : 0;
@@ -968,6 +1448,230 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* Row 3: D3 Cluster de Correlação (Pares com Frequência > 60% nos Últimos 100 Concursos) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <section className="xl:col-span-8 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-slate-100">
+                <Share2 className="w-4 h-4 text-sky-400 shrink-0" />
+                <h3 className="text-sm font-semibold">
+                  Cluster de Correlação D3 (Frequência Conjunta &gt; {clusterThreshold}%)
+                </h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Identifica comunidades de dezenas que tendem a sair juntas acima da linha de base (58,3%) nos últimos {analytics.drawsCount} concursos. Clique em um nó ou aresta para adicionar ao pool.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
+                {([60, 65, 70] as const).map((thr) => (
+                  <button
+                    key={thr}
+                    type="button"
+                    onClick={() => setClusterThreshold(thr)}
+                    className={`px-2.5 py-1 rounded-md font-mono tabular-nums font-medium transition cursor-pointer ${
+                      clusterThreshold === thr
+                        ? 'bg-slate-800 text-slate-100'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    &gt;{thr}%
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setClusterMetricMode('media')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
+                    clusterMetricMode === 'media'
+                      ? 'bg-slate-800 text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Média Cond.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClusterMetricMode('bilateral')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
+                    clusterMetricMode === 'bilateral'
+                      ? 'bg-slate-800 text-slate-100'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Bilateral
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cluster Graph Live Inspector */}
+          <div className="px-5 py-2.5 border-b border-slate-800/80 bg-slate-950/50 flex flex-wrap items-center justify-between gap-2 text-xs font-mono tabular-nums">
+            {hoveredClusterLink ? (
+              <span className="text-slate-200">
+                Par{' '}
+                <strong>
+                  {String(hoveredClusterLink.a).padStart(2, '0')}–
+                  {String(hoveredClusterLink.b).padStart(2, '0')}
+                </strong>{' '}
+                · Saem juntas em{' '}
+                <strong className="text-emerald-400">
+                  {clusterAnalysis.getScore(hoveredClusterLink).toFixed(1)}%
+                </strong>{' '}
+                ({hoveredClusterLink.coOccurrence}× em {analytics.drawsCount} conc. · P({String(hoveredClusterLink.b).padStart(2, '0')}|{String(hoveredClusterLink.a).padStart(2, '0')}) {hoveredClusterLink.pBGivenA.toFixed(1)}% · φ{' '}
+                {hoveredClusterLink.correlation >= 0 ? '+' : ''}
+                {hoveredClusterLink.correlation.toFixed(2)})
+              </span>
+            ) : hoveredClusterNode !== null ? (
+              <span className="text-slate-200">
+                Dezena <strong>{String(hoveredClusterNode).padStart(2, '0')}</strong> ·{' '}
+                {
+                  clusterAnalysis.qualifyingPairs.filter(
+                    (p) => p.a === hoveredClusterNode || p.b === hoveredClusterNode
+                  ).length
+                }{' '}
+                conexões &gt;{clusterThreshold}% · Clique para incluir/remover do pool manual
+              </span>
+            ) : (
+              <span className="text-slate-400 font-sans">
+                {clusterAnalysis.qualifyingPairs.length} pares acima de {clusterThreshold}% organizados em {clusterAnalysis.clusters.length} clusters de afinidade.
+              </span>
+            )}
+
+            <span className="text-[11px] text-slate-500 font-sans">
+              Espessura da linha proporcional à frequência conjunta
+            </span>
+          </div>
+
+          <div className="p-4">
+            <svg
+              ref={clusterSvgRef}
+              className="w-full h-auto block"
+              role="img"
+              aria-label={`Grafo D3 de Clusters de Correlação com pares acima de ${clusterThreshold}% nos últimos 100 concursos`}
+            />
+          </div>
+        </section>
+
+        {/* Detected Clusters & Top >60% Pairs */}
+        <section className="xl:col-span-4 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+          <div className="px-5 py-4 border-b border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-100">
+              Clusters &amp; Pares &gt;{clusterThreshold}%
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Adicione um cluster completo ou duplas específicas ao seu fechamento manual.
+            </p>
+          </div>
+
+          {/* Clusters List */}
+          <div className="divide-y divide-slate-800/80 border-b border-slate-800">
+            {clusterAnalysis.clusters.length === 0 ? (
+              <div className="px-5 py-4 text-xs text-slate-400">
+                Nenhum cluster detectado acima de {clusterThreshold}%. Reduza o limiar para 60%.
+              </div>
+            ) : (
+              clusterAnalysis.clusters.map((cluster) => {
+                const allInPool = cluster.members.every((m) => manualSelection.includes(m));
+                return (
+                  <div
+                    key={cluster.id}
+                    className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-slate-800/20 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span
+                          className="font-semibold"
+                          style={{ color: cluster.color }}
+                        >
+                          {cluster.name}
+                        </span>
+                        <span className="text-slate-500">·</span>
+                        <span className="font-mono tabular-nums text-slate-300">
+                          {cluster.avgAffinityPct.toFixed(1)}% média
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono tabular-nums text-xs text-slate-200">
+                        {cluster.members.map((m) => String(m).padStart(2, '0')).join(' · ')}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => addClusterToSelection(cluster.members)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-[11px] font-medium transition cursor-pointer shrink-0 ${
+                        allInPool
+                          ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-200'
+                      }`}
+                    >
+                      {allInPool ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          No pool
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3 h-3" />
+                          Cluster
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Top >60% Pairs */}
+          <div className="px-5 py-3 bg-slate-950/40 flex-1">
+            <div className="text-xs font-medium text-slate-300 mb-2">
+              Top Pares com Saída Conjunta &gt;{clusterThreshold}%
+            </div>
+            <div className="space-y-2 font-mono tabular-nums text-xs">
+              {clusterAnalysis.qualifyingPairs.slice(0, 8).map((pair) => {
+                const score = clusterAnalysis.getScore(pair);
+                const bothSelected =
+                  manualSelection.includes(pair.a) && manualSelection.includes(pair.b);
+                return (
+                  <div
+                    key={`c60-${pair.a}-${pair.b}`}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <div className="text-slate-300">
+                      <span className="font-semibold text-slate-100">
+                        {String(pair.a).padStart(2, '0')}–{String(pair.b).padStart(2, '0')}
+                      </span>
+                      <span className="ml-2 text-emerald-400 font-semibold">
+                        {score.toFixed(1)}%
+                      </span>
+                      <span className="ml-2 text-slate-500">
+                        ({pair.coOccurrence}×)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addPairToSelection(pair.a, pair.b)}
+                      className={`px-2 py-0.5 rounded border text-[11px] font-sans font-medium transition cursor-pointer ${
+                        bothSelected
+                          ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                          : 'border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-200'
+                      }`}
+                    >
+                      {bothSelected ? 'No pool' : '+ Par'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>

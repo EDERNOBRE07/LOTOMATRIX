@@ -199,17 +199,43 @@ export const PresetsAuditoriaSettingsPanel: React.FC<PresetsAuditoriaSettingsPan
 
       {/* Interactive 3-Preset Selector */}
       <div className="p-5 sm:p-6 border-b border-slate-800">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-          <span className="text-xs font-medium text-slate-400">
-            Perfil ativo no motor:{' '}
-            <strong className="text-slate-100 font-semibold">
-              {activePresetKey === 'personalizado'
-                ? 'Personalizado'
-                : PRESET_SHORT_TITLE[activePresetKey]}
-            </strong>
-          </span>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium text-slate-400">
+              Perfil ativo (<code className="font-mono text-slate-300">activeFilterConfig</code>):{' '}
+              <strong className="text-slate-100 font-semibold">
+                {activePresetKey === 'personalizado'
+                  ? 'Personalizado'
+                  : PRESET_SHORT_TITLE[activePresetKey]}
+              </strong>
+            </span>
+            <div
+              className="inline-flex items-center p-0.5 rounded-lg bg-slate-950 border border-slate-800"
+              role="group"
+              aria-label="Alternância rápida de preset"
+            >
+              {ORDERED_PRESET_KEYS.map((key) => {
+                const isActive = activePresetKey === key;
+                return (
+                  <button
+                    key={`quick-${key}`}
+                    type="button"
+                    onClick={() => handleSelectPreset(key)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? 'bg-slate-800 text-slate-100 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {PRESET_SHORT_TITLE[key]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <span className="text-xs text-slate-400 font-mono tabular-nums">
-            Soma {filters.somaMin}–{filters.somaMax} · Pares {filters.paresMin}–{filters.paresMax} · Moldura {filters.molduraMin}–{filters.molduraMax} · Consec. ≤ {filters.maxConsecutivas}
+            Soma {filters.somaMin}–{filters.somaMax} · Moldura {filters.molduraMin}–{filters.molduraMax} · Primos {filters.primosMin}–{filters.primosMax} · Fib {filters.fibonacciMin}–{filters.fibonacciMax} · Rep {filters.repetidasMin}–{filters.repetidasMax} · Consec ≤ {filters.maxConsecutivas}
           </span>
         </div>
 
