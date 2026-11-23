@@ -328,6 +328,198 @@ export function gerarEDispararRelatorioPDF(
   const safeName = String(nomeFechamento || 'Fechamento').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
   doc.save(`LotoSniper_Relatorio_concurso_${concursoAlvo}_${safeName}.pdf`);
 }
+
+/**
+ * Exportação direta em PDF formatado para Impressão Rápida da lista de jogos salvos.
+ * Layout A4 de alto contraste e economia máxima de tinta (sem blocos escuros),
+ * com dezenas alinhadas em fonte monoespaçada e coluna de conferência manual [ ].
+ */
+export function gerarPdfImpressaoRapidaListaJogos(
+  ticketsInput?: GameTicket[],
+  fechamentoMetaParam?: FechamentoExportMeta | null,
+  latestDrawParam?: LotofacilDraw,
+  valorPorAposta: number = 3.5
+): { fileName: string; totalJogos: number } | null {
+  let tickets: GameTicket[] = Array.isArray(ticketsInput) ? [...ticketsInput] : [];
+  let meta: FechamentoExportMeta | null | undefined = fechamentoMetaParam;
+
+  if (tickets.length === 0) {
+    try {
+      const raw = localStorage.getItem('lotosniper_saved_tickets');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          tickets = parsed;
+        }
+      }
+    } catch {}
+  }
+
+  if (tickets.length === 0) {
+    const savedList = getSavedFechamentos();
+    const flattened = savedList.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : []));
+    if (flattened.length > 0) {
+      tickets = flattened;
+      if (!meta && savedList[0]) {
+        meta = savedList[0] as unknown as FechamentoExportMeta;
+      }
+    }
+  }
+
+  if (!meta) {
+    try {
+      const rawMeta = localStorage.getItem('lotosniper_active_fechamento_meta');
+      if (rawMeta) meta = JSON.parse(rawMeta);
+    } catch {}
+  }
+
+  if (tickets.length === 0) {
+    return null;
+  }
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+
+  const nomeFechamento =
+    meta?.strategyName || meta?.modeName || 'Lista de Jogos Salvos LotoSniper';
+  const concursoBase = resolveConcursoBase(meta?.concurso ?? latestDrawParam?.concurso, 3824);
+  const concursoAlvo = resolveConcursoAlvo(concursoBase, meta?.concursoAlvo);
+  const totalJogos = tickets.length;
+  const investimentoTotal = totalJogos * valorPorAposta;
+  const now = new Date();
+  const dataHoraEmissao = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+
+  // Cabeçalho limpo de baixo consumo de tinta (fundo branco + linha de destaque)
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.7);
+  doc.line(margin, 12, pageWidth - margin, 12);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('LOTOSNIPER AI PRO — LISTA DE JOGOS SALVOS (IMPRESSÃO RÁPIDA)', margin, 19);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    `Concurso Alvo: #${concursoAlvo}   |   Estratégia: ${String(nomeFechamento).slice(0, 42)}   |   Emitido em: ${dataHoraEmissao}`,
+    margin,
+    25
+  );
+
+  // Quadro resumo compacto (fundo branco com borda fina)
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, 28.5, pageWidth - margin * 2, 11, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Total de Jogos: ${totalJogos}`, margin + 4, 35.2);
+  doc.text(
+    `Investimento Estimado: R$ ${investimentoTotal.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} (R$ ${valorPorAposta.toFixed(2).replace('.', ',')}/aposta)`,
+    margin + 46,
+    35.2
+  );
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Formato Econômico A4', pageWidth - margin - 34, 35.2);
+
+  const PRIMOS = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+  const MOLDURA_SET = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25];
+
+  const rows = tickets.map((t, idx) => {
+    const sorted = [...t.dezenas].sort((a, b) => a - b);
+    const dezenasFormatted = sorted.map((n) => n.toString().padStart(2, '0')).join('  ');
+    const soma = t.soma ?? sorted.reduce((acc, n) => acc + n, 0);
+    const pares = t.pares ?? sorted.filter((n) => n % 2 === 0).length;
+    const impares = 15 - pares;
+    const moldura = t.moldura ?? sorted.filter((n) => MOLDURA_SET.includes(n)).length;
+    const primos = t.primos ?? sorted.filter((n) => PRIMOS.includes(n)).length;
+
+    return [
+      `#${(t.index ?? idx + 1).toString().padStart(2, '0')}`,
+      dezenasFormatted,
+      String(soma),
+      `${pares}P/${impares}I`,
+      String(moldura),
+      String(primos),
+      '[   ]',
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 43,
+    margin: { left: margin, right: margin, bottom: 14 },
+    head: [['Jogo', '15 Dezenas (Ordem Crescente)', 'Soma', 'Par/Ímp', 'Mold.', 'Primos', 'OK']],
+    body: rows,
+    theme: 'grid',
+    styles: {
+      fontSize: 8.5,
+      cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+      textColor: [15, 23, 42],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.2,
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+      lineColor: [100, 116, 139],
+      lineWidth: 0.3,
+    },
+    alternateRowStyles: {
+      fillColor: [250, 250, 252],
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 15, fontStyle: 'bold' },
+      1: { halign: 'center', cellWidth: 102, font: 'courier', fontStyle: 'bold', fontSize: 9 },
+      2: { halign: 'center', cellWidth: 14 },
+      3: { halign: 'center', cellWidth: 17 },
+      4: { halign: 'center', cellWidth: 13 },
+      5: { halign: 'center', cellWidth: 14 },
+      6: { halign: 'center', cellWidth: 11, font: 'courier', textColor: [100, 116, 139] },
+    },
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 10.5, pageWidth - margin, pageHeight - 10.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `LotoSniper AI Pro · Lista de Impressão Rápida · Concurso Alvo #${concursoAlvo} (${totalJogos} jogos)`,
+      margin,
+      pageHeight - 6
+    );
+    doc.text(`Página ${p} de ${totalPages}`, pageWidth - margin - 20, pageHeight - 6);
+  }
+
+  try {
+    soundService.playGoldenZoneSuccessChime();
+  } catch {}
+
+  const fileName = `LotoSniper_Impressao_Rapida_Concurso_${concursoAlvo}_${totalJogos}_jogos.pdf`;
+  doc.save(fileName);
+  return { fileName, totalJogos };
+}
 import {
   Download,
   Copy,
@@ -1369,6 +1561,33 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
     }
   };
 
+  // Exportação direta da lista de jogos salvos em PDF limpo para Impressão Rápida (A4 econômico)
+  const handleExportImpressaoRapidaPDF = () => {
+    const selectedList = tickets.filter((t) => selectedTicketIds.has(t.id || `ticket-${t.index}`));
+    const listToExport =
+      activeSection === 'bilhetes_individuais' && selectedList.length > 0
+        ? selectedList
+        : tickets.length > 0
+        ? tickets
+        : undefined;
+
+    const result = gerarPdfImpressaoRapidaListaJogos(listToExport, fechamentoMeta, latestDraw);
+    if (!result) {
+      setDuplicateActionFeedback('Nenhum jogo salvo disponível para gerar o PDF de impressão rápida.');
+      setTimeout(() => setDuplicateActionFeedback(null), 4000);
+      return;
+    }
+
+    setCopiedFormat('pdf_quick_print');
+    setDuplicateActionFeedback(
+      `PDF de impressão rápida gerado (${result.fileName} · ${result.totalJogos} jogo(s) prontos para imprimir).`
+    );
+    setTimeout(() => {
+      setCopiedFormat((prev) => (prev === 'pdf_quick_print' ? null : prev));
+      setDuplicateActionFeedback(null);
+    }, 4500);
+  };
+
   return (
     <div className="space-y-5">
       {/* Seletor de Visão Principal & Ações (App Shell bg-slate-900/80 + font-mono) */}
@@ -1418,11 +1637,29 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Direto: Exportar Lista de Jogos Salvos em PDF para Impressão Rápida */}
+          <button
+            type="button"
+            onClick={handleExportImpressaoRapidaPDF}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+            title="Exportar a lista de jogos salvos diretamente para um PDF A4 limpo, com dezenas alinhadas e caixas de conferência, ideal para impressão rápida"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-950" />
+            <span>
+              {copiedFormat === 'pdf_quick_print' ? 'PDF Baixado!' : 'Impressão Rápida (PDF)'}
+            </span>
+            {tickets.length > 0 && (
+              <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-slate-950/20 text-slate-950 font-black">
+                {tickets.length}
+              </span>
+            )}
+          </button>
+
           {/* Botão Principal: Exportar Bilhetes Atuais Salvos em PDF Formatado para Lotérica */}
           <button
             type="button"
             onClick={handleExportLotericaOrganizadoPDF}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition flex items-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             title="Exportar os bilhetes salvos atuais como PDF formatado e organizado para impressão e apostas na lotérica"
           >
             <Printer className="w-3.5 h-3.5 text-slate-950" />
@@ -1442,7 +1679,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               const listToExport = targetTickets.length > 0 ? targetTickets : tickets;
               gerarEDispararRelatorioPDF(listToExport, fechamentoMeta, latestDraw);
             }}
-            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
             title="Gerar relatório executivo PDF com resumo do fechamento, meta técnica e tabela completa"
           >
             <Award className="w-3.5 h-3.5 text-amber-400" />
@@ -2055,8 +2292,17 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
               </button>
               <button
                 type="button"
+                onClick={handleExportImpressaoRapidaPDF}
+                className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 whitespace-nowrap shrink-0"
+                title="Baixar PDF formatado de impressão rápida com os jogos selecionados"
+              >
+                <Printer className="w-3 h-3 text-slate-950" />
+                <span>PDF Impressão Rápida ({selectedTicketIds.size || tickets.length})</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleExportCSV}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95 whitespace-nowrap shrink-0"
                 title="Exportar jogos selecionados diretamente para CSV"
               >
                 <Download className="w-3 h-3 text-emerald-400" />

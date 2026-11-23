@@ -10,6 +10,24 @@ code, kbd, samp, pre, .font-mono {
 }
 
 /* ========================================================================= */
+/* THEME: DARK PADRÃO (SLATE CLÁSSICO / ARDÓSIA & ESMERALDA)                 */
+/* ========================================================================= */
+html.theme-slate,
+body.theme-slate,
+.theme-slate {
+  --theme-bg-deep: #020617;
+  --theme-bg-surface: #0f172a;
+  --theme-bg-card: #1e293b;
+  --theme-accent: #10b981;
+}
+
+html.theme-slate,
+html.theme-slate body {
+  background-color: #020617;
+  color: #f1f5f9;
+}
+
+/* ========================================================================= */
 /* THEME: GOLD IMPERIAL / LUXURY PALETTE (TONS DOURADOS & PRETOS PROFUNDOS)  */
 /* ========================================================================= */
 html.theme-gold,

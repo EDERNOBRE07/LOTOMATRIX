@@ -1,22 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
-  TrendingUp,
   AlertTriangle,
   RefreshCw,
   Zap,
   Flame,
   ArrowRight,
-  BellRing,
   X,
   Crown,
   Contrast,
   Moon,
   ShieldCheck,
+  ChevronDown,
+  Check,
+  BookOpen,
 } from 'lucide-react';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
 import { DevServerHealthStatus } from './DevServerHealthStatus';
+
+export type HeaderAppTheme = 'gold' | 'high_contrast' | 'slate';
+
+const THEME_ORDER: HeaderAppTheme[] = ['gold', 'high_contrast', 'slate'];
+
+const THEME_META: Record<
+  HeaderAppTheme,
+  {
+    label: string;
+    shortLabel: string;
+    description: string;
+    swatch: string;
+    buttonClass: string;
+  }
+> = {
+  gold: {
+    label: 'Gold Imperial',
+    shortLabel: 'Gold',
+    description: 'Preto obsidiana com acentos dourados',
+    swatch: 'bg-amber-400 border-amber-200',
+    buttonClass:
+      'bg-amber-400 text-slate-950 border-amber-300 shadow-amber-400/20 hover:bg-amber-300',
+  },
+  high_contrast: {
+    label: 'Alto Contraste',
+    shortLabel: 'Alto Contraste',
+    description: 'Preto absoluto com máxima legibilidade P&B',
+    swatch: 'bg-white border-zinc-400',
+    buttonClass:
+      'bg-zinc-100 text-zinc-950 border-white hover:bg-white ring-1 ring-white/50',
+  },
+  slate: {
+    label: 'Dark (Slate)',
+    shortLabel: 'Dark Slate',
+    description: 'Tema escuro padrão em ardósia e esmeralda',
+    swatch: 'bg-slate-700 border-emerald-400',
+    buttonClass:
+      'bg-slate-800 text-slate-100 border-slate-600 hover:bg-slate-700 hover:border-emerald-400/60',
+  },
+};
 
 interface HeaderProps {
   latestDraw: LotofacilDraw;
@@ -27,6 +68,7 @@ interface HeaderProps {
   concursosNoCiclo?: number;
   onQuickOptimize?: () => void;
   onOpenBackup?: () => void;
+  onOpenTour?: () => void;
   aiStatus: 'online' | 'ready' | 'loading';
   titleAsSpan?: boolean;
 }
@@ -40,11 +82,15 @@ export const Header: React.FC<HeaderProps> = ({
   concursosNoCiclo = 4,
   onQuickOptimize,
   onOpenBackup,
+  onOpenTour,
   aiStatus,
   titleAsSpan = false,
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<'gold' | 'high_contrast' | 'slate'>(() => {
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  const [currentTheme, setCurrentTheme] = useState<HeaderAppTheme>(() => {
     try {
       const saved = localStorage.getItem('lotosniper_theme');
       if (saved === 'high_contrast') return 'high_contrast';
@@ -56,33 +102,72 @@ export const Header: React.FC<HeaderProps> = ({
     }
   });
 
-  React.useEffect(() => {
-    const handleThemeEvent = (e: any) => {
-      if (e.detail) {
-        setCurrentTheme(e.detail);
+  useEffect(() => {
+    const handleThemeEvent = (e: Event) => {
+      const custom = e as CustomEvent<HeaderAppTheme>;
+      if (
+        custom.detail === 'gold' ||
+        custom.detail === 'high_contrast' ||
+        custom.detail === 'slate'
+      ) {
+        setCurrentTheme(custom.detail);
       }
     };
     window.addEventListener('lotosniper-theme-changed', handleThemeEvent);
     return () => window.removeEventListener('lotosniper-theme-changed', handleThemeEvent);
   }, []);
 
-  const toggleTheme = () => {
-    // Alterna entre o modo 'Gold' e 'Modo Noturno (Alto Contraste / Preto Absoluto)'
-    const nextTheme = currentTheme === 'high_contrast' ? 'gold' : 'high_contrast';
+  useEffect(() => {
+    if (!isThemeMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsThemeMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isThemeMenuOpen]);
+
+  const applyGlobalTheme = (nextTheme: HeaderAppTheme) => {
     setCurrentTheme(nextTheme);
+    setIsThemeMenuOpen(false);
     try {
       localStorage.setItem('lotosniper_theme', nextTheme);
       if (typeof document !== 'undefined') {
-        document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
+        document.documentElement.classList.remove(
+          'theme-gold',
+          'theme-high-contrast',
+          'theme-night-contrast',
+          'theme-slate'
+        );
         if (nextTheme === 'gold') {
           document.documentElement.classList.add('theme-gold');
         } else if (nextTheme === 'high_contrast') {
           document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
+        } else {
+          document.documentElement.classList.add('theme-slate');
         }
         window.dispatchEvent(new CustomEvent('lotosniper-theme-changed', { detail: nextTheme }));
       }
     } catch {}
   };
+
+  const cycleTheme = () => {
+    const idx = THEME_ORDER.indexOf(currentTheme);
+    const nextTheme = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
+    applyGlobalTheme(nextTheme);
+  };
+
+  const nextThemeInCycle =
+    THEME_ORDER[(THEME_ORDER.indexOf(currentTheme) + 1) % THEME_ORDER.length];
+  const activeThemeMeta = THEME_META[currentTheme];
 
   // Reta final do ciclo: menos de 3 dezenas pendentes (1 ou 2 dezenas restantes, até 3)
   const isRetaFinalCiclo =
@@ -252,43 +337,104 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Vite Dev Server Health Status Pill */}
           <DevServerHealthStatus showPillInHeader={true} />
 
-          {/* Theme Quick Switcher: Alternância entre Modo Gold e Alto Contraste (Monocromático) */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-black transition cursor-pointer shadow-sm active:scale-95 ${
-              currentTheme === 'high_contrast'
-                ? 'bg-zinc-100 text-zinc-950 border-white hover:bg-white ring-1 ring-white/50'
-                : 'bg-amber-400 text-slate-950 border-amber-300 shadow-amber-400/20 hover:bg-amber-300'
-            }`}
-            title={
-              currentTheme === 'gold'
-                ? 'Alternar para Modo Alto Contraste (Monocromático para leitura prolongada em baixa luminosidade)'
-                : 'Alternar para Modo Gold Imperial'
-            }
-          >
-            {currentTheme === 'high_contrast' ? (
-              <>
-                <Moon className="w-3.5 h-3.5 text-zinc-950 fill-current" />
-                <span>Modo Noturno</span>
-                <span className="text-[9px] font-mono uppercase bg-black text-white px-1 py-0.2 rounded font-black hidden sm:inline">
-                  P&B
-                </span>
-              </>
-            ) : (
-              <>
-                <Crown className="w-3.5 h-3.5 fill-current text-slate-950" />
-                <span>Modo Gold</span>
-              </>
+          {/* Global Theme Switcher: Alternância rápida entre Gold, Alto Contraste e Dark (Slate) */}
+          <div className="relative flex items-center" ref={themeMenuRef}>
+            <div className="inline-flex items-stretch rounded-lg shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={cycleTheme}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 border border-r-0 rounded-l-lg text-xs font-black transition cursor-pointer active:scale-[0.98] whitespace-nowrap shrink-0 ${activeThemeMeta.buttonClass}`}
+                title={`Tema atual: ${activeThemeMeta.label}. Clique para alternar para ${THEME_META[nextThemeInCycle].label}.`}
+                aria-label={`Alternar tema global. Atual: ${activeThemeMeta.label}. Próximo: ${THEME_META[nextThemeInCycle].label}.`}
+              >
+                {currentTheme === 'gold' && <Crown className="w-3.5 h-3.5 fill-current shrink-0" />}
+                {currentTheme === 'high_contrast' && <Contrast className="w-3.5 h-3.5 shrink-0" />}
+                {currentTheme === 'slate' && <Moon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                <span>{activeThemeMeta.shortLabel}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+                className={`px-1.5 py-1.5 border rounded-r-lg transition cursor-pointer flex items-center justify-center ${activeThemeMeta.buttonClass}`}
+                title="Escolher tema (Gold, Alto Contraste ou Dark Slate)"
+                aria-label="Abrir seletor de tema"
+                aria-expanded={isThemeMenuOpen}
+                aria-haspopup="menu"
+              >
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    isThemeMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+            </div>
+
+            {isThemeMenuOpen && (
+              <div
+                role="menu"
+                aria-label="Selecionar tema global"
+                className="absolute right-0 top-full mt-2 w-60 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-1.5 z-50 space-y-1"
+              >
+                <div className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 border-b border-slate-800">
+                  Tema Visual Global
+                </div>
+                {THEME_ORDER.map((themeKey) => {
+                  const meta = THEME_META[themeKey];
+                  const isActive = currentTheme === themeKey;
+                  return (
+                    <button
+                      key={themeKey}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={isActive}
+                      onClick={() => applyGlobalTheme(themeKey)}
+                      className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-lg text-left transition cursor-pointer ${
+                        isActive
+                          ? 'bg-slate-800 text-white'
+                          : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className={`w-3.5 h-3.5 rounded-full border shrink-0 ${meta.swatch}`}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold block truncate">{meta.label}</span>
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            {meta.description}
+                          </span>
+                        </div>
+                      </div>
+                      {isActive && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             )}
-          </button>
+          </div>
+
+          {/* Reopen Guided Tour Button (Desktop & Mobile) */}
+          {onOpenTour && (
+            <button
+              type="button"
+              onClick={onOpenTour}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-sm active:scale-95 bg-slate-800/90 hover:bg-slate-700 text-amber-300 border-amber-500/35 hover:border-amber-400 whitespace-nowrap shrink-0"
+              title="Abrir guia interativo de uso do LotoSniper AI Pro"
+              aria-label="Abrir tutorial interativo"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Guia</span>
+            </button>
+          )}
 
           {/* Backup & Nuvem Button */}
           {onOpenBackup && (
             <button
               type="button"
               onClick={onOpenBackup}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-sm active:scale-95 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 hover:border-emerald-400"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-sm active:scale-95 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 hover:border-emerald-400 whitespace-nowrap shrink-0"
               title="Central de Backup: Download Forçado JSON, Snapshots de Segurança e Google Drive"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

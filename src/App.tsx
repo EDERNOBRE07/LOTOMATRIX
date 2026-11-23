@@ -203,11 +203,18 @@ export default function App() {
   useEffect(() => {
     try {
       const savedTheme = localStorage.getItem('lotosniper_theme') || 'gold';
-      document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
+      document.documentElement.classList.remove(
+        'theme-gold',
+        'theme-high-contrast',
+        'theme-night-contrast',
+        'theme-slate'
+      );
       if (savedTheme === 'high_contrast') {
         document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
       } else if (savedTheme === 'gold') {
         document.documentElement.classList.add('theme-gold');
+      } else {
+        document.documentElement.classList.add('theme-slate');
       }
     } catch {}
   }, []);
@@ -918,6 +925,7 @@ export default function App() {
         aiStatus={isAILoading ? 'loading' : 'ready'}
         onQuickOptimize={() => handleSelectStudioTab('fechamento')}
         onOpenBackup={() => setIsBackupModalOpen(true)}
+        onOpenTour={() => setIsTourOpen(true)}
         titleAsSpan={publicRoute !== '/'}
       />
 
@@ -1446,7 +1454,7 @@ export default function App() {
       <GuidedTourModal
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
-        onNavigateTab={(tab) => setActiveTab(tab as any)}
+        onNavigateTab={(tab) => handleSelectStudioTab(tab as TabType)}
       />
 
       {/* Central de Backup & Segurança de Dados (Download Forçado JSON, Snapshots & Drive) */}

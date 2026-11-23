@@ -40,11 +40,18 @@ export const ThemeSelectorModule: React.FC<ThemeSelectorModuleProps> = ({ onThem
     try {
       localStorage.setItem('lotosniper_theme', theme);
       if (typeof document !== 'undefined') {
-        document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
+        document.documentElement.classList.remove(
+          'theme-gold',
+          'theme-high-contrast',
+          'theme-night-contrast',
+          'theme-slate'
+        );
         if (theme === 'gold') {
           document.documentElement.classList.add('theme-gold');
         } else if (theme === 'high_contrast') {
           document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
+        } else {
+          document.documentElement.classList.add('theme-slate');
         }
       }
 
@@ -86,11 +93,18 @@ export const ThemeSelectorModule: React.FC<ThemeSelectorModuleProps> = ({ onThem
   useEffect(() => {
     // Synchronize on mount
     if (typeof document !== 'undefined') {
-      document.documentElement.classList.remove('theme-gold', 'theme-high-contrast', 'theme-night-contrast');
+      document.documentElement.classList.remove(
+        'theme-gold',
+        'theme-high-contrast',
+        'theme-night-contrast',
+        'theme-slate'
+      );
       if (currentTheme === 'gold') {
         document.documentElement.classList.add('theme-gold');
       } else if (currentTheme === 'high_contrast') {
         document.documentElement.classList.add('theme-high-contrast', 'theme-night-contrast');
+      } else {
+        document.documentElement.classList.add('theme-slate');
       }
     }
   }, [currentTheme]);
