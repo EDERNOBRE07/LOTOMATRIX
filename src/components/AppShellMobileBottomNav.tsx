@@ -4,6 +4,7 @@ import {
   Layers,
   Award,
   Download,
+  Grid3X3,
 } from 'lucide-react';
 import { TabType } from '../App';
 
@@ -47,6 +48,14 @@ export const AppShellMobileBottomNav: React.FC<AppShellMobileBottomNavProps> = (
       badge: savedTicketsCount > 0 ? savedTicketsCount : undefined,
     },
     {
+      id: 'heatmap' as TabType,
+      label: 'Heatmap',
+      icon: Grid3X3,
+      isActive: activeTab === 'heatmap',
+      activeColor: 'text-sky-400',
+      activeBg: 'bg-sky-500/15 border-sky-500/30',
+    },
+    {
       id: 'simulador' as TabType,
       label: 'Simulador',
       icon: Award,
@@ -61,7 +70,7 @@ export const AppShellMobileBottomNav: React.FC<AppShellMobileBottomNavProps> = (
       aria-label="Navegação Inferior Mobile LotoSniper"
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800/90 backdrop-blur-xl px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_25px_rgba(0,0,0,0.5)]"
     >
-      <div className="grid grid-cols-4 gap-1 items-center max-w-md mx-auto">
+      <div className="grid grid-cols-5 gap-1 items-center max-w-md mx-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const active = item.isActive;

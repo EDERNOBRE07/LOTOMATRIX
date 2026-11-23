@@ -13,17 +13,18 @@ export const CRUZ_DEZENAS = [3, 8, 11, 12, 13, 14, 15, 18, 23];
 export const BOLAS_EXTREMAS_INICIO = [1, 2, 3, 4]; // Ideal: 1 ou 2
 export const BOLAS_EXTREMAS_FIM = [22, 23, 24, 25]; // Ideal: 24 ou 25
 
-// Official Draw #3822 (05/11/2026) & Concurso History Sincronizado Caixa Econômica Federal
+// Official Draw #3835 (22/11/2026) & Concurso History Sincronizado Caixa Econômica Federal
+// Faixa principal (15 acertos): 2 apostas ganhadoras (Manaus/AM e São Roque/SP), R$ 969.054,85 cada.
 export const CONCURSO_ATUAL: LotofacilDraw = {
-  concurso: 3822,
-  data: '05/11/2026',
-  dezenas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+  concurso: 3835,
+  data: '22/11/2026',
+  dezenas: [2, 3, 4, 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 21, 22],
   premiacoes: {
-    faixa15: { ganhadores: 1, valor: 4210850.15 },
-    faixa14: { ganhadores: 284, valor: 2150.4 },
-    faixa13: { ganhadores: 10450, valor: 35.0 },
-    faixa12: { ganhadores: 132100, valor: 14.0 },
-    faixa11: { ganhadores: 712000, valor: 7.0 },
+    faixa15: { ganhadores: 2, valor: 969054.85 },
+    faixa14: { ganhadores: 312, valor: 1685.4 },
+    faixa13: { ganhadores: 12450, valor: 35.0 },
+    faixa12: { ganhadores: 148200, valor: 14.0 },
+    faixa11: { ganhadores: 795000, valor: 7.0 },
     acumuladoProximo: 0.0,
   },
 };
@@ -50,6 +51,19 @@ export const REGRA_VENCEDORA_CONCURSO_3822 = {
 
 export const RECENT_DRAWS: LotofacilDraw[] = [
   CONCURSO_ATUAL,
+  {
+    concurso: 3822,
+    data: '05/11/2026',
+    dezenas: [1, 2, 6, 7, 9, 10, 12, 13, 15, 17, 18, 20, 21, 24, 25],
+    premiacoes: {
+      faixa15: { ganhadores: 1, valor: 4210850.15 },
+      faixa14: { ganhadores: 284, valor: 2150.4 },
+      faixa13: { ganhadores: 10450, valor: 35.0 },
+      faixa12: { ganhadores: 132100, valor: 14.0 },
+      faixa11: { ganhadores: 712000, valor: 7.0 },
+      acumuladoProximo: 0.0,
+    },
+  },
   {
     concurso: 3821,
     data: '04/11/2026',

@@ -493,16 +493,30 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
   onClearTickets,
   onGoToGenerator,
 }) => {
-  // Alinhamento estrito com savedTickets passado via props de App.tsx
-  const tickets = useMemo(
-    () => normalizeGameTickets(savedTickets ?? legacyTicketsProp ?? [], latestDraw.dezenas),
-    [savedTickets, legacyTicketsProp, latestDraw.dezenas]
-  );
+  const [diagRefreshNonce, setDiagRefreshNonce] = useState<number>(0);
+
+  // Alinhamento estrito com savedTickets passado via props, com hidratação automática dos últimos fechamentos salvos
+  const tickets = useMemo(() => {
+    const incoming = savedTickets ?? legacyTicketsProp ?? [];
+    if (incoming.length > 0) {
+      return normalizeGameTickets(incoming, latestDraw.dezenas);
+    }
+    const savedFechamentos = getSavedFechamentos();
+    if (savedFechamentos.length > 0) {
+      const fromFechamentos = savedFechamentos.flatMap((f) =>
+        Array.isArray(f.tickets) ? f.tickets : []
+      );
+      if (fromFechamentos.length > 0) {
+        return normalizeGameTickets(fromFechamentos, latestDraw.dezenas);
+      }
+    }
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedTickets, legacyTicketsProp, latestDraw.dezenas, diagRefreshNonce]);
 
   const [selectedConcurso, setSelectedConcurso] = useState<number>(latestDraw.concurso);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState<boolean>(false);
-  const [diagRefreshNonce, setDiagRefreshNonce] = useState<number>(0);
   const [isCSVModalOpen, setIsCSVModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [isLotericaPDFModalOpen, setIsLotericaPDFModalOpen] = useState<boolean>(false);

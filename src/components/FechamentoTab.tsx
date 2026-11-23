@@ -189,6 +189,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>(() => {
     try {
+      const fromHeatmap = localStorage.getItem('lotosniper_selected_numbers');
+      if (fromHeatmap) {
+        const parsed = JSON.parse(fromHeatmap);
+        localStorage.removeItem('lotosniper_selected_numbers');
+        if (Array.isArray(parsed) && parsed.length >= 15 && parsed.length <= 25) {
+          const valid = Array.from(
+            new Set(parsed.map((n: unknown) => Number(n)).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25))
+          ).sort((a, b) => a - b);
+          if (valid.length >= 15) return valid;
+        }
+      }
+    } catch {}
+    try {
       const optimal = buildOptimal18Pool(latestDraw, dynamicStats, cyclePendingNumbers, 9, 9);
       return optimal.dezenas18.slice(0, 18);
     } catch {

@@ -343,7 +343,12 @@ function loadFromCache(): LotofacilDraw | null {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.concurso === 'number' && parsed.concurso >= CONCURSO_ATUAL.concurso) {
+        return parsed;
+      }
+      // Expurga automaticamente cache defasado inferior à base oficial verificada
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
     }
   } catch {
     return null;

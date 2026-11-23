@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   Flame,
   Zap,
+  Grid3X3,
 } from 'lucide-react';
 import { TabType } from '../App';
 
@@ -72,6 +73,18 @@ export const AppShellSidebar: React.FC<AppShellSidebarProps> = ({
       activeColor: 'bg-gradient-to-r from-cyan-400 to-sky-500 text-slate-950 font-black shadow-lg shadow-cyan-500/20',
       hoverColor: 'hover:bg-slate-900 hover:text-cyan-300',
       isActive: isJogosActive,
+    },
+    {
+      id: 'heatmap' as TabType,
+      label: 'Mapa de Calor D3',
+      shortLabel: 'Heatmap',
+      description: 'Frequência & Correlação 100c',
+      icon: Grid3X3,
+      badge: '100c',
+      badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+      activeColor: 'bg-gradient-to-r from-sky-400 to-indigo-500 text-slate-950 font-black shadow-lg shadow-sky-500/20',
+      hoverColor: 'hover:bg-slate-900 hover:text-sky-300',
+      isActive: activeTab === 'heatmap',
     },
     {
       id: 'simulador' as TabType,

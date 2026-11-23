@@ -2,6 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { LotofacilDraw, GameTicket } from '../types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
+import {
+  getSavedFechamentos,
+  formatTicketsForConferenciaInput,
+} from '../services/savedFechamentosStorage';
 import { ExportCSVModal, CSVExportGame } from './ExportCSVModal';
 import {
   analyzeGamesList,
@@ -109,8 +113,40 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   onAddVolanteToConference,
   onGoToFechamento,
 }) => {
-  // Input raw text with 24 games as initial value
-  const [inputText, setInputText] = useState<string>(SAMPLE_24_GAMES_TEXT);
+  const hasUserEditedRef = React.useRef<boolean>(false);
+
+  const buildInitialConferenceText = (): { text: string; sourceName: string | null } => {
+    try {
+      const pendingRaw = localStorage.getItem('lotosniper_pending_conference_games');
+      if (pendingRaw) {
+        const parsed = JSON.parse(pendingRaw);
+        if (parsed && parsed.text) {
+          return { text: parsed.text, sourceName: parsed.name || 'Fechamento Salvo' };
+        }
+      }
+    } catch {}
+
+    // Prioriza o último fechamento salvo do usuário para conferência imediata ao abrir/atualizar
+    const savedFechamentos = getSavedFechamentos();
+    if (savedFechamentos.length > 0 && savedFechamentos[0].tickets.length > 0) {
+      return {
+        text: formatTicketsForConferenciaInput(savedFechamentos[0].tickets),
+        sourceName: savedFechamentos[0].modalidadeMatriz || savedFechamentos[0].nomeFechamento || 'Fechamento Salvo',
+      };
+    }
+
+    if (generatedTickets && generatedTickets.length > 0) {
+      return {
+        text: formatTicketsForConferenciaInput(generatedTickets),
+        sourceName: `${generatedTickets.length} jogos salvos`,
+      };
+    }
+
+    return { text: SAMPLE_24_GAMES_TEXT, sourceName: null };
+  };
+
+  // Inicializa automaticamente com os últimos jogos salvos (fallback para amostra apenas se não houver jogos)
+  const [inputText, setInputText] = useState<string>(() => buildInitialConferenceText().text);
   const [isEditorExpanded, setIsEditorExpanded] = useState<boolean>(true);
   const [filterFaixa, setFilterFaixa] = useState<'all' | 'premiados' | '15' | '14' | '13' | '12' | '11'>('all');
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
@@ -161,6 +197,7 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     // 2. Listener para eventos disparados com o módulo já montado
     const handleLoadConferenceGames = (e: any) => {
       if (e?.detail?.text) {
+        hasUserEditedRef.current = false;
         setInputText(e.detail.text);
         setIsEditorExpanded(true);
         const name = e.detail.name || 'Fechamento Salvo';
@@ -172,9 +209,36 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
         setTimeout(() => setLoadedFechamentoNotice(null), 7000);
       }
     };
+
+    // 3. Re-hidrata automaticamente quando os fechamentos/jogos salvos forem sincronizados ou atualizados
+    const handleSavedGamesSynced = () => {
+      if (hasUserEditedRef.current) return;
+      const savedFechamentos = getSavedFechamentos();
+      if (savedFechamentos.length > 0 && savedFechamentos[0].tickets.length > 0) {
+        setInputText(formatTicketsForConferenciaInput(savedFechamentos[0].tickets));
+      }
+    };
+
     window.addEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
-    return () => window.removeEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
+    window.addEventListener('lotosniper-saved-fechamentos-updated', handleSavedGamesSynced);
+    window.addEventListener('lotosniper-backup-restored', handleSavedGamesSynced);
+    return () => {
+      window.removeEventListener('lotosniper-load-conference-games', handleLoadConferenceGames);
+      window.removeEventListener('lotosniper-saved-fechamentos-updated', handleSavedGamesSynced);
+      window.removeEventListener('lotosniper-backup-restored', handleSavedGamesSynced);
+    };
   }, []);
+
+  // Sincroniza se generatedTickets chegar após montagem inicial e usuário não editou manualmente
+  React.useEffect(() => {
+    if (hasUserEditedRef.current) return;
+    const savedFechamentos = getSavedFechamentos();
+    if (savedFechamentos.length > 0 && savedFechamentos[0].tickets.length > 0) {
+      setInputText(formatTicketsForConferenciaInput(savedFechamentos[0].tickets));
+    } else if (generatedTickets.length > 0 && inputText === SAMPLE_24_GAMES_TEXT) {
+      setInputText(formatTicketsForConferenciaInput(generatedTickets));
+    }
+  }, [generatedTickets.length]);
 
   // Combine draws with latestDraw strictly placed first
   const allDraws = useMemo(() => {
@@ -742,7 +806,10 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
           <div className="p-3">
             <textarea
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => {
+                hasUserEditedRef.current = true;
+                setInputText(e.target.value);
+              }}
               rows={8}
               placeholder={`Jogo 01: 01 - 02 - 03 - 04 - 05 - 06 - 10 - 11 - 12 - 13 - 20 - 22 - 23 - 24 - 25\nJogo 02: 01 - 02 - 03 - 04 - 05 - 06 - 10 - 11 - 13 - 14 - 15 - 20 - 21 - 22 - 23\n...`}
               className="w-full bg-slate-900 text-emerald-300 font-mono text-xs rounded-xl p-3 border border-slate-800 focus:outline-none focus:border-emerald-500/60 leading-relaxed resize-y"

@@ -427,7 +427,23 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
       return [sample];
     }
 
-    if (!raw) return [];
+    if (!raw) {
+      // Fallback de recuperação caso a chave espelho possua fechamentos salvos
+      const mirrorRaw = localStorage.getItem('lotosniper_saved_fechamentos');
+      if (!mirrorRaw) return [];
+      try {
+        const mirrorParsed = JSON.parse(mirrorRaw);
+        if (Array.isArray(mirrorParsed) && mirrorParsed.length > 0) {
+          localStorage.setItem(STORAGE_KEY, mirrorRaw);
+          return mirrorParsed
+            .filter((p) => p && typeof p === 'object')
+            .map((item, idx) => normalizeSavedFechamento(item, idx))
+            .filter((f) => Array.isArray(f.tickets) && f.tickets.length > 0)
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        }
+      } catch {}
+      return [];
+    }
     let parsed: any;
     try {
       parsed = JSON.parse(raw);
@@ -468,6 +484,34 @@ export function getSavedFechamentos(): SavedFechamentoPrognostico[] {
     console.warn('[LotoSniper] Erro ao carregar fechamentos salvos:', err);
     return [];
   }
+}
+
+/**
+ * Retorna sempre os últimos bilhetes salvos disponíveis (priorizando o fechamento mais recente
+ * em lotosniper_saved_prognosticos e fazendo fallback para lotosniper_saved_tickets).
+ */
+export function getLatestSavedTickets(): {
+  tickets: GameTicket[];
+  latestFechamento: SavedFechamentoPrognostico | null;
+} {
+  try {
+    const fechamentos = getSavedFechamentos();
+    if (fechamentos.length > 0) {
+      const latest = fechamentos[0];
+      const allTickets = fechamentos.flatMap((f) => (Array.isArray(f.tickets) ? f.tickets : []));
+      if (allTickets.length > 0) {
+        return { tickets: allTickets, latestFechamento: latest };
+      }
+    }
+    const rawTickets = localStorage.getItem('lotosniper_saved_tickets');
+    if (rawTickets) {
+      const parsed = JSON.parse(rawTickets);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return { tickets: parsed, latestFechamento: null };
+      }
+    }
+  } catch {}
+  return { tickets: [], latestFechamento: null };
 }
 
 export async function syncWithMySQLHostinger(): Promise<{
@@ -518,10 +562,24 @@ export async function syncWithMySQLHostinger(): Promise<{
             const existingIds = new Set(localList.map((x) => x.id));
             const toAdd = remote.filter((r: any) => !existingIds.has(r.id) && !deletedIds.has(r.id));
             if (toAdd.length > 0) {
-              const merged = [...localList, ...toAdd];
+              const merged = [...localList, ...toAdd].sort(
+                (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
+              );
+              const mergedTickets = merged.flatMap((f) =>
+                Array.isArray(f.tickets) ? f.tickets : []
+              );
               localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+              localStorage.setItem('lotosniper_saved_fechamentos', JSON.stringify(merged));
+              if (mergedTickets.length > 0) {
+                localStorage.setItem('lotosniper_saved_tickets', JSON.stringify(mergedTickets));
+              }
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('lotosniper-saved-fechamentos-updated', { detail: merged }));
+                if (mergedTickets.length > 0) {
+                  window.dispatchEvent(
+                    new CustomEvent('lotosniper-saved-tickets-updated', { detail: mergedTickets })
+                  );
+                }
               }
             }
           }

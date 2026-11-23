@@ -166,27 +166,25 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = 18000, errorMsg = 'Oper
   ]);
 }
 
-// Official latest draw baseline from Caixa Econômica Federal (Concurso 3817 - 29/10/2026)
+// Official latest draw baseline synced with CONCURSO_ATUAL (Concurso 3835 - 22/11/2026)
 const LATEST_DRAW = {
-  concurso: 3817,
-  data: '29/10/2026',
-  dezenas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
-  repetidasDoAnterior: [2, 6, 8, 13, 16, 18, 22, 24, 25], // 9 repetidas do 3816
-  saidasDoAusentes: [10, 11, 12, 15, 19, 23], // 6 ausentes do 3816 que retornaram
-  dezenasAusentes: [1, 3, 4, 5, 7, 9, 14, 17, 20, 21],
+  concurso: CONCURSO_ATUAL.concurso,
+  data: CONCURSO_ATUAL.data,
+  dezenas: [...CONCURSO_ATUAL.dezenas],
+  repetidasDoAnterior: [2, 9, 10, 12, 13, 15, 17, 18, 21],
+  saidasDoAusentes: [3, 4, 5, 16, 19, 22],
+  dezenasAusentes: Array.from({ length: 25 }, (_, i) => i + 1).filter(
+    (n) => !CONCURSO_ATUAL.dezenas.includes(n)
+  ),
   cicloAtual: {
-    concursosDecorridos: 2,
-    dezenasSorteadas: [2, 6, 8, 10, 11, 12, 13, 15, 16, 18, 19, 22, 23, 24, 25],
-    dezenasFaltantesParaFechar: [5, 7, 9, 14, 17, 21],
+    concursosDecorridos: 1,
+    dezenasSorteadas: [...CONCURSO_ATUAL.dezenas],
+    dezenasFaltantesParaFechar: Array.from({ length: 25 }, (_, i) => i + 1).filter(
+      (n) => !CONCURSO_ATUAL.dezenas.includes(n)
+    ),
     mediaHistoricaCiclo: 4.5,
   },
-  premiacoes: {
-    faixa15: { ganhadores: 1, valor: 3995036.64 },
-    faixa14: { ganhadores: 325, valor: 2242.58 },
-    faixa13: { ganhadores: 11829, valor: 35.0 },
-    faixa12: { ganhadores: 148288, valor: 14.0 },
-    faixa11: { ganhadores: 776768, valor: 7.0 },
-  },
+  premiacoes: CONCURSO_ATUAL.premiacoes,
 };
 
 // Cache in memory for recent draws
@@ -356,24 +354,32 @@ async function fetchFromMirror(): Promise<any | null> {
 
 async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
   const now = Date.now();
-  if (!forceFresh && cachedLatestDraw && now - lastFetchTime < CACHE_TTL_MS) {
+  if (
+    !forceFresh &&
+    cachedLatestDraw &&
+    cachedLatestDraw.concurso >= LATEST_DRAW.concurso &&
+    now - lastFetchTime < CACHE_TTL_MS
+  ) {
     return cachedLatestDraw;
   }
 
-  // 1. Try checking for next upcoming/newly drawn contest from Caixa
-  let draw = await fetchFromCaixa(LATEST_DRAW.concurso + 1);
+  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa (sempre o mais recente real)
+  let draw = await fetchFromCaixa();
 
-  // 2. Try official Caixa standard latest
-  if (!draw) {
-    draw = await fetchFromCaixa();
+  // 2. Caso o endpoint padrão retorne igual ao baseline, sonda explicitamente o próximo concurso (+1)
+  if (!draw || draw.concurso === LATEST_DRAW.concurso) {
+    const nextProbe = await fetchFromCaixa(LATEST_DRAW.concurso + 1);
+    if (nextProbe && nextProbe.concurso > (draw?.concurso || LATEST_DRAW.concurso)) {
+      draw = nextProbe;
+    }
   }
 
-  // 3. Try mirror only if it meets or exceeds baseline
-  if (!draw) {
+  // 3. Tenta espelhos públicos somente se retornarem concurso >= baseline
+  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = await fetchFromMirror();
   }
 
-  // 4. Fallback to baseline LATEST_DRAW if offline or blocked, never regress
+  // 4. Fallback seguro para LATEST_DRAW (#3835) caso offline/bloqueado — nunca regredir concurso
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
