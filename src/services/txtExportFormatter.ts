@@ -1,6 +1,6 @@
 import { GameTicket, LotofacilDraw, FilterCriteria } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
-import { FIBONACCI, PRIMOS, MOLDURA, CRUZ_DEZENAS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, FIBONACCI, PRIMOS, MOLDURA, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 export interface FechamentoExportMeta {
   strategyName?: string;
@@ -89,7 +89,7 @@ export function generateFechamentoTxtContent({
 
   const lines: string[] = [];
 
-  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
 
   // 1. BANNER PRINCIPAL

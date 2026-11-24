@@ -3,6 +3,8 @@
  * Suporta AWS S3, Cloudflare R2, MinIO, Wasabi, Backblaze B2 e outros provedores compatíveis com API S3.
  */
 
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
+
 export interface S3BackupConfig {
   endpoint: string;
   bucket: string;
@@ -162,7 +164,7 @@ export async function uploadBackupToS3(
   }
 
   const dateStamp = new Date().toISOString().split('T')[0];
-  const concursoBase = Number(data.concursoRef) || 3824;
+  const concursoBase = Number(data.concursoRef) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = concursoBase + 1;
   const prefix = String(config.backupPrefix || '').replace(/\/+$/, '').replace(/^\/+/, '');
   const prefixPath = prefix ? `${prefix}/` : '';
@@ -267,7 +269,10 @@ const INITIAL_MOCK_LOGS: S3CronExecutionLog[] = [
     scheduledTime: '02:00',
     status: 'success',
     statusCode: 200,
-    filesUploaded: ['backups/lotosniper/lotosniper_backup_conc_3817.json', 'backups/lotosniper/lotosniper_apostas_conc_3817.csv'],
+    filesUploaded: [
+      `backups/lotosniper/lotosniper_backup_conc_${CONCURSO_ATUAL.concurso - 1}.json`,
+      `backups/lotosniper/lotosniper_apostas_conc_${CONCURSO_ATUAL.concurso - 1}.csv`,
+    ],
     totalBytes: 18450,
     durationMs: 820,
     message: 'Backup automático diário das 02:00 executado com êxito. 2 arquivos enviados.',
@@ -282,7 +287,10 @@ const INITIAL_MOCK_LOGS: S3CronExecutionLog[] = [
     scheduledTime: '20:45',
     status: 'success',
     statusCode: 200,
-    filesUploaded: ['backups/lotosniper/lotosniper_backup_conc_3818.json', 'backups/lotosniper/lotosniper_apostas_conc_3818.csv'],
+    filesUploaded: [
+      `backups/lotosniper/lotosniper_backup_conc_${CONCURSO_ATUAL.concurso}.json`,
+      `backups/lotosniper/lotosniper_apostas_conc_${CONCURSO_ATUAL.concurso}.csv`,
+    ],
     totalBytes: 24310,
     durationMs: 760,
     message: 'Gatilho pós-sorteio Caixa acionado. Sincronização e auditoria consolidadas.',

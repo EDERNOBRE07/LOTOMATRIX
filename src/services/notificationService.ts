@@ -919,7 +919,7 @@ export function evaluateHybridRule(
   rule: HybridAlertRule,
   latestDraw: LotofacilDraw,
   statsList: DezenaStats[] = [],
-  cicloAusentes: number[] = [17, 22],
+  cicloAusentes: number[] = [],
   radarData?: { dezena: number; probabilidade: number; forcaEma: number }[]
 ): HybridEvaluationResult {
   // Se for uma regra baseada em Performance (Acertos / ROI)
@@ -1065,7 +1065,7 @@ export function evaluateHybridRule(
 export function auditAndTriggerHybridAlerts(
   latestDraw: LotofacilDraw,
   statsList: DezenaStats[] = [],
-  cicloAusentes: number[] = [17, 22]
+  cicloAusentes: number[] = []
 ): HybridEvaluationResult[] {
   const rules = getHybridAlertRules().filter((r) => r.ativa);
   const config = getPushNotificationConfig();

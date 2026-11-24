@@ -76,6 +76,18 @@ export const AppShellSidebar: React.FC<AppShellSidebarProps> = ({
       isActive: activeTab === 'filtros',
     },
     {
+      id: 'ia_preditor' as TabType,
+      label: 'Preditor IA',
+      shortLabel: 'Preditor IA',
+      description: 'Ranking Neural & 18 Dezenas',
+      icon: Zap,
+      badge: 'IA Live',
+      badgeColor: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30',
+      activeColor: 'bg-gradient-to-r from-fuchsia-500 to-purple-500 text-white font-black shadow-lg shadow-fuchsia-500/20',
+      hoverColor: 'hover:bg-slate-900 hover:text-fuchsia-300',
+      isActive: activeTab === 'ia_preditor',
+    },
+    {
       id: 'jogos' as TabType,
       label: 'Meus Jogos & Conferência',
       shortLabel: 'Jogos',

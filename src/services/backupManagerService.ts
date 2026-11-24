@@ -6,6 +6,7 @@
  */
 
 import { GameTicket } from '../types/lotofacil';
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import {
   formatBackupJsonFilename,
   getBackupConcursoAlvo,
@@ -111,7 +112,7 @@ export function buildCompleteBackupPayload(concursoBaseOverride?: number): Backu
 
   const concursoBase = resolveConcursoBase(
     concursoBaseOverride ?? activeFechamentoMeta?.concurso ?? fechamentosSalvos[0]?.concurso,
-    3824
+    CONCURSO_ATUAL.concurso
   );
   const concursoAlvo = Number(concursoBase) + 1;
 
@@ -168,7 +169,7 @@ export function triggerForcedJSONDownload(
     const dateStamp = now.toISOString().slice(0, 10);
     const concursoBase = resolveConcursoBase(
       concursoBaseOverride ?? payload.concursoBase,
-      3824
+      CONCURSO_ATUAL.concurso
     );
     const concursoAlvo = Number(concursoBase) + 1;
     const filename = customFilename || formatBackupJsonFilename(concursoAlvo, dateStamp);
@@ -216,7 +217,7 @@ export function saveLocalSnapshot(
 
     const concursoBase = resolveConcursoBase(
       concursoBaseOverride ?? payload.concursoBase,
-      3824
+      CONCURSO_ATUAL.concurso
     );
     const concursoAlvo = Number(concursoBase) + 1;
     const dateStamp = new Date().toISOString().slice(0, 10);
@@ -310,7 +311,7 @@ export function restoreBackupFromJSON(
     } else if (Array.isArray(parsed.savedTickets) && parsed.savedTickets.length > 0) {
       const concursoBase = resolveConcursoBase(
         parsed.concursoBase ?? parsed.concursoReferencia ?? parsed.fechamentoMeta?.concurso,
-        3824
+        CONCURSO_ATUAL.concurso
       );
       const concursoAlvo = resolveConcursoAlvo(concursoBase, parsed.concursoAlvo);
       const universo = Array.from(
@@ -709,7 +710,15 @@ export function checkAndRunScheduledDailyBackup(
 export function openGoogleDriveForUpload(): void {
   // Gera o download do JSON primeiro
   triggerForcedJSONDownload();
-  // Abre o Google Drive para que o usuário solte o arquivo baixado
-  window.open('https://drive.google.com/drive/u/0/my-drive', '_blank');
+  // Abre o Google Drive para que o usuário solte o arquivo baixado sem usar window.open
+  if (typeof document !== 'undefined') {
+    const link = document.createElement('a');
+    link.href = 'https://drive.google.com/drive/u/0/my-drive';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 

@@ -507,7 +507,7 @@ export function isCombinationRobust50(
 export function calculateForcaDeCiclo(
   numero: number,
   stat?: DezenaStats,
-  cyclePendingNumbers: number[] = [17, 22]
+  cyclePendingNumbers: number[] = []
 ): number {
   let score = 35;
   if (!stat) return score;
@@ -992,7 +992,7 @@ export function generateFechamentoInteligentePonderado({
   // Mapear Índice de Performance e Força de Ciclo para cada dezena do pool
   const ipMap = new Map<number, number>();
   const forcaCicloMap = new Map<number, number>();
-  const cyclePending = [17, 22];
+  const cyclePending = dynamicStats.filter((s) => s.pendenteNoCiclo).map((s) => s.numero);
 
   sortedPool.forEach((num) => {
     const stat = dynamicStats.find((s) => s.numero === num);

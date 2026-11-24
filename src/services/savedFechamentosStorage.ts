@@ -1,5 +1,5 @@
 import { GameTicket, FilterCriteria, LotofacilDraw } from '../types/lotofacil';
-import { MOLDURA, PRIMOS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, MOLDURA, PRIMOS } from '../data/lotofacilData';
 import { VALOR_APOSTA_LOTOFACIL, MAX_DEZENAS_FIXAS, auditarTicketsGerados, analyzeTicket } from './combinatorics';
 
 export const FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
@@ -32,7 +32,7 @@ export interface SavedFechamentoPrognostico {
 
 export function resolveConcursoBase(
   concurso?: number | string | null,
-  fallback: number = 3824
+  fallback: number = CONCURSO_ATUAL.concurso
 ): number {
   const num = Number(concurso);
   return Number.isFinite(num) && num > 0 ? Math.trunc(num) : fallback;
@@ -41,7 +41,7 @@ export function resolveConcursoBase(
 export function resolveConcursoAlvo(
   concursoBase?: number | string | null,
   explicitAlvo?: number | string | null,
-  fallbackBase: number = 3824
+  fallbackBase: number = CONCURSO_ATUAL.concurso
 ): number {
   const alvoNum = Number(explicitAlvo);
   if (Number.isFinite(alvoNum) && alvoNum > 0) {
@@ -52,7 +52,7 @@ export function resolveConcursoAlvo(
 
 export function getBackupConcursoAlvo(
   fechamentos: Array<{ concurso?: number; concursoAlvo?: number }> = [],
-  fallbackBase: number = 3824
+  fallbackBase: number = CONCURSO_ATUAL.concurso
 ): number {
   if (!Array.isArray(fechamentos) || fechamentos.length === 0) {
     return resolveConcursoAlvo(fallbackBase);
@@ -71,7 +71,7 @@ export function formatBackupJsonFilename(
 ): string {
   const safeAlvo = Number.isFinite(Number(concursoAlvo)) && Number(concursoAlvo) > 0
     ? Math.trunc(Number(concursoAlvo))
-    : 3825;
+    : CONCURSO_ATUAL.concurso + 1;
   return `lotosniper_concurso_${safeAlvo}_${dataFormatada}.json`;
 }
 
@@ -205,7 +205,7 @@ export function normalizeSavedFechamento(
   }
 
   const id = item.id ? String(item.id) : `fechamento-${Date.now()}-${fallbackIndex}`;
-  const concurso = resolveConcursoBase(item.concurso, 3824);
+  const concurso = resolveConcursoBase(item.concurso, CONCURSO_ATUAL.concurso);
   const concursoAlvo = resolveConcursoAlvo(concurso, item.concursoAlvo);
   const dataConcurso = item.dataConcurso ? String(item.dataConcurso) : '';
   const dataCriacao = item.dataCriacao ? String(item.dataCriacao) : new Date().toLocaleString('pt-BR');
@@ -1207,7 +1207,7 @@ export function createSavedFechamentoFromCurrent({
   const sanitizedFixas = rawFixas.slice(0, maxFixas).sort((a, b) => a - b);
   const auditRes = auditarTicketsGerados(validTickets);
 
-  const concursoBase = resolveConcursoBase(concurso, 3824);
+  const concursoBase = resolveConcursoBase(concurso, CONCURSO_ATUAL.concurso);
   const concursoAlvo = Number(concursoBase) + 1;
   const faixaSomaObj = {
     min: filters?.somaMin ?? 175,
@@ -1310,7 +1310,7 @@ export function triggerAutoBackupSnapshot(concursoBaseFallback?: number): void {
     const snapshotsRaw = localStorage.getItem(BACKUP_SNAPSHOTS_KEY);
     const snapshots: BackupSnapshot[] = snapshotsRaw ? JSON.parse(snapshotsRaw) : [];
 
-    const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, 3824);
+    const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, CONCURSO_ATUAL.concurso);
     const concursoAlvo = Number(concursoBase) + 1;
     const dataFormatada = new Date().toISOString().slice(0, 10);
     const nomeArquivo = formatBackupJsonFilename(concursoAlvo, dataFormatada);
@@ -1346,7 +1346,7 @@ export function getBackupSnapshots(): BackupSnapshot[] {
 
 export function exportBackupJSON(concursoBaseFallback?: number): void {
   const list = getSavedFechamentos();
-  const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, 3824);
+  const concursoBase = resolveConcursoBase(concursoBaseFallback ?? list[0]?.concurso, CONCURSO_ATUAL.concurso);
   const concursoAlvo = Number(concursoBase) + 1;
   const dataFormatada = new Date().toISOString().slice(0, 10);
   const fileName = formatBackupJsonFilename(concursoAlvo, dataFormatada);
@@ -1442,7 +1442,7 @@ export function inspectBackupJSONPreview(jsonString: string): {
       parsed?.concurso ??
       parsed?.fechamentoMeta?.concurso ??
       firstItemConcurso;
-    const concursoBase = resolveConcursoBase(rawConcursoBase, 3824);
+    const concursoBase = resolveConcursoBase(rawConcursoBase, CONCURSO_ATUAL.concurso);
     const rawAlvo =
       parsed?.concursoAlvo ??
       parsed?.fechamentoMeta?.concursoAlvo ??
@@ -1484,7 +1484,7 @@ export function restoreBackupJSON(
     const parsed = JSON.parse(jsonString);
     const rootConcursoBase = resolveConcursoBase(
       parsed?.concursoBase ?? parsed?.concursoReferencia ?? parsed?.concurso ?? parsed?.fechamentoMeta?.concurso,
-      3824
+      CONCURSO_ATUAL.concurso
     );
     const rootConcursoAlvo = resolveConcursoAlvo(
       rootConcursoBase,

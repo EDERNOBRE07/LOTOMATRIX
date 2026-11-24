@@ -1184,11 +1184,11 @@ function countClasseADezenas(ticketNumbers, classeANumbers) {
 
 // src/services/savedFechamentosStorage.ts
 var FIBONACCI_NUMBERS = [1, 2, 3, 5, 8, 13, 21];
-function resolveConcursoBase(concurso, fallback = 3824) {
+function resolveConcursoBase(concurso, fallback = CONCURSO_ATUAL.concurso) {
   const num = Number(concurso);
   return Number.isFinite(num) && num > 0 ? Math.trunc(num) : fallback;
 }
-function resolveConcursoAlvo(concursoBase, explicitAlvo, fallbackBase = 3824) {
+function resolveConcursoAlvo(concursoBase, explicitAlvo, fallbackBase = CONCURSO_ATUAL.concurso) {
   const alvoNum = Number(explicitAlvo);
   if (Number.isFinite(alvoNum) && alvoNum > 0) {
     return Math.trunc(alvoNum);
@@ -1250,7 +1250,7 @@ function normalizeSavedFechamento(item, fallbackIndex = 0) {
     return createInitialSampleFechamento();
   }
   const id = item.id ? String(item.id) : `fechamento-${Date.now()}-${fallbackIndex}`;
-  const concurso = resolveConcursoBase(item.concurso, 3824);
+  const concurso = resolveConcursoBase(item.concurso, CONCURSO_ATUAL.concurso);
   const concursoAlvo = resolveConcursoAlvo(concurso, item.concursoAlvo);
   const dataConcurso = item.dataConcurso ? String(item.dataConcurso) : "";
   const dataCriacao = item.dataCriacao ? String(item.dataCriacao) : (/* @__PURE__ */ new Date()).toLocaleString("pt-BR");
@@ -5146,7 +5146,23 @@ app.post("/api/ai/optimize", async (req, res) => {
     const faltantesCiclo = dezenasAusentes;
     const effectiveFixas = Array.isArray(dezenasFixas) && dezenasFixas.length > 0 ? dezenasFixas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : Array.isArray(filtrosEstatisticos?.dezenasFixas) ? filtrosEstatisticos.dezenasFixas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : [];
     const effectiveExcluidas = Array.isArray(dezenasExcluidas) && dezenasExcluidas.length > 0 ? dezenasExcluidas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : Array.isArray(filtrosEstatisticos?.dezenasExcluidas) ? filtrosEstatisticos.dezenasExcluidas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : [];
-    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(",")}:${effectiveFixas.join(",")}:${effectiveExcluidas.join(",")}:${metaGarantia}:${filtrosEstatisticos?.somaMin ?? ""}-${filtrosEstatisticos?.somaMax ?? ""}:${filtrosEstatisticos?.paresMin ?? ""}-${filtrosEstatisticos?.paresMax ?? ""}`;
+    const filterSig = [
+      filtrosEstatisticos?.somaMin ?? "",
+      filtrosEstatisticos?.somaMax ?? "",
+      filtrosEstatisticos?.paresMin ?? "",
+      filtrosEstatisticos?.paresMax ?? "",
+      filtrosEstatisticos?.molduraMin ?? "",
+      filtrosEstatisticos?.molduraMax ?? "",
+      filtrosEstatisticos?.primosMin ?? "",
+      filtrosEstatisticos?.primosMax ?? "",
+      filtrosEstatisticos?.fibonacciMin ?? "",
+      filtrosEstatisticos?.fibonacciMax ?? "",
+      filtrosEstatisticos?.repetidasMin ?? "",
+      filtrosEstatisticos?.repetidasMax ?? "",
+      filtrosEstatisticos?.maxConsecutivas ?? "",
+      filtrosEstatisticos?.estratificacaoCaudaAtiva ? "1" : "0"
+    ].join("-");
+    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(",")}:${effectiveFixas.join(",")}:${effectiveExcluidas.join(",")}:${metaGarantia}:${filterSig}`;
     const cachedOptimize = !forceFresh ? aiOptimizeCache.get(optimizeCacheKey) : void 0;
     if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
       return res.json({
@@ -5163,8 +5179,8 @@ Contexto do \xFAltimo concurso analisado (Concurso ${concurso}):
 Dezenas sorteadas (Repetidas em potencial): ${JSON.stringify(dezenasSorteadas)}
 Dezenas ausentes no \xFAltimo concurso (Retorno em potencial): ${JSON.stringify(dezenasAusentes)}
 Dezenas pendentes para fechar o ciclo atual: ${JSON.stringify(faltantesCiclo)}.
-Dezenas fixas solicitadas pelo usu\xE1rio: ${JSON.stringify(dezenasFixas)}
-Dezenas exclu\xEDdas pelo usu\xE1rio: ${JSON.stringify(dezenasExcluidas)}
+Dezenas fixas solicitadas pelo usu\xE1rio: ${JSON.stringify(effectiveFixas)}
+Dezenas exclu\xEDdas pelo usu\xE1rio: ${JSON.stringify(effectiveExcluidas)}
 Meta do sistema: Otimizar sele\xE7\xE3o de 18 dezenas base para fechamento visando garantia matem\xE1tica de 14 pontos no pr\xF3ximo sorteio (${concurso + 1}).
 
 ESTRAT\xC9GIA MATEM\xC1TICA OBRIGAT\xD3RIA (DOCUMENTO OFICIAL DA LOTOF\xC1CIL):
@@ -5378,7 +5394,7 @@ app.post("/api/ai/efficiency-report", async (req, res) => {
     const topQuentes50 = Object.entries(freq50).map(([k, v]) => ({ num: parseInt(k, 10), freq: v })).sort((a, b) => b.freq - a.freq);
     const quentes50 = topQuentes50.slice(0, 7).map((x) => x.num);
     const frias50 = topQuentes50.slice(-7).map((x) => x.num);
-    const effCacheKey = `${latestDraw?.concurso || 3824}:${totalJogos}`;
+    const effCacheKey = `${latestDraw?.concurso || LATEST_DRAW.concurso}:${totalJogos}`;
     const cachedEff = aiEfficiencyCache.get(effCacheKey);
     if (cachedEff && cachedEff.expiresAt > Date.now()) {
       return res.json({
@@ -5576,7 +5592,7 @@ INSTRU\xC7\xD5ES DO LAUDO:
         dicasFineTuningProximasApostas: [
           "Substitua qualquer jogo que contenha mais de 4 dezenas consecutivas por uma transi\xE7\xE3o em salto duplo.",
           "Limite a quantidade de dezenas frias a no m\xE1ximo 2 ou 3 por volante para preservar o teto matem\xE1tico.",
-          "Mantenha ao menos uma dezena que fecha ciclo (como 17 ou 22) fixa em pelo menos 70% dos bilhetes gerados."
+          "Mantenha ao menos uma dezena ausente/pendente do ciclo atual fixa nos bilhetes gerados para capturar fechamentos de ciclo."
         ]
       }
     };

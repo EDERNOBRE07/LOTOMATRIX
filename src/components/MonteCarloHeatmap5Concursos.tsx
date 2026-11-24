@@ -33,7 +33,7 @@ interface MonteCarloHeatmap5ConcursosProps {
 export const MonteCarloHeatmap5Concursos: React.FC<MonteCarloHeatmap5ConcursosProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
-  cyclePendingNumbers = [17, 22],
+  cyclePendingNumbers = [],
   onApplyNumbers,
 }) => {
   const [iterations, setIterations] = useState<number>(10000);
@@ -50,8 +50,7 @@ export const MonteCarloHeatmap5Concursos: React.FC<MonteCarloHeatmap5ConcursosPr
       iterations,
     };
     return runMonteCarloSimulation(latestDraw, dynamicStats, cyclePendingNumbers, config);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestDraw.concurso, iterations, simulationTrigger]);
+  }, [latestDraw, dynamicStats, cyclePendingNumbers, iterations, simulationTrigger]);
 
   const handleRerun = () => {
     setIsSimulating(true);

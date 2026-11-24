@@ -54,7 +54,7 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
   });
 
   // Metadados do fechamento
-  const resolvedConcurso = Number(savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso) || 3824;
+  const resolvedConcurso = Number(savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;
   const resolvedConcursoAlvo = savedFechamento?.concursoAlvo ?? fechamentoMeta?.concursoAlvo ?? resolvedConcurso + 1;
   const resolvedData = savedFechamento?.dataConcurso || fechamentoMeta?.dataConcurso || latestDraw.data;
   const strategyName =

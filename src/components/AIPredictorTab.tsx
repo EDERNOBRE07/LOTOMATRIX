@@ -229,7 +229,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
     // 10 most recent draws in chronological order (oldest to newest)
     const last10 = RECENT_DRAWS.slice(0, 10).reverse();
 
-    // Baseline calibration rates for past 10 contests
+    // Baseline calibration rates for recent contests, honoring current prediction confidence on latestDraw
     const baselineRates: Record<number, number> = {
       3795: 92.4,
       3796: 93.1,
@@ -240,11 +240,14 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       3801: 95.0,
       3802: 96.1,
       3803: 95.8,
-      3804: prediction?.taxaConfianca || 96.5,
+      3804: 96.2,
     };
 
     return last10.map((d, index) => {
-      const conf = baselineRates[d.concurso] || 93.0 + index * 0.4;
+      const conf =
+        d.concurso === latestDraw.concurso
+          ? prediction?.taxaConfianca ?? 96.4
+          : baselineRates[d.concurso] ?? 93.0 + index * 0.35;
       const hitsInDraw = recomendadas18.filter((n) => d.dezenas.includes(n)).length;
       const hitsAdjusted = Math.max(12, Math.min(15, hitsInDraw));
       const assertividade = (hitsAdjusted / 15) * 100;
@@ -510,7 +513,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         {/* 18 Balls Grid */}
         <div className="flex flex-wrap items-center gap-2 py-4">
           {recomendadas18.map((num) => {
-            const isKeyCycle = num === 17 || num === 22;
+            const isKeyCycle = cyclePendingNumbers.includes(num);
             const score = scores[num - 1] || 50;
             return (
               <div
@@ -751,7 +754,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         <div className="text-xs sm:text-sm text-slate-300 leading-relaxed space-y-2.5">
           <p>
             {prediction?.justificativaTecnica ||
-              'O modelo de aprendizado estatístico identifica forte assimetria no atraso das dezenas 17 (7 concursos sem ocorrência, maior já registrado: 10) e 22 (5 concursos sem ocorrência, maior já registrado: 7). Ambas as dezenas são as únicas pendentes para o fechamento do Ciclo 804 (atualmente com 4 concursos decorridos, quando a média histórica de fechamento é de 4,7 concursos).'}
+              `O modelo estatístico pondera as 15 dezenas sorteadas no Concurso #${latestDraw.concurso} (${latestDraw.data}) e a pressão das ${cyclePendingNumbers.length} dezenas pendentes do ciclo (${cyclePendingNumbers.map((n) => n.toString().padStart(2, '0')).join(', ') || 'ciclo fechado'}) para maximizar a cobertura de 14 e 15 pontos.`}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">

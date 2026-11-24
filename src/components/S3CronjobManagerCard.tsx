@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import {
   Timer,
   Clock,
@@ -141,8 +142,8 @@ export const S3CronjobManagerCard: React.FC<S3CronjobManagerCardProps> = ({
         app: 'LotoSniper Pro',
         versao: '2.5.0',
         exportedAt: new Date().toISOString(),
-        concursoReferencia: latestDraw?.concurso || 3818,
-        dataReferencia: latestDraw?.data || '03/11/2026',
+        concursoReferencia: latestDraw?.concurso || CONCURSO_ATUAL.concurso,
+        dataReferencia: latestDraw?.data || CONCURSO_ATUAL.data,
         totalFechamentos: savedFechamentos.length,
         totalJogos: targetTickets.length,
         fechamentos: savedFechamentos,
@@ -156,7 +157,7 @@ export const S3CronjobManagerCard: React.FC<S3CronjobManagerCardProps> = ({
         t.dezenas.map((n) => n.toString().padStart(2, '0')).join(' - '),
         t.scoreIA || 14,
         'Fechamento Salvo',
-        latestDraw?.concurso || 3818,
+        latestDraw?.concurso || CONCURSO_ATUAL.concurso,
         latestDraw?.data || '',
       ]);
       const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');

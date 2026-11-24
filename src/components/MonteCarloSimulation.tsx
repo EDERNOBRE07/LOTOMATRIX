@@ -48,7 +48,7 @@ interface MonteCarloSimulationProps {
 export const MonteCarloSimulation: React.FC<MonteCarloSimulationProps> = ({
   latestDraw = CONCURSO_ATUAL,
   statsList = DEZENAS_STATS,
-  cyclePendingNumbers = [17, 22],
+  cyclePendingNumbers = [],
   onApplyNumbers,
 }) => {
   const [config, setConfig] = useState<MonteCarloConfig>(DEFAULT_MONTE_CARLO_CONFIG);
@@ -65,8 +65,7 @@ export const MonteCarloSimulation: React.FC<MonteCarloSimulationProps> = ({
       cyclePendingNumbers,
       config
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestDraw.concurso, config, simulationTrigger]);
+  }, [latestDraw, statsList, cyclePendingNumbers, config, simulationTrigger]);
 
   const handleRerunSimulation = () => {
     setIsSimulating(true);

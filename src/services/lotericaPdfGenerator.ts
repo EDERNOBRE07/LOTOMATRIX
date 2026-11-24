@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GameTicket } from '../types/lotofacil';
 import { SavedFechamentoPrognostico } from './savedFechamentosStorage';
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
 
 export interface LotericaPdfExportOptions {
   fechamento?: SavedFechamentoPrognostico | null;
@@ -101,7 +102,7 @@ export function generateProfessionalLotericaPDF({
 
   // Resolução de metadados
   const targetTickets = tickets.length > 0 ? tickets : (fechamento?.tickets || []);
-  const resolvedConcursoBase = Number(concurso || fechamento?.concurso) || 3824;
+  const resolvedConcursoBase = Number(concurso || fechamento?.concurso) || CONCURSO_ATUAL.concurso;
   const resolvedConcurso = Number(concursoAlvo || fechamento?.concursoAlvo) || resolvedConcursoBase + 1;
   const resolvedData = dataConcurso || fechamento?.dataConcurso || new Date().toLocaleDateString('pt-BR');
   const resolvedStrategy = strategyName || fechamento?.nomeFechamento || fechamento?.tipoFechamento || 'Fechamento Lotérico Inteligente';
@@ -401,7 +402,7 @@ export function generateProfessionalLotericaPDF({
  */
 export function downloadProfessionalLotericaPDF(options: LotericaPdfExportOptions): void {
   const doc = generateProfessionalLotericaPDF(options);
-  const concursoBase = Number(options.concurso || options.fechamento?.concurso) || 3824;
+  const concursoBase = Number(options.concurso || options.fechamento?.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = Number(options.concursoAlvo || options.fechamento?.concursoAlvo) || concursoBase + 1;
   const totalJogos = options.tickets.length || options.fechamento?.totalJogos || 1;
   const filename = `lotosniper_comprovante_loterica_concurso_${concursoAlvo}_${totalJogos}_jogos.pdf`;

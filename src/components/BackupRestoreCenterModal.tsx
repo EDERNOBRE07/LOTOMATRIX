@@ -359,8 +359,14 @@ export const BackupRestoreCenterModal: React.FC<BackupRestoreCenterModalProps> =
     const res = triggerForcedJSONDownload();
     if (res.success) {
       setLastBackup(Date.now());
-      // 2. Abre a pasta do Google Drive
-      window.open('https://drive.google.com/drive/u/0/my-drive', '_blank');
+      // 2. Abre a pasta do Google Drive de forma segura sem window.open
+      const link = document.createElement('a');
+      link.href = 'https://drive.google.com/drive/u/0/my-drive';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       setStatusMessage({
         type: 'success',
         text: `Arquivo "${res.filename}" gerado! O Google Drive foi aberto em uma nova aba para você salvar o arquivo em nuvem.`,

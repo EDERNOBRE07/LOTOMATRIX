@@ -653,7 +653,23 @@ app.post('/api/ai/optimize', async (req: Request, res: Response) => {
       ? filtrosEstatisticos.dezenasExcluidas.map(Number).filter((n: number) => Number.isInteger(n) && n >= 1 && n <= 25)
       : [];
 
-    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${effectiveFixas.join(',')}:${effectiveExcluidas.join(',')}:${metaGarantia}:${filtrosEstatisticos?.somaMin ?? ''}-${filtrosEstatisticos?.somaMax ?? ''}:${filtrosEstatisticos?.paresMin ?? ''}-${filtrosEstatisticos?.paresMax ?? ''}`;
+    const filterSig = [
+      filtrosEstatisticos?.somaMin ?? '',
+      filtrosEstatisticos?.somaMax ?? '',
+      filtrosEstatisticos?.paresMin ?? '',
+      filtrosEstatisticos?.paresMax ?? '',
+      filtrosEstatisticos?.molduraMin ?? '',
+      filtrosEstatisticos?.molduraMax ?? '',
+      filtrosEstatisticos?.primosMin ?? '',
+      filtrosEstatisticos?.primosMax ?? '',
+      filtrosEstatisticos?.fibonacciMin ?? '',
+      filtrosEstatisticos?.fibonacciMax ?? '',
+      filtrosEstatisticos?.repetidasMin ?? '',
+      filtrosEstatisticos?.repetidasMax ?? '',
+      filtrosEstatisticos?.maxConsecutivas ?? '',
+      filtrosEstatisticos?.estratificacaoCaudaAtiva ? '1' : '0',
+    ].join('-');
+    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${effectiveFixas.join(',')}:${effectiveExcluidas.join(',')}:${metaGarantia}:${filterSig}`;
     const cachedOptimize = !forceFresh ? aiOptimizeCache.get(optimizeCacheKey) : undefined;
     if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
       return res.json({
@@ -672,8 +688,8 @@ Contexto do último concurso analisado (Concurso ${concurso}):
 Dezenas sorteadas (Repetidas em potencial): ${JSON.stringify(dezenasSorteadas)}
 Dezenas ausentes no último concurso (Retorno em potencial): ${JSON.stringify(dezenasAusentes)}
 Dezenas pendentes para fechar o ciclo atual: ${JSON.stringify(faltantesCiclo)}.
-Dezenas fixas solicitadas pelo usuário: ${JSON.stringify(dezenasFixas)}
-Dezenas excluídas pelo usuário: ${JSON.stringify(dezenasExcluidas)}
+Dezenas fixas solicitadas pelo usuário: ${JSON.stringify(effectiveFixas)}
+Dezenas excluídas pelo usuário: ${JSON.stringify(effectiveExcluidas)}
 Meta do sistema: Otimizar seleção de 18 dezenas base para fechamento visando garantia matemática de 14 pontos no próximo sorteio (${concurso + 1}).
 
 ESTRATÉGIA MATEMÁTICA OBRIGATÓRIA (DOCUMENTO OFICIAL DA LOTOFÁCIL):
@@ -920,7 +936,7 @@ app.post('/api/ai/efficiency-report', async (req: Request, res: Response) => {
     const quentes50 = topQuentes50.slice(0, 7).map((x) => x.num);
     const frias50 = topQuentes50.slice(-7).map((x) => x.num);
 
-    const effCacheKey = `${latestDraw?.concurso || 3824}:${totalJogos}`;
+    const effCacheKey = `${latestDraw?.concurso || LATEST_DRAW.concurso}:${totalJogos}`;
     const cachedEff = aiEfficiencyCache.get(effCacheKey);
     if (cachedEff && cachedEff.expiresAt > Date.now()) {
       return res.json({
@@ -1123,7 +1139,7 @@ INSTRUÇÕES DO LAUDO:
         dicasFineTuningProximasApostas: [
           'Substitua qualquer jogo que contenha mais de 4 dezenas consecutivas por uma transição em salto duplo.',
           'Limite a quantidade de dezenas frias a no máximo 2 ou 3 por volante para preservar o teto matemático.',
-          'Mantenha ao menos uma dezena que fecha ciclo (como 17 ou 22) fixa em pelo menos 70% dos bilhetes gerados.',
+          'Mantenha ao menos uma dezena ausente/pendente do ciclo atual fixa nos bilhetes gerados para capturar fechamentos de ciclo.',
         ],
       },
     };

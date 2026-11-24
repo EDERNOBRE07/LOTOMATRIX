@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
 import { FechamentoExportMeta } from './txtExportFormatter';
-import { CRUZ_DEZENAS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 export interface CartoesExportOptions {
   tickets: GameTicket[];
@@ -32,7 +32,7 @@ export function exportCartoesJogosToPdf({
   const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
   const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
 
-  const concurso = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concurso = Number(meta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;
   const targetConcurso = Number(meta?.concursoAlvo) || concurso + 1;
   const dataConcurso = meta?.dataConcurso || latestDraw.data || new Date().toLocaleDateString('pt-BR');
   const nomeFechamento =

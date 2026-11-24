@@ -7,7 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { GameTicket, LotofacilDraw, FilterCriteria } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
-import { PRIMOS, MOLDURA, FIBONACCI, CRUZ_DEZENAS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, PRIMOS, MOLDURA, FIBONACCI, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { FechamentoExportMeta } from './txtExportFormatter';
 
 
@@ -36,7 +36,7 @@ export function exportFechamentoToPdf({
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
 
-  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
   const dataConcurso = meta?.dataConcurso || latestDraw.data || new Date().toLocaleDateString('pt-BR');
   const strategyName = meta?.strategyName || 'Fechamento Otimizado para 14 Pontos';
@@ -212,7 +212,7 @@ export function exportFechamentoToCsv({
 }: FechamentoExportOptions): void {
   if (!tickets || tickets.length === 0) return;
 
-  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || 3824;
+  const concursoBase = Number(meta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = Number(meta?.concursoAlvo) || concursoBase + 1;
   const previousDrawDezenas = latestDraw?.dezenas || [];
 

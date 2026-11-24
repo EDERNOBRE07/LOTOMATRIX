@@ -150,7 +150,7 @@ interface FechamentoTabProps {
 export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
-  cyclePendingNumbers = [17, 22],
+  cyclePendingNumbers = [],
   concursosNoCiclo = 2,
   aiPrediction,
   initialFixedNumbers,
@@ -211,18 +211,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   });
 
   const [fixedNumbers, setFixedNumbers] = useState<number[]>(() => {
-    if (activeFilterConfig?.dezenasFixas && activeFilterConfig.dezenasFixas.length > 0) {
-      return sanitizeDezenasFixas(activeFilterConfig.dezenasFixas);
+    if (activeFilterConfig) {
+      return sanitizeDezenasFixas(activeFilterConfig.dezenasFixas || []);
     }
-    try {
-      if (typeof window !== 'undefined' && localStorage.getItem('lotosniper_active_filter_config')) {
-        return sanitizeDezenasFixas(activeFilterConfig?.dezenasFixas || []);
-      }
-    } catch {}
     return sanitizeDezenasFixas(cyclePendingNumbers.slice(0, 2));
   });
   const [excludedNumbers, setExcludedNumbers] = useState<number[]>(() =>
-    Array.isArray(activeFilterConfig?.dezenasExcluidas) ? activeFilterConfig.dezenasExcluidas : []
+    Array.isArray(activeFilterConfig?.dezenasExcluidas)
+      ? [...activeFilterConfig.dezenasExcluidas].sort((a, b) => a - b)
+      : []
   );
   const [showBolaoSimulator, setShowBolaoSimulator] = useState(false);
   const [filters, setFilters] = useState<FilterCriteria>(() => {
@@ -240,7 +237,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   });
 
-  const lastExternalConfigSigRef = React.useRef<string>('');
+  const filtersRef = React.useRef<FilterCriteria>(filters);
+  filtersRef.current = filters;
+
+  const syncFilters = (
+    nextOrFn: FilterCriteria | ((prev: FilterCriteria) => FilterCriteria)
+  ): FilterCriteria => {
+    const base = filtersRef.current;
+    const next = typeof nextOrFn === 'function' ? nextOrFn(base) : nextOrFn;
+    filtersRef.current = next;
+    setFilters(next);
+    onFiltersConfigChange?.(next);
+    return next;
+  };
+
+  const lastExternalConfigSigRef = React.useRef<string>(
+    activeFilterConfig ? JSON.stringify(activeFilterConfig) : ''
+  );
+  const pendingExternalSyncRef = React.useRef<{ fixas: number[]; excl: number[] } | null>(null);
   const prevSelectedKeyRef = React.useRef<string>(selectedNumbers.join(','));
 
   // Sincroniza todas as alterações vindas da aba Filtros Inteligentes / activeFilterConfig em tempo real
@@ -250,30 +264,42 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     if (lastExternalConfigSigRef.current === incomingSig) return;
     lastExternalConfigSigRef.current = incomingSig;
 
+    const nextFixas = Array.isArray(activeFilterConfig.dezenasFixas)
+      ? sanitizeDezenasFixas(activeFilterConfig.dezenasFixas)
+      : fixedNumbers;
+    const nextExcl = Array.isArray(activeFilterConfig.dezenasExcluidas)
+      ? [...activeFilterConfig.dezenasExcluidas].sort((a, b) => a - b)
+      : excludedNumbers;
+
+    const fixasChanged =
+      fixedNumbers.length !== nextFixas.length ||
+      fixedNumbers.some((v, i) => v !== nextFixas[i]);
+    const exclChanged =
+      excludedNumbers.length !== nextExcl.length ||
+      excludedNumbers.some((v, i) => v !== nextExcl[i]);
+
+    if (fixasChanged || exclChanged) {
+      pendingExternalSyncRef.current = { fixas: nextFixas, excl: nextExcl };
+    }
+
     setFilters((prev) => {
       const merged: FilterCriteria = {
         ...prev,
         ...activeFilterConfig,
       };
-      return JSON.stringify(prev) === JSON.stringify(merged) ? prev : merged;
+      if (JSON.stringify(prev) === JSON.stringify(merged)) {
+        return prev;
+      }
+      filtersRef.current = merged;
+      return merged;
     });
 
-    if (Array.isArray(activeFilterConfig.dezenasFixas)) {
-      const nextFixas = sanitizeDezenasFixas(activeFilterConfig.dezenasFixas);
-      setFixedNumbers((prev) =>
-        prev.length === nextFixas.length && prev.every((v, i) => v === nextFixas[i])
-          ? prev
-          : nextFixas
-      );
+    if (fixasChanged) {
+      setFixedNumbers(nextFixas);
     }
 
-    if (Array.isArray(activeFilterConfig.dezenasExcluidas)) {
-      const nextExcl = [...activeFilterConfig.dezenasExcluidas].sort((a, b) => a - b);
-      setExcludedNumbers((prev) =>
-        prev.length === nextExcl.length && prev.every((v, i) => v === nextExcl[i])
-          ? prev
-          : nextExcl
-      );
+    if (exclChanged) {
+      setExcludedNumbers(nextExcl);
     }
   }, [activeFilterConfig]);
 
@@ -283,22 +309,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     if (prevSelectedKeyRef.current === selectedKey) return;
     prevSelectedKeyRef.current = selectedKey;
     if (selectedNumbers.length < 15) return;
-    if (filters.autoCalibrarSomaUniverso === false) return;
+    const currentFilters = filtersRef.current;
+    if (currentFilters.autoCalibrarSomaUniverso === false) return;
     const cal = calibrarFaixaSomaUniverso(selectedNumbers);
-    if (filters.somaMin !== cal.somaMin || filters.somaMax !== cal.somaMax) {
-      setFilters((prev) => {
-        const next = {
-          ...prev,
-          somaMin: cal.somaMin,
-          somaMax: cal.somaMax,
-        };
-        onFiltersConfigChange?.(next);
-        return next;
+    if (currentFilters.somaMin !== cal.somaMin || currentFilters.somaMax !== cal.somaMax) {
+      syncFilters({
+        ...currentFilters,
+        somaMin: cal.somaMin,
+        somaMax: cal.somaMax,
       });
     }
-  }, [selectedNumbers, filters.autoCalibrarSomaUniverso, filters.somaMin, filters.somaMax]);
+  }, [selectedNumbers]);
 
-  // Sincronização bidirecional de Fixas (máx 5) e Excluídas com activeFilterConfig
+  // Sincronização unidirecional (local -> global) apenas quando Fixas/Excluídas mudam localmente
   useEffect(() => {
     const sanitized = sanitizeDezenasFixas(fixedNumbers);
     if (sanitized.length !== fixedNumbers.length) {
@@ -306,27 +329,59 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       return;
     }
     const sortedExcl = [...excludedNumbers].sort((a, b) => a - b);
-    const resolvedModo = resolveModoFixas(sanitized.length, filters.modoFixas);
-    const currentFixas = filters.dezenasFixas || [];
-    const currentExcl = filters.dezenasExcluidas || [];
-    const sameFixas =
-      currentFixas.length === sanitized.length &&
-      sanitized.every((v, idx) => currentFixas[idx] === v);
-    const sameExcl =
-      currentExcl.length === sortedExcl.length &&
-      sortedExcl.every((v, idx) => currentExcl[idx] === v);
 
-    if (!sameFixas || !sameExcl || (sanitized.length >= 3 && filters.modoFixas === undefined)) {
-      const nextFilters: FilterCriteria = {
-        ...filters,
-        dezenasFixas: sanitized,
-        dezenasExcluidas: sortedExcl,
-        modoFixas: filters.modoFixas === 'rigidas' ? 'rigidas' : resolvedModo,
-      };
+    // Se há uma sincronização externa pendente, aguarda ela pousar antes de propagar para evitar ping-pong
+    if (pendingExternalSyncRef.current) {
+      const pending = pendingExternalSyncRef.current;
+      const landed =
+        pending.fixas.length === sanitized.length &&
+        pending.fixas.every((v, i) => v === sanitized[i]) &&
+        pending.excl.length === sortedExcl.length &&
+        pending.excl.every((v, i) => v === sortedExcl[i]);
+      if (landed) {
+        pendingExternalSyncRef.current = null;
+      }
+      return;
+    }
+
+    const currentFilters = filtersRef.current;
+    const refFixas = activeFilterConfig?.dezenasFixas ?? currentFilters.dezenasFixas ?? [];
+    const refExcl = activeFilterConfig?.dezenasExcluidas ?? currentFilters.dezenasExcluidas ?? [];
+    const sameAsExternalFixas =
+      refFixas.length === sanitized.length &&
+      sanitized.every((v, idx) => refFixas[idx] === v);
+    const sameAsExternalExcl =
+      refExcl.length === sortedExcl.length &&
+      sortedExcl.every((v, idx) => refExcl[idx] === v);
+
+    const localFixas = currentFilters.dezenasFixas || [];
+    const localExcl = currentFilters.dezenasExcluidas || [];
+    const sameAsLocal =
+      localFixas.length === sanitized.length &&
+      sanitized.every((v, idx) => localFixas[idx] === v) &&
+      localExcl.length === sortedExcl.length &&
+      sortedExcl.every((v, idx) => localExcl[idx] === v);
+
+    if (sameAsExternalFixas && sameAsExternalExcl && sameAsLocal) {
+      return;
+    }
+
+    const resolvedModo = resolveModoFixas(sanitized.length, currentFilters.modoFixas);
+    const nextFilters: FilterCriteria = {
+      ...currentFilters,
+      dezenasFixas: sanitized,
+      dezenasExcluidas: sortedExcl,
+      modoFixas: currentFilters.modoFixas === 'rigidas' ? 'rigidas' : resolvedModo,
+    };
+
+    if (!sameAsLocal) {
+      filtersRef.current = nextFilters;
       setFilters(nextFilters);
+    }
+    if (!sameAsExternalFixas || !sameAsExternalExcl) {
       onFiltersConfigChange?.(nextFilters);
     }
-  }, [fixedNumbers, excludedNumbers, filters.dezenasFixas, filters.dezenasExcluidas, filters.modoFixas]);
+  }, [fixedNumbers, excludedNumbers]);
 
   // Estado da Garantia Efetiva Auditada (LJCR & Set Cover)
   const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);
@@ -452,7 +507,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const handleVoidChanged = (e: any) => {
       const cfg = e.detail;
       if (cfg) {
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           vaziosAtivos: cfg.ativo,
           combinacoesVazioExcluidas: cfg.paresExcluidos,
@@ -470,7 +525,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const handleAIPresetApplied = (e: any) => {
       const presetFilters = e.detail;
       if (presetFilters) {
-        setFilters(presetFilters);
+        syncFilters(presetFilters);
         const calibrated = buildFilterCompliantPool({
           targetCount,
           filters: presetFilters,
@@ -499,7 +554,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       if (Array.isArray(incomingDezenas)) {
         const sorted = sanitizeDezenasFixas(incomingDezenas);
         setFixedNumbers(sorted);
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           dezenasFixas: sorted,
           modoFixas: sorted.length >= 3 && prev.modoFixas !== 'rigidas' ? 'rotativas' : prev.modoFixas,
@@ -537,7 +592,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const handleAggressivenessChanged = (e: any) => {
       const level = e.detail;
       if (level === 'conservadora') {
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           paresMin: 6,
           paresMax: 8,
@@ -548,7 +603,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         }));
         setDocumentMessage('🛡️ Calibração Conservadora ativada: Paridade 6-8, Repetidas 8-10, Soma 180-220.');
       } else if (level === 'balanceada') {
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           paresMin: 6,
           paresMax: 9,
@@ -560,7 +615,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         }));
         setDocumentMessage('⚖️ Calibração Balanceada (Zona de Ouro): Tolerância Ampla 6-9 Pares, 6-10 Repetidas, Sequências até 6.');
       } else if (level === 'agressiva') {
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           paresMin: 7,
           paresMax: 8,
@@ -572,7 +627,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         }));
         setDocumentMessage('⚡ Calibração Agressiva: Redução de Espaço Amostral 500, Paridade 7-8, Repetidas 7-9.');
       } else if (level === 'cirurgica') {
-        setFilters((prev) => ({
+        syncFilters((prev) => ({
           ...prev,
           paresMin: 6,
           paresMax: 9,
@@ -677,7 +732,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const handleRestoreGeneration = (item: any) => {
     setMode(item.mode);
     setSelectedNumbers(item.selectedNumbers);
-    setFilters(item.filters);
+    syncFilters(item.filters);
     setGeneratedTickets(item.tickets);
     setGenerationType(item.generationType);
     onSaveTickets(item.tickets);
@@ -1083,7 +1138,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const canonicalName = getCanonicalFechamentoTypeName();
     const garantiaStr = preset?.garantia ? `Garantia ${preset.garantia}` : 'Garantia 14 se 15';
     const ticketCount = generatedTickets.length > 0 ? generatedTickets.length : (preset?.jogosMaximos || 24);
-    const concursoBase = resolveConcursoBase(latestDraw?.concurso, 3824);
+    const concursoBase = resolveConcursoBase(latestDraw?.concurso, CONCURSO_ATUAL.concurso);
     const concursoAlvo = Number(concursoBase) + 1;
 
     const filterSummary = buildStandardFilterSummary({
@@ -1148,7 +1203,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dezenasExcluidas: excludedNumbers,
       };
 
-      setFilters(idealAIFilters);
+      syncFilters(idealAIFilters);
       saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
 
       // 2. Calibra o pool ideal de dezenas para o fechamento utilizando todos os filtros recomendados pela IA
@@ -1345,7 +1400,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dataAtualizacao: new Date().toISOString(),
     });
 
-    setFilters(fullPresetFilters);
+    syncFilters(fullPresetFilters);
 
     const calibrated = buildFilterCompliantPool({
       targetCount,
@@ -1615,7 +1670,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       }
       ticketsToSave = validTicketsToSave;
       const f = metaData.filters || filters;
-      const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, 3824);
+      const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, CONCURSO_ATUAL.concurso);
       const concursoAlvo = Number(concursoBase) + 1;
       const poolToSave = activePool.length > 0 ? activePool : selectedNumbers;
       const fixasToSave = sanitizeDezenasFixas(
@@ -1754,7 +1809,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
       };
-      setFilters(fullFilters);
+      syncFilters(fullFilters);
 
       let tickets: GameTicket[] = [];
       const active25Pool = Array.from({ length: 25 }, (_, i) => i + 1);
@@ -2003,7 +2058,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
       };
-      setFilters(fullFilters);
+      syncFilters(fullFilters);
 
       const result = await fechamentoWorkerClient.generatePonderado({
         mode,
@@ -2242,7 +2297,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasFixas: fixedNumbers,
       dezenasExcluidas: excludedNumbers,
     };
-    setFilters(fullFilters);
+    syncFilters(fullFilters);
 
     // Auditoria de conformidade preenchendo auditoriaAnomalias
     auditarTicketsGerados(tickets, fullFilters);
@@ -2290,7 +2345,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       dezenasExcluidas: excludedNumbers,
     };
 
-    const concursoBase = resolveConcursoBase(latestDraw.concurso, 3824);
+    const concursoBase = resolveConcursoBase(latestDraw.concurso, CONCURSO_ATUAL.concurso);
     const concursoAlvo = Number(concursoBase) + 1;
 
     const exportMeta: FechamentoExportMeta = {
@@ -2395,7 +2450,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
       };
-      setFilters(fullFilters);
+      syncFilters(fullFilters);
 
       const tickets = gerarMatrizEstratificada(selectedNumbers, preset.jogosMaximos, {
         dezenasFixas: fixedNumbers,
@@ -2529,7 +2584,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   const getCurrentExportMeta = (): FechamentoExportMeta => {
     const finalPrognosticoName = getFullPrognosticoFechamentoName();
-    const concursoBase = resolveConcursoBase(latestDraw.concurso, 3824);
+    const concursoBase = resolveConcursoBase(latestDraw.concurso, CONCURSO_ATUAL.concurso);
     const concursoAlvo = Number(concursoBase) + 1;
     return {
       strategyName: finalPrognosticoName,
@@ -3498,7 +3553,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setFilters((prev) => ({
+                  syncFilters((prev) => ({
                     ...prev,
                     somaMin: 175,
                     somaMax: 220,
@@ -3637,7 +3692,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           onClick={() => {
                             const trimmed = fixedNumbers.slice(0, RECOMMENDED_MAX_FIXAS);
                             setFixedNumbers(trimmed);
-                            setFilters((prev) => ({ ...prev, dezenasFixas: trimmed }));
+                            syncFilters((prev) => ({ ...prev, dezenasFixas: trimmed }));
                           }}
                           className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] shrink-0 transition cursor-pointer"
                         >
@@ -3947,8 +4002,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setFilters(DEFAULT_FILTERS);
-                  setFixedNumbers(cyclePendingNumbers.slice(0, 2));
+                  const nextFixas = cyclePendingNumbers.slice(0, 2);
+                  syncFilters({
+                    ...DEFAULT_FILTERS,
+                    dezenasFixas: nextFixas,
+                    dezenasExcluidas: [],
+                  });
+                  setFixedNumbers(nextFixas);
                   setExcludedNumbers([]);
                   setGenerationError(null);
                   setDocumentMessage('Filtros padrão restaurados! Tente processar a matriz novamente.');
@@ -4404,7 +4464,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <div
                 onClick={() => {
                   const nextVal = !(filters.cruzAtiva !== false);
-                  setFilters((prev) => ({ ...prev, cruzAtiva: nextVal }));
+                  syncFilters((prev) => ({ ...prev, cruzAtiva: nextVal }));
                 }}
                 className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
                   filters.cruzAtiva !== false
@@ -4459,7 +4519,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <div
                 onClick={() => {
                   const nextVal = !(filters.extremidadesAtiva !== false);
-                  setFilters((prev) => ({ ...prev, extremidadesAtiva: nextVal }));
+                  syncFilters((prev) => ({ ...prev, extremidadesAtiva: nextVal }));
                 }}
                 className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition select-none ${
                   filters.extremidadesAtiva !== false
@@ -4691,7 +4751,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   {/* Number Balls */}
                   <div className="flex flex-wrap gap-1.5 my-2.5">
                     {ticket.dezenas.map((num) => {
-                      const isKey = num === 17 || num === 22;
+                      const isKey = cyclePendingNumbers.includes(num);
                       return (
                         <span
                           key={num}
@@ -4923,8 +4983,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         isOpen={isErrorLogsModalOpen}
         onClose={() => setIsErrorLogsModalOpen(false)}
         onRestoreDefaults={() => {
-          setFilters(DEFAULT_FILTERS);
-          setFixedNumbers(cyclePendingNumbers.slice(0, 2));
+          const nextFixas = cyclePendingNumbers.slice(0, 2);
+          syncFilters({
+            ...DEFAULT_FILTERS,
+            dezenasFixas: nextFixas,
+            dezenasExcluidas: [],
+          });
+          setFixedNumbers(nextFixas);
           setExcludedNumbers([]);
           setGenerationError(null);
           setDocumentMessage('Filtros padrão restaurados! Tente processar a matriz novamente.');

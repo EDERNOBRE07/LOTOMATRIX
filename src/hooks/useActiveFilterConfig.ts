@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FilterCriteria } from '../types/lotofacil';
 import { DEFAULT_FILTERS, sanitizeDezenasFixas } from '../services/combinatorics';
 
@@ -112,7 +112,27 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
     return normalizeActiveFilterConfig(initialFilters);
   });
 
-  // Salva no localStorage e dispara evento para atualização síncrona
+  const skipBroadcastRef = useRef<boolean>(true);
+
+  // Salva no localStorage e dispara evento após commit apenas quando houver mudança real
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(activeFilterConfig));
+      if (skipBroadcastRef.current) {
+        skipBroadcastRef.current = false;
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('lotosniper-active-filter-updated', { detail: activeFilterConfig })
+        );
+      }
+    } catch (e) {
+      console.warn('Erro ao salvar activeFilterConfig no localStorage:', e);
+    }
+  }, [activeFilterConfig]);
+
+  // Atualiza estado de forma pura, evitando re-renders quando a configuração normalizada é idêntica
   const setActiveFilterConfig = useCallback(
     (
       newConfigOrFn:
@@ -123,16 +143,10 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
         const rawNext =
           typeof newConfigOrFn === 'function' ? newConfigOrFn(prev) : newConfigOrFn;
         const next = normalizeActiveFilterConfig(rawNext, prev);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('lotosniper-active-filter-updated', { detail: next })
-            );
-          }
-        } catch (e) {
-          console.warn('Erro ao salvar activeFilterConfig no localStorage:', e);
+        if (JSON.stringify(prev) === JSON.stringify(next)) {
+          return prev;
         }
+        skipBroadcastRef.current = false;
         return next;
       });
     },
@@ -199,7 +213,12 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
       if (event.key === STORAGE_KEY && event.newValue) {
         try {
           const parsed = JSON.parse(event.newValue);
-          setActiveFilterConfigState(normalizeActiveFilterConfig(parsed));
+          setActiveFilterConfigState((prev) => {
+            const normalized = normalizeActiveFilterConfig(parsed);
+            if (JSON.stringify(prev) === JSON.stringify(normalized)) return prev;
+            skipBroadcastRef.current = true;
+            return normalized;
+          });
         } catch {}
       }
     };
@@ -208,7 +227,9 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
       if (detail && typeof detail === 'object') {
         setActiveFilterConfigState((prev) => {
           const normalized = normalizeActiveFilterConfig(detail);
-          return JSON.stringify(prev) === JSON.stringify(normalized) ? prev : normalized;
+          if (JSON.stringify(prev) === JSON.stringify(normalized)) return prev;
+          skipBroadcastRef.current = true;
+          return normalized;
         });
       }
     };

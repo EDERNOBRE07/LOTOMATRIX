@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SavedFechamentoPrognostico } from './savedFechamentosStorage';
 import { VALOR_APOSTA_LOTOFACIL } from './combinatorics';
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
 
 export interface GenerateGoldPdfOptions {
   fechamento: SavedFechamentoPrognostico;
@@ -47,7 +48,7 @@ export function generateGoldFechamentoPDF({
   doc.text('ENGENHARIA ESTATÍSTICA & FECHAMENTOS INTELIGENTES LOTOFÁCIL', margin, 20);
 
   // Metadados Laterais no Header
-  const concursoBase = Number(fechamento.concurso) || 3824;
+  const concursoBase = Number(fechamento.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = fechamento.concursoAlvo ?? concursoBase + 1;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -234,7 +235,7 @@ export function generateGoldFechamentoPDF({
 
 export function downloadGoldFechamentoPDF(fechamento: SavedFechamentoPrognostico): void {
   const doc = generateGoldFechamentoPDF({ fechamento });
-  const concursoAlvo = fechamento.concursoAlvo ?? (Number(fechamento.concurso) || 3824) + 1;
+  const concursoAlvo = fechamento.concursoAlvo ?? (Number(fechamento.concurso) || CONCURSO_ATUAL.concurso) + 1;
   const filename = `lotosniper_concurso_${concursoAlvo}_gold_${fechamento.totalJogos}_jogos.pdf`;
   doc.save(filename);
 }
@@ -305,7 +306,7 @@ export function generateTicketsVolantePDF(
 
   const statsFooterText = `RESUMO TÉCNICO: ${totalJogos} Jogos • Média Soma: ${mediaSoma} (Zona de Ouro) • Paridade: ${mediaPares}P/${mediaImpares}I • Moldura: ${mediaMoldura} • Primos: ${mediaPrimos}`;
 
-  const concursoBase = Number(options.concurso) || 3824;
+  const concursoBase = Number(options.concurso) || CONCURSO_ATUAL.concurso;
   const concursoAlvo = Number(options.concursoAlvo) || concursoBase + 1;
   const dataConcurso = options.dataConcurso || 'Atual';
   const style = options.style || 'oficial';
@@ -629,7 +630,7 @@ export function downloadTicketsVolantePDF(
 ): void {
   const doc = generateTicketsVolantePDF(tickets, options);
   const style = options.style || 'oficial';
-  const concursoAlvo = Number(options.concursoAlvo) || (Number(options.concurso) || 3824) + 1;
+  const concursoAlvo = Number(options.concursoAlvo) || (Number(options.concurso) || CONCURSO_ATUAL.concurso) + 1;
   const prefix = style === 'economico' ? 'lotosniper_lista_economica' : 'lotosniper_volantes_5x5';
   const filename = `${prefix}_concurso_${concursoAlvo}_${tickets.length}_jogos.pdf`;
   doc.save(filename);

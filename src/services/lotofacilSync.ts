@@ -507,42 +507,36 @@ export function computeDynamicStats(
   // Dezenas sorteadas no último concurso
   const drawnSet = new Set(latestDraw.dezenas);
 
-  // Compute Cycle: find how many recent contests backward are needed to see all 25 numbers
-  const seenInCycle = new Set<number>();
+  // Compute Cycle chronologically up to latestDraw.concurso
+  const chronologicalHistory = [
+    latestDraw,
+    ...history.filter((h) => h.concurso !== latestDraw.concurso && h.concurso <= latestDraw.concurso),
+  ].sort((a, b) => a.concurso - b.concurso);
+
+  const combinedHistory = [...chronologicalHistory].reverse();
+
+  let seenInCycle = new Set<number>();
   let concursosNoCiclo = 0;
 
-  // Combine latestDraw with history sorted descending by contest number
-  const combinedHistory = [
-    latestDraw,
-    ...history.filter((h) => h.concurso !== latestDraw.concurso),
-  ].sort((a, b) => b.concurso - a.concurso);
-
-  for (const draw of combinedHistory) {
+  for (let i = 0; i < chronologicalHistory.length; i++) {
+    const draw = chronologicalHistory[i];
     concursosNoCiclo++;
     for (const d of draw.dezenas) {
       seenInCycle.add(d);
     }
-    if (seenInCycle.size === 25) {
-      break;
+    // Se fechou um ciclo anterior e ainda há concursos posteriores, inicia novo ciclo no próximo concurso
+    if (seenInCycle.size === 25 && i < chronologicalHistory.length - 1) {
+      seenInCycle = new Set<number>();
+      concursosNoCiclo = 0;
     }
   }
 
-  // Dezenas pendentes no ciclo atual
+  // Dezenas pendentes no ciclo atual (será [] se o último concurso acabou de fechar o ciclo)
   const dezenasPendentesCiclo: number[] = [];
   for (let num = 1; num <= 25; num++) {
     if (!seenInCycle.has(num)) {
       dezenasPendentesCiclo.push(num);
     }
-  }
-
-  // If all numbers seen, the current open cycle is just the latest draw
-  if (dezenasPendentesCiclo.length === 0) {
-    for (let num = 1; num <= 25; num++) {
-      if (!drawnSet.has(num)) {
-        dezenasPendentesCiclo.push(num);
-      }
-    }
-    concursosNoCiclo = 1;
   }
 
   // Recompute delays for each number
@@ -585,7 +579,7 @@ export function computeDynamicStats(
 
   return {
     stats: dynamicStats,
-    dezenasPendentesCiclo: dezenasPendentesCiclo.length > 0 ? dezenasPendentesCiclo : [17, 22],
+    dezenasPendentesCiclo,
     concursosNoCiclo,
   };
 }

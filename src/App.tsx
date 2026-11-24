@@ -13,7 +13,6 @@ import { ModuloConferenciaJogos } from './components/ModuloConferenciaJogos';
 import { VolanteSelector } from './components/VolanteSelector';
 import { AppShellSidebar } from './components/AppShellSidebar';
 import { AppShellMobileBottomNav } from './components/AppShellMobileBottomNav';
-import { NavigationMenu } from './components/NavigationMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { DevServerHealthStatus, ServerHealthState } from './components/DevServerHealthStatus';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -974,6 +973,7 @@ export default function App() {
         concursosNoCiclo={concursosNoCiclo}
         aiStatus={isAILoading ? 'loading' : 'ready'}
         onQuickOptimize={() => handleSelectStudioTab('fechamento')}
+        onOpenAIPredictor={() => handleSelectStudioTab('ia_preditor')}
         onOpenBackup={() => setIsBackupModalOpen(true)}
         onOpenTour={() => setIsTourOpen(true)}
         titleAsSpan={publicRoute !== '/'}

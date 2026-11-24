@@ -130,8 +130,8 @@ interface StatisticsTabProps {
 export const StatisticsTab: React.FC<StatisticsTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   statsList = DEZENAS_STATS,
-  cyclePendingNumbers = [17, 22],
-  concursosNoCiclo = 4,
+  cyclePendingNumbers = [],
+  concursosNoCiclo = 1,
   onApplyNumbers,
   savedTickets = [],
   fechamentoNome = '18 Dezenas • 24 Jogos (18-15-14-15)',

@@ -67,6 +67,7 @@ interface HeaderProps {
   cyclePendingNumbers?: number[];
   concursosNoCiclo?: number;
   onQuickOptimize?: () => void;
+  onOpenAIPredictor?: () => void;
   onOpenBackup?: () => void;
   onOpenTour?: () => void;
   aiStatus: 'online' | 'ready' | 'loading';
@@ -78,9 +79,10 @@ export const Header: React.FC<HeaderProps> = ({
   isSyncing,
   onSyncNow,
   syncSource = 'caixa-oficial',
-  cyclePendingNumbers = [17, 22],
-  concursosNoCiclo = 4,
+  cyclePendingNumbers = [],
+  concursosNoCiclo = 1,
   onQuickOptimize,
+  onOpenAIPredictor,
   onOpenBackup,
   onOpenTour,
   aiStatus,
@@ -326,14 +328,22 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* AI Status */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+          {/* AI Status (opens Preditor IA) */}
+          <button
+            type="button"
+            onClick={onOpenAIPredictor}
+            disabled={!onOpenAIPredictor}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 transition ${
+              onOpenAIPredictor ? 'hover:bg-emerald-500/20 hover:border-emerald-400 cursor-pointer' : ''
+            }`}
+            title="Abrir Preditor de IA em Tempo Real"
+          >
+            <Sparkles className={`w-3.5 h-3.5 text-emerald-400 ${aiStatus === 'loading' ? 'animate-spin' : ''}`} />
             <span>IA:</span>
             <strong className="text-white font-mono">
               {aiStatus === 'loading' ? 'Otimizando...' : 'Online'}
             </strong>
-          </div>
+          </button>
 
           {/* Vite Dev Server Health Status Pill */}
           <DevServerHealthStatus showPillInHeader={true} />

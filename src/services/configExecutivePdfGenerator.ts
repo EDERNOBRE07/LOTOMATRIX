@@ -4,6 +4,7 @@ import { GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { getSavedFechamentos, SavedFechamentoPrognostico } from './savedFechamentosStorage';
 import { EfficiencyReportData } from '../components/RelatorioEficienciaGeminiCard';
 import { countMatches, VALOR_APOSTA_LOTOFACIL } from './combinatorics';
+import { CONCURSO_ATUAL } from '../data/lotofacilData';
 
 export interface GenerateExecutivePdfOptions {
   savedTickets: GameTicket[];
@@ -421,7 +422,7 @@ export function generateExecutivePerformancePDF({
 
 export function downloadExecutivePerformancePDF(options: GenerateExecutivePdfOptions): void {
   const doc = generateExecutivePerformancePDF(options);
-  const concurso = options.latestDraw?.concurso || 3818;
+  const concurso = options.latestDraw?.concurso || CONCURSO_ATUAL.concurso;
   const fileName = `lotosniper_relatorio_executivo_c${concurso}_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);
 }
