@@ -56,6 +56,7 @@ export async function fetchWithExponentialBackoff(
 
     try {
       const res = await fetch(url, {
+        cache: 'no-store',
         ...fetchInit,
         signal: controller.signal,
       });
@@ -169,34 +170,45 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     } catch {}
   }
 
-  // 1. Try server-side API (works in AI Studio and Node deployments)
+  // 1. Try server-side proxy API first (bypasses browser CORS & Akamai CDN stale cache)
   try {
-    const serverUrl = `/api/lotofacil/status?fresh=${forceFresh}&_t=${Date.now()}`;
+    const serverUrl = `/api/lotofacil/status?fresh=${forceFresh}&t=${Date.now()}`;
     const result = await fetchWithExponentialBackoff(serverUrl, {
       endpointLabel: 'Backend Server Proxy',
-      headers: { Accept: 'application/json' },
-      maxRetries: 3,
-      baseDelayMs: 600,
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
+      maxRetries: 2,
+      baseDelayMs: 450,
       timeoutMs: 8000,
     });
 
     if (result.ok && result.data && result.data.success && result.data.latestDraw) {
       const draw = normalizeDraw(result.data.latestDraw);
-      // Only accept if draw is at least as new as our verified baseline
+      // Only accept if draw is at least as new as our verified baseline (#3836+)
       if (draw.concurso >= CONCURSO_ATUAL.concurso) {
         saveToCache(draw);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: draw }));
         }
+        const resolvedSource: SyncResult['source'] =
+          result.data.source === 'espelho-api'
+            ? 'espelho-api'
+            : result.data.source === 'base-local-verificada'
+            ? 'base-local-verificada'
+            : 'caixa-oficial';
         console.log(
-          `[LotoSniper Caixa Sync] Sincronização validada com sucesso! Concurso #${draw.concurso} (${draw.data}).`
+          `[LotoSniper Caixa Sync] Sincronização validada com sucesso! Concurso #${draw.concurso} (${draw.data}) via ${resolvedSource}.`
         );
         return {
           draw,
-          source: result.data.source || 'caixa-oficial',
+          source: resolvedSource,
           timestamp: new Date().toISOString(),
           isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
-          message: `Concurso #${draw.concurso} (${draw.data}) sincronizado em tempo real com a Caixa Econômica Federal.`,
+          message: `Concurso #${draw.concurso} (${draw.data}) sincronizado em tempo real.`,
         };
       }
     }
@@ -204,85 +216,61 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     console.warn('[LotoSniper Caixa Sync] Backend sync falhou ou não alcançável, tentando endpoints diretos:', err);
   }
 
-  // 2. Client-side fallback for static Hostinger deployment or direct fetch
+  // 2. Client-side fallback: direct official Caixa API (+ probe next contest) & reliable mirrors
   try {
+    const ts = Date.now();
+    const nextContestProbe = CONCURSO_ATUAL.concurso + 1;
     const publicApis = [
       {
-        url: 'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil',
+        url: `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${nextContestProbe}?t=${ts}`,
+        label: `Caixa ServiceBus Oficial (#${nextContestProbe})`,
+        isCaixa: true,
+      },
+      {
+        url: `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil?t=${ts}`,
         label: 'Caixa ServiceBus Oficial',
+        isCaixa: true,
       },
       {
-        url: 'https://api.guidi.dev.br/loteria/lotofacil/ultimo',
+        url: `https://api.guidi.dev.br/loteria/lotofacil/ultimo?t=${ts}`,
         label: 'Espelho Guidi Dev',
+        isCaixa: false,
       },
       {
-        url: 'https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest',
+        url: `https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest?t=${ts}`,
         label: 'Espelho Heroku Loterias',
+        isCaixa: false,
       },
     ];
+
+    let bestExternalDraw: LotofacilDraw | null = null;
+    let bestExternalSource: SyncResult['source'] = 'espelho-api';
+    let bestExternalLabel = '';
 
     for (const apiTarget of publicApis) {
       try {
         const result = await fetchWithExponentialBackoff(apiTarget.url, {
           endpointLabel: apiTarget.label,
           headers: { Accept: 'application/json' },
-          maxRetries: 3,
-          baseDelayMs: 500,
+          cache: 'no-store',
+          maxRetries: 2,
+          baseDelayMs: 400,
           timeoutMs: 5000,
         });
 
         if (result.ok && result.data) {
-          const json = result.data;
-          const rawDezenas = json.dezenas || json.listaDezenas || json.numeros;
-          const concursoNum = json.concurso || json.numero;
-
-          // Reject stale mirror draws older than CONCURSO_ATUAL
-          if (!concursoNum || concursoNum < CONCURSO_ATUAL.concurso) {
-            console.warn(
-              `[LotoSniper Caixa Sync] Concurso retornado (#${concursoNum}) é inferior à base oficial (#${CONCURSO_ATUAL.concurso}), ignorando espelho desatualizado.`
-            );
+          const parsed = parseExternalPayload(result.data);
+          if (!parsed || parsed.concurso < CONCURSO_ATUAL.concurso) {
             continue;
           }
-
-          if (Array.isArray(rawDezenas) && rawDezenas.length === 15) {
-            const dezenas = rawDezenas
-              .map((d: any) => parseInt(String(d), 10))
-              .sort((a: number, b: number) => a - b);
-
-            const draw: LotofacilDraw = {
-              concurso: concursoNum,
-              data: json.data || json.dataApuracao || new Date().toLocaleDateString('pt-BR'),
-              dezenas,
-              premiacoes: {
-                faixa15: {
-                  ganhadores: json.premiacoes?.[0]?.ganhadores ?? json.listaRateioPremio?.[0]?.numeroDeGanhadores ?? 1,
-                  valor: json.premiacoes?.[0]?.valorPremio ?? json.listaRateioPremio?.[0]?.valorPremio ?? 2000000,
-                },
-                faixa14: {
-                  ganhadores: json.premiacoes?.[1]?.ganhadores ?? json.listaRateioPremio?.[1]?.numeroDeGanhadores ?? 350,
-                  valor: json.premiacoes?.[1]?.valorPremio ?? json.listaRateioPremio?.[1]?.valorPremio ?? 1800,
-                },
-                faixa13: { ganhadores: 28000, valor: 35 },
-                faixa12: { ganhadores: 160000, valor: 14 },
-                faixa11: { ganhadores: 900000, valor: 7 },
-                acumuladoProximo: json.acumulou ? 3500000 : 0,
-              },
-            };
-
-            saveToCache(draw);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: draw }));
-            }
-            console.log(
-              `[LotoSniper Caixa Sync] Concurso #${draw.concurso} carregado com sucesso via ${apiTarget.label}.`
-            );
-            return {
-              draw,
-              source: apiTarget.url.includes('caixa.gov.br') ? 'caixa-oficial' : 'espelho-api',
-              timestamp: new Date().toISOString(),
-              isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
-              message: `Concurso #${draw.concurso} carregado via ${apiTarget.label}.`,
-            };
+          if (!bestExternalDraw || parsed.concurso > bestExternalDraw.concurso) {
+            bestExternalDraw = parsed;
+            bestExternalSource = apiTarget.isCaixa ? 'caixa-oficial' : 'espelho-api';
+            bestExternalLabel = apiTarget.label;
+          }
+          // If we already found a contest newer than baseline, return immediately
+          if (parsed.concurso > CONCURSO_ATUAL.concurso) {
+            break;
           }
         }
       } catch (mirrorErr) {
@@ -290,43 +278,182 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
         continue;
       }
     }
+
+    if (bestExternalDraw) {
+      saveToCache(bestExternalDraw);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: bestExternalDraw }));
+      }
+      return {
+        draw: bestExternalDraw,
+        source: bestExternalSource,
+        timestamp: new Date().toISOString(),
+        isNewerThanBaseline: bestExternalDraw.concurso > CONCURSO_ATUAL.concurso,
+        message: `Concurso #${bestExternalDraw.concurso} (${bestExternalDraw.data}) carregado via ${bestExternalLabel}.`,
+      };
+    }
   } catch (err) {
     console.warn('[LotoSniper Caixa Sync] Erro geral ao consultar espelhos públicos:', err);
   }
 
-  // 3. Fallback to localStorage cache only if it is equal or newer than CONCURSO_ATUAL
+  // 3. Fallback to localStorage cache only if it is equal or newer than CONCURSO_ATUAL (#3836+)
   if (!forceFresh) {
     const cached = loadFromCache();
     if (cached && cached.concurso >= CONCURSO_ATUAL.concurso) {
       return {
         draw: cached,
-        source: 'caixa-oficial',
+        source: 'base-local-verificada',
         timestamp: localStorage.getItem(LOCAL_STORAGE_LAST_SYNC) || new Date().toISOString(),
         isNewerThanBaseline: cached.concurso > CONCURSO_ATUAL.concurso,
-        message: `Concurso #${cached.concurso} ativo e sincronizado.`,
+        message: `Concurso #${cached.concurso} (${cached.data}) ativo e sincronizado.`,
       };
     }
   }
 
-  // 4. Default Verified Baseline (Concurso 3817)
+  // 4. Default Verified Baseline (Concurso #3836 - 23/11/2026)
   saveToCache(CONCURSO_ATUAL);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: CONCURSO_ATUAL }));
+  }
   return {
     draw: CONCURSO_ATUAL,
-    source: 'caixa-oficial',
+    source: 'base-local-verificada',
     timestamp: new Date().toISOString(),
     isNewerThanBaseline: false,
-    message: `Concurso #${CONCURSO_ATUAL.concurso} ativo (Base Oficial Verificada Caixa).`,
+    message: `Concurso #${CONCURSO_ATUAL.concurso} (${CONCURSO_ATUAL.data}) ativo (Base Oficial Consolidada Caixa).`,
+  };
+}
+
+/**
+ * Fetches a specific Lotofácil contest by number via server proxy with direct Caixa fallback.
+ */
+export async function fetchConcursoByNumber(concurso: number): Promise<LotofacilDraw | null> {
+  if (!Number.isInteger(concurso) || concurso < 1 || concurso > 999999) {
+    return null;
+  }
+
+  const ts = Date.now();
+  try {
+    const proxyRes = await fetchWithExponentialBackoff(
+      `/api/lotofacil/concurso/${concurso}?t=${ts}`,
+      {
+        endpointLabel: `Proxy Concurso #${concurso}`,
+        headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+        cache: 'no-store',
+        maxRetries: 2,
+        baseDelayMs: 400,
+        timeoutMs: 6500,
+      }
+    );
+    if (proxyRes.ok && proxyRes.data?.success && proxyRes.data?.draw) {
+      return normalizeDraw(proxyRes.data.draw);
+    }
+  } catch {}
+
+  try {
+    const directRes = await fetchWithExponentialBackoff(
+      `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${concurso}?t=${ts}`,
+      {
+        endpointLabel: `Caixa Direto #${concurso}`,
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        maxRetries: 1,
+        baseDelayMs: 400,
+        timeoutMs: 5000,
+      }
+    );
+    if (directRes.ok && directRes.data) {
+      return parseExternalPayload(directRes.data);
+    }
+  } catch {}
+
+  return null;
+}
+
+function parseExternalPayload(json: any): LotofacilDraw | null {
+  if (!json || typeof json !== 'object') return null;
+  const rawDezenas = json.dezenas || json.listaDezenas || json.numeros;
+  const concursoNum = Number(json.concurso || json.numero);
+  if (!Number.isFinite(concursoNum) || !Array.isArray(rawDezenas) || rawDezenas.length !== 15) {
+    return null;
+  }
+
+  const dezenas = rawDezenas
+    .map((d: any) => parseInt(String(d), 10))
+    .filter((n: number) => Number.isFinite(n) && n >= 1 && n <= 25)
+    .sort((a: number, b: number) => a - b);
+
+  if (dezenas.length !== 15) return null;
+
+  const rateio = Array.isArray(json.listaRateioPremio) ? json.listaRateioPremio : [];
+  const premiacoesArr = Array.isArray(json.premiacoes) ? json.premiacoes : [];
+  const faixa15Ganhadores =
+    premiacoesArr[0]?.ganhadores ?? rateio[0]?.numeroDeGanhadores ?? (json.acumulou ? 0 : 1);
+  const faixa15Valor =
+    premiacoesArr[0]?.valorPremio ?? rateio[0]?.valorPremio ?? (json.acumulou ? 0 : 1700000);
+  const acumuladoProximo = Number(
+    json.valorEstimadoProximoConcurso ??
+      json.valorAcumuladoProximoConcurso ??
+      json.proximoEstimado ??
+      (json.acumulou || faixa15Ganhadores === 0 ? 5000000 : 0)
+  );
+
+  return {
+    concurso: concursoNum,
+    data: json.data || json.dataApuracao || new Date().toLocaleDateString('pt-BR'),
+    dezenas,
+    acumulou: Boolean(json.acumulou || faixa15Ganhadores === 0),
+    proximoEstimado: acumuladoProximo > 0 ? acumuladoProximo : undefined,
+    dataProximoConcurso: json.dataProximoConcurso || undefined,
+    premiacoes: {
+      faixa15: {
+        ganhadores: faixa15Ganhadores,
+        valor: faixa15Valor,
+      },
+      faixa14: {
+        ganhadores: premiacoesArr[1]?.ganhadores ?? rateio[1]?.numeroDeGanhadores ?? 300,
+        valor: premiacoesArr[1]?.valorPremio ?? rateio[1]?.valorPremio ?? 1800,
+      },
+      faixa13: {
+        ganhadores: premiacoesArr[2]?.ganhadores ?? rateio[2]?.numeroDeGanhadores ?? 12000,
+        valor: premiacoesArr[2]?.valorPremio ?? rateio[2]?.valorPremio ?? 35,
+      },
+      faixa12: {
+        ganhadores: premiacoesArr[3]?.ganhadores ?? rateio[3]?.numeroDeGanhadores ?? 140000,
+        valor: premiacoesArr[3]?.valorPremio ?? rateio[3]?.valorPremio ?? 14,
+      },
+      faixa11: {
+        ganhadores: premiacoesArr[4]?.ganhadores ?? rateio[4]?.numeroDeGanhadores ?? 750000,
+        valor: premiacoesArr[4]?.valorPremio ?? rateio[4]?.valorPremio ?? 7,
+      },
+      acumuladoProximo,
+    },
   };
 }
 
 function normalizeDraw(raw: any): LotofacilDraw {
+  const concurso = Number(raw.concurso || raw.numero || CONCURSO_ATUAL.concurso);
+  const fallbackMeta = concurso === CONCURSO_ATUAL.concurso ? CONCURSO_ATUAL : undefined;
+  const premiacoes = raw.premiacoes || fallbackMeta?.premiacoes || CONCURSO_ATUAL.premiacoes;
+  const faixa15Ganhadores = premiacoes?.faixa15?.ganhadores;
+  const acumuladoProximo =
+    raw.proximoEstimado ??
+    premiacoes?.acumuladoProximo ??
+    (concurso === CONCURSO_ATUAL.concurso ? CONCURSO_ATUAL.proximoEstimado : 0);
+
   return {
-    concurso: raw.concurso || raw.numero || CONCURSO_ATUAL.concurso,
+    concurso,
     data: raw.data || raw.dataApuracao || CONCURSO_ATUAL.data,
     dezenas: Array.isArray(raw.dezenas)
       ? raw.dezenas.map((n: any) => parseInt(String(n), 10)).sort((a: number, b: number) => a - b)
       : CONCURSO_ATUAL.dezenas,
-    premiacoes: raw.premiacoes || CONCURSO_ATUAL.premiacoes,
+    acumulou: raw.acumulou ?? (faixa15Ganhadores === 0),
+    proximoEstimado: acumuladoProximo && acumuladoProximo > 0 ? acumuladoProximo : undefined,
+    dataProximoConcurso: raw.dataProximoConcurso || fallbackMeta?.dataProximoConcurso,
+    premiacoes: {
+      ...premiacoes,
+      acumuladoProximo: acumuladoProximo || 0,
+    },
   };
 }
 

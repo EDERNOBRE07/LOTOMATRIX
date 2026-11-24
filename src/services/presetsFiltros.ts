@@ -1,14 +1,16 @@
 import { FilterCriteria } from '../types/lotofacil';
 
+export type PresetId = 'conservador' | 'balanceado' | 'agressivo' | 'estratificado';
+
 export interface PresetLotoFacilItem {
-  id: 'conservador' | 'balanceado' | 'agressivo';
+  id: PresetId;
   nome: string;
   badge: string;
   desvio: string;
   coberturaConcursos: string;
   corteMedio: string;
   descricao: string;
-  badgeColor: 'emerald' | 'sky' | 'amber';
+  badgeColor: 'emerald' | 'sky' | 'amber' | 'violet';
   filtros: Partial<FilterCriteria>;
 }
 
@@ -16,7 +18,7 @@ export interface PresetLotoFacilItem {
  * Presets Estatísticos Canônicos da Lotofácil
  * Calibrados pela distribuição normal histórica de sorteios da Caixa.
  */
-export const PRESETS_LOTOFACIL: Record<'conservador' | 'balanceado' | 'agressivo', PresetLotoFacilItem> = {
+export const PRESETS_LOTOFACIL: Record<PresetId, PresetLotoFacilItem> = {
   conservador: {
     id: 'conservador',
     nome: 'Conservador',
@@ -156,7 +158,71 @@ export const PRESETS_LOTOFACIL: Record<'conservador' | 'balanceado' | 'agressivo
       rankingHistoricoAtivo: true,
       palpiteIneditoAtivo: true,
       antiColisaoHistoricaAtiva: true,
+      linhasMin: 1,
+      linhasMax: 4,
+      colunasMin: 1,
+      colunasMax: 4,
+      quadrantesAtivo: true,
+      quadranteMin: 2,
+      quadranteMax: 5,
+      fallbackProgressivoAtivo: true,
       presetEstatistico: 'agressivo',
+    },
+  },
+  estratificado: {
+    id: 'estratificado',
+    nome: 'Estratificado',
+    badge: '75/15/10 Caudas',
+    desvio: 'Anti-Cisne',
+    coberturaConcursos: '~92% dos sorteios',
+    corteMedio: '~22%',
+    descricao: 'Estratificação obrigatória de caudas (75% Zona Central 180–215, 15% Cauda Alta 216–230, 10% Cauda Baixa 155–179) com proteção total de matriz 5×5 e Fallback 3 níveis.',
+    badgeColor: 'violet',
+    filtros: {
+      somaMin: 170,
+      somaMax: 225,
+      paresMin: 6,
+      paresMax: 8,
+      molduraMin: 8,
+      molduraMax: 11,
+      primosMin: 4,
+      primosMax: 7,
+      fibonacciMin: 3,
+      fibonacciMax: 6,
+      repetidasMin: 7,
+      repetidasMax: 10,
+      maxConsecutivas: 6,
+      estratificacaoCaudaAtiva: true,
+      autoCalibrarSomaUniverso: true,
+      cruzAtiva: true,
+      cruzMin: 4,
+      cruzMax: 7,
+      validacaoEstritaCruz: false,
+      posicionalAtivo: true,
+      multiplosAtivo: true,
+      contagemDigitosAtiva: true,
+      digitosMin: 22,
+      digitosMax: 27,
+      umDigitoMin: 3,
+      umDigitoMax: 8,
+      somaAlgarismosAtiva: true,
+      somaAlgarismosMin: 63,
+      somaAlgarismosMax: 87,
+      linhasColunasAtivo: true,
+      linhasMin: 1,
+      linhasMax: 4,
+      colunasMin: 1,
+      colunasMax: 4,
+      maxLinhasCheias: 1,
+      maxColunasCheias: 1,
+      quadrantesAtivo: false,
+      quadranteMin: 2,
+      quadranteMax: 5,
+      rankingHistoricoAtivo: true,
+      palpiteIneditoAtivo: true,
+      antiColisaoHistoricaAtiva: true,
+      fallbackProgressivoAtivo: true,
+      presetEstatistico: 'estratificado',
     },
   },
 };
@@ -166,9 +232,7 @@ export const EQUILIBRIO_PRO_PRESET = PRESETS_LOTOFACIL.balanceado;
 /**
  * Retorna os parâmetros de filtro correspondentes a um preset selecionado
  */
-export function getPresetFilters(
-  presetKey: 'conservador' | 'balanceado' | 'agressivo'
-): Partial<FilterCriteria> {
+export function getPresetFilters(presetKey: PresetId): Partial<FilterCriteria> {
   return PRESETS_LOTOFACIL[presetKey]?.filtros || PRESETS_LOTOFACIL.balanceado.filtros;
 }
 
@@ -177,9 +241,10 @@ export function getPresetFilters(
  */
 export function detectActivePreset(
   filters?: FilterCriteria
-): 'balanceado' | 'agressivo' | 'conservador' | 'personalizado' {
+): 'balanceado' | 'agressivo' | 'conservador' | 'estratificado' | 'personalizado' {
   if (!filters) return 'balanceado';
-  const keys: Array<'balanceado' | 'agressivo' | 'conservador'> = [
+  const keys: PresetId[] = [
+    'estratificado',
     'balanceado',
     'agressivo',
     'conservador',
@@ -200,7 +265,8 @@ export function detectActivePreset(
       filters.fibonacciMax === p.fibonacciMax &&
       filters.repetidasMin === p.repetidasMin &&
       filters.repetidasMax === p.repetidasMax &&
-      filters.maxConsecutivas === p.maxConsecutivas;
+      filters.maxConsecutivas === p.maxConsecutivas &&
+      (key !== 'estratificado' || filters.estratificacaoCaudaAtiva === true);
 
     if (matchesCore) return key;
   }

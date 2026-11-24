@@ -2,6 +2,9 @@ export interface LotofacilDraw {
   concurso: number;
   data: string;
   dezenas: number[];
+  acumulou?: boolean;
+  proximoEstimado?: number;
+  dataProximoConcurso?: string;
   premiacoes?: {
     faixa15?: { ganhadores: number; valor: number };
     faixa14?: { ganhadores: number; valor: number };
@@ -78,10 +81,11 @@ export interface FilterCriteria {
   fechamentoPonderadoAtivo?: boolean;
   validacaoEstritaCruz?: boolean; // Modo Validação Estrita: restringe estritamente para 5-6 dezenas na Cruz da Lotofácil
   strictValidation?: boolean; // Trava booleana de Validação Estrita: descarta jogos fora de 5 a 6 dezenas na Cruz
-  presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'custom';
+  presetEstatistico?: 'conservador' | 'balanceado' | 'agressivo' | 'estratificado' | 'custom';
   modoFixas?: 'rotativas' | 'rigidas'; // Proteção K de N (padrão quando fixas >= 3) vs Rígidas 100%
   autoCalibrarSomaUniverso?: boolean; // Auto-calibra faixa de soma pelo universo selecionado (μ_U ± 20)
   estratificacaoCaudaAtiva?: boolean; // Força estratificação de cauda (75% Central 180-215 / 15% Alta 216-230 / 10% Baixa 155-179) em >= 10 jogos
+  fallbackProgressivoAtivo?: boolean; // Relaxamento automático em 3 níveis caso os filtros zerem a geração
   // 6 Novos Filtros Matemáticos (Poda Combinatória & Bitwise)
   posicionalAtivo?: boolean; // Intervalos posicionais por bola D1..D15 + Branch & Bound
   multiplosAtivo?: boolean; // Máscaras bitwise M(3)..M(8)
@@ -93,9 +97,16 @@ export interface FilterCriteria {
   somaAlgarismosAtiva?: boolean; // Soma dos algarismos individuais [63..87]
   somaAlgarismosMin?: number;
   somaAlgarismosMax?: number;
-  linhasColunasAtivo?: boolean; // Matriz 5x5: zero linhas/colunas vazias + máx 1 cheia
+  linhasColunasAtivo?: boolean; // Matriz 5x5: controle de min/max por linha (L1-L5) e coluna (C1-C5)
+  linhasMin?: number;
+  linhasMax?: number;
+  colunasMin?: number;
+  colunasMax?: number;
   maxLinhasCheias?: number;
   maxColunasCheias?: number;
+  quadrantesAtivo?: boolean; // Distribuição nos 4 quadrantes (Q1-Q4) do volante 5x5
+  quadranteMin?: number;
+  quadranteMax?: number;
   rankingHistoricoAtivo?: boolean; // Equilíbrio Top 5, 10, 15, 20 mais sorteadas
   palpiteIneditoAtivo?: boolean; // Anti-repetição O(1) contra todos os sorteios oficiais
   // Filtro Avançado: Distância de Hamming Dinâmica (baseada nos últimos 5 resultados)

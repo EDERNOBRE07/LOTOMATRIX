@@ -252,8 +252,9 @@ export function handleGeneratorWorkerMessage(
       let appliedFallbackLevel: ProgressiveFallbackLevel = 0;
       let appliedFallbackLabel = 'Filtros Estritos (Nível 0)';
       let appliedFallbackDescription = 'Todos os filtros matemáticos originais aplicados.';
+      const allowProgressiveFallback = data.filters?.fallbackProgressivoAtivo !== false;
       const levelsToTry: ProgressiveFallbackLevel[] =
-        data.selectedNumbers.length > 15 ? [0, 1, 2, 3] : [0];
+        data.selectedNumbers.length > 15 && allowProgressiveFallback ? [0, 1, 2, 3] : [0];
 
       for (const lvl of levelsToTry) {
         const fb = buildProgressiveFallbackFilters(baseSanitizedFilters, lvl);

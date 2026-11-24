@@ -1,17 +1,16 @@
 import React, { useMemo } from 'react';
-import { FilterCriteria, GameTicket, LotofacilDraw } from '../types/lotofacil';
+import { FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
-import { analyzeTicket, ticketPassesFilters } from '../services/combinatorics';
+import { analyzeTicket, validateFilters } from '../services/combinatorics';
+import { getHistoricalNDraws } from '../services/historical100Draws';
 import {
-  Sparkles,
   CheckCircle2,
   XCircle,
-  Sliders,
-  Scale,
-  Repeat,
-  Layers,
   Activity,
-  Flame,
+  ArrowRight,
+  Layers,
+  ShieldCheck,
+  BarChart3,
 } from 'lucide-react';
 
 interface RealTimeFilterSimulationProps {
@@ -19,16 +18,43 @@ interface RealTimeFilterSimulationProps {
   selectedNumbers: number[];
   latestDraw?: LotofacilDraw;
   aiScores?: number[];
+  onApplyToFechamento?: () => void;
 }
+
+const TOTAL_LOTOFACIL_COMBOS = 3268760;
+
+// Deterministic PRNG for stable Monte Carlo combination pass-rate sampling
+function createDeterministicSamples(count: number): number[][] {
+  let seed = 38362026;
+  const nextRand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  const samples: number[][] = [];
+  for (let i = 0; i < count; i++) {
+    const nums = Array.from({ length: 25 }, (_, idx) => idx + 1);
+    for (let j = 24; j > 0; j--) {
+      const k = Math.floor(nextRand() * (j + 1));
+      const tmp = nums[j];
+      nums[j] = nums[k];
+      nums[k] = tmp;
+    }
+    samples.push(nums.slice(0, 15).sort((a, b) => a - b));
+  }
+  return samples;
+}
+
+const MONTE_CARLO_SAMPLES = createDeterministicSamples(600);
 
 export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> = ({
   filters,
   selectedNumbers,
   latestDraw = CONCURSO_ATUAL,
   aiScores,
+  onApplyToFechamento,
 }) => {
-  // Generate a deterministic preview set of 5 candidate games from the currently selected numbers
-  // or default pool so user sees immediate live feedback when sliders change
+  // Deterministic preview set of 5 candidate games from the active pool
   const previewGames = useMemo(() => {
     const pool =
       selectedNumbers.length >= 15
@@ -38,19 +64,16 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
     const games: { dezenas: number[]; label: string }[] = [];
     const poolLen = pool.length;
 
-    // Pattern 1: Balanced start-end
     games.push({
       label: 'Prévia A (Equilíbrio Canônico)',
       dezenas: [...pool.slice(0, 8), ...pool.slice(poolLen - 7)].slice(0, 15).sort((a, b) => a - b),
     });
 
-    // Pattern 2: Core + Frame bias
     games.push({
       label: 'Prévia B (Alta Afinidade IA)',
       dezenas: pool.slice(0, 15).sort((a, b) => a - b),
     });
 
-    // Pattern 3: Interleaved odd/even
     const evens = pool.filter((n) => n % 2 === 0);
     const odds = pool.filter((n) => n % 2 !== 0);
     const mixed = [...evens.slice(0, 8), ...odds.slice(0, 7)].slice(0, 15).sort((a, b) => a - b);
@@ -59,14 +82,12 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
       dezenas: mixed.length === 15 ? mixed : pool.slice(1, 16).sort((a, b) => a - b),
     });
 
-    // Pattern 4: Golden Zone sum targeting
     const shifted = [...pool.slice(2, 17)].sort((a, b) => a - b);
     games.push({
       label: 'Prévia D (Faixa Central)',
       dezenas: shifted.length === 15 ? shifted : pool.slice(0, 15).sort((a, b) => a - b),
     });
 
-    // Pattern 5: Repetidas / Cycle blend
     const reverseBlend = [...pool.slice(poolLen - 15)].sort((a, b) => a - b);
     games.push({
       label: 'Prévia E (Repetidas & Ciclo)',
@@ -76,78 +97,170 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
     return games;
   }, [selectedNumbers]);
 
-  // Evaluate each preview game in real-time against active filters
+  // Evaluate each preview game in real-time using the exact combinatorics validator
   const evaluationResults = useMemo(() => {
     return previewGames.map((game, idx) => {
       const analysis = analyzeTicket(game.dezenas, latestDraw.dezenas, aiScores);
-      const passes = ticketPassesFilters(analysis, filters);
-
-      // Rejection reasons if fails
-      const failureReasons: string[] = [];
-      if (analysis.soma < filters.somaMin) failureReasons.push(`Soma ${analysis.soma} < ${filters.somaMin}`);
-      if (analysis.soma > filters.somaMax) failureReasons.push(`Soma ${analysis.soma} > ${filters.somaMax}`);
-      if (analysis.pares < filters.paresMin) failureReasons.push(`Pares ${analysis.pares} < ${filters.paresMin}`);
-      if (analysis.pares > filters.paresMax) failureReasons.push(`Pares ${analysis.pares} > ${filters.paresMax}`);
-      if (analysis.repetidas < filters.repetidasMin) failureReasons.push(`Repetidas ${analysis.repetidas} < ${filters.repetidasMin}`);
-      if (analysis.repetidas > filters.repetidasMax) failureReasons.push(`Repetidas ${analysis.repetidas} > ${filters.repetidasMax}`);
-      if (analysis.moldura < filters.molduraMin) failureReasons.push(`Moldura ${analysis.moldura} < ${filters.molduraMin}`);
-      if (analysis.moldura > filters.molduraMax) failureReasons.push(`Moldura ${analysis.moldura} > ${filters.molduraMax}`);
-      if (analysis.primos < filters.primosMin) failureReasons.push(`Primos ${analysis.primos} < ${filters.primosMin}`);
-      if (analysis.primos > filters.primosMax) failureReasons.push(`Primos ${analysis.primos} > ${filters.primosMax}`);
-      if (analysis.fibonacci < filters.fibonacciMin) failureReasons.push(`Fibonacci ${analysis.fibonacci} < ${filters.fibonacciMin}`);
-      if (analysis.fibonacci > filters.fibonacciMax) failureReasons.push(`Fibonacci ${analysis.fibonacci} > ${filters.fibonacciMax}`);
-      if (analysis.maxConsecutivas > filters.maxConsecutivas) failureReasons.push(`Seq. ${analysis.maxConsecutivas} > ${filters.maxConsecutivas}`);
+      const validation = validateFilters(game.dezenas, filters, latestDraw.dezenas);
 
       return {
         ...game,
         index: idx + 1,
         analysis,
-        passes,
-        failureReasons,
+        passes: validation.isValid,
+        failureReasons: validation.violations,
       };
     });
   }, [previewGames, filters, latestDraw.dezenas, aiScores]);
+
+  // Real-time impact telemetry: estimated surviving combinations in C(25,15) + approval rate on last 10 & 50 contests
+  const impactStats = useMemo(() => {
+    // 1. Sample C(25,15) universe (without user-specific fixas/excluidas blocking random draws unless set)
+    let passedSamples = 0;
+    for (const sample of MONTE_CARLO_SAMPLES) {
+      if (validateFilters(sample, filters, latestDraw.dezenas).isValid) {
+        passedSamples++;
+      }
+    }
+    const survivalRatio = passedSamples / MONTE_CARLO_SAMPLES.length;
+    const estimatedPassingCombos = Math.round(TOTAL_LOTOFACIL_COMBOS * survivalRatio);
+    const reductionPercent = Number(((1 - survivalRatio) * 100).toFixed(1));
+
+    // 2. Historical approval rate on the last 10 and 50 official draws
+    const draws50 = getHistoricalNDraws(50, latestDraw);
+    // For historical backtest of structural rules, ignore anti-colisão & personal fixed/excluded numbers
+    const historicalFilters: FilterCriteria = {
+      ...filters,
+      dezenasFixas: [],
+      dezenasExcluidas: [],
+      antiColisaoHistoricaAtiva: false,
+      palpiteIneditoAtivo: false,
+    };
+
+    let approved10 = 0;
+    let approved50 = 0;
+    for (let i = 0; i < draws50.length; i++) {
+      const current = draws50[i];
+      const prevDezenas = draws50[i + 1]?.dezenas ?? latestDraw.dezenas;
+      const ok = validateFilters(current.dezenas, historicalFilters, prevDezenas).isValid;
+      if (ok) {
+        approved50++;
+        if (i < 10) approved10++;
+      }
+    }
+
+    const rate10 = draws50.length > 0 ? Math.round((approved10 / Math.min(10, draws50.length)) * 100) : 0;
+    const rate50 = draws50.length > 0 ? Math.round((approved50 / draws50.length) * 100) : 0;
+
+    return {
+      estimatedPassingCombos,
+      reductionPercent,
+      survivalPct: Number((survivalRatio * 100).toFixed(1)),
+      approved10,
+      total10: Math.min(10, draws50.length),
+      rate10,
+      approved50,
+      total50: draws50.length,
+      rate50,
+    };
+  }, [filters, latestDraw]);
 
   const passingCount = evaluationResults.filter((r) => r.passes).length;
   const passRate = Math.round((passingCount / evaluationResults.length) * 100);
 
   return (
-    <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl space-y-4">
+    <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-800 gap-3">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between pb-4 border-b border-slate-800 gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
             <Activity className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Simulação em Tempo Real dos Filtros Personalizados</span>
+            <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+              <span>Painel de Impacto &amp; Simulação em Tempo Real</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 uppercase">
-                Prévia Instantânea
+                Concurso #{latestDraw.concurso}
               </span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Veja o impacto imediato das alterações nos filtros sobre a elegibilidade da matriz em 5 jogos de amostra.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Avalia instantaneamente a poda no universo de 3.268.760 combinações e a taxa de aprovação histórica nos concursos oficiais.
             </p>
           </div>
         </div>
 
-        {/* Live Eligibility Meter */}
-        <div className="bg-slate-950 p-2.5 px-4 rounded-xl border border-slate-800 flex items-center gap-3 shrink-0">
-          <div className="text-right">
-            <span className="text-[10px] text-slate-400 uppercase font-semibold block">Elegibilidade da Matriz</span>
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`font-mono text-sm font-black ${
-                  passRate >= 60 ? 'text-emerald-400' : passRate >= 20 ? 'text-amber-400' : 'text-rose-400'
-                }`}
-              >
-                {passRate}% Aprovada
-              </span>
-              <span className="text-[11px] text-slate-400">({passingCount}/5)</span>
-            </div>
+        {onApplyToFechamento && (
+          <button
+            type="button"
+            onClick={onApplyToFechamento}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer shrink-0"
+          >
+            <span>Aplicar Filtros no Estúdio de Fechamento</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* 4 KPI Impact Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold">Combinações Elegíveis</span>
+            <Layers className="w-3.5 h-3.5 text-amber-400" />
           </div>
-          <div className="w-12 h-2.5 bg-slate-800 rounded-full overflow-hidden">
+          <div className="text-lg font-black font-mono tabular-nums text-amber-300">
+            {impactStats.estimatedPassingCombos.toLocaleString('pt-BR')}
+          </div>
+          <span className="text-[10px] font-mono text-slate-400 block">
+            {impactStats.survivalPct}% de C(25,15) • Poda de {impactStats.reductionPercent}%
+          </span>
+        </div>
+
+        <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold">Aprovação Últimos 10</span>
+            <BarChart3 className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <div className="text-lg font-black font-mono tabular-nums text-emerald-400">
+            {impactStats.rate10}%
+            <span className="text-xs text-slate-400 font-normal ml-1.5">
+              ({impactStats.approved10}/{impactStats.total10})
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400 block">
+            Concursos oficiais recentes aprovados
+          </span>
+        </div>
+
+        <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold">Aprovação Últimos 50</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+          </div>
+          <div className="text-lg font-black font-mono tabular-nums text-cyan-300">
+            {impactStats.rate50}%
+            <span className="text-xs text-slate-400 font-normal ml-1.5">
+              ({impactStats.approved50}/{impactStats.total50})
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-slate-400 block">
+            Robustez histórica estrutural
+          </span>
+        </div>
+
+        <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="font-semibold">Amostra da Matriz (5)</span>
+            <span className="font-mono text-[10px] text-slate-400">{passingCount}/5</span>
+          </div>
+          <div
+            className={`text-lg font-black font-mono tabular-nums ${
+              passRate >= 60 ? 'text-emerald-400' : passRate >= 20 ? 'text-amber-400' : 'text-rose-400'
+            }`}
+          >
+            {passRate}% Aprovada
+          </div>
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-300 ${
                 passRate >= 60 ? 'bg-emerald-500' : passRate >= 20 ? 'bg-amber-500' : 'bg-rose-500'
@@ -186,7 +299,7 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
               </div>
 
               {/* Quick Metrics Badges */}
-              <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px]">
+              <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px] tabular-nums">
                 <span className={`px-1.5 py-0.5 rounded ${item.analysis.soma >= filters.somaMin && item.analysis.soma <= filters.somaMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
                   Soma: {item.analysis.soma}
                 </span>
@@ -204,6 +317,9 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
                 </span>
                 <span className={`px-1.5 py-0.5 rounded ${item.analysis.fibonacci >= filters.fibonacciMin && item.analysis.fibonacci <= filters.fibonacciMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
                   {item.analysis.fibonacci} Fibo
+                </span>
+                <span className={`px-1.5 py-0.5 rounded ${item.analysis.maxConsecutivas <= filters.maxConsecutivas ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                  Seq ≤{item.analysis.maxConsecutivas}
                 </span>
               </div>
             </div>
@@ -229,9 +345,9 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
 
             {/* Failure reason explanation if podado */}
             {!item.passes && item.failureReasons.length > 0 && (
-              <div className="mt-2 text-[11px] text-rose-300 bg-rose-950/40 p-1.5 px-2.5 rounded-lg border border-rose-500/30 flex items-center gap-1.5">
-                <span className="font-bold">Motivo da Poda:</span>
-                <span>{item.failureReasons.join(' • ')}</span>
+              <div className="mt-2 text-[11px] text-rose-300 bg-rose-950/40 p-1.5 px-2.5 rounded-lg border border-rose-500/30 flex items-start gap-1.5">
+                <span className="font-bold shrink-0">Motivo da Poda:</span>
+                <span>{item.failureReasons.slice(0, 4).join(' • ')}</span>
               </div>
             )}
           </div>

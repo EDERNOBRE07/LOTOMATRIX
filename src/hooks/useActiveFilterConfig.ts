@@ -65,8 +65,17 @@ export function normalizeActiveFilterConfig(
     bola15Min: merged.bola15Min ?? 22,
     bola15Max: merged.bola15Max ?? 25,
     linhasColunasAtivo: merged.linhasColunasAtivo ?? true,
+    linhasMin: Math.max(0, Math.min(5, merged.linhasMin ?? 1)),
+    linhasMax: Math.max(Math.max(0, Math.min(5, merged.linhasMin ?? 1)), Math.min(5, merged.linhasMax ?? 4)),
+    colunasMin: Math.max(0, Math.min(5, merged.colunasMin ?? 1)),
+    colunasMax: Math.max(Math.max(0, Math.min(5, merged.colunasMin ?? 1)), Math.min(5, merged.colunasMax ?? 4)),
     maxLinhasCheias: merged.maxLinhasCheias ?? 1,
     maxColunasCheias: merged.maxColunasCheias ?? 1,
+    quadrantesAtivo: merged.quadrantesAtivo ?? false,
+    quadranteMin: Math.max(0, Math.min(6, merged.quadranteMin ?? 2)),
+    quadranteMax: Math.max(Math.max(0, Math.min(6, merged.quadranteMin ?? 2)), Math.min(6, merged.quadranteMax ?? 5)),
+    estratificacaoCaudaAtiva: merged.estratificacaoCaudaAtiva ?? false,
+    fallbackProgressivoAtivo: merged.fallbackProgressivoAtivo ?? true,
     palpiteIneditoAtivo: merged.palpiteIneditoAtivo ?? true,
     hammingDinamicoAtivo: merged.hammingDinamicoAtivo ?? false,
     hammingModo: merged.hammingModo === 'manual' ? 'manual' : 'auto',
@@ -194,8 +203,21 @@ export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) 
         } catch {}
       }
     };
+    const handleCustomUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<FilterCriteria>).detail;
+      if (detail && typeof detail === 'object') {
+        setActiveFilterConfigState((prev) => {
+          const normalized = normalizeActiveFilterConfig(detail);
+          return JSON.stringify(prev) === JSON.stringify(normalized) ? prev : normalized;
+        });
+      }
+    };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('lotosniper-active-filter-updated', handleCustomUpdate);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('lotosniper-active-filter-updated', handleCustomUpdate);
+    };
   }, []);
 
   return {

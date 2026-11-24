@@ -419,14 +419,56 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   />
                 </div>
 
-                {/* Quick Gold Calibration */}
-                <button
-                  type="button"
-                  onClick={() => update({ somaMin: 185, somaMax: 215, autoCalibrarSomaUniverso: false })}
-                  className="w-full py-1 text-[11px] rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 font-bold border border-indigo-500/40 transition cursor-pointer"
-                >
-                  ⚡ Calibrar Zona de Ouro Expandida (185–215)
-                </button>
+                {/* Quick Gold Calibration + Estratificação de Caudas Toggle */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => update({ somaMin: 180, somaMax: 215, autoCalibrarSomaUniverso: false })}
+                    className={`py-1.5 px-2 text-[11px] rounded-lg font-bold border transition cursor-pointer ${
+                      filters.somaMin === 180 && filters.somaMax === 215
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border-indigo-500/40'
+                    }`}
+                  >
+                    ★ Zona de Ouro (180–215)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ somaMin: 190, somaMax: 210, autoCalibrarSomaUniverso: false })}
+                    className={`py-1.5 px-2 text-[11px] rounded-lg font-bold border transition cursor-pointer ${
+                      filters.somaMin === 190 && filters.somaMax === 210
+                        ? 'bg-amber-500 text-slate-950 border-amber-400'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    🎯 Núcleo Estrito (190–210)
+                  </button>
+                </div>
+
+                {/* Toggle Explícito: Estratificação de Caudas (75% / 15% / 10%) */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <div className="text-[11px]">
+                    <span className="text-amber-300 font-bold block">
+                      Estratificação de Caudas (75% / 15% / 10%)
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      75% Central (180–215) • 15% Alta (216–230) • 10% Baixa (155–179)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      update({ estratificacaoCaudaAtiva: !filters.estratificacaoCaudaAtiva })
+                    }
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                      filters.estratificacaoCaudaAtiva
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    {filters.estratificacaoCaudaAtiva ? '✓ Ativa' : 'Inativa'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -651,51 +693,87 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                80%+ repetem de 8 a 10 dezenas do sorteio anterior.
+                Calculado sobre as 15 dezenas de #{latestDraw.concurso}. Padrão canônico: 7 a 10 repetidas.
               </p>
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Mín: {filters.repetidasMin}</span>
-                  <span>Máx: {filters.repetidasMax}</span>
+              <div className="space-y-2">
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Mínimo:</span>
+                    <span className="text-amber-300 font-bold">{filters.repetidasMin}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max={filters.repetidasMax}
+                    value={filters.repetidasMin}
+                    onChange={(e) => update({ repetidasMin: parseInt(e.target.value, 10) })}
+                    className="w-full accent-amber-500 cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="6"
-                  max="12"
-                  value={filters.repetidasMax}
-                  onChange={(e) => update({ repetidasMax: parseInt(e.target.value, 10) })}
-                  className="w-full accent-amber-500 cursor-pointer"
-                />
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Máximo:</span>
+                    <span className="text-amber-300 font-bold">{filters.repetidasMax}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={filters.repetidasMin}
+                    max="12"
+                    value={filters.repetidasMax}
+                    onChange={(e) => update({ repetidasMax: parseInt(e.target.value, 10) })}
+                    className="w-full accent-amber-500 cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* 2.2 Moldura (16 dezenas externas) */}
+            {/* 2.2 Moldura e Miolo (16 externas / 9 internas) */}
             <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Square className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-white">Dezenas na Moldura</span>
+                  <span className="text-xs font-bold text-white">Moldura &amp; Miolo</span>
                 </div>
                 <span className="font-mono text-xs font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
                   {filters.molduraMin}–{filters.molduraMax}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Padrão recomendado é 8 a 12 externas (evita overfitting estatístico).
+                Moldura (16 externas): ideal 8 a 11. Miolo automático:{' '}
+                <strong className="font-mono text-emerald-300">
+                  {15 - filters.molduraMax}–{15 - filters.molduraMin}
+                </strong>{' '}
+                dezenas.
               </p>
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Mín: {filters.molduraMin}</span>
-                  <span>Máx: {filters.molduraMax}</span>
+              <div className="space-y-2">
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Mín Moldura:</span>
+                    <span className="text-emerald-300 font-bold">{filters.molduraMin}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="6"
+                    max={filters.molduraMax}
+                    value={filters.molduraMin}
+                    onChange={(e) => update({ molduraMin: parseInt(e.target.value, 10) })}
+                    className="w-full accent-emerald-500 cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="7"
-                  max="12"
-                  value={filters.molduraMax}
-                  onChange={(e) => update({ molduraMax: parseInt(e.target.value, 10) })}
-                  className="w-full accent-emerald-500 cursor-pointer"
-                />
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Máx Moldura:</span>
+                    <span className="text-emerald-300 font-bold">{filters.molduraMax}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={filters.molduraMin}
+                    max="13"
+                    value={filters.molduraMax}
+                    onChange={(e) => update({ molduraMax: parseInt(e.target.value, 10) })}
+                    className="w-full accent-emerald-500 cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 
@@ -711,25 +789,41 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Total de 9 primos (2,3,5,7,11,13,17,19,23). Ideal 4 a 7.
+                9 primos (02,03,05,07,11,13,17,19,23). Faixa recomendada: 4 a 7.
               </p>
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Mín: {filters.primosMin}</span>
-                  <span>Máx: {filters.primosMax}</span>
+              <div className="space-y-2">
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Mín Primos:</span>
+                    <span className="text-rose-300 font-bold">{filters.primosMin}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2"
+                    max={filters.primosMax}
+                    value={filters.primosMin}
+                    onChange={(e) => update({ primosMin: parseInt(e.target.value, 10) })}
+                    className="w-full accent-rose-500 cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="3"
-                  max="8"
-                  value={filters.primosMax}
-                  onChange={(e) => update({ primosMax: parseInt(e.target.value, 10) })}
-                  className="w-full accent-rose-500 cursor-pointer"
-                />
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Máx Primos:</span>
+                    <span className="text-rose-300 font-bold">{filters.primosMax}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={filters.primosMin}
+                    max="9"
+                    value={filters.primosMax}
+                    onChange={(e) => update({ primosMax: parseInt(e.target.value, 10) })}
+                    className="w-full accent-rose-500 cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* 2.4 SELETOR DE SEQUÊNCIA FIBONACCI (NOVO COMPONENTE) */}
+            {/* 2.4 SELETOR DE SEQUÊNCIA FIBONACCI */}
             <div className="bg-gradient-to-br from-cyan-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border border-cyan-500/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -748,14 +842,14 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center justify-between gap-1.5">
                   <button
                     type="button"
-                    onClick={() => update({ fibonacciMin: 3, fibonacciMax: 5 })}
+                    onClick={() => update({ fibonacciMin: 3, fibonacciMax: 6 })}
                     className={`px-2 py-1 text-[10px] rounded font-bold border transition cursor-pointer ${
-                      filters.fibonacciMin === 3 && filters.fibonacciMax === 5
+                      filters.fibonacciMin === 3 && filters.fibonacciMax === 6
                         ? 'bg-cyan-500 text-slate-950 border-cyan-400'
                         : 'bg-slate-800 text-slate-300 border-slate-700'
                     }`}
                   >
-                    3 a 5 (Canônico)
+                    3 a 6 (Canônico)
                   </button>
                   <button
                     type="button"
@@ -770,18 +864,149 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   </button>
                 </div>
 
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Mín: {filters.fibonacciMin}</span>
-                  <span>Máx: {filters.fibonacciMax}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                      <span>Mín:</span>
+                      <span className="text-cyan-300 font-bold">{filters.fibonacciMin}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max={filters.fibonacciMax}
+                      value={filters.fibonacciMin}
+                      onChange={(e) => update({ fibonacciMin: parseInt(e.target.value, 10) })}
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                      <span>Máx:</span>
+                      <span className="text-cyan-300 font-bold">{filters.fibonacciMax}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={filters.fibonacciMin}
+                      max="7"
+                      value={filters.fibonacciMax}
+                      onChange={(e) => update({ fibonacciMax: parseInt(e.target.value, 10) })}
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="2"
-                  max="6"
-                  value={filters.fibonacciMax}
-                  onChange={(e) => update({ fibonacciMax: parseInt(e.target.value, 10) })}
-                  className="w-full accent-cyan-400 cursor-pointer"
-                />
+              </div>
+            </div>
+
+            {/* 2.4b SEQUÊNCIAS / CONSECUTIVAS (maxConsecutivas: 3 a 6) */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-violet-500/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-violet-400" />
+                  <span className="text-xs font-bold text-white">Sequências Consecutivas</span>
+                </div>
+                <span className="font-mono text-xs font-bold text-violet-300 bg-violet-500/20 px-1.5 py-0.5 rounded border border-violet-400/40">
+                  Máx {filters.maxConsecutivas}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Limite máximo de dezenas consecutivas seguidas no volante (ex: 15-16-17). Recomendado: 3 a 6.
+              </p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[3, 4, 5, 6].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => update({ maxConsecutivas: val })}
+                    className={`py-1.5 rounded-lg text-xs font-mono font-bold border transition cursor-pointer ${
+                      filters.maxConsecutivas === val
+                        ? 'bg-violet-500 text-white border-violet-400'
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    ≤ {val}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="range"
+                min="3"
+                max="8"
+                value={filters.maxConsecutivas}
+                onChange={(e) => update({ maxConsecutivas: parseInt(e.target.value, 10) })}
+                className="w-full accent-violet-400 cursor-pointer"
+              />
+            </div>
+
+            {/* 2.4c QUADRANTES (Q1 a Q4 DO VOLANTE 5x5) */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-teal-500/40 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-teal-400" />
+                  <span className="text-xs font-bold text-white">Quadrantes (Q1–Q4)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      quadrantesAtivo: !filters.quadrantesAtivo,
+                      quadranteMin: filters.quadranteMin ?? 2,
+                      quadranteMax: filters.quadranteMax ?? 5,
+                    })
+                  }
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded border transition cursor-pointer ${
+                    filters.quadrantesAtivo
+                      ? 'bg-teal-500 text-slate-950 border-teal-400 font-black'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  {filters.quadrantesAtivo ? '✓ Ativo' : 'Ativar'}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Equilibra as dezenas nos 4 quadrantes do volante 5×5 (Q1..Q4). Faixa por quadrante:{' '}
+                <strong className="font-mono text-teal-300">
+                  {filters.quadranteMin ?? 2}–{filters.quadranteMax ?? 5}
+                </strong>.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Mín/Q:</span>
+                    <span className="text-teal-300 font-bold">{filters.quadranteMin ?? 2}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={filters.quadranteMax ?? 5}
+                    value={filters.quadranteMin ?? 2}
+                    onChange={(e) =>
+                      update({
+                        quadrantesAtivo: true,
+                        quadranteMin: parseInt(e.target.value, 10),
+                      })
+                    }
+                    className="w-full accent-teal-400 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Máx/Q:</span>
+                    <span className="text-teal-300 font-bold">{filters.quadranteMax ?? 5}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={filters.quadranteMin ?? 2}
+                    max="6"
+                    value={filters.quadranteMax ?? 5}
+                    onChange={(e) =>
+                      update({
+                        quadrantesAtivo: true,
+                        quadranteMax: parseInt(e.target.value, 10),
+                      })
+                    }
+                    className="w-full accent-teal-400 cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1379,9 +1604,9 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </div>
             </div>
 
-            {/* 3.4 Integridade Linhas / Colunas 5x5 */}
+            {/* 3.4 Integridade Linhas / Colunas 5x5 (L1-L5 e C1-C5) */}
             <div
-              className={`p-3.5 rounded-2xl border transition space-y-2 ${
+              className={`p-3.5 rounded-2xl border transition space-y-2.5 ${
                 filters.linhasColunasAtivo
                   ? 'bg-amber-950/25 border-amber-500/50'
                   : 'bg-slate-950/75 border-slate-800'
@@ -1390,10 +1615,10 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <span className="text-xs font-bold text-white block">
-                    4. Linhas &amp; Colunas 5×5
+                    4. Linhas &amp; Colunas 5×5 (L1–L5 / C1–C5)
                   </span>
                   <span className="text-[10px] font-mono text-amber-300/90">
-                    Zero Vazias • Máx 1 Cheia
+                    L: {filters.linhasMin ?? 1}–{filters.linhasMax ?? 4} • C: {filters.colunasMin ?? 1}–{filters.colunasMax ?? 4}
                   </span>
                 </div>
                 <button
@@ -1402,6 +1627,10 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                     soundService.playFilterClick();
                     update({
                       linhasColunasAtivo: !filters.linhasColunasAtivo,
+                      linhasMin: filters.linhasMin ?? 1,
+                      linhasMax: filters.linhasMax ?? 4,
+                      colunasMin: filters.colunasMin ?? 1,
+                      colunasMax: filters.colunasMax ?? 4,
                       maxLinhasCheias: filters.maxLinhasCheias ?? 1,
                       maxColunasCheias: filters.maxColunasCheias ?? 1,
                     });
@@ -1416,8 +1645,82 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 </button>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Bloqueia volantes com linha ou coluna zerada e impede concentração excessiva (máx. 1 linha e 1 coluna cheias).
+                Controla mínimos/máximos por linha (L1–L5) e coluna (C1–C5), evitando linhas/colunas zeradas ou cheias.
               </p>
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 text-[10px] font-mono text-slate-300">
+                <div className="flex items-center justify-between gap-1">
+                  <span>Linhas:</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={4}
+                      value={filters.linhasMin ?? 1}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.min(4, Number(e.target.value) || 0));
+                        update({
+                          linhasColunasAtivo: true,
+                          linhasMin: v,
+                          linhasMax: Math.max(v, filters.linhasMax ?? 4),
+                        });
+                      }}
+                      className="w-10 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-center text-white"
+                    />
+                    <span>–</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={filters.linhasMax ?? 4}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(5, Number(e.target.value) || 4));
+                        update({
+                          linhasColunasAtivo: true,
+                          linhasMax: v,
+                          linhasMin: Math.min(v, filters.linhasMin ?? 1),
+                        });
+                      }}
+                      className="w-10 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-center text-white"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-1">
+                  <span>Colunas:</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={4}
+                      value={filters.colunasMin ?? 1}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.min(4, Number(e.target.value) || 0));
+                        update({
+                          linhasColunasAtivo: true,
+                          colunasMin: v,
+                          colunasMax: Math.max(v, filters.colunasMax ?? 4),
+                        });
+                      }}
+                      className="w-10 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-center text-white"
+                    />
+                    <span>–</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={5}
+                      value={filters.colunasMax ?? 4}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(5, Number(e.target.value) || 4));
+                        update({
+                          linhasColunasAtivo: true,
+                          colunasMax: v,
+                          colunasMin: Math.min(v, filters.colunasMin ?? 1),
+                        });
+                      }}
+                      className="w-10 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-center text-white"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 3.5 Equilíbrio Ranking Histórico */}
@@ -1497,6 +1800,50 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 Rejeita instantaneamente combinações de 15 dezenas já premiadas em concursos oficiais anteriores.
               </p>
             </div>
+          </div>
+
+          {/* SEÇÃO 4: FALLBACK PROGRESSIVO AUTOMÁTICO EM 3 NÍVEIS */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              filters.fallbackProgressivoAtivo !== false
+                ? 'bg-emerald-950/20 border-emerald-500/40'
+                : 'bg-slate-950/80 border-slate-800'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shrink-0">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs sm:text-sm font-bold text-white">
+                    Fallback Progressivo Automático (3 Níveis)
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    Nível 1 → Nível 2 → Nível 3
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                  Quando filtros muito restritivos zeram a geração de bilhetes, o motor relaxa gradualmente em 3 níveis (Caudas → Múltiplos/Posicional → Faixas Estatísticas) sem perder a garantia combinatória.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                soundService.playFilterClick();
+                update({
+                  fallbackProgressivoAtivo: filters.fallbackProgressivoAtivo === false,
+                });
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-black border transition cursor-pointer shrink-0 ${
+                filters.fallbackProgressivoAtivo !== false
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+              }`}
+            >
+              {filters.fallbackProgressivoAtivo !== false ? '✓ Fallback Ativo' : 'Desativado (Estrito)'}
+            </button>
           </div>
         </div>
       </div>

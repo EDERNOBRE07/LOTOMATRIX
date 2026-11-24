@@ -166,13 +166,16 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs = 18000, errorMsg = 'Oper
   ]);
 }
 
-// Official latest draw baseline synced with CONCURSO_ATUAL (Concurso 3835 - 22/11/2026)
+// Official latest draw baseline synced with CONCURSO_ATUAL (Concurso #3836 - 23/11/2026)
 const LATEST_DRAW = {
   concurso: CONCURSO_ATUAL.concurso,
   data: CONCURSO_ATUAL.data,
   dezenas: [...CONCURSO_ATUAL.dezenas],
-  repetidasDoAnterior: [2, 9, 10, 12, 13, 15, 17, 18, 21],
-  saidasDoAusentes: [3, 4, 5, 16, 19, 22],
+  acumulou: CONCURSO_ATUAL.acumulou ?? true,
+  proximoEstimado: CONCURSO_ATUAL.proximoEstimado ?? 5000000.0,
+  dataProximoConcurso: CONCURSO_ATUAL.dataProximoConcurso ?? '24/11/2026',
+  repetidasDoAnterior: [2, 3, 5, 9, 12, 15, 16, 17, 19, 21, 22],
+  saidasDoAusentes: [7, 20, 23, 24],
   dezenasAusentes: Array.from({ length: 25 }, (_, i) => i + 1).filter(
     (n) => !CONCURSO_ATUAL.dezenas.includes(n)
   ),
@@ -193,14 +196,29 @@ let lastFetchTime = 0;
 let caixaUnavailableUntil = 0;
 const CACHE_TTL_MS = 30 * 1000; // 30 seconds cache to keep data fresh
 
-async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
-  if (!targetConcurso && Date.now() < caixaUnavailableUntil) {
+function isValidConcursoNumber(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 999999;
+}
+
+function setNoStoreHeaders(res: Response) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
+async function fetchFromCaixa(targetConcurso?: number, ignoreCooldown = false): Promise<any | null> {
+  if (targetConcurso !== undefined && !isValidConcursoNumber(targetConcurso)) {
     return null;
   }
 
+  if (!targetConcurso && !ignoreCooldown && Date.now() < caixaUnavailableUntil) {
+    return null;
+  }
+
+  const ts = Date.now();
   const url = targetConcurso
-    ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}`
-    : 'https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil';
+    ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}?t=${ts}`
+    : `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil?t=${ts}`;
 
   // Consultas por número específico não devem repetir em caso de 404/500 (concurso futuro ainda não sorteado)
   const maxRetries = targetConcurso ? 1 : 2;
@@ -209,17 +227,21 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
   while (attempt < maxRetries) {
     attempt++;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 6500);
 
     try {
       const res = await fetch(url, {
+        cache: 'no-store',
         signal: controller.signal,
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
           'Accept': 'application/json, text/plain, */*',
           'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
           'Referer': 'https://loterias.caixa.gov.br/',
+          'Origin': 'https://loterias.caixa.gov.br',
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache',
         },
       });
 
@@ -232,11 +254,11 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
 
       if (!res.ok) {
         if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, 500 * attempt));
+          await new Promise((r) => setTimeout(r, 450 * attempt));
           continue;
         }
         if (!targetConcurso) {
-          caixaUnavailableUntil = Date.now() + 2 * 60 * 1000;
+          caixaUnavailableUntil = Date.now() + 45 * 1000;
         }
         return null;
       }
@@ -246,8 +268,8 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
         return null;
       }
 
-      // Never accept stale draw numbers older than our baseline
-      if (data.numero < LATEST_DRAW.concurso) {
+      // Never accept stale draw numbers older than our baseline on latest lookup
+      if (!targetConcurso && Number(data.numero) < LATEST_DRAW.concurso) {
         return null;
       }
 
@@ -270,31 +292,36 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
         };
       };
 
+      const faixa15 = getFaixa(1);
+      const acumulou = Boolean(data.acumulado || faixa15.ganhadores === 0);
+      const proximoEstimado = Number(data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5000000 : 1700000));
+
       caixaUnavailableUntil = 0;
       console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
 
       return {
         source: 'caixa-oficial',
-        concurso: data.numero,
+        concurso: Number(data.numero),
         data: data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
         dezenas,
-        acumulou: !!data.acumulado,
-        proximoEstimado: data.valorEstimadoProximoConcurso || 2000000,
+        acumulou,
+        proximoEstimado,
         dataProximoConcurso: data.dataProximoConcurso || undefined,
         premiacoes: {
-          faixa15: getFaixa(1),
+          faixa15,
           faixa14: getFaixa(2),
           faixa13: getFaixa(3),
           faixa12: getFaixa(4),
           faixa11: getFaixa(5),
+          acumuladoProximo: acumulou ? proximoEstimado : 0,
         },
       };
     } catch {
       clearTimeout(timeoutId);
       if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 500 * attempt));
+        await new Promise((r) => setTimeout(r, 450 * attempt));
       } else if (!targetConcurso) {
-        caixaUnavailableUntil = Date.now() + 2 * 60 * 1000;
+        caixaUnavailableUntil = Date.now() + 45 * 1000;
       }
     }
   }
@@ -302,20 +329,35 @@ async function fetchFromCaixa(targetConcurso?: number): Promise<any | null> {
   return null;
 }
 
-async function fetchFromMirror(): Promise<any | null> {
-  const mirrors = [
-    'https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest',
-    'https://api.guidi.dev.br/loteria/lotofacil/ultimo',
-  ];
+async function fetchFromMirror(targetConcurso?: number): Promise<any | null> {
+  if (targetConcurso !== undefined && !isValidConcursoNumber(targetConcurso)) {
+    return null;
+  }
+
+  const ts = Date.now();
+  const mirrors = targetConcurso
+    ? [
+        `https://api.guidi.dev.br/loteria/lotofacil/${targetConcurso}?t=${ts}`,
+        `https://loteriascaixa-api.herokuapp.com/api/lotofacil/${targetConcurso}?t=${ts}`,
+      ]
+    : [
+        `https://api.guidi.dev.br/loteria/lotofacil/ultimo?t=${ts}`,
+        `https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest?t=${ts}`,
+      ];
 
   for (const url of mirrors) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
 
     try {
       const res = await fetch(url, {
+        cache: 'no-store',
         signal: controller.signal,
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache',
+        },
       });
       clearTimeout(timeoutId);
       if (!res.ok) continue;
@@ -324,30 +366,39 @@ async function fetchFromMirror(): Promise<any | null> {
       const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
       if (!rawDezenas || !Array.isArray(rawDezenas)) continue;
 
-      const concurso = data.concurso || data.numero;
-      // Strict check: Reject any mirror result that is older than baseline LATEST_DRAW.concurso
-      if (!concurso || concurso < LATEST_DRAW.concurso) continue;
+      const concurso = Number(data.concurso || data.numero);
+      // Strict check: Reject any mirror result that is older than baseline LATEST_DRAW.concurso on latest lookup
+      if (!Number.isFinite(concurso) || (!targetConcurso && concurso < LATEST_DRAW.concurso)) continue;
 
       const dezenas = rawDezenas
         .map((d: any) => parseInt(String(d), 10))
-        .filter((n: number) => !isNaN(n))
+        .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
         .sort((a: number, b: number) => a - b);
 
       if (dezenas.length !== 15) continue;
+
+      const rateio = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+      const premArr = Array.isArray(data.premiacoes) ? data.premiacoes : [];
+      const faixa15Ganhadores = premArr[0]?.ganhadores ?? rateio[0]?.numeroDeGanhadores ?? (data.acumulou || data.acumulado ? 0 : 1);
+      const faixa15Valor = premArr[0]?.valorPremio ?? rateio[0]?.valorPremio ?? (faixa15Ganhadores === 0 ? 0 : 1700000);
+      const acumulou = Boolean(data.acumulou || data.acumulado || faixa15Ganhadores === 0);
+      const proximoEstimado = Number(data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5000000 : 1700000));
 
       return {
         source: 'espelho-api',
         concurso,
         data: data.data || data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
         dezenas,
-        acumulou: !!data.acumulou || !!data.acumulado,
-        proximoEstimado: data.valorEstimadoProximoConcurso || 2000000,
+        acumulou,
+        proximoEstimado,
+        dataProximoConcurso: data.dataProximoConcurso || undefined,
         premiacoes: {
-          faixa15: { ganhadores: data.premiacoes?.[0]?.ganhadores || 1, valor: data.premiacoes?.[0]?.valorPremio || 1500000 },
-          faixa14: { ganhadores: data.premiacoes?.[1]?.ganhadores || 300, valor: data.premiacoes?.[1]?.valorPremio || 1500 },
-          faixa13: { ganhadores: 25000, valor: 35 },
-          faixa12: { ganhadores: 150000, valor: 14 },
-          faixa11: { ganhadores: 800000, valor: 7 },
+          faixa15: { ganhadores: faixa15Ganhadores, valor: faixa15Valor },
+          faixa14: { ganhadores: premArr[1]?.ganhadores ?? rateio[1]?.numeroDeGanhadores ?? 300, valor: premArr[1]?.valorPremio ?? rateio[1]?.valorPremio ?? 1800 },
+          faixa13: { ganhadores: premArr[2]?.ganhadores ?? rateio[2]?.numeroDeGanhadores ?? 12000, valor: premArr[2]?.valorPremio ?? rateio[2]?.valorPremio ?? 35 },
+          faixa12: { ganhadores: premArr[3]?.ganhadores ?? rateio[3]?.numeroDeGanhadores ?? 140000, valor: premArr[3]?.valorPremio ?? rateio[3]?.valorPremio ?? 14 },
+          faixa11: { ganhadores: premArr[4]?.ganhadores ?? rateio[4]?.numeroDeGanhadores ?? 750000, valor: premArr[4]?.valorPremio ?? rateio[4]?.valorPremio ?? 7 },
+          acumuladoProximo: acumulou ? proximoEstimado : 0,
         },
       };
     } catch {
@@ -360,6 +411,10 @@ async function fetchFromMirror(): Promise<any | null> {
 
 async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
   const now = Date.now();
+  if (forceFresh) {
+    caixaUnavailableUntil = 0;
+  }
+
   if (
     !forceFresh &&
     cachedLatestDraw &&
@@ -369,19 +424,29 @@ async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
     return cachedLatestDraw;
   }
 
-  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa (sempre retorna o concurso publicado mais recente)
-  let draw = await fetchFromCaixa();
+  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa
+  let draw = await fetchFromCaixa(undefined, forceFresh);
 
-  // 2. Tenta espelhos públicos somente se a Caixa falhar ou retornar anterior à baseline
-  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
-    draw = await fetchFromMirror();
+  // 1b. Bypass de cache Akamai CDN da Caixa: tenta sondar o próximo concurso (#3837+) diretamente
+  const probeTarget = Math.max(LATEST_DRAW.concurso, draw?.concurso || 0) + 1;
+  const nextDraw = await fetchFromCaixa(probeTarget, true);
+  if (nextDraw && (!draw || nextDraw.concurso > draw.concurso)) {
+    draw = nextDraw;
   }
 
-  // 3. Fallback seguro para LATEST_DRAW (#3835) caso offline/bloqueado — nunca regredir concurso
+  // 2. Tenta espelhos públicos confiáveis caso a Caixa esteja indisponível ou defasada
+  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
+    const mirrorDraw = await fetchFromMirror();
+    if (mirrorDraw && (!draw || mirrorDraw.concurso > draw.concurso)) {
+      draw = mirrorDraw;
+    }
+  }
+
+  // 3. Fallback seguro para LATEST_DRAW (#3836 consolidado) — nunca regredir concurso
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
-      source: 'caixa-oficial',
+      source: 'base-local-verificada',
     };
   }
 
@@ -392,6 +457,7 @@ async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
 
 // API: Get current draw & statistical baseline (Live dynamic sync)
 app.get('/api/lotofacil/status', async (req: Request, res: Response) => {
+  setNoStoreHeaders(res);
   const forceFresh = req.query.fresh === 'true';
   const draw = await getOrUpdateLatestDraw(forceFresh);
 
@@ -404,22 +470,64 @@ app.get('/api/lotofacil/status', async (req: Request, res: Response) => {
 });
 
 app.get('/api/lotofacil/latest', async (req: Request, res: Response) => {
+  setNoStoreHeaders(res);
   const forceFresh = req.query.fresh === 'true';
   const draw = await getOrUpdateLatestDraw(forceFresh);
   res.json({
     success: true,
     draw,
-    source: draw.source,
+    source: draw.source || 'caixa-oficial',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/lotofacil/concurso/:concurso', async (req: Request, res: Response) => {
+  setNoStoreHeaders(res);
+  const concursoNum = Number(req.params.concurso);
+  if (!isValidConcursoNumber(concursoNum)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Número de concurso inválido. Informe um inteiro entre 1 e 999999.',
+    });
+  }
+
+  if (concursoNum === LATEST_DRAW.concurso) {
+    return res.json({
+      success: true,
+      draw: { ...LATEST_DRAW, source: 'caixa-oficial' },
+      source: 'caixa-oficial',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  let draw = await fetchFromCaixa(concursoNum, true);
+  if (!draw) {
+    draw = await fetchFromMirror(concursoNum);
+  }
+
+  if (!draw) {
+    return res.status(404).json({
+      success: false,
+      error: `Concurso #${concursoNum} ainda não disponível na Caixa.`,
+    });
+  }
+
+  return res.json({
+    success: true,
+    draw,
+    source: draw.source || 'caixa-oficial',
     timestamp: new Date().toISOString(),
   });
 });
 
 app.post('/api/lotofacil/sync', async (_req: Request, res: Response) => {
+  setNoStoreHeaders(res);
   const draw = await getOrUpdateLatestDraw(true);
   res.json({
     success: true,
     updated: true,
     draw,
+    source: draw.source || 'caixa-oficial',
     timestamp: new Date().toISOString(),
   });
 });
@@ -474,29 +582,32 @@ app.delete('/api/fechamento-errors', (_req: Request, res: Response) => {
 
 // API: Real-time AI Optimization & Predictive Machine Learning
 app.post('/api/ai/optimize', async (req: Request, res: Response) => {
+  setNoStoreHeaders(res);
   try {
+    const activeDraw = cachedLatestDraw || LATEST_DRAW;
     const {
-      concurso = LATEST_DRAW.concurso,
-      dezenasAnterior = LATEST_DRAW.dezenas,
+      concurso = activeDraw.concurso,
+      dezenasAnterior = activeDraw.dezenas,
       dezenasFixas = [],
       dezenasExcluidas = [],
       metaGarantia = '14_pontos',
       filtrosEstatisticos = {},
-    } = req.body;
+      forceFresh = false,
+    } = req.body || {};
 
     const dezenasSorteadas = Array.isArray(dezenasAnterior) && dezenasAnterior.length === 15
       ? [...dezenasAnterior].sort((a: number, b: number) => a - b)
-      : LATEST_DRAW.dezenas;
+      : activeDraw.dezenas;
 
     const dezenasAusentes = Array.from({ length: 25 }, (_, i) => i + 1).filter(
       (n) => !dezenasSorteadas.includes(n)
     );
 
-    // Dynamic Cycle status
-    const faltantesCiclo = LATEST_DRAW.cicloAtual.dezenasFaltantesParaFechar;
+    // Dynamic Cycle status derived from latest synced draw
+    const faltantesCiclo = dezenasAusentes;
 
     const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${dezenasFixas.join(',')}:${dezenasExcluidas.join(',')}:${metaGarantia}`;
-    const cachedOptimize = aiOptimizeCache.get(optimizeCacheKey);
+    const cachedOptimize = !forceFresh ? aiOptimizeCache.get(optimizeCacheKey) : undefined;
     if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
       return res.json({
         success: true,
@@ -1752,6 +1863,7 @@ app.post('/api/mcp', (req: Request, res: Response) => {
     const args = rpc.params?.arguments || {};
 
     if (toolName === 'lotosniper_get_latest_draw') {
+      const current = cachedLatestDraw || CONCURSO_ATUAL;
       return res.json({
         jsonrpc: '2.0',
         id,
@@ -1760,9 +1872,11 @@ app.post('/api/mcp', (req: Request, res: Response) => {
             {
               type: 'text',
               text: JSON.stringify({
-                concurso: CONCURSO_ATUAL.concurso,
-                data: CONCURSO_ATUAL.data,
-                dezenas: CONCURSO_ATUAL.dezenas,
+                concurso: current.concurso,
+                data: current.data,
+                dezenas: current.dezenas,
+                acumulou: current.acumulou,
+                proximoEstimado: current.proximoEstimado,
               }),
             },
           ],

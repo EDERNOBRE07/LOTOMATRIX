@@ -1923,7 +1923,7 @@ export function validateFilters(
     }
   }
 
-  // 21. Integridade de Linhas e Colunas (Matriz 5x5)
+  // 21. Integridade de Linhas e Colunas (Matriz 5x5: L1-L5 e C1-C5)
   if (activeFilterConfig.linhasColunasAtivo) {
     const lcRes = validarLinhasColunasMask(
       cardMask,
@@ -1932,6 +1932,47 @@ export function validateFilters(
     );
     if (!lcRes.valido) {
       violations.push(`Matriz 5x5 Linhas/Colunas: ${lcRes.violacoes.join(', ')}`);
+    }
+
+    const lMin = activeFilterConfig.linhasMin ?? 1;
+    const lMax = activeFilterConfig.linhasMax ?? 5;
+    const cMin = activeFilterConfig.colunasMin ?? 1;
+    const cMax = activeFilterConfig.colunasMax ?? 5;
+    const lineCounts = [0, 0, 0, 0, 0];
+    const colCounts = [0, 0, 0, 0, 0];
+    for (const d of dezenas) {
+      lineCounts[Math.floor((d - 1) / 5)]++;
+      colCounts[(d - 1) % 5]++;
+    }
+    for (let idx = 0; idx < 5; idx++) {
+      if (lineCounts[idx] < lMin || lineCounts[idx] > lMax) {
+        violations.push(`Linha L${idx + 1} fora da faixa (${lineCounts[idx]}, esperado ${lMin}-${lMax})`);
+        break;
+      }
+    }
+    for (let idx = 0; idx < 5; idx++) {
+      if (colCounts[idx] < cMin || colCounts[idx] > cMax) {
+        violations.push(`Coluna C${idx + 1} fora da faixa (${colCounts[idx]}, esperado ${cMin}-${cMax})`);
+        break;
+      }
+    }
+  }
+
+  // 21b. Distribuição por Quadrantes (Q1-Q4 do volante 5x5)
+  if (activeFilterConfig.quadrantesAtivo) {
+    const qMin = activeFilterConfig.quadranteMin ?? 2;
+    const qMax = activeFilterConfig.quadranteMax ?? 5;
+    const Q1 = [1, 2, 3, 6, 7, 8];
+    const Q2 = [4, 5, 9, 10, 14, 15];
+    const Q3 = [11, 12, 16, 17, 21, 22];
+    const Q4 = [18, 19, 20, 23, 24, 25];
+    const quads = [Q1, Q2, Q3, Q4];
+    for (let qi = 0; qi < quads.length; qi++) {
+      const cnt = dezenas.filter((d) => quads[qi].includes(d)).length;
+      if (cnt < qMin || cnt > qMax) {
+        violations.push(`Quadrante Q${qi + 1} fora da faixa (${cnt}, esperado ${qMin}-${qMax})`);
+        break;
+      }
     }
   }
 
@@ -2141,7 +2182,8 @@ export function generateMinimumSetCoverFechamento({
   }
 
   // Se o fallback automático estiver habilitado na chamada raiz, executa cascata de 3 níveis até atingir maxTickets
-  if (!disableAutoFallback && fallbackLevel === 0) {
+  const autoFallbackDisabled = disableAutoFallback || filters?.fallbackProgressivoAtivo === false;
+  if (!autoFallbackDisabled && fallbackLevel === 0) {
     let bestTickets: GameTicket[] = [];
     for (const lvl of [0, 1, 2, 3] as ProgressiveFallbackLevel[]) {
       const fb = buildProgressiveFallbackFilters(filters, lvl);
@@ -2843,7 +2885,8 @@ export function generateFechamentoCovering(
   }
 
   // Fallback Progressivo Automático em 3 níveis quando filtros estritos não atingem a meta de bilhetes
-  if (!disableAutoFallback && fallbackLevel === 0 && n > 15) {
+  const autoFallbackDisabled = disableAutoFallback || filters?.fallbackProgressivoAtivo === false;
+  if (!autoFallbackDisabled && fallbackLevel === 0 && n > 15) {
     let bestTickets: GameTicket[] = [];
     for (const lvl of [0, 1, 2, 3] as ProgressiveFallbackLevel[]) {
       const fb = buildProgressiveFallbackFilters(filters, lvl);
@@ -5050,6 +5093,7 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   modoFixas: 'rotativas',
   autoCalibrarSomaUniverso: true,
   estratificacaoCaudaAtiva: true,
+  fallbackProgressivoAtivo: true,
   posicionalAtivo: true,
   multiplosAtivo: true,
   contagemDigitosAtiva: true,
@@ -5061,8 +5105,15 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   somaAlgarismosMin: 63,
   somaAlgarismosMax: 87,
   linhasColunasAtivo: true,
+  linhasMin: 1,
+  linhasMax: 4,
+  colunasMin: 1,
+  colunasMax: 4,
   maxLinhasCheias: 1,
   maxColunasCheias: 1,
+  quadrantesAtivo: false,
+  quadranteMin: 2,
+  quadranteMax: 5,
   rankingHistoricoAtivo: true,
   palpiteIneditoAtivo: true,
   hammingDinamicoAtivo: false,
