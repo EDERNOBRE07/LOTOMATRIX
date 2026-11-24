@@ -182,8 +182,8 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
       },
       cache: 'no-store',
       maxRetries: 2,
-      baseDelayMs: 450,
-      timeoutMs: 8000,
+      baseDelayMs: 350,
+      timeoutMs: 10000,
     });
 
     if (result.ok && result.data && result.data.success && result.data.latestDraw) {
@@ -216,7 +216,7 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     console.warn('[LotoSniper Caixa Sync] Backend sync falhou ou não alcançável, tentando endpoints diretos:', err);
   }
 
-  // 2. Client-side fallback: direct official Caixa API (+ probe next contest) & reliable mirrors
+  // 2. Client-side fallback: parallel direct official Caixa API (+ probe next contest) & reliable mirrors
   try {
     const ts = Date.now();
     const nextContestProbe = CONCURSO_ATUAL.concurso + 1;
@@ -224,6 +224,11 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
       {
         url: `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${nextContestProbe}?t=${ts}`,
         label: `Caixa ServiceBus Oficial (#${nextContestProbe})`,
+        isCaixa: true,
+      },
+      {
+        url: `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${CONCURSO_ATUAL.concurso}?t=${ts}`,
+        label: `Caixa ServiceBus Oficial (#${CONCURSO_ATUAL.concurso})`,
         isCaixa: true,
       },
       {
@@ -243,39 +248,44 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
       },
     ];
 
-    let bestExternalDraw: LotofacilDraw | null = null;
-    let bestExternalSource: SyncResult['source'] = 'espelho-api';
-    let bestExternalLabel = '';
-
-    for (const apiTarget of publicApis) {
-      try {
+    const settled = await Promise.allSettled(
+      publicApis.map(async (apiTarget) => {
         const result = await fetchWithExponentialBackoff(apiTarget.url, {
           endpointLabel: apiTarget.label,
           headers: { Accept: 'application/json' },
           cache: 'no-store',
-          maxRetries: 2,
-          baseDelayMs: 400,
-          timeoutMs: 5000,
+          maxRetries: 1,
+          baseDelayMs: 300,
+          timeoutMs: 4000,
         });
+        if (!result.ok || !result.data) return null;
+        const parsed = parseExternalPayload(result.data);
+        if (!parsed || parsed.concurso < CONCURSO_ATUAL.concurso) return null;
+        return {
+          draw: parsed,
+          source: (apiTarget.isCaixa ? 'caixa-oficial' : 'espelho-api') as SyncResult['source'],
+          label: apiTarget.label,
+        };
+      })
+    );
 
-        if (result.ok && result.data) {
-          const parsed = parseExternalPayload(result.data);
-          if (!parsed || parsed.concurso < CONCURSO_ATUAL.concurso) {
-            continue;
-          }
-          if (!bestExternalDraw || parsed.concurso > bestExternalDraw.concurso) {
-            bestExternalDraw = parsed;
-            bestExternalSource = apiTarget.isCaixa ? 'caixa-oficial' : 'espelho-api';
-            bestExternalLabel = apiTarget.label;
-          }
-          // If we already found a contest newer than baseline, return immediately
-          if (parsed.concurso > CONCURSO_ATUAL.concurso) {
-            break;
-          }
-        }
-      } catch (mirrorErr) {
-        console.warn(`[LotoSniper Caixa Sync] Falha ao consultar ${apiTarget.label}:`, mirrorErr);
-        continue;
+    let bestExternalDraw: LotofacilDraw | null = null;
+    let bestExternalSource: SyncResult['source'] = 'espelho-api';
+    let bestExternalLabel = '';
+
+    for (const item of settled) {
+      if (item.status !== 'fulfilled' || !item.value) continue;
+      const { draw: parsed, source, label } = item.value;
+      if (
+        !bestExternalDraw ||
+        parsed.concurso > bestExternalDraw.concurso ||
+        (parsed.concurso === bestExternalDraw.concurso &&
+          source === 'caixa-oficial' &&
+          bestExternalSource !== 'caixa-oficial')
+      ) {
+        bestExternalDraw = parsed;
+        bestExternalSource = source;
+        bestExternalLabel = label;
       }
     }
 
@@ -501,8 +511,11 @@ export function computeDynamicStats(
   const seenInCycle = new Set<number>();
   let concursosNoCiclo = 0;
 
-  // Combine latestDraw with history
-  const combinedHistory = [latestDraw, ...history.filter((h) => h.concurso !== latestDraw.concurso)];
+  // Combine latestDraw with history sorted descending by contest number
+  const combinedHistory = [
+    latestDraw,
+    ...history.filter((h) => h.concurso !== latestDraw.concurso),
+  ].sort((a, b) => b.concurso - a.concurso);
 
   for (const draw of combinedHistory) {
     concursosNoCiclo++;

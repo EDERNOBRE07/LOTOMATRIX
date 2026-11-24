@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AIPredictionResponse, LotofacilDraw, DezenaStats } from '../types/lotofacil';
+import { AIPredictionResponse, LotofacilDraw, DezenaStats, FilterCriteria } from '../types/lotofacil';
 import { CONCURSO_ATUAL, DEZENAS_STATS, RECENT_DRAWS } from '../data/lotofacilData';
 import { buildOptimal18Pool } from '../services/combinatorics';
 import {
@@ -39,6 +39,7 @@ import {
   Award,
   Activity,
   Compass,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface AIPredictorTabProps {
@@ -47,6 +48,8 @@ interface AIPredictorTabProps {
   cyclePendingNumbers?: number[];
   prediction: AIPredictionResponse | null;
   isLoading: boolean;
+  activeFilterConfig?: FilterCriteria;
+  onOpenFiltros?: () => void;
   onRefreshPrediction: () => void;
   onApplyRecommendation: (numbers: number[]) => void;
   onFixAnchors?: (numbers: number[]) => void;
@@ -109,6 +112,8 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   cyclePendingNumbers = [17, 22],
   prediction,
   isLoading,
+  activeFilterConfig,
+  onOpenFiltros,
   onRefreshPrediction,
   onApplyRecommendation,
   onFixAnchors,
@@ -149,11 +154,15 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
     }
   }, [riskLevel]);
 
+  const activeFixas = activeFilterConfig?.dezenasFixas || [];
+  const activeExcluidas = activeFilterConfig?.dezenasExcluidas || [];
+
   const scores = React.useMemo(() => {
     const maxVezes = Math.max(...dynamicStats.map((s) => s.vezes), 1);
 
     return Array.from({ length: 25 }, (_, i) => {
       const num = i + 1;
+      if (activeExcluidas.includes(num)) return 5;
       const stat = dynamicStats.find((s) => s.numero === num);
       const isCycle = cyclePendingNumbers.includes(num);
       const isRecentDraw = latestDraw.dezenas.includes(num);
@@ -174,24 +183,30 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       if (isCycle) fiboScore = Math.max(fiboScore, 96);
       if ([11, 20, 25, 10, 13, 24].includes(num)) fiboScore += 10;
 
-      // Ponderação canônica conforme riskLevel
-      const blended = weights.hist * histScore + weights.fibo * fiboScore;
+      // Ponderação canônica conforme riskLevel + prioridade de fixas ativas
+      let blended = weights.hist * histScore + weights.fibo * fiboScore;
+      if (activeFixas.includes(num)) blended = Math.max(blended, 98);
       return Math.round(Math.min(99, Math.max(35, blended)));
     });
-  }, [dynamicStats, cyclePendingNumbers, latestDraw.dezenas, weights]);
+  }, [dynamicStats, cyclePendingNumbers, latestDraw.dezenas, weights, activeFixas, activeExcluidas]);
 
   const recomendadas18 = React.useMemo(() => {
-    // Ranqueia dezenas 1 a 25 pelo score calculado
+    // Ranqueia dezenas 1 a 25 respeitando dezenas fixas e excluídas dos Filtros Inteligentes
     const ranked = Array.from({ length: 25 }, (_, i) => ({
       numero: i + 1,
       score: scores[i],
-    })).sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return a.numero - b.numero;
-    });
+    }))
+      .filter((item) => !activeExcluidas.includes(item.numero))
+      .sort((a, b) => {
+        const aFix = activeFixas.includes(a.numero) ? 1 : 0;
+        const bFix = activeFixas.includes(b.numero) ? 1 : 0;
+        if (bFix !== aFix) return bFix - aFix;
+        if (b.score !== a.score) return b.score - a.score;
+        return a.numero - b.numero;
+      });
 
     return ranked.slice(0, 18).map((r) => r.numero).sort((a, b) => a - b);
-  }, [scores]);
+  }, [scores, activeFixas, activeExcluidas]);
 
   const goldenBets = React.useMemo(() => {
     return [
@@ -304,6 +319,55 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* BARRA DE SINCRONIZAÇÃO COM FILTROS INTELIGENTES */}
+      {activeFilterConfig && (
+        <div className="bg-slate-900/95 border border-amber-500/30 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-start sm:items-center gap-3 flex-wrap">
+            <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-400 shrink-0">
+              <SlidersHorizontal className="w-4 h-4" />
+            </div>
+            <div className="text-xs space-y-1">
+              <div className="font-bold text-white flex items-center gap-2 flex-wrap">
+                <span>Filtros Inteligentes Sincronizados no Preditor</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  Soma {activeFilterConfig.somaMin}–{activeFilterConfig.somaMax}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  {activeFilterConfig.paresMin}–{activeFilterConfig.paresMax} Pares
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                  {activeFilterConfig.repetidasMin}–{activeFilterConfig.repetidasMax} Rep.
+                </span>
+                {activeFixas.length > 0 && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-400/20 text-amber-200 border border-amber-400/40">
+                    Fixas: {activeFixas.map((n) => n.toString().padStart(2, '0')).join(', ')}
+                  </span>
+                )}
+                {activeExcluidas.length > 0 && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    Excluídas: {activeExcluidas.map((n) => n.toString().padStart(2, '0')).join(', ')}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Moldura {activeFilterConfig.molduraMin}–{activeFilterConfig.molduraMax} • Primos {activeFilterConfig.primosMin}–{activeFilterConfig.primosMax} • Fibonacci {activeFilterConfig.fibonacciMin}–{activeFilterConfig.fibonacciMax} • Consecutivas ≤{activeFilterConfig.maxConsecutivas}
+              </p>
+            </div>
+          </div>
+
+          {onOpenFiltros && (
+            <button
+              type="button"
+              onClick={onOpenFiltros}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold transition cursor-pointer shrink-0 self-start lg:self-auto"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Ajustar Filtros Inteligentes</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* MENU DE CONFIGURAÇÃO: NÍVEL DE RISCO DA PREDIÇÃO IA */}
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
@@ -693,25 +757,33 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <span className="text-slate-400 text-[10px] block">Paridade Recomendada:</span>
               <strong className="text-white font-mono">
-                {prediction?.padroesSugeridos?.paresImpares || '7P / 8I ou 8P / 7I'}
+                {activeFilterConfig
+                  ? `${activeFilterConfig.paresMin} a ${activeFilterConfig.paresMax} Pares`
+                  : prediction?.padroesSugeridos?.paresImpares || '7P / 8I ou 8P / 7I'}
               </strong>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <span className="text-slate-400 text-[10px] block">Densidade de Primos:</span>
               <strong className="text-purple-300 font-mono">
-                {prediction?.padroesSugeridos?.primos || '5 a 6 Primos'}
+                {activeFilterConfig
+                  ? `${activeFilterConfig.primosMin} a ${activeFilterConfig.primosMax} Primos`
+                  : prediction?.padroesSugeridos?.primos || '5 a 6 Primos'}
               </strong>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <span className="text-slate-400 text-[10px] block">Moldura do Volante:</span>
               <strong className="text-amber-300 font-mono">
-                {prediction?.padroesSugeridos?.moldura || '9 a 10 dezenas'}
+                {activeFilterConfig
+                  ? `${activeFilterConfig.molduraMin} a ${activeFilterConfig.molduraMax} dezenas`
+                  : prediction?.padroesSugeridos?.moldura || '9 a 10 dezenas'}
               </strong>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <span className="text-slate-400 text-[10px] block">Faixa de Soma:</span>
               <strong className="text-emerald-300 font-mono">
-                {prediction?.padroesSugeridos?.somaFaixa || '185 a 210'}
+                {activeFilterConfig
+                  ? `${activeFilterConfig.somaMin} a ${activeFilterConfig.somaMax}`
+                  : prediction?.padroesSugeridos?.somaFaixa || '185 a 210'}
               </strong>
             </div>
           </div>
@@ -723,7 +795,9 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
               <span className="text-xs font-bold text-amber-300">Distribuição Fibonacci & Companheiras do 01:</span>
             </div>
             <span className="text-xs font-mono text-amber-200">
-              {prediction?.padroesSugeridos?.fibonacci || '3 a 5 dezenas da Sequência Fibonacci (01, 02, 03, 05, 08, 13, 21) com calibragem para fechamento de ciclo'}
+              {activeFilterConfig
+                ? `${activeFilterConfig.fibonacciMin} a ${activeFilterConfig.fibonacciMax} dezenas Fibonacci (01, 02, 03, 05, 08, 13, 21) • Repetidas: ${activeFilterConfig.repetidasMin}–${activeFilterConfig.repetidasMax}`
+                : prediction?.padroesSugeridos?.fibonacci || '3 a 5 dezenas da Sequência Fibonacci (01, 02, 03, 05, 08, 13, 21) com calibragem para fechamento de ciclo'}
             </span>
           </div>
         </div>

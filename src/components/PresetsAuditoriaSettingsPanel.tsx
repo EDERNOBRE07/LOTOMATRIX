@@ -29,16 +29,18 @@ const ORDERED_PRESET_KEYS: Array<'balanceado' | 'agressivo' | 'conservador'> = [
   'conservador',
 ];
 
-const PRESET_SHORT_TITLE: Record<'balanceado' | 'agressivo' | 'conservador', string> = {
+const PRESET_SHORT_TITLE: Record<'balanceado' | 'agressivo' | 'conservador' | 'estratificado', string> = {
   balanceado: 'Equilíbrio Pro',
   agressivo: 'Ousado',
   conservador: 'Conservador',
+  estratificado: 'Estratificado',
 };
 
-const PRESET_ROLE: Record<'balanceado' | 'agressivo' | 'conservador', string> = {
+const PRESET_ROLE: Record<'balanceado' | 'agressivo' | 'conservador' | 'estratificado', string> = {
   balanceado: 'Padrão auditado · Recomendado',
   agressivo: 'Alta seletividade · Zona central',
   conservador: 'Cobertura máxima · Corte brando',
+  estratificado: 'Caudas 75/15/10 · Anti-Cisne',
 };
 
 interface ComparisonRow {

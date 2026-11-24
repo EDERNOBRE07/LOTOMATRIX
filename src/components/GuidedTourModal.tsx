@@ -120,7 +120,7 @@ const TOUR_STEPS: TourStep[] = [
       'Se o Indicador de Garantia ficar abaixo de 75%, clique em "Flexibilizar Filtros" ou troque para o preset Balanceado para recuperar cobertura matemática.',
     icon: SlidersHorizontal,
     accentIconBg: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/35',
-    targetTab: 'fechamento',
+    targetTab: 'filtros',
   },
   {
     id: 'motor-ia',

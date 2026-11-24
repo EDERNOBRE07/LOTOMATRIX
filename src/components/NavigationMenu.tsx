@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   TrendingUp,
   Sliders,
+  SlidersHorizontal,
   ChevronRight,
   Bell,
 } from 'lucide-react';
@@ -79,6 +80,21 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
       inactiveIconColor: 'text-emerald-400',
       glowColor: 'bg-emerald-500',
       accentBorder: 'border-emerald-500/40',
+    },
+    {
+      id: 'filtros',
+      label: 'Filtros Inteligentes',
+      shortLabel: 'Filtros',
+      badge: 'Calibração',
+      subtitle: 'Presets estatísticos, poda estrutural 5×5, fixas/excluídas e simulação em tempo real',
+      icon: SlidersHorizontal,
+      activeColorClass:
+        'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.55)] border-amber-300 ring-2 ring-amber-400/40',
+      hoverColorClass:
+        'hover:border-amber-500/60 hover:text-amber-300 hover:bg-amber-950/40 hover:shadow-[0_0_20px_rgba(245,158,11,0.25)]',
+      inactiveIconColor: 'text-amber-400',
+      glowColor: 'bg-amber-500',
+      accentBorder: 'border-amber-500/40',
     },
     {
       id: 'conferencia',
@@ -249,8 +265,8 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
           </div>
         </div>
 
-        {/* Grid / Carrossel dos 6 Módulos Principais com Botões Animados e Cores Vibrantes */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
+        {/* Grid / Carrossel dos Módulos Principais com Botões Animados e Cores Vibrantes */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-2.5">
           {primaryTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

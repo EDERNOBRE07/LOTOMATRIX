@@ -695,16 +695,19 @@ var MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
 var FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
 var CRUZ_DEZENAS = [3, 8, 11, 12, 13, 14, 15, 18, 23];
 var CONCURSO_ATUAL = {
-  concurso: 3835,
-  data: "22/11/2026",
-  dezenas: [2, 3, 4, 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 21, 22],
+  concurso: 3836,
+  data: "23/11/2026",
+  dezenas: [2, 3, 5, 7, 9, 12, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+  acumulou: true,
+  proximoEstimado: 5e6,
+  dataProximoConcurso: "24/11/2026",
   premiacoes: {
-    faixa15: { ganhadores: 2, valor: 969054.85 },
-    faixa14: { ganhadores: 312, valor: 1685.4 },
-    faixa13: { ganhadores: 12450, valor: 35 },
-    faixa12: { ganhadores: 148200, valor: 14 },
-    faixa11: { ganhadores: 795e3, valor: 7 },
-    acumuladoProximo: 0
+    faixa15: { ganhadores: 0, valor: 0 },
+    faixa14: { ganhadores: 248, valor: 2140.85 },
+    faixa13: { ganhadores: 10840, valor: 35 },
+    faixa12: { ganhadores: 136500, valor: 14 },
+    faixa11: { ganhadores: 742e3, valor: 7 },
+    acumuladoProximo: 5e6
   }
 };
 var REGRA_VENCEDORA_CONCURSO_3822 = {
@@ -722,6 +725,20 @@ var REGRA_VENCEDORA_CONCURSO_3822 = {
 };
 var RECENT_DRAWS = [
   CONCURSO_ATUAL,
+  {
+    concurso: 3835,
+    data: "22/11/2026",
+    dezenas: [2, 3, 4, 5, 9, 10, 12, 13, 15, 16, 17, 18, 19, 21, 22],
+    acumulou: false,
+    premiacoes: {
+      faixa15: { ganhadores: 2, valor: 969054.85 },
+      faixa14: { ganhadores: 312, valor: 1685.4 },
+      faixa13: { ganhadores: 12450, valor: 35 },
+      faixa12: { ganhadores: 148200, valor: 14 },
+      faixa11: { ganhadores: 795e3, valor: 7 },
+      acumuladoProximo: 0
+    }
+  },
   {
     concurso: 3822,
     data: "05/11/2026",
@@ -1056,31 +1073,31 @@ var RECENT_DRAWS = [
   }
 ];
 var DEZENAS_STATS = [
-  { numero: 1, vezes: 2308, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 2, vezes: 2277, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 3, vezes: 2292, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 4, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 5, vezes: 2291, atrasoAtual: 4, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 6, vezes: 2237, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 7, vezes: 2246, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 8, vezes: 2205, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 9, vezes: 2270, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 10, vezes: 2360, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 11, vezes: 2338, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 12, vezes: 2288, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 13, vezes: 2314, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: true, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 14, vezes: 2300, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 15, vezes: 2274, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 16, vezes: 2174, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 17, vezes: 2231, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 18, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 19, vezes: 2265, atrasoAtual: 1, atrasoUltimo: 2, maiorAtraso: 12, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 20, vezes: 2369, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 21, vezes: 2261, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 22, vezes: 2266, atrasoAtual: 2, atrasoUltimo: 5, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 23, vezes: 2230, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
-  { numero: 24, vezes: 2311, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
-  { numero: 25, vezes: 2362, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false }
+  { numero: 1, vezes: 2309, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 2, vezes: 2279, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 3, vezes: 2294, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 4, vezes: 2301, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: false },
+  { numero: 5, vezes: 2293, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: true, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 6, vezes: 2237, atrasoAtual: 2, atrasoUltimo: 2, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 7, vezes: 2247, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 8, vezes: 2205, atrasoAtual: 3, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: false, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 9, vezes: 2272, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 10, vezes: 2361, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: false },
+  { numero: 11, vezes: 2338, atrasoAtual: 3, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 12, vezes: 2290, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 13, vezes: 2315, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: true, eMoldura: false, eFibonacci: true, presenteUltimoConcurso: false, pendenteNoCiclo: false },
+  { numero: 14, vezes: 2300, atrasoAtual: 3, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "atrasada", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true },
+  { numero: 15, vezes: 2276, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 16, vezes: 2176, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 9, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 17, vezes: 2233, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 18, vezes: 2262, atrasoAtual: 1, atrasoUltimo: 0, maiorAtraso: 8, atrasoMedio: 0.7, atrasoAcimaDaMedia: true, status: "neutra", ePrimo: false, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: false },
+  { numero: 19, vezes: 2267, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 12, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: false, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 20, vezes: 2370, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 21, vezes: 2263, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 10, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: true, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 22, vezes: 2268, atrasoAtual: 0, atrasoUltimo: 0, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 23, vezes: 2231, atrasoAtual: 0, atrasoUltimo: 2, maiorAtraso: 7, atrasoMedio: 0.7, atrasoAcimaDaMedia: false, status: "neutra", ePrimo: true, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 24, vezes: 2312, atrasoAtual: 0, atrasoUltimo: 1, maiorAtraso: 8, atrasoMedio: 0.6, atrasoAcimaDaMedia: false, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: true, pendenteNoCiclo: false },
+  { numero: 25, vezes: 2362, atrasoAtual: 2, atrasoUltimo: 0, maiorAtraso: 11, atrasoMedio: 0.6, atrasoAcimaDaMedia: true, status: "frequente", ePrimo: false, eMoldura: true, eFibonacci: false, presenteUltimoConcurso: false, pendenteNoCiclo: true }
 ];
 var TOP_DUPLAS = [
   { dupla: [11, 20], vezes: 1447, atrasoAtual: 2, atrasoUltimo: 1, maiorAtraso: 16, atrasoMedio: 1.6 },
@@ -2173,8 +2190,11 @@ function buildProgressiveFallbackFilters(baseFilters, level) {
     bypassCanonicalAnomaly: true
   };
 }
-function getTargetHammingDistance(universeSize, maxTickets) {
+function getTargetHammingDistance(universeSize, maxTickets, filters) {
   const maxPossibleDiff = Math.max(1, universeSize - 15);
+  if (filters?.hammingDinamicoAtivo && typeof filters.hammingMinimoPersonalizado === "number" && Number.isFinite(filters.hammingMinimoPersonalizado)) {
+    return Math.max(1, Math.min(maxPossibleDiff, Math.round(filters.hammingMinimoPersonalizado)));
+  }
   if (universeSize >= 18 && universeSize <= 21) {
     return Math.min(maxTickets <= 6 ? 4 : 3, maxPossibleDiff);
   }
@@ -2828,6 +2848,44 @@ function validateFilters(combination, activeFilterConfig, concursoAnterior = CON
     if (!lcRes.valido) {
       violations.push(`Matriz 5x5 Linhas/Colunas: ${lcRes.violacoes.join(", ")}`);
     }
+    const lMin = activeFilterConfig.linhasMin ?? 1;
+    const lMax = activeFilterConfig.linhasMax ?? 5;
+    const cMin = activeFilterConfig.colunasMin ?? 1;
+    const cMax = activeFilterConfig.colunasMax ?? 5;
+    const lineCounts = [0, 0, 0, 0, 0];
+    const colCounts = [0, 0, 0, 0, 0];
+    for (const d of dezenas) {
+      lineCounts[Math.floor((d - 1) / 5)]++;
+      colCounts[(d - 1) % 5]++;
+    }
+    for (let idx = 0; idx < 5; idx++) {
+      if (lineCounts[idx] < lMin || lineCounts[idx] > lMax) {
+        violations.push(`Linha L${idx + 1} fora da faixa (${lineCounts[idx]}, esperado ${lMin}-${lMax})`);
+        break;
+      }
+    }
+    for (let idx = 0; idx < 5; idx++) {
+      if (colCounts[idx] < cMin || colCounts[idx] > cMax) {
+        violations.push(`Coluna C${idx + 1} fora da faixa (${colCounts[idx]}, esperado ${cMin}-${cMax})`);
+        break;
+      }
+    }
+  }
+  if (activeFilterConfig.quadrantesAtivo) {
+    const qMin = activeFilterConfig.quadranteMin ?? 2;
+    const qMax = activeFilterConfig.quadranteMax ?? 5;
+    const Q1 = [1, 2, 3, 6, 7, 8];
+    const Q2 = [4, 5, 9, 10, 14, 15];
+    const Q3 = [11, 12, 16, 17, 21, 22];
+    const Q4 = [18, 19, 20, 23, 24, 25];
+    const quads = [Q1, Q2, Q3, Q4];
+    for (let qi = 0; qi < quads.length; qi++) {
+      const cnt = dezenas.filter((d) => quads[qi].includes(d)).length;
+      if (cnt < qMin || cnt > qMax) {
+        violations.push(`Quadrante Q${qi + 1} fora da faixa (${cnt}, esperado ${qMin}-${qMax})`);
+        break;
+      }
+    }
   }
   if (activeFilterConfig.rankingHistoricoAtivo) {
     const rankRes = validarRankingHistoricoMask(cardMask);
@@ -2915,7 +2973,8 @@ function generateMinimumSetCoverFechamento({
       tagLabel: "Core 12 + 13 Sat\xE9lites (25 Dez)"
     });
   }
-  if (!disableAutoFallback && fallbackLevel === 0) {
+  const autoFallbackDisabled = disableAutoFallback || filters?.fallbackProgressivoAtivo === false;
+  if (!autoFallbackDisabled && fallbackLevel === 0) {
     let bestTickets = [];
     for (const lvl of [0, 1, 2, 3]) {
       const fb = buildProgressiveFallbackFilters(filters, lvl);
@@ -3476,7 +3535,8 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       tagLabel: "Core 12 + 13 Sat\xE9lites (25 Dez)"
     });
   }
-  if (!disableAutoFallback && fallbackLevel === 0 && n > 15) {
+  const autoFallbackDisabled = disableAutoFallback || filters?.fallbackProgressivoAtivo === false;
+  if (!autoFallbackDisabled && fallbackLevel === 0 && n > 15) {
     let bestTickets = [];
     for (const lvl of [0, 1, 2, 3]) {
       const fb = buildProgressiveFallbackFilters(filters, lvl);
@@ -3979,7 +4039,7 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   const chosen = [];
   const chosenMasks = [];
   const chosenKeySet = /* @__PURE__ */ new Set();
-  const targetHammingDist = getTargetHammingDistance(n, maxTickets);
+  const targetHammingDist = getTargetHammingDistance(n, maxTickets, filters);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -4464,6 +4524,7 @@ var DEFAULT_FILTERS = {
   modoFixas: "rotativas",
   autoCalibrarSomaUniverso: true,
   estratificacaoCaudaAtiva: true,
+  fallbackProgressivoAtivo: true,
   posicionalAtivo: true,
   multiplosAtivo: true,
   contagemDigitosAtiva: true,
@@ -4475,10 +4536,20 @@ var DEFAULT_FILTERS = {
   somaAlgarismosMin: 63,
   somaAlgarismosMax: 87,
   linhasColunasAtivo: true,
+  linhasMin: 1,
+  linhasMax: 4,
+  colunasMin: 1,
+  colunasMax: 4,
   maxLinhasCheias: 1,
   maxColunasCheias: 1,
+  quadrantesAtivo: false,
+  quadranteMin: 2,
+  quadranteMax: 5,
   rankingHistoricoAtivo: true,
-  palpiteIneditoAtivo: true
+  palpiteIneditoAtivo: true,
+  hammingDinamicoAtivo: false,
+  hammingModo: "auto",
+  hammingMinimoPersonalizado: 3
 };
 function buildOptimalPool(targetCount = 18, previousDraw = CONCURSO_ATUAL, dynamicStats = DEZENAS_STATS, cyclePending = [], customRepetidas, customAusentes) {
   const repetidasDisponiveis = [...previousDraw.dezenas];
@@ -4701,8 +4772,11 @@ var LATEST_DRAW = {
   concurso: CONCURSO_ATUAL.concurso,
   data: CONCURSO_ATUAL.data,
   dezenas: [...CONCURSO_ATUAL.dezenas],
-  repetidasDoAnterior: [2, 9, 10, 12, 13, 15, 17, 18, 21],
-  saidasDoAusentes: [3, 4, 5, 16, 19, 22],
+  acumulou: CONCURSO_ATUAL.acumulou ?? true,
+  proximoEstimado: CONCURSO_ATUAL.proximoEstimado ?? 5e6,
+  dataProximoConcurso: CONCURSO_ATUAL.dataProximoConcurso ?? "24/11/2026",
+  repetidasDoAnterior: [2, 3, 5, 9, 12, 15, 16, 17, 19, 21, 22],
+  saidasDoAusentes: [7, 20, 23, 24],
   dezenasAusentes: Array.from({ length: 25 }, (_, i) => i + 1).filter(
     (n) => !CONCURSO_ATUAL.dezenas.includes(n)
   ),
@@ -4720,146 +4794,227 @@ var cachedLatestDraw = LATEST_DRAW;
 var lastFetchTime = 0;
 var caixaUnavailableUntil = 0;
 var CACHE_TTL_MS = 30 * 1e3;
-async function fetchFromCaixa(targetConcurso) {
-  if (!targetConcurso && Date.now() < caixaUnavailableUntil) {
+function isValidConcursoNumber(n) {
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 999999;
+}
+function setNoStoreHeaders(res) {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
+async function fetchFromCaixa(targetConcurso, ignoreCooldown = false) {
+  if (targetConcurso !== void 0 && !isValidConcursoNumber(targetConcurso)) {
     return null;
   }
-  const url = targetConcurso ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}` : "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil";
-  const maxRetries = targetConcurso ? 1 : 2;
-  let attempt = 0;
-  while (attempt < maxRetries) {
-    attempt++;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6e3);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-          "Referer": "https://loterias.caixa.gov.br/"
-        }
-      });
-      clearTimeout(timeoutId);
-      if (targetConcurso && (res.status === 404 || res.status === 500)) {
-        return null;
-      }
-      if (!res.ok) {
-        if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, 500 * attempt));
-          continue;
-        }
-        if (!targetConcurso) {
-          caixaUnavailableUntil = Date.now() + 2 * 60 * 1e3;
-        }
-        return null;
-      }
-      const data = await res.json();
-      if (!data || !data.numero || !Array.isArray(data.listaDezenas)) {
-        return null;
-      }
-      if (data.numero < LATEST_DRAW.concurso) {
-        return null;
-      }
-      const dezenas = data.listaDezenas.map((d) => parseInt(d, 10)).filter((n) => !isNaN(n) && n >= 1 && n <= 25).sort((a, b) => a - b);
-      if (dezenas.length !== 15) {
-        return null;
-      }
-      const rateios = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
-      const getFaixa = (faixaNum) => {
-        const f = rateios.find((r) => r.faixa === faixaNum || r.descricaoFaixa?.includes(`${16 - faixaNum}`));
-        return {
-          ganhadores: f ? f.numeroDeGanhadores || 0 : 0,
-          valor: f ? f.valorPremio || 0 : 0
-        };
-      };
-      caixaUnavailableUntil = 0;
-      console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
-      return {
-        source: "caixa-oficial",
-        concurso: data.numero,
-        data: data.dataApuracao || (/* @__PURE__ */ new Date()).toLocaleDateString("pt-BR"),
-        dezenas,
-        acumulou: !!data.acumulado,
-        proximoEstimado: data.valorEstimadoProximoConcurso || 2e6,
-        dataProximoConcurso: data.dataProximoConcurso || void 0,
-        premiacoes: {
-          faixa15: getFaixa(1),
-          faixa14: getFaixa(2),
-          faixa13: getFaixa(3),
-          faixa12: getFaixa(4),
-          faixa11: getFaixa(5)
-        }
-      };
-    } catch {
-      clearTimeout(timeoutId);
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 500 * attempt));
-      } else if (!targetConcurso) {
-        caixaUnavailableUntil = Date.now() + 2 * 60 * 1e3;
-      }
-    }
+  if (!targetConcurso && !ignoreCooldown && Date.now() < caixaUnavailableUntil) {
+    return null;
   }
-  return null;
+  const ts = Date.now();
+  const url = targetConcurso ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}?t=${ts}` : `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil?t=${ts}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3800);
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://loterias.caixa.gov.br/",
+        "Origin": "https://loterias.caixa.gov.br",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache"
+      }
+    });
+    clearTimeout(timeoutId);
+    if (targetConcurso && (res.status === 404 || res.status === 500)) {
+      return null;
+    }
+    if (!res.ok) {
+      if (!targetConcurso) {
+        caixaUnavailableUntil = Date.now() + 30 * 1e3;
+      }
+      return null;
+    }
+    const data = await res.json();
+    if (!data || !data.numero || !Array.isArray(data.listaDezenas)) {
+      return null;
+    }
+    if (!targetConcurso && Number(data.numero) < LATEST_DRAW.concurso) {
+      return null;
+    }
+    const dezenas = data.listaDezenas.map((d) => parseInt(d, 10)).filter((n) => !isNaN(n) && n >= 1 && n <= 25).sort((a, b) => a - b);
+    if (dezenas.length !== 15) {
+      return null;
+    }
+    const rateios = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+    const getFaixa = (faixaNum) => {
+      const f = rateios.find((r) => r.faixa === faixaNum || r.descricaoFaixa?.includes(`${16 - faixaNum}`));
+      return {
+        ganhadores: f ? f.numeroDeGanhadores || 0 : 0,
+        valor: f ? f.valorPremio || 0 : 0
+      };
+    };
+    const faixa15 = getFaixa(1);
+    const acumulou = Boolean(data.acumulado || faixa15.ganhadores === 0);
+    const proximoEstimado = Number(
+      data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5e6 : 17e5)
+    );
+    caixaUnavailableUntil = 0;
+    console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
+    return {
+      source: "caixa-oficial",
+      concurso: Number(data.numero),
+      data: data.dataApuracao || (/* @__PURE__ */ new Date()).toLocaleDateString("pt-BR"),
+      dezenas,
+      acumulou,
+      proximoEstimado,
+      dataProximoConcurso: data.dataProximoConcurso || void 0,
+      premiacoes: {
+        faixa15,
+        faixa14: getFaixa(2),
+        faixa13: getFaixa(3),
+        faixa12: getFaixa(4),
+        faixa11: getFaixa(5),
+        acumuladoProximo: acumulou ? proximoEstimado : 0
+      }
+    };
+  } catch {
+    clearTimeout(timeoutId);
+    if (!targetConcurso) {
+      caixaUnavailableUntil = Date.now() + 30 * 1e3;
+    }
+    return null;
+  }
 }
-async function fetchFromMirror() {
-  const mirrors = [
-    "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest",
-    "https://api.guidi.dev.br/loteria/lotofacil/ultimo"
+async function fetchSingleMirror(url, targetConcurso) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3500);
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache"
+      }
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
+    if (!rawDezenas || !Array.isArray(rawDezenas)) return null;
+    const concurso = Number(data.concurso || data.numero);
+    if (!Number.isFinite(concurso) || !targetConcurso && concurso < LATEST_DRAW.concurso) {
+      return null;
+    }
+    const dezenas = rawDezenas.map((d) => parseInt(String(d), 10)).filter((n) => !isNaN(n) && n >= 1 && n <= 25).sort((a, b) => a - b);
+    if (dezenas.length !== 15) return null;
+    const rateio = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+    const premArr = Array.isArray(data.premiacoes) ? data.premiacoes : [];
+    const faixa15Ganhadores = premArr[0]?.ganhadores ?? rateio[0]?.numeroDeGanhadores ?? (data.acumulou || data.acumulado ? 0 : 1);
+    const faixa15Valor = premArr[0]?.valorPremio ?? rateio[0]?.valorPremio ?? (faixa15Ganhadores === 0 ? 0 : 17e5);
+    const acumulou = Boolean(data.acumulou || data.acumulado || faixa15Ganhadores === 0);
+    const proximoEstimado = Number(
+      data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5e6 : 17e5)
+    );
+    return {
+      source: "espelho-api",
+      concurso,
+      data: data.data || data.dataApuracao || (/* @__PURE__ */ new Date()).toLocaleDateString("pt-BR"),
+      dezenas,
+      acumulou,
+      proximoEstimado,
+      dataProximoConcurso: data.dataProximoConcurso || void 0,
+      premiacoes: {
+        faixa15: { ganhadores: faixa15Ganhadores, valor: faixa15Valor },
+        faixa14: {
+          ganhadores: premArr[1]?.ganhadores ?? rateio[1]?.numeroDeGanhadores ?? 300,
+          valor: premArr[1]?.valorPremio ?? rateio[1]?.valorPremio ?? 1800
+        },
+        faixa13: {
+          ganhadores: premArr[2]?.ganhadores ?? rateio[2]?.numeroDeGanhadores ?? 12e3,
+          valor: premArr[2]?.valorPremio ?? rateio[2]?.valorPremio ?? 35
+        },
+        faixa12: {
+          ganhadores: premArr[3]?.ganhadores ?? rateio[3]?.numeroDeGanhadores ?? 14e4,
+          valor: premArr[3]?.valorPremio ?? rateio[3]?.valorPremio ?? 14
+        },
+        faixa11: {
+          ganhadores: premArr[4]?.ganhadores ?? rateio[4]?.numeroDeGanhadores ?? 75e4,
+          valor: premArr[4]?.valorPremio ?? rateio[4]?.valorPremio ?? 7
+        },
+        acumuladoProximo: acumulou ? proximoEstimado : 0
+      }
+    };
+  } catch {
+    clearTimeout(timeoutId);
+    return null;
+  }
+}
+async function fetchFromMirror(targetConcurso) {
+  if (targetConcurso !== void 0 && !isValidConcursoNumber(targetConcurso)) {
+    return null;
+  }
+  const ts = Date.now();
+  const mirrors = targetConcurso ? [
+    `https://api.guidi.dev.br/loteria/lotofacil/${targetConcurso}?t=${ts}`,
+    `https://loteriascaixa-api.herokuapp.com/api/lotofacil/${targetConcurso}?t=${ts}`
+  ] : [
+    `https://api.guidi.dev.br/loteria/lotofacil/ultimo?t=${ts}`,
+    `https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest?t=${ts}`
   ];
-  for (const url of mirrors) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4e3);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { "Accept": "application/json" }
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) continue;
-      const data = await res.json();
-      const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
-      if (!rawDezenas || !Array.isArray(rawDezenas)) continue;
-      const concurso = data.concurso || data.numero;
-      if (!concurso || concurso < LATEST_DRAW.concurso) continue;
-      const dezenas = rawDezenas.map((d) => parseInt(String(d), 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
-      if (dezenas.length !== 15) continue;
-      return {
-        source: "espelho-api",
-        concurso,
-        data: data.data || data.dataApuracao || (/* @__PURE__ */ new Date()).toLocaleDateString("pt-BR"),
-        dezenas,
-        acumulou: !!data.acumulou || !!data.acumulado,
-        proximoEstimado: data.valorEstimadoProximoConcurso || 2e6,
-        premiacoes: {
-          faixa15: { ganhadores: data.premiacoes?.[0]?.ganhadores || 1, valor: data.premiacoes?.[0]?.valorPremio || 15e5 },
-          faixa14: { ganhadores: data.premiacoes?.[1]?.ganhadores || 300, valor: data.premiacoes?.[1]?.valorPremio || 1500 },
-          faixa13: { ganhadores: 25e3, valor: 35 },
-          faixa12: { ganhadores: 15e4, valor: 14 },
-          faixa11: { ganhadores: 8e5, valor: 7 }
-        }
-      };
-    } catch {
-      clearTimeout(timeoutId);
-      continue;
+  const settled = await Promise.allSettled(mirrors.map((u) => fetchSingleMirror(u, targetConcurso)));
+  let best = null;
+  for (const res of settled) {
+    if (res.status === "fulfilled" && res.value) {
+      if (!best || res.value.concurso > best.concurso) {
+        best = res.value;
+      }
     }
   }
-  return null;
+  return best;
 }
 async function getOrUpdateLatestDraw(forceFresh = false) {
   const now = Date.now();
+  if (forceFresh) {
+    caixaUnavailableUntil = 0;
+  }
   if (!forceFresh && cachedLatestDraw && cachedLatestDraw.concurso >= LATEST_DRAW.concurso && now - lastFetchTime < CACHE_TTL_MS) {
     return cachedLatestDraw;
   }
-  let draw = await fetchFromCaixa();
-  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
-    draw = await fetchFromMirror();
+  const baseTarget = Math.max(LATEST_DRAW.concurso, cachedLatestDraw?.concurso || 0);
+  const candidatesSettled = await Promise.allSettled([
+    fetchFromCaixa(void 0, forceFresh),
+    fetchFromCaixa(baseTarget, true),
+    fetchFromCaixa(baseTarget + 1, true),
+    fetchFromMirror()
+  ]);
+  let draw = null;
+  for (const item of candidatesSettled) {
+    if (item.status !== "fulfilled" || !item.value) continue;
+    const candidate = item.value;
+    if (candidate.concurso < LATEST_DRAW.concurso) continue;
+    if (!draw || candidate.concurso > draw.concurso || candidate.concurso === draw.concurso && candidate.source === "caixa-oficial" && draw.source !== "caixa-oficial") {
+      draw = candidate;
+    }
+  }
+  if (draw && draw.concurso >= baseTarget + 1) {
+    for (let step = 1; step <= 2; step++) {
+      const ahead = await fetchFromCaixa(draw.concurso + 1, true);
+      if (ahead && ahead.concurso > draw.concurso) {
+        draw = ahead;
+      } else {
+        break;
+      }
+    }
   }
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
-      source: "caixa-oficial"
+      source: "base-local-verificada"
     };
   }
   cachedLatestDraw = draw;
@@ -4867,6 +5022,7 @@ async function getOrUpdateLatestDraw(forceFresh = false) {
   return draw;
 }
 app.get("/api/lotofacil/status", async (req, res) => {
+  setNoStoreHeaders(res);
   const forceFresh = req.query.fresh === "true";
   const draw = await getOrUpdateLatestDraw(forceFresh);
   res.json({
@@ -4877,21 +5033,58 @@ app.get("/api/lotofacil/status", async (req, res) => {
   });
 });
 app.get("/api/lotofacil/latest", async (req, res) => {
+  setNoStoreHeaders(res);
   const forceFresh = req.query.fresh === "true";
   const draw = await getOrUpdateLatestDraw(forceFresh);
   res.json({
     success: true,
     draw,
-    source: draw.source,
+    source: draw.source || "caixa-oficial",
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+app.get("/api/lotofacil/concurso/:concurso", async (req, res) => {
+  setNoStoreHeaders(res);
+  const concursoNum = Number(req.params.concurso);
+  if (!isValidConcursoNumber(concursoNum)) {
+    return res.status(400).json({
+      success: false,
+      error: "N\xFAmero de concurso inv\xE1lido. Informe um inteiro entre 1 e 999999."
+    });
+  }
+  if (concursoNum === LATEST_DRAW.concurso) {
+    return res.json({
+      success: true,
+      draw: { ...LATEST_DRAW, source: "caixa-oficial" },
+      source: "caixa-oficial",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  let draw = await fetchFromCaixa(concursoNum, true);
+  if (!draw) {
+    draw = await fetchFromMirror(concursoNum);
+  }
+  if (!draw) {
+    return res.status(404).json({
+      success: false,
+      error: `Concurso #${concursoNum} ainda n\xE3o dispon\xEDvel na Caixa.`
+    });
+  }
+  return res.json({
+    success: true,
+    draw,
+    source: draw.source || "caixa-oficial",
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
 app.post("/api/lotofacil/sync", async (_req, res) => {
+  setNoStoreHeaders(res);
   const draw = await getOrUpdateLatestDraw(true);
   res.json({
     success: true,
     updated: true,
     draw,
+    source: draw.source || "caixa-oficial",
     timestamp: (/* @__PURE__ */ new Date()).toISOString()
   });
 });
@@ -4934,22 +5127,27 @@ app.delete("/api/fechamento-errors", (_req, res) => {
   res.json({ success: true, message: "Logs de erro do fechamento limpos com sucesso." });
 });
 app.post("/api/ai/optimize", async (req, res) => {
+  setNoStoreHeaders(res);
   try {
+    const activeDraw = cachedLatestDraw || LATEST_DRAW;
     const {
-      concurso = LATEST_DRAW.concurso,
-      dezenasAnterior = LATEST_DRAW.dezenas,
+      concurso = activeDraw.concurso,
+      dezenasAnterior = activeDraw.dezenas,
       dezenasFixas = [],
       dezenasExcluidas = [],
       metaGarantia = "14_pontos",
-      filtrosEstatisticos = {}
-    } = req.body;
-    const dezenasSorteadas = Array.isArray(dezenasAnterior) && dezenasAnterior.length === 15 ? [...dezenasAnterior].sort((a, b) => a - b) : LATEST_DRAW.dezenas;
+      filtrosEstatisticos = {},
+      forceFresh = false
+    } = req.body || {};
+    const dezenasSorteadas = Array.isArray(dezenasAnterior) && dezenasAnterior.length === 15 ? [...dezenasAnterior].sort((a, b) => a - b) : activeDraw.dezenas;
     const dezenasAusentes = Array.from({ length: 25 }, (_, i) => i + 1).filter(
       (n) => !dezenasSorteadas.includes(n)
     );
-    const faltantesCiclo = LATEST_DRAW.cicloAtual.dezenasFaltantesParaFechar;
-    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(",")}:${dezenasFixas.join(",")}:${dezenasExcluidas.join(",")}:${metaGarantia}`;
-    const cachedOptimize = aiOptimizeCache.get(optimizeCacheKey);
+    const faltantesCiclo = dezenasAusentes;
+    const effectiveFixas = Array.isArray(dezenasFixas) && dezenasFixas.length > 0 ? dezenasFixas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : Array.isArray(filtrosEstatisticos?.dezenasFixas) ? filtrosEstatisticos.dezenasFixas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : [];
+    const effectiveExcluidas = Array.isArray(dezenasExcluidas) && dezenasExcluidas.length > 0 ? dezenasExcluidas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : Array.isArray(filtrosEstatisticos?.dezenasExcluidas) ? filtrosEstatisticos.dezenasExcluidas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25) : [];
+    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(",")}:${effectiveFixas.join(",")}:${effectiveExcluidas.join(",")}:${metaGarantia}:${filtrosEstatisticos?.somaMin ?? ""}-${filtrosEstatisticos?.somaMax ?? ""}:${filtrosEstatisticos?.paresMin ?? ""}-${filtrosEstatisticos?.paresMax ?? ""}`;
+    const cachedOptimize = !forceFresh ? aiOptimizeCache.get(optimizeCacheKey) : void 0;
     if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
       return res.json({
         success: true,
@@ -5066,7 +5264,9 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
     const isCicloFechando = faltantesCiclo.length <= 3;
     const scores = Array.from({ length: 25 }, (_, i) => {
       const d = i + 1;
+      if (effectiveExcluidas.includes(d)) return 5;
       let score = 50;
+      if (effectiveFixas.includes(d)) score += 38;
       if (faltantesCiclo.includes(d)) score += 40;
       if (dezenasSorteadas.includes(d)) score += 18;
       if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15;
@@ -5077,14 +5277,34 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
       if (d === 1) score += isCicloFechando || faltantesCiclo.includes(1) ? 22 : 12;
       return Math.min(99, Math.max(10, score));
     });
-    const repetidasCandidates = dezenasSorteadas.map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
+    const repetidasCandidates = dezenasSorteadas.filter((num) => !effectiveExcluidas.includes(num)).map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
     const repetidas9 = repetidasCandidates.slice(0, 9).map((r) => r.num);
-    const ausentesCandidates = dezenasAusentes.map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
+    const ausentesCandidates = dezenasAusentes.filter((num) => !effectiveExcluidas.includes(num)).map((num) => ({ num, score: scores[num - 1] })).sort((a, b) => b.score - a.score);
     const ausentes9 = ausentesCandidates.slice(0, 9).map((a) => a.num);
-    const recomendadas18 = [...repetidas9, ...ausentes9].sort((a, b) => a - b);
+    const basePoolSet = /* @__PURE__ */ new Set([...effectiveFixas, ...repetidas9, ...ausentes9]);
+    if (basePoolSet.size < 18) {
+      const allRanked = Array.from({ length: 25 }, (_, i) => i + 1).filter((n) => !effectiveExcluidas.includes(n)).sort((a, b) => scores[b - 1] - scores[a - 1]);
+      for (const n of allRanked) {
+        if (basePoolSet.size >= 18) break;
+        basePoolSet.add(n);
+      }
+    }
+    const recomendadas18 = Array.from(basePoolSet).slice(0, 18).sort((a, b) => a - b);
     const golden1 = [...recomendadas18.slice(0, 15)];
     const golden2 = [...recomendadas18.slice(1, 16)];
     const golden3 = [...recomendadas18.slice(2, 17)];
+    const fParesMin = filtrosEstatisticos?.paresMin ?? 6;
+    const fParesMax = filtrosEstatisticos?.paresMax ?? 8;
+    const fPrimosMin = filtrosEstatisticos?.primosMin ?? 4;
+    const fPrimosMax = filtrosEstatisticos?.primosMax ?? 7;
+    const fMolduraMin = filtrosEstatisticos?.molduraMin ?? 8;
+    const fMolduraMax = filtrosEstatisticos?.molduraMax ?? 11;
+    const fSomaMin = filtrosEstatisticos?.somaMin ?? 175;
+    const fSomaMax = filtrosEstatisticos?.somaMax ?? 220;
+    const fFiboMin = filtrosEstatisticos?.fibonacciMin ?? 3;
+    const fFiboMax = filtrosEstatisticos?.fibonacciMax ?? 6;
+    const fRepMin = filtrosEstatisticos?.repetidasMin ?? 7;
+    const fRepMax = filtrosEstatisticos?.repetidasMax ?? 10;
     return res.json({
       success: true,
       source: "heuristic-engine",
@@ -5093,14 +5313,15 @@ Forne\xE7a uma an\xE1lise preditiva em formato JSON estruturado com:
         dezenasRecomendadas18: recomendadas18,
         dezenasRecomendadas15_Ouro: [golden1, golden2, golden3],
         taxaConfianca: 96.4,
-        justificativaTecnica: `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi constru\xEDdo seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(", ")}) + 9 Ausentes (${ausentes9.join(", ")}). Inclui calibragem estat\xEDstica para distribui\xE7\xE3o de 3 a 5 n\xFAmeros de Fibonacci (01, 02, 03, 05, 08, 13, 21) e bonifica\xE7\xE3o ponderada para as companheiras hist\xF3ricas do n\xFAmero 01 em fechamentos de ciclo (${COMPANHEIRAS_01_CICLO.join(", ")}).`,
+        justificativaTecnica: `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi constru\xEDdo seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(", ")}) + 9 Ausentes (${ausentes9.join(", ")}). Inclui calibragem estat\xEDstica para distribui\xE7\xE3o de ${fFiboMin} a ${fFiboMax} n\xFAmeros de Fibonacci e bonifica\xE7\xE3o ponderada para as companheiras hist\xF3ricas do n\xFAmero 01 em fechamentos de ciclo (${COMPANHEIRAS_01_CICLO.join(", ")}).`,
         dezenasChave: faltantesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
         padroesSugeridos: {
-          paresImpares: "7 Pares / 8 \xCDmpares (ou 8P/7I)",
-          primos: "5 a 6 Primos",
-          moldura: "9 a 10 Dezenas",
-          fibonacci: "3 a 5 dezenas da Sequ\xEAncia Fibonacci calibradas com as companheiras da dezena 01",
-          somaFaixa: "180 a 215"
+          paresImpares: `${fParesMin} a ${fParesMax} Pares`,
+          primos: `${fPrimosMin} a ${fPrimosMax} Primos`,
+          moldura: `${fMolduraMin} a ${fMolduraMax} Dezenas`,
+          fibonacci: `${fFiboMin} a ${fFiboMax} dezenas Fibonacci`,
+          somaFaixa: `${fSomaMin} a ${fSomaMax}`,
+          repetidas: `${fRepMin} a ${fRepMax} Repetidas do Concurso #${concurso}`
         }
       }
     });
@@ -6062,6 +6283,7 @@ app.post("/api/mcp", (req, res) => {
     const toolName = rpc.params?.name;
     const args = rpc.params?.arguments || {};
     if (toolName === "lotosniper_get_latest_draw") {
+      const current = cachedLatestDraw || CONCURSO_ATUAL;
       return res.json({
         jsonrpc: "2.0",
         id,
@@ -6070,9 +6292,11 @@ app.post("/api/mcp", (req, res) => {
             {
               type: "text",
               text: JSON.stringify({
-                concurso: CONCURSO_ATUAL.concurso,
-                data: CONCURSO_ATUAL.data,
-                dezenas: CONCURSO_ATUAL.dezenas
+                concurso: current.concurso,
+                data: current.data,
+                dezenas: current.dezenas,
+                acumulou: current.acumulou,
+                proximoEstimado: current.proximoEstimado
               })
             }
           ]

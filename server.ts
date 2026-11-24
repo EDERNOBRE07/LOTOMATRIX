@@ -220,113 +220,181 @@ async function fetchFromCaixa(targetConcurso?: number, ignoreCooldown = false): 
     ? `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/${targetConcurso}?t=${ts}`
     : `https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil?t=${ts}`;
 
-  // Consultas por número específico não devem repetir em caso de 404/500 (concurso futuro ainda não sorteado)
-  const maxRetries = targetConcurso ? 1 : 2;
-  let attempt = 0;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3800);
 
-  while (attempt < maxRetries) {
-    attempt++;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6500);
+  try {
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://loterias.caixa.gov.br/',
+        'Origin': 'https://loterias.caixa.gov.br',
+        'Cache-Control': 'no-cache, no-store',
+        'Pragma': 'no-cache',
+      },
+    });
 
-    try {
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: controller.signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Referer': 'https://loterias.caixa.gov.br/',
-          'Origin': 'https://loterias.caixa.gov.br',
-          'Cache-Control': 'no-cache, no-store',
-          'Pragma': 'no-cache',
-        },
-      });
+    clearTimeout(timeoutId);
 
-      clearTimeout(timeoutId);
-
-      // A API da Caixa retorna HTTP 404 ou 500 quando um concurso futuro ainda não existe
-      if (targetConcurso && (res.status === 404 || res.status === 500)) {
-        return null;
-      }
-
-      if (!res.ok) {
-        if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, 450 * attempt));
-          continue;
-        }
-        if (!targetConcurso) {
-          caixaUnavailableUntil = Date.now() + 45 * 1000;
-        }
-        return null;
-      }
-
-      const data = await res.json();
-      if (!data || !data.numero || !Array.isArray(data.listaDezenas)) {
-        return null;
-      }
-
-      // Never accept stale draw numbers older than our baseline on latest lookup
-      if (!targetConcurso && Number(data.numero) < LATEST_DRAW.concurso) {
-        return null;
-      }
-
-      const dezenas = data.listaDezenas
-        .map((d: string) => parseInt(d, 10))
-        .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
-        .sort((a: number, b: number) => a - b);
-
-      if (dezenas.length !== 15) {
-        return null;
-      }
-
-      // Rateios
-      const rateios = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
-      const getFaixa = (faixaNum: number) => {
-        const f = rateios.find((r: any) => r.faixa === faixaNum || r.descricaoFaixa?.includes(`${16 - faixaNum}`));
-        return {
-          ganhadores: f ? (f.numeroDeGanhadores || 0) : 0,
-          valor: f ? (f.valorPremio || 0) : 0,
-        };
-      };
-
-      const faixa15 = getFaixa(1);
-      const acumulou = Boolean(data.acumulado || faixa15.ganhadores === 0);
-      const proximoEstimado = Number(data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5000000 : 1700000));
-
-      caixaUnavailableUntil = 0;
-      console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
-
-      return {
-        source: 'caixa-oficial',
-        concurso: Number(data.numero),
-        data: data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
-        dezenas,
-        acumulou,
-        proximoEstimado,
-        dataProximoConcurso: data.dataProximoConcurso || undefined,
-        premiacoes: {
-          faixa15,
-          faixa14: getFaixa(2),
-          faixa13: getFaixa(3),
-          faixa12: getFaixa(4),
-          faixa11: getFaixa(5),
-          acumuladoProximo: acumulou ? proximoEstimado : 0,
-        },
-      };
-    } catch {
-      clearTimeout(timeoutId);
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, 450 * attempt));
-      } else if (!targetConcurso) {
-        caixaUnavailableUntil = Date.now() + 45 * 1000;
-      }
+    if (targetConcurso && (res.status === 404 || res.status === 500)) {
+      return null;
     }
-  }
 
-  return null;
+    if (!res.ok) {
+      if (!targetConcurso) {
+        caixaUnavailableUntil = Date.now() + 30 * 1000;
+      }
+      return null;
+    }
+
+    const data = await res.json();
+    if (!data || !data.numero || !Array.isArray(data.listaDezenas)) {
+      return null;
+    }
+
+    if (!targetConcurso && Number(data.numero) < LATEST_DRAW.concurso) {
+      return null;
+    }
+
+    const dezenas = data.listaDezenas
+      .map((d: string) => parseInt(d, 10))
+      .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
+      .sort((a: number, b: number) => a - b);
+
+    if (dezenas.length !== 15) {
+      return null;
+    }
+
+    const rateios = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+    const getFaixa = (faixaNum: number) => {
+      const f = rateios.find((r: any) => r.faixa === faixaNum || r.descricaoFaixa?.includes(`${16 - faixaNum}`));
+      return {
+        ganhadores: f ? (f.numeroDeGanhadores || 0) : 0,
+        valor: f ? (f.valorPremio || 0) : 0,
+      };
+    };
+
+    const faixa15 = getFaixa(1);
+    const acumulou = Boolean(data.acumulado || faixa15.ganhadores === 0);
+    const proximoEstimado = Number(
+      data.valorEstimadoProximoConcurso ||
+        data.valorAcumuladoProximoConcurso ||
+        (acumulou ? 5000000 : 1700000)
+    );
+
+    caixaUnavailableUntil = 0;
+    console.log(`[Caixa Server API] Concurso #${data.numero} (${data.dataApuracao}) sincronizado com sucesso.`);
+
+    return {
+      source: 'caixa-oficial',
+      concurso: Number(data.numero),
+      data: data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
+      dezenas,
+      acumulou,
+      proximoEstimado,
+      dataProximoConcurso: data.dataProximoConcurso || undefined,
+      premiacoes: {
+        faixa15,
+        faixa14: getFaixa(2),
+        faixa13: getFaixa(3),
+        faixa12: getFaixa(4),
+        faixa11: getFaixa(5),
+        acumuladoProximo: acumulou ? proximoEstimado : 0,
+      },
+    };
+  } catch {
+    clearTimeout(timeoutId);
+    if (!targetConcurso) {
+      caixaUnavailableUntil = Date.now() + 30 * 1000;
+    }
+    return null;
+  }
+}
+
+async function fetchSingleMirror(url: string, targetConcurso?: number): Promise<any | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache, no-store',
+        'Pragma': 'no-cache',
+      },
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
+    if (!rawDezenas || !Array.isArray(rawDezenas)) return null;
+
+    const concurso = Number(data.concurso || data.numero);
+    if (!Number.isFinite(concurso) || (!targetConcurso && concurso < LATEST_DRAW.concurso)) {
+      return null;
+    }
+
+    const dezenas = rawDezenas
+      .map((d: any) => parseInt(String(d), 10))
+      .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
+      .sort((a: number, b: number) => a - b);
+
+    if (dezenas.length !== 15) return null;
+
+    const rateio = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
+    const premArr = Array.isArray(data.premiacoes) ? data.premiacoes : [];
+    const faixa15Ganhadores =
+      premArr[0]?.ganhadores ?? rateio[0]?.numeroDeGanhadores ?? (data.acumulou || data.acumulado ? 0 : 1);
+    const faixa15Valor =
+      premArr[0]?.valorPremio ?? rateio[0]?.valorPremio ?? (faixa15Ganhadores === 0 ? 0 : 1700000);
+    const acumulou = Boolean(data.acumulou || data.acumulado || faixa15Ganhadores === 0);
+    const proximoEstimado = Number(
+      data.valorEstimadoProximoConcurso ||
+        data.valorAcumuladoProximoConcurso ||
+        (acumulou ? 5000000 : 1700000)
+    );
+
+    return {
+      source: 'espelho-api',
+      concurso,
+      data: data.data || data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
+      dezenas,
+      acumulou,
+      proximoEstimado,
+      dataProximoConcurso: data.dataProximoConcurso || undefined,
+      premiacoes: {
+        faixa15: { ganhadores: faixa15Ganhadores, valor: faixa15Valor },
+        faixa14: {
+          ganhadores: premArr[1]?.ganhadores ?? rateio[1]?.numeroDeGanhadores ?? 300,
+          valor: premArr[1]?.valorPremio ?? rateio[1]?.valorPremio ?? 1800,
+        },
+        faixa13: {
+          ganhadores: premArr[2]?.ganhadores ?? rateio[2]?.numeroDeGanhadores ?? 12000,
+          valor: premArr[2]?.valorPremio ?? rateio[2]?.valorPremio ?? 35,
+        },
+        faixa12: {
+          ganhadores: premArr[3]?.ganhadores ?? rateio[3]?.numeroDeGanhadores ?? 140000,
+          valor: premArr[3]?.valorPremio ?? rateio[3]?.valorPremio ?? 14,
+        },
+        faixa11: {
+          ganhadores: premArr[4]?.ganhadores ?? rateio[4]?.numeroDeGanhadores ?? 750000,
+          valor: premArr[4]?.valorPremio ?? rateio[4]?.valorPremio ?? 7,
+        },
+        acumuladoProximo: acumulou ? proximoEstimado : 0,
+      },
+    };
+  } catch {
+    clearTimeout(timeoutId);
+    return null;
+  }
 }
 
 async function fetchFromMirror(targetConcurso?: number): Promise<any | null> {
@@ -345,68 +413,16 @@ async function fetchFromMirror(targetConcurso?: number): Promise<any | null> {
         `https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest?t=${ts}`,
       ];
 
-  for (const url of mirrors) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-    try {
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache, no-store',
-          'Pragma': 'no-cache',
-        },
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const rawDezenas = data.dezenas || data.listaDezenas || data.numeros;
-      if (!rawDezenas || !Array.isArray(rawDezenas)) continue;
-
-      const concurso = Number(data.concurso || data.numero);
-      // Strict check: Reject any mirror result that is older than baseline LATEST_DRAW.concurso on latest lookup
-      if (!Number.isFinite(concurso) || (!targetConcurso && concurso < LATEST_DRAW.concurso)) continue;
-
-      const dezenas = rawDezenas
-        .map((d: any) => parseInt(String(d), 10))
-        .filter((n: number) => !isNaN(n) && n >= 1 && n <= 25)
-        .sort((a: number, b: number) => a - b);
-
-      if (dezenas.length !== 15) continue;
-
-      const rateio = Array.isArray(data.listaRateioPremio) ? data.listaRateioPremio : [];
-      const premArr = Array.isArray(data.premiacoes) ? data.premiacoes : [];
-      const faixa15Ganhadores = premArr[0]?.ganhadores ?? rateio[0]?.numeroDeGanhadores ?? (data.acumulou || data.acumulado ? 0 : 1);
-      const faixa15Valor = premArr[0]?.valorPremio ?? rateio[0]?.valorPremio ?? (faixa15Ganhadores === 0 ? 0 : 1700000);
-      const acumulou = Boolean(data.acumulou || data.acumulado || faixa15Ganhadores === 0);
-      const proximoEstimado = Number(data.valorEstimadoProximoConcurso || data.valorAcumuladoProximoConcurso || (acumulou ? 5000000 : 1700000));
-
-      return {
-        source: 'espelho-api',
-        concurso,
-        data: data.data || data.dataApuracao || new Date().toLocaleDateString('pt-BR'),
-        dezenas,
-        acumulou,
-        proximoEstimado,
-        dataProximoConcurso: data.dataProximoConcurso || undefined,
-        premiacoes: {
-          faixa15: { ganhadores: faixa15Ganhadores, valor: faixa15Valor },
-          faixa14: { ganhadores: premArr[1]?.ganhadores ?? rateio[1]?.numeroDeGanhadores ?? 300, valor: premArr[1]?.valorPremio ?? rateio[1]?.valorPremio ?? 1800 },
-          faixa13: { ganhadores: premArr[2]?.ganhadores ?? rateio[2]?.numeroDeGanhadores ?? 12000, valor: premArr[2]?.valorPremio ?? rateio[2]?.valorPremio ?? 35 },
-          faixa12: { ganhadores: premArr[3]?.ganhadores ?? rateio[3]?.numeroDeGanhadores ?? 140000, valor: premArr[3]?.valorPremio ?? rateio[3]?.valorPremio ?? 14 },
-          faixa11: { ganhadores: premArr[4]?.ganhadores ?? rateio[4]?.numeroDeGanhadores ?? 750000, valor: premArr[4]?.valorPremio ?? rateio[4]?.valorPremio ?? 7 },
-          acumuladoProximo: acumulou ? proximoEstimado : 0,
-        },
-      };
-    } catch {
-      clearTimeout(timeoutId);
-      continue;
+  const settled = await Promise.allSettled(mirrors.map((u) => fetchSingleMirror(u, targetConcurso)));
+  let best: any | null = null;
+  for (const res of settled) {
+    if (res.status === 'fulfilled' && res.value) {
+      if (!best || res.value.concurso > best.concurso) {
+        best = res.value;
+      }
     }
   }
-  return null;
+  return best;
 }
 
 async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
@@ -424,25 +440,45 @@ async function getOrUpdateLatestDraw(forceFresh: boolean = false) {
     return cachedLatestDraw;
   }
 
-  // 1. Consulta diretamente o endpoint oficial do último concurso da Caixa
-  let draw = await fetchFromCaixa(undefined, forceFresh);
+  const baseTarget = Math.max(LATEST_DRAW.concurso, cachedLatestDraw?.concurso || 0);
 
-  // 1b. Bypass de cache Akamai CDN da Caixa: tenta sondar o próximo concurso (#3837+) diretamente
-  const probeTarget = Math.max(LATEST_DRAW.concurso, draw?.concurso || 0) + 1;
-  const nextDraw = await fetchFromCaixa(probeTarget, true);
-  if (nextDraw && (!draw || nextDraw.concurso > draw.concurso)) {
-    draw = nextDraw;
-  }
+  // Consulta paralela: endpoint oficial, concurso base direto (bypass CDN), próximo concurso (#3837+) e espelhos
+  const candidatesSettled = await Promise.allSettled([
+    fetchFromCaixa(undefined, forceFresh),
+    fetchFromCaixa(baseTarget, true),
+    fetchFromCaixa(baseTarget + 1, true),
+    fetchFromMirror(),
+  ]);
 
-  // 2. Tenta espelhos públicos confiáveis caso a Caixa esteja indisponível ou defasada
-  if (!draw || draw.concurso < LATEST_DRAW.concurso) {
-    const mirrorDraw = await fetchFromMirror();
-    if (mirrorDraw && (!draw || mirrorDraw.concurso > draw.concurso)) {
-      draw = mirrorDraw;
+  let draw: any | null = null;
+  for (const item of candidatesSettled) {
+    if (item.status !== 'fulfilled' || !item.value) continue;
+    const candidate = item.value;
+    if (candidate.concurso < LATEST_DRAW.concurso) continue;
+    if (
+      !draw ||
+      candidate.concurso > draw.concurso ||
+      (candidate.concurso === draw.concurso &&
+        candidate.source === 'caixa-oficial' &&
+        draw.source !== 'caixa-oficial')
+    ) {
+      draw = candidate;
     }
   }
 
-  // 3. Fallback seguro para LATEST_DRAW (#3836 consolidado) — nunca regredir concurso
+  // Se avançou além do baseTarget, sonda até 2 concursos à frente caso haja acúmulo de dias
+  if (draw && draw.concurso >= baseTarget + 1) {
+    for (let step = 1; step <= 2; step++) {
+      const ahead = await fetchFromCaixa(draw.concurso + 1, true);
+      if (ahead && ahead.concurso > draw.concurso) {
+        draw = ahead;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Fallback seguro para LATEST_DRAW (#3836 consolidado) — nunca regredir concurso
   if (!draw || draw.concurso < LATEST_DRAW.concurso) {
     draw = {
       ...LATEST_DRAW,
@@ -606,7 +642,18 @@ app.post('/api/ai/optimize', async (req: Request, res: Response) => {
     // Dynamic Cycle status derived from latest synced draw
     const faltantesCiclo = dezenasAusentes;
 
-    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${dezenasFixas.join(',')}:${dezenasExcluidas.join(',')}:${metaGarantia}`;
+    const effectiveFixas: number[] = Array.isArray(dezenasFixas) && dezenasFixas.length > 0
+      ? dezenasFixas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+      : Array.isArray(filtrosEstatisticos?.dezenasFixas)
+      ? filtrosEstatisticos.dezenasFixas.map(Number).filter((n: number) => Number.isInteger(n) && n >= 1 && n <= 25)
+      : [];
+    const effectiveExcluidas: number[] = Array.isArray(dezenasExcluidas) && dezenasExcluidas.length > 0
+      ? dezenasExcluidas.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+      : Array.isArray(filtrosEstatisticos?.dezenasExcluidas)
+      ? filtrosEstatisticos.dezenasExcluidas.map(Number).filter((n: number) => Number.isInteger(n) && n >= 1 && n <= 25)
+      : [];
+
+    const optimizeCacheKey = `${concurso}:${dezenasSorteadas.join(',')}:${effectiveFixas.join(',')}:${effectiveExcluidas.join(',')}:${metaGarantia}:${filtrosEstatisticos?.somaMin ?? ''}-${filtrosEstatisticos?.somaMax ?? ''}:${filtrosEstatisticos?.paresMin ?? ''}-${filtrosEstatisticos?.paresMax ?? ''}`;
     const cachedOptimize = !forceFresh ? aiOptimizeCache.get(optimizeCacheKey) : undefined;
     if (cachedOptimize && cachedOptimize.expiresAt > Date.now()) {
       return res.json({
@@ -731,39 +778,63 @@ Forneça uma análise preditiva em formato JSON estruturado com:
 
     const scores = Array.from({ length: 25 }, (_, i) => {
       const d = i + 1;
+      if (effectiveExcluidas.includes(d)) return 5;
       let score = 50;
+      if (effectiveFixas.includes(d)) score += 38;
       if (faltantesCiclo.includes(d)) score += 40; // Cycle completion urgency
       if (dezenasSorteadas.includes(d)) score += 18; // Repetition likelihood
       if ([11, 20, 25, 10, 13, 24, 1, 4].includes(d)) score += 15; // Top historical frequency
       if (PRIMOS.includes(d)) score += 6;
       if (MOLDURA.includes(d)) score += 6;
-      // Heurística de Fibonacci (meta canônica 3 a 5 dezenas)
       if (FIBONACCI.includes(d)) score += 14;
-      // Companheiras do 01 em fechamento de ciclo
       if (COMPANHEIRAS_01_CICLO.includes(d)) score += isCicloFechando ? 20 : 10;
       if (d === 1) score += isCicloFechando || faltantesCiclo.includes(1) ? 22 : 12;
 
       return Math.min(99, Math.max(10, score));
     });
 
-    // Select 9 Repetidas based on score
-    const repetidasCandidates = dezenasSorteadas
-      .map(num => ({ num, score: scores[num - 1] }))
-      .sort((a, b) => b.score - a.score);
-    const repetidas9 = repetidasCandidates.slice(0, 9).map(r => r.num);
+    // Select 9 Repetidas + 9 Ausentes respecting fixed and excluded numbers
+    const repetidasCandidates: Array<{ num: number; score: number }> = (dezenasSorteadas as number[])
+      .filter((num: number) => !effectiveExcluidas.includes(num))
+      .map((num: number) => ({ num, score: scores[num - 1] }))
+      .sort((a: { num: number; score: number }, b: { num: number; score: number }) => b.score - a.score);
+    const repetidas9 = repetidasCandidates.slice(0, 9).map((r) => r.num);
 
-    // Select 9 Ausentes based on score (almost all 10 ausentes included!)
-    const ausentesCandidates = dezenasAusentes
-      .map(num => ({ num, score: scores[num - 1] }))
-      .sort((a, b) => b.score - a.score);
-    const ausentes9 = ausentesCandidates.slice(0, 9).map(a => a.num);
+    const ausentesCandidates: Array<{ num: number; score: number }> = dezenasAusentes
+      .filter((num: number) => !effectiveExcluidas.includes(num))
+      .map((num: number) => ({ num, score: scores[num - 1] }))
+      .sort((a: { num: number; score: number }, b: { num: number; score: number }) => b.score - a.score);
+    const ausentes9 = ausentesCandidates.slice(0, 9).map((a) => a.num);
 
-    const recomendadas18 = [...repetidas9, ...ausentes9].sort((a, b) => a - b);
+    const basePoolSet = new Set<number>([...effectiveFixas, ...repetidas9, ...ausentes9]);
+    if (basePoolSet.size < 18) {
+      const allRanked = Array.from({ length: 25 }, (_, i) => i + 1)
+        .filter((n) => !effectiveExcluidas.includes(n))
+        .sort((a, b) => scores[b - 1] - scores[a - 1]);
+      for (const n of allRanked) {
+        if (basePoolSet.size >= 18) break;
+        basePoolSet.add(n);
+      }
+    }
+    const recomendadas18 = Array.from(basePoolSet).slice(0, 18).sort((a, b) => a - b);
 
     // 3 Golden bets of 15 numbers
     const golden1 = [...recomendadas18.slice(0, 15)];
     const golden2 = [...recomendadas18.slice(1, 16)];
     const golden3 = [...recomendadas18.slice(2, 17)];
+
+    const fParesMin = filtrosEstatisticos?.paresMin ?? 6;
+    const fParesMax = filtrosEstatisticos?.paresMax ?? 8;
+    const fPrimosMin = filtrosEstatisticos?.primosMin ?? 4;
+    const fPrimosMax = filtrosEstatisticos?.primosMax ?? 7;
+    const fMolduraMin = filtrosEstatisticos?.molduraMin ?? 8;
+    const fMolduraMax = filtrosEstatisticos?.molduraMax ?? 11;
+    const fSomaMin = filtrosEstatisticos?.somaMin ?? 175;
+    const fSomaMax = filtrosEstatisticos?.somaMax ?? 220;
+    const fFiboMin = filtrosEstatisticos?.fibonacciMin ?? 3;
+    const fFiboMax = filtrosEstatisticos?.fibonacciMax ?? 6;
+    const fRepMin = filtrosEstatisticos?.repetidasMin ?? 7;
+    const fRepMax = filtrosEstatisticos?.repetidasMax ?? 10;
 
     return res.json({
       success: true,
@@ -774,14 +845,15 @@ Forneça uma análise preditiva em formato JSON estruturado com:
         dezenasRecomendadas15_Ouro: [golden1, golden2, golden3],
         taxaConfianca: 96.4,
         justificativaTecnica:
-          `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi construído seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(', ')}) + 9 Ausentes (${ausentes9.join(', ')}). Inclui calibragem estatística para distribuição de 3 a 5 números de Fibonacci (01, 02, 03, 05, 08, 13, 21) e bonificação ponderada para as companheiras históricas do número 01 em fechamentos de ciclo (${COMPANHEIRAS_01_CICLO.join(', ')}).`,
+          `Engenharia LotoSniper calibrada pelo Concurso #${concurso}: O grupo de 18 dezenas foi construído seguindo a Regra de Ouro do documento: 9 Repetidas do concurso anterior (${repetidas9.join(', ')}) + 9 Ausentes (${ausentes9.join(', ')}). Inclui calibragem estatística para distribuição de ${fFiboMin} a ${fFiboMax} números de Fibonacci e bonificação ponderada para as companheiras históricas do número 01 em fechamentos de ciclo (${COMPANHEIRAS_01_CICLO.join(', ')}).`,
         dezenasChave: faltantesCiclo.concat(recomendadas18.slice(0, 2)).slice(0, 5),
         padroesSugeridos: {
-          paresImpares: '7 Pares / 8 Ímpares (ou 8P/7I)',
-          primos: '5 a 6 Primos',
-          moldura: '9 a 10 Dezenas',
-          fibonacci: '3 a 5 dezenas da Sequência Fibonacci calibradas com as companheiras da dezena 01',
-          somaFaixa: '180 a 215',
+          paresImpares: `${fParesMin} a ${fParesMax} Pares`,
+          primos: `${fPrimosMin} a ${fPrimosMax} Primos`,
+          moldura: `${fMolduraMin} a ${fMolduraMax} Dezenas`,
+          fibonacci: `${fFiboMin} a ${fFiboMax} dezenas Fibonacci`,
+          somaFaixa: `${fSomaMin} a ${fSomaMax}`,
+          repetidas: `${fRepMin} a ${fRepMax} Repetidas do Concurso #${concurso}`,
         },
       },
     });

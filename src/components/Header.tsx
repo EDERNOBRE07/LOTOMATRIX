@@ -177,6 +177,7 @@ export const Header: React.FC<HeaderProps> = ({
     if (src === 'caixa-oficial') return 'Caixa Oficial (Tempo Real)';
     if (src === 'espelho-api') return 'Espelho Oficial (Online)';
     if (src === 'cache-local') return 'Cache Local Atualizado';
+    if (src === 'base-local-verificada') return 'Base Oficial Consolidada';
     return 'Base Oficial';
   };
 

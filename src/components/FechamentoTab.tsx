@@ -210,10 +210,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   });
 
-  const [fixedNumbers, setFixedNumbers] = useState<number[]>(() =>
-    sanitizeDezenasFixas(cyclePendingNumbers.slice(0, 2))
+  const [fixedNumbers, setFixedNumbers] = useState<number[]>(() => {
+    if (activeFilterConfig?.dezenasFixas && activeFilterConfig.dezenasFixas.length > 0) {
+      return sanitizeDezenasFixas(activeFilterConfig.dezenasFixas);
+    }
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('lotosniper_active_filter_config')) {
+        return sanitizeDezenasFixas(activeFilterConfig?.dezenasFixas || []);
+      }
+    } catch {}
+    return sanitizeDezenasFixas(cyclePendingNumbers.slice(0, 2));
+  });
+  const [excludedNumbers, setExcludedNumbers] = useState<number[]>(() =>
+    Array.isArray(activeFilterConfig?.dezenasExcluidas) ? activeFilterConfig.dezenasExcluidas : []
   );
-  const [excludedNumbers, setExcludedNumbers] = useState<number[]>([]);
   const [showBolaoSimulator, setShowBolaoSimulator] = useState(false);
   const [filters, setFilters] = useState<FilterCriteria>(() => {
     const curvaAbcConfig = getCurvaAbcFilterConfig();
@@ -222,75 +232,101 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       ...DEFAULT_FILTERS,
       ...(activeFilterConfig || {}),
       modoFixas: activeFilterConfig?.modoFixas || 'rotativas',
-      autoCalibrarSomaUniverso: activeFilterConfig?.autoCalibrarSomaUniverso !== false,
-      curvaAbcAtiva: curvaAbcConfig.ativo,
-      minDezenasClasseA: curvaAbcConfig.minClasseA,
-      vaziosAtivos: voidConfig.ativo,
-      combinacoesVazioExcluidas: voidConfig.paresExcluidos,
+      autoCalibrarSomaUniverso: activeFilterConfig?.autoCalibrarSomaUniverso ?? true,
+      curvaAbcAtiva: activeFilterConfig?.curvaAbcAtiva ?? curvaAbcConfig.ativo,
+      minDezenasClasseA: activeFilterConfig?.minDezenasClasseA ?? curvaAbcConfig.minClasseA,
+      vaziosAtivos: activeFilterConfig?.vaziosAtivos ?? voidConfig.ativo,
+      combinacoesVazioExcluidas: activeFilterConfig?.combinacoesVazioExcluidas ?? voidConfig.paresExcluidos,
     };
   });
 
-  // Sincroniza alterações vindas dos Presets na aba Configurações (activeFilterConfig) em tempo real
+  const lastExternalConfigSigRef = React.useRef<string>('');
+  const prevSelectedKeyRef = React.useRef<string>(selectedNumbers.join(','));
+
+  // Sincroniza todas as alterações vindas da aba Filtros Inteligentes / activeFilterConfig em tempo real
   useEffect(() => {
     if (!activeFilterConfig) return;
+    const incomingSig = JSON.stringify(activeFilterConfig);
+    if (lastExternalConfigSigRef.current === incomingSig) return;
+    lastExternalConfigSigRef.current = incomingSig;
+
     setFilters((prev) => {
-      const changed =
-        prev.somaMin !== activeFilterConfig.somaMin ||
-        prev.somaMax !== activeFilterConfig.somaMax ||
-        prev.paresMin !== activeFilterConfig.paresMin ||
-        prev.paresMax !== activeFilterConfig.paresMax ||
-        prev.molduraMin !== activeFilterConfig.molduraMin ||
-        prev.molduraMax !== activeFilterConfig.molduraMax ||
-        prev.primosMin !== activeFilterConfig.primosMin ||
-        prev.primosMax !== activeFilterConfig.primosMax ||
-        prev.fibonacciMin !== activeFilterConfig.fibonacciMin ||
-        prev.fibonacciMax !== activeFilterConfig.fibonacciMax ||
-        prev.repetidasMin !== activeFilterConfig.repetidasMin ||
-        prev.repetidasMax !== activeFilterConfig.repetidasMax ||
-        prev.maxConsecutivas !== activeFilterConfig.maxConsecutivas ||
-        prev.presetEstatistico !== activeFilterConfig.presetEstatistico ||
-        prev.autoCalibrarSomaUniverso !== activeFilterConfig.autoCalibrarSomaUniverso;
-      if (!changed) return prev;
-      return {
+      const merged: FilterCriteria = {
         ...prev,
         ...activeFilterConfig,
       };
+      return JSON.stringify(prev) === JSON.stringify(merged) ? prev : merged;
     });
+
+    if (Array.isArray(activeFilterConfig.dezenasFixas)) {
+      const nextFixas = sanitizeDezenasFixas(activeFilterConfig.dezenasFixas);
+      setFixedNumbers((prev) =>
+        prev.length === nextFixas.length && prev.every((v, i) => v === nextFixas[i])
+          ? prev
+          : nextFixas
+      );
+    }
+
+    if (Array.isArray(activeFilterConfig.dezenasExcluidas)) {
+      const nextExcl = [...activeFilterConfig.dezenasExcluidas].sort((a, b) => a - b);
+      setExcludedNumbers((prev) =>
+        prev.length === nextExcl.length && prev.every((v, i) => v === nextExcl[i])
+          ? prev
+          : nextExcl
+      );
+    }
   }, [activeFilterConfig]);
 
-  // Auto-Calibração contínua da Faixa de Soma pelo Universo Selecionado (μ_U ± 20)
+  // Auto-Calibração contínua da Faixa de Soma apenas quando o usuário altera o Universo Selecionado (μ_U ± 20)
   useEffect(() => {
+    const selectedKey = selectedNumbers.join(',');
+    if (prevSelectedKeyRef.current === selectedKey) return;
+    prevSelectedKeyRef.current = selectedKey;
     if (selectedNumbers.length < 15) return;
     if (filters.autoCalibrarSomaUniverso === false) return;
     const cal = calibrarFaixaSomaUniverso(selectedNumbers);
     if (filters.somaMin !== cal.somaMin || filters.somaMax !== cal.somaMax) {
-      setFilters((prev) => ({
-        ...prev,
-        somaMin: cal.somaMin,
-        somaMax: cal.somaMax,
-      }));
+      setFilters((prev) => {
+        const next = {
+          ...prev,
+          somaMin: cal.somaMin,
+          somaMax: cal.somaMax,
+        };
+        onFiltersConfigChange?.(next);
+        return next;
+      });
     }
   }, [selectedNumbers, filters.autoCalibrarSomaUniverso, filters.somaMin, filters.somaMax]);
 
-  // Sincronização automática de Fixas (máx 5) e ativação padrão de Rotativas (K de N) para 3+ fixas
+  // Sincronização bidirecional de Fixas (máx 5) e Excluídas com activeFilterConfig
   useEffect(() => {
     const sanitized = sanitizeDezenasFixas(fixedNumbers);
     if (sanitized.length !== fixedNumbers.length) {
       setFixedNumbers(sanitized);
       return;
     }
+    const sortedExcl = [...excludedNumbers].sort((a, b) => a - b);
     const resolvedModo = resolveModoFixas(sanitized.length, filters.modoFixas);
+    const currentFixas = filters.dezenasFixas || [];
+    const currentExcl = filters.dezenasExcluidas || [];
     const sameFixas =
-      (filters.dezenasFixas || []).length === sanitized.length &&
-      sanitized.every((v, idx) => (filters.dezenasFixas || [])[idx] === v);
-    if (!sameFixas || (sanitized.length >= 3 && filters.modoFixas === undefined)) {
-      setFilters((prev) => ({
-        ...prev,
+      currentFixas.length === sanitized.length &&
+      sanitized.every((v, idx) => currentFixas[idx] === v);
+    const sameExcl =
+      currentExcl.length === sortedExcl.length &&
+      sortedExcl.every((v, idx) => currentExcl[idx] === v);
+
+    if (!sameFixas || !sameExcl || (sanitized.length >= 3 && filters.modoFixas === undefined)) {
+      const nextFilters: FilterCriteria = {
+        ...filters,
         dezenasFixas: sanitized,
-        modoFixas: prev.modoFixas === 'rigidas' ? 'rigidas' : resolvedModo,
-      }));
+        dezenasExcluidas: sortedExcl,
+        modoFixas: filters.modoFixas === 'rigidas' ? 'rigidas' : resolvedModo,
+      };
+      setFilters(nextFilters);
+      onFiltersConfigChange?.(nextFilters);
     }
-  }, [fixedNumbers, filters.dezenasFixas, filters.modoFixas]);
+  }, [fixedNumbers, excludedNumbers, filters.dezenasFixas, filters.dezenasExcluidas, filters.modoFixas]);
 
   // Estado da Garantia Efetiva Auditada (LJCR & Set Cover)
   const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);

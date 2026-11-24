@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { FechamentoTab } from './components/FechamentoTab';
+import { FiltrosInteligentesTab } from './components/FiltrosInteligentesTab';
 import { AIPredictorTab } from './components/AIPredictorTab';
 import { StatisticsTab } from './components/StatisticsTab';
 import { SimulatorTab } from './components/SimulatorTab';
@@ -42,7 +43,7 @@ import {
   getNotificationPermission,
   sendNativeCycleAlertNotification,
 } from './services/nativeNotificationService';
-import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats } from './types/lotofacil';
+import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats, FilterCriteria } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
 import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
 import { buildOptimal18Pool, countMatches, normalizeGameTickets } from './services/combinatorics';
@@ -94,6 +95,7 @@ import {
 
 export type TabType =
   | 'fechamento'
+  | 'filtros'
   | 'conferencia'
   | 'ia_preditor'
   | 'estatisticas'
@@ -183,6 +185,7 @@ export default function App() {
     activeFilterConfig,
     setActiveFilterConfig,
     applyStrategicFilters,
+    resetToCanonicalFilters,
   } = useActiveFilterConfig();
 
   // Guided Tour modal state (opens on first load or on demand)
@@ -336,25 +339,48 @@ export default function App() {
       return null;
     }
   });
-  const buildLogisticPredictionResponse = (draw: LotofacilDraw): AIPredictionResponse => {
+  const buildLogisticPredictionResponse = (
+    draw: LotofacilDraw,
+    filtersCfg: FilterCriteria = activeFilterConfig
+  ): AIPredictionResponse => {
     const logistic = predictDezenaWeightsLogistic(draw);
     const confianca = Number(
       Math.min(98.5, Math.max(72.0, 100 - logistic.modelMetrics.logLoss * 42)).toFixed(1)
     );
+    const fixas = filtersCfg?.dezenasFixas || [];
+    const excluidas = filtersCfg?.dezenasExcluidas || [];
+    const mergedPool = Array.from(
+      new Set([
+        ...fixas,
+        ...logistic.dezenasRecomendadas18.filter((n) => !excluidas.includes(n)),
+      ])
+    );
+    if (mergedPool.length < 18) {
+      for (let n = 1; n <= 25; n++) {
+        if (mergedPool.length >= 18) break;
+        if (!excluidas.includes(n) && !mergedPool.includes(n)) {
+          mergedPool.push(n);
+        }
+      }
+    }
+    const recomendadas18 = mergedPool.slice(0, 18).sort((a, b) => a - b);
+
     return {
       scores: logistic.scores,
-      dezenasRecomendadas18: logistic.dezenasRecomendadas18,
+      dezenasRecomendadas18: recomendadas18,
       dezenasRecomendadas15_Ouro: logistic.dezenasRecomendadas15_Ouro,
       taxaConfianca: confianca,
       justificativaTecnica: logistic.explicacaoEstrategica,
       dezenasChave: logistic.dezenasChave,
       padroesSugeridos: {
-        paresImpares: '6 a 8 Pares (Pico Gaussiano 6–7)',
-        primos: '4 a 7 Primos (Pico 5–6)',
-        moldura: '8 a 11 Dezenas (Pico 9–10)',
-        fibonacci: '3 a 6 Fibonacci (Pico 4–6)',
-        somaFaixa: '175 a 220 (Zona Central 180–215 · Caudas 75/15/10)',
-        repetidas: `7 a 10 Repetidas do Concurso #${draw.concurso}`,
+        paresImpares: `${filtersCfg?.paresMin ?? 6} a ${filtersCfg?.paresMax ?? 8} Pares`,
+        primos: `${filtersCfg?.primosMin ?? 4} a ${filtersCfg?.primosMax ?? 7} Primos`,
+        moldura: `${filtersCfg?.molduraMin ?? 8} a ${filtersCfg?.molduraMax ?? 11} Dezenas`,
+        fibonacci: `${filtersCfg?.fibonacciMin ?? 3} a ${filtersCfg?.fibonacciMax ?? 6} Fibonacci`,
+        somaFaixa: `${filtersCfg?.somaMin ?? 175} a ${filtersCfg?.somaMax ?? 220}${
+          filtersCfg?.estratificacaoCaudaAtiva ? ' · Caudas 75/15/10' : ''
+        }`,
+        repetidas: `${filtersCfg?.repetidasMin ?? 7} a ${filtersCfg?.repetidasMax ?? 10} Repetidas do Concurso #${draw.concurso}`,
       },
     };
   };
@@ -862,6 +888,7 @@ export default function App() {
   // Fetch AI prediction based on the target contest
   const fetchAIPrediction = async (draw: LotofacilDraw = latestDraw, force: boolean = false) => {
     if (!force && lastPredictedConcursoRef.current === draw.concurso && aiPrediction) {
+      setIsAILoading(false);
       return;
     }
     lastPredictedConcursoRef.current = draw.concurso;
@@ -873,7 +900,11 @@ export default function App() {
         body: JSON.stringify({
           concurso: draw.concurso,
           dezenasAnterior: draw.dezenas,
+          dezenasFixas: activeFilterConfig.dezenasFixas || [],
+          dezenasExcluidas: activeFilterConfig.dezenasExcluidas || [],
+          filtrosEstatisticos: activeFilterConfig,
           metaGarantia: '14_pontos',
+          forceFresh: force,
         }),
       });
 
@@ -884,13 +915,13 @@ export default function App() {
           return;
         }
       }
+      setAiPrediction(buildLogisticPredictionResponse(draw, activeFilterConfig));
     } catch (err) {
       console.warn('API backend unreachable, usando heurística avançada local:', err);
+      setAiPrediction(buildLogisticPredictionResponse(draw, activeFilterConfig));
+    } finally {
+      setIsAILoading(false);
     }
-
-    // Modelo de Regressão Logística L2 treinado sobre o histórico recente de 50 concursos (src/services/aiEngine.ts)
-    setAiPrediction(buildLogisticPredictionResponse(draw));
-    setIsAILoading(false);
   };
 
   // Run automatically on application mount (every time user opens the app)
@@ -1304,6 +1335,17 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'filtros' && (
+            <FiltrosInteligentesTab
+              filters={activeFilterConfig}
+              onChangeFilters={setActiveFilterConfig}
+              onResetFilters={resetToCanonicalFilters}
+              latestDraw={latestDraw}
+              aiPrediction={aiPrediction}
+              onApplyToFechamento={() => setActiveTab('fechamento')}
+            />
+          )}
+
           {activeTab === 'conferencia' && (
             <div className="space-y-6">
               {/* Volante Oficial Interativo 5×5 */}
@@ -1339,6 +1381,8 @@ export default function App() {
               cyclePendingNumbers={dezenasPendentesCiclo}
               prediction={aiPrediction}
               isLoading={isAILoading}
+              activeFilterConfig={activeFilterConfig}
+              onOpenFiltros={() => setActiveTab('filtros')}
               onRefreshPrediction={() => fetchAIPrediction(latestDraw, true)}
               onApplyRecommendation={handleApplyAIRecsToFechamento}
               onFixAnchors={(anchors) => {
@@ -1357,7 +1401,7 @@ export default function App() {
               onApplyNumbers={handleApplyAIRecsToFechamento}
               savedTickets={savedTickets}
               fechamentoNome={activeFechamentoMeta?.modeName || activeFechamentoMeta?.strategyName}
-              filters={activeFechamentoMeta?.filters}
+              filters={activeFechamentoMeta?.filters || activeFilterConfig}
               aiPrediction={aiPrediction}
             />
           )}

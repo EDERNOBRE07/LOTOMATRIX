@@ -13,6 +13,7 @@ import {
   Flame,
   Zap,
   Grid3X3,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { TabType } from '../App';
 
@@ -61,6 +62,18 @@ export const AppShellSidebar: React.FC<AppShellSidebarProps> = ({
       activeColor: 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black shadow-lg shadow-amber-500/20',
       hoverColor: 'hover:bg-slate-900 hover:text-amber-300',
       isActive: activeTab === 'fechamento',
+    },
+    {
+      id: 'filtros' as TabType,
+      label: 'Filtros Inteligentes',
+      shortLabel: 'Filtros',
+      description: 'Presets, Poda 5×5 & Simulação',
+      icon: SlidersHorizontal,
+      badge: 'Pro',
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/35',
+      activeColor: 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-400 text-slate-950 font-black shadow-lg shadow-amber-500/25',
+      hoverColor: 'hover:bg-slate-900 hover:text-amber-300',
+      isActive: activeTab === 'filtros',
     },
     {
       id: 'jogos' as TabType,

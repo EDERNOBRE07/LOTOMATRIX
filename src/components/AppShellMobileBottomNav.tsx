@@ -5,6 +5,7 @@ import {
   Award,
   Download,
   Grid3X3,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { TabType } from '../App';
 
@@ -39,6 +40,14 @@ export const AppShellMobileBottomNav: React.FC<AppShellMobileBottomNavProps> = (
       activeBg: 'bg-amber-500/15 border-amber-500/30',
     },
     {
+      id: 'filtros' as TabType,
+      label: 'Filtros',
+      icon: SlidersHorizontal,
+      isActive: activeTab === 'filtros',
+      activeColor: 'text-yellow-400',
+      activeBg: 'bg-yellow-500/15 border-yellow-500/30',
+    },
+    {
       id: 'jogos' as TabType,
       label: 'Meus Jogos',
       icon: Download,
@@ -70,7 +79,7 @@ export const AppShellMobileBottomNav: React.FC<AppShellMobileBottomNavProps> = (
       aria-label="Navegação Inferior Mobile LotoSniper"
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 border-t border-slate-800/90 backdrop-blur-xl px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_25px_rgba(0,0,0,0.5)]"
     >
-      <div className="grid grid-cols-5 gap-1 items-center max-w-md mx-auto">
+      <div className="grid grid-cols-6 gap-1 items-center max-w-lg mx-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const active = item.isActive;
