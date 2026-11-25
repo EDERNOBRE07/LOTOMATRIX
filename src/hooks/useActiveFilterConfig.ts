@@ -3,11 +3,13 @@ import { FilterCriteria } from '../types/lotofacil';
 import { DEFAULT_FILTERS, sanitizeDezenasFixas } from '../services/combinatorics';
 
 const STORAGE_KEY = 'lotosniper_active_filter_config';
+const MIGRATION_VERSION_KEY = 'lotosniper_filter_audit_v2_migrated';
 
 /**
- * Normaliza e garante a presença explícita dos 5 novos filtros matemáticos
- * (Intervalos D1–D15, Múltiplos M3–M8, Soma dos Dígitos 63–87, Geometria da Cruz
- * e Equilíbrio de Ranking Histórico), além das regras canônicas de fixas e exclusões.
+ * Normaliza a configuração de filtros garantindo que os filtros de alta comprovação
+ * (Soma ampla, Paridade, Moldura e Repetidas calibradas) sejam o núcleo ativo,
+ * enquanto filtros secundários de apostila (D1–D15, M3–M8, Dígitos, Cruz, Ranking, Linhas/Colunas)
+ * permaneçam opcionais (false por padrão) para evitar over-filtering.
  */
 export function normalizeActiveFilterConfig(
   partialConfig?: Partial<FilterCriteria>,
@@ -74,38 +76,33 @@ export function normalizeActiveFilterConfig(
     repetidasParesMax: safeRepPMax,
     repetidasImparesMin: safeRepIMin,
     repetidasImparesMax: safeRepIMax,
-    // 1. Intervalos Posicionais por Bola (D1 a D15)
-    posicionalAtivo: merged.posicionalAtivo ?? true,
-    // 2. Múltiplos M(3) a M(8) via Máscaras Bitwise
-    multiplosAtivo: merged.multiplosAtivo ?? true,
-    // 3. Soma dos Dígitos / Algarismos (63 a 87) + Contagem de Dígitos (22 a 27)
-    somaAlgarismosAtiva: merged.somaAlgarismosAtiva ?? true,
+    // Filtros secundários de apostila: DESLIGADOS por padrão (evita over-filtering)
+    posicionalAtivo: merged.posicionalAtivo ?? false,
+    multiplosAtivo: merged.multiplosAtivo ?? false,
+    somaAlgarismosAtiva: merged.somaAlgarismosAtiva ?? false,
     somaAlgarismosMin: algMin,
     somaAlgarismosMax: algMax,
-    contagemDigitosAtiva: merged.contagemDigitosAtiva ?? true,
+    contagemDigitosAtiva: merged.contagemDigitosAtiva ?? false,
     digitosMin: merged.digitosMin ?? 22,
     digitosMax: merged.digitosMax ?? 27,
     umDigitoMin: merged.umDigitoMin ?? 3,
     umDigitoMax: merged.umDigitoMax ?? 8,
-    // 4. Geometria da Cruz (9 dezenas no volante 5×5: [2, 7, 11, 12, 13, 14, 15, 17, 22])
-    cruzAtiva: merged.cruzAtiva !== false,
+    cruzAtiva: merged.cruzAtiva ?? false,
     cruzMin: isStrictCruz ? 5 : safeCruzMin,
     cruzMax: isStrictCruz ? 6 : safeCruzMax,
     strictValidation: isStrictCruz,
     validacaoEstritaCruz: isStrictCruz,
-    // 5. Equilíbrio de Ranking Histórico (Caps Top 5 / Top 10 / Top 15 / Top 20)
-    rankingHistoricoAtivo: merged.rankingHistoricoAtivo ?? true,
-    // Complementares: Bolas Extremas, Matriz 5x5, Anti-Colisão e Fixas Rotativas K de N
-    extremidadesAtiva: merged.extremidadesAtiva ?? true,
+    rankingHistoricoAtivo: merged.rankingHistoricoAtivo ?? false,
+    extremidadesAtiva: merged.extremidadesAtiva ?? false,
     bola1Min: merged.bola1Min ?? 1,
     bola1Max: merged.bola1Max ?? 4,
     bola15Min: merged.bola15Min ?? 22,
     bola15Max: merged.bola15Max ?? 25,
-    linhasColunasAtivo: merged.linhasColunasAtivo ?? true,
+    linhasColunasAtivo: merged.linhasColunasAtivo ?? false,
     linhasMin: Math.max(0, Math.min(5, merged.linhasMin ?? 1)),
-    linhasMax: Math.max(Math.max(0, Math.min(5, merged.linhasMin ?? 1)), Math.min(5, merged.linhasMax ?? 4)),
+    linhasMax: Math.max(Math.max(0, Math.min(5, merged.linhasMin ?? 1)), Math.min(5, merged.linhasMax ?? 5)),
     colunasMin: Math.max(0, Math.min(5, merged.colunasMin ?? 1)),
-    colunasMax: Math.max(Math.max(0, Math.min(5, merged.colunasMin ?? 1)), Math.min(5, merged.colunasMax ?? 4)),
+    colunasMax: Math.max(Math.max(0, Math.min(5, merged.colunasMin ?? 1)), Math.min(5, merged.colunasMax ?? 5)),
     maxLinhasCheias: merged.maxLinhasCheias ?? 1,
     maxColunasCheias: merged.maxColunasCheias ?? 1,
     quadrantesAtivo: merged.quadrantesAtivo ?? false,
@@ -118,11 +115,12 @@ export function normalizeActiveFilterConfig(
     hammingModo: merged.hammingModo === 'manual' ? 'manual' : 'auto',
     hammingMinimoPersonalizado: Math.max(
       1,
-      Math.min(6, Math.round(merged.hammingMinimoPersonalizado ?? 3))
+      Math.min(6, Math.round(merged.hammingMinimoPersonalizado ?? 2))
     ),
     antiColisaoHistoricaAtiva: merged.antiColisaoHistoricaAtiva ?? true,
-    antiPadraoViciadoAtivo: merged.antiPadraoViciadoAtivo ?? true,
+    antiPadraoViciadoAtivo: merged.antiPadraoViciadoAtivo ?? false,
     autoCalibrarSomaUniverso: merged.autoCalibrarSomaUniverso ?? true,
+    modoRigorFiltros: merged.modoRigorFiltros ?? 'conservador',
     modoFixas: modoFixasResolved,
     dezenasFixas: fixedSanitized,
     dezenasExcluidas: Array.from(new Set(merged.dezenasExcluidas || [])).sort((a, b) => a - b),
@@ -131,13 +129,31 @@ export function normalizeActiveFilterConfig(
 
 /**
  * Hook personalizado para gerenciar e persistir deterministicamente o estado do 'activeFilterConfig'.
- * Captura todos os parâmetros (pares/ímpares, primos, moldura, repetidas, soma, linhas/colunas,
- * sequências consecutivas, Cruz da Lotofácil, Bolas Extremas, Posicional D1–D15, Múltiplos M3–M8,
- * Soma dos Dígitos 63–87 e Equilíbrio de Ranking Histórico) e sincroniza com a esteira geradora.
  */
 export function useActiveFilterConfig(initialFilters?: Partial<FilterCriteria>) {
   const [activeFilterConfig, setActiveFilterConfigState] = useState<FilterCriteria>(() => {
     try {
+      const migrated = localStorage.getItem(MIGRATION_VERSION_KEY);
+      if (!migrated) {
+        localStorage.setItem(MIGRATION_VERSION_KEY, '1');
+        // Migração única: remove over-filtering legado salvo em localStorage preservando fixas/excluídas
+        const legacyRaw = localStorage.getItem(STORAGE_KEY);
+        let preservedFixas: number[] = [];
+        let preservedExcluidas: number[] = [];
+        if (legacyRaw) {
+          try {
+            const parsedLegacy = JSON.parse(legacyRaw);
+            if (Array.isArray(parsedLegacy?.dezenasFixas)) preservedFixas = parsedLegacy.dezenasFixas;
+            if (Array.isArray(parsedLegacy?.dezenasExcluidas)) preservedExcluidas = parsedLegacy.dezenasExcluidas;
+          } catch {}
+        }
+        return normalizeActiveFilterConfig({
+          ...DEFAULT_FILTERS,
+          dezenasFixas: preservedFixas,
+          dezenasExcluidas: preservedExcluidas,
+          ...(initialFilters || {}),
+        });
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);

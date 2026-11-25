@@ -1,5 +1,5 @@
 import { LotofacilDraw } from '../types/lotofacil';
-import { CONCURSO_ATUAL, MOLDURA } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, MOLDURA, RECENT_DRAWS } from '../data/lotofacilData';
 import { getHistoricalNDraws } from './historical100Draws';
 
 export interface LogisticFeatureVector {
@@ -199,8 +199,8 @@ export function trainLogisticRegressionModel(
   metrics: LogisticRegressionModelMetrics;
 } {
   const epochs = options.epochs ?? 120;
-  const learningRate = options.learningRate ?? 0.15;
-  const l2Lambda = options.l2Lambda ?? 0.025;
+  const learningRate = options.learningRate ?? 0.08;
+  const l2Lambda = options.l2Lambda ?? 0.35;
 
   // Ordena em ordem cronológica crescente (mais antigo -> mais recente) mantendo janela de 50 concursos
   const recent50 = [...drawsDescending]
@@ -305,6 +305,13 @@ export function trainLogisticRegressionModel(
     bias -= learningRate * (gradB / N);
     for (let j = 0; j < numFeatures; j++) {
       weights[j] -= learningRate * (gradW[j] / N + l2Lambda * weights[j]);
+      // Trava de regularização: impede overfitting em amostras pequenas e bloqueia inversão da taxa base de repetição (60%)
+      if (j === 5) {
+        // presenteAnterior: não pode ser severamente negativo por colinearidade com pressaoCiclo ou viés amostral
+        weights[j] = Math.max(-0.05, Math.min(0.30, weights[j]));
+      } else {
+        weights[j] = Math.max(-0.35, Math.min(0.35, weights[j]));
+      }
     }
   }
 
@@ -362,10 +369,26 @@ export function predictDezenaWeightsLogistic(
   const cached = predictionCache.get(cacheKey);
   if (cached) return cached;
 
-  const draws50 =
-    customDraws && customDraws.length >= 20
-      ? [...customDraws].sort((a, b) => b.concurso - a.concurso).slice(0, 50)
-      : getHistoricalNDraws(50, latestDraw);
+  // Prioriza exclusivamente sorteios reais (elimina contaminação por sorteios sintéticos aleatórios)
+  let draws50: LotofacilDraw[];
+  if (customDraws && customDraws.length >= 12) {
+    draws50 = [...customDraws]
+      .filter((d) => d.concurso <= latestDraw.concurso)
+      .sort((a, b) => b.concurso - a.concurso)
+      .slice(0, 50);
+  } else {
+    const dedupMap = new Map<number, LotofacilDraw>();
+    dedupMap.set(latestDraw.concurso, latestDraw);
+    for (const d of RECENT_DRAWS) {
+      if (d.concurso <= latestDraw.concurso && !dedupMap.has(d.concurso)) {
+        dedupMap.set(d.concurso, d);
+      }
+    }
+    const realDraws = Array.from(dedupMap.values())
+      .sort((a, b) => b.concurso - a.concurso)
+      .slice(0, 50);
+    draws50 = realDraws.length >= 12 ? realDraws : getHistoricalNDraws(50, latestDraw);
+  }
 
   const chronological50 = [...draws50].sort((a, b) => a.concurso - b.concurso);
   const trained = trainLogisticRegressionModel(draws50);
@@ -435,15 +458,15 @@ export function predictDezenaWeightsLogistic(
 
   dezenasRanking.sort((a, b) => b.probability - a.probability || a.dezena - b.dezena);
 
-  // Seleciona 18 dezenas balanceadas (9 repetidas do último concurso + 9 ausentes) ordenadas pelo score logístico
+  // Seleciona 18 dezenas respeitando a proporção hipergeométrica real da Lotofácil (60%/40% -> 10 repetidas + 8 ausentes)
   const lastSet = new Set(latestDraw.dezenas);
   const topRepetidas = dezenasRanking
     .filter((d) => lastSet.has(d.dezena))
-    .slice(0, 9)
+    .slice(0, 10)
     .map((d) => d.dezena);
   const topAusentes = dezenasRanking
     .filter((d) => !lastSet.has(d.dezena))
-    .slice(0, 9)
+    .slice(0, 8)
     .map((d) => d.dezena);
 
   const dezenasRecomendadas18 = Array.from(new Set([...topRepetidas, ...topAusentes]))
@@ -476,7 +499,7 @@ export function predictDezenaWeightsLogistic(
     dezenasRecomendadas18,
     dezenasRecomendadas15_Ouro: [top15A, top15B, top15C],
     dezenasChave,
-    explicacaoEstrategica: `Modelo de Regressão Logística L2 treinado nos últimos ${trained.metrics.windowSize} concursos (${trained.metrics.trainingSamples} amostras, Log-Loss ${trained.metrics.logLoss}). Maiores probabilidades para o Concurso #${latestDraw.concurso + 1}: dezenas ${top3Label}, mantendo equilíbrio 9 repetidas / 9 ausentes no universo de 18 dezenas.`,
+    explicacaoEstrategica: `Modelo de Regressão Logística L2 calibrado nos últimos ${trained.metrics.windowSize} concursos reais (${trained.metrics.trainingSamples} amostras, Log-Loss ${trained.metrics.logLoss}). Maiores probabilidades para o Concurso #${latestDraw.concurso + 1}: dezenas ${top3Label}, mantendo proporção real 10 repetidas / 8 ausentes no universo de 18 dezenas.`,
     modelMetrics: trained.metrics,
   };
 

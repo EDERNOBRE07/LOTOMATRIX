@@ -509,20 +509,17 @@ export function calculateForcaDeCiclo(
   stat?: DezenaStats,
   cyclePendingNumbers: number[] = []
 ): number {
-  let score = 35;
+  let score = 40;
   if (!stat) return score;
 
   if (cyclePendingNumbers.includes(numero) || stat.pendenteNoCiclo) {
-    score += 48; // Urgência máxima de fechamento de ciclo
+    score += 40; // Urgência real de fechamento de ciclo
   } else if (stat.atrasoAtual >= 3) {
-    score += 26; // Retorno iminente
+    score += 22; // Retorno provável após atraso
   } else if (stat.atrasoAtual === 0) {
-    score += 18; // Repetição canônica
-  }
-
-  // Dezenas com histórico comprovado de força em viradas de ciclo
-  if ([1, 2, 3, 5, 10, 11, 13, 20, 25].includes(numero)) {
-    score += 14;
+    score += 18; // Reincidência canônica (taxa base 60%)
+  } else {
+    score += 10;
   }
 
   return Math.min(100, Math.max(15, score));
@@ -681,10 +678,18 @@ export function identificarClustersDensidade500(
   const sortedPool = [...pool].sort((a, b) => a - b);
   if (sortedPool.length < 5) return [];
 
-  const draws500 = getHistorical500Draws(latestDraw);
-  const totalDraws = draws500.length || 500;
+  const dedupReal = new Map<number, LotofacilDraw>();
+  dedupReal.set(latestDraw.concurso, latestDraw);
+  for (const d of RECENT_DRAWS) {
+    if (d.concurso <= latestDraw.concurso && !dedupReal.has(d.concurso)) {
+      dedupReal.set(d.concurso, d);
+    }
+  }
+  const realHistorical = Array.from(dedupReal.values()).sort((a, b) => b.concurso - a.concurso);
+  const draws500 = realHistorical.length >= 10 ? realHistorical : getHistorical500Draws(latestDraw);
+  const totalDraws = draws500.length || 50;
 
-  // 1. Matriz de co-ocorrência 25x25 nos 500 concursos
+  // 1. Matriz de co-ocorrência 25x25 baseada estritamente nos sorteios reais da base
   const cooc = Array.from({ length: 26 }, () => new Array(26).fill(0));
   const freqMap = new Array(26).fill(0);
 
@@ -935,16 +940,15 @@ export function generateFechamentoInteligentePonderado({
   // Modo de Fixas: Rotativas Inteligentes (K de N) ativo por padrão se N >= 3
   const kBounds = getRotatedFixedBounds(fixedList.length, filters?.modoFixas);
 
-  // Auto-Calibração da Faixa de Soma pelo Universo Selecionado + Estratificação de Caudas (75% Central 180–215 / 15% Alta 216–230 / 10% Baixa 155–179 em >= 10 jogos)
+  // Auto-Calibração da Faixa de Soma pelo Universo Selecionado + Estratificação de Caudas opt-in
   const sumBounds = resolveCentralSumBounds(sortedPool, filters);
-  const useStratifiedAntiCisne = maxTickets >= 10 && n >= 16 && filters?.estratificacaoCaudaAtiva !== false;
+  const useStratifiedAntiCisne = maxTickets >= 10 && n >= 16 && filters?.estratificacaoCaudaAtiva === true;
   const highTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.15)) : 0;
   const lowTailQuota = useStratifiedAntiCisne ? Math.max(1, Math.round(maxTickets * 0.10)) : 0;
   const coreQuota = Math.max(1, maxTickets - lowTailQuota - highTailQuota);
 
-  // Alvo de Espalhamento Geométrico: prioriza Hamming >= 3 para universos de 18 a 21 dezenas
-  const minHammingTarget = getTargetHammingDistance(n, maxTickets);
-  const is18to21Universe = n >= 18 && n <= 21;
+  // Alvo de Espalhamento Geométrico matematicamente factível para o par (n, maxTickets)
+  const minHammingTarget = getTargetHammingDistance(n, maxTickets, filters);
 
   // Metas de Controle de Frequência Equilibrada por Dezena
   const freqBounds = calculateVariableFrequencyBounds(maxTickets, n, fixedList.length, kBounds.modo);
@@ -1139,7 +1143,7 @@ export function generateFechamentoInteligentePonderado({
             somaMin: sumBounds.centralMin,
             somaMax: sumBounds.centralMax,
           };
-          if (!ticketPassesFilters(analysis, adjustedFilters)) {
+          if (!ticketPassesFilters(analysis, adjustedFilters, latestDraw.dezenas)) {
             return null;
           }
         }
@@ -1196,14 +1200,12 @@ export function generateFechamentoInteligentePonderado({
       (sorted.reduce((acc, num) => acc + (forcaCicloMap.get(num) || 50), 0) / 15).toFixed(1)
     );
 
-    const regraVencedora = evaluateAderenciaRegraVencedora3822(sorted, analysis);
-
+    // Score ponderado limpo: elimina overfitting em concurso único (#3822) e ruído de clusters sintéticos
     const scorePonderado =
-      ipMedio * 0.35 +
+      (analysis.scoreIA || 65) * 0.45 +
+      ipMedio * 0.30 +
       forcaCicloMedio * 0.25 +
-      (analysis.scoreIA || 50) * 0.15 +
-      clusterBonus * 1.2 +
-      (regraVencedora.scoreAderencia / 100) * 18;
+      clusterBonus * 0.25;
 
     return {
       dezenas: sorted,
@@ -1411,11 +1413,11 @@ export function generateFechamentoInteligentePonderado({
     return balance;
   };
 
-  // Para 18..21 dezenas, aplica filtro estrito Hamming >= 3 em todos os estratos antes de qualquer fallback para 2 (nunca <= 1)
-  const strictHammingSequence = is18to21Universe
-    ? Array.from(new Set([Math.max(3, minHammingTarget), 3]))
-    : Array.from(new Set([minHammingTarget, Math.min(2, minHammingTarget), 1]));
-  const fallbackHammingSequence = is18to21Universe ? [2] : [1];
+  // Sequência de Hamming matematicamente factível (nunca trava 18d/24J em teto impossível de Hamming >= 3)
+  const strictHammingSequence = Array.from(
+    new Set([minHammingTarget, Math.min(2, minHammingTarget)])
+  );
+  const fallbackHammingSequence = [1];
 
   // Fase 1: Preencher estratos de Proteção de Cauda (15% Cauda Alta 216–230 e 10% Cauda Baixa 155–179) mantendo Hamming >= 3 em 18–21
   const selectQuotaStratum = (stratum: SumStratum, targetCount: number) => {
@@ -1517,33 +1519,46 @@ export function generateFechamentoInteligentePonderado({
     if (chosenItems.length >= maxTickets) break;
   }
 
-  // Fase 3: Síntese complementar caso restrições extremas impeçam atingir maxTickets (mantendo fixas K de N e Hamming >= 3 em 18..21)
+  // Fase 3: Síntese complementar garantida (trava absoluta contra fechamento vazio)
   if (chosenItems.length < maxTickets && sortedPool.length >= 15) {
-    const synthesisHamming = is18to21Universe ? Math.max(3, minHammingTarget) : Math.min(2, minHammingTarget);
-    for (let attempt = 0; attempt < 300 && chosenItems.length < maxTickets; attempt++) {
+    const synthesisHamming = minHammingTarget;
+    for (let attempt = 0; attempt < 360 && chosenItems.length < maxTickets; attempt++) {
       const fSub = fixedSubsets[attempt % fixedSubsets.length];
       const needed = 15 - fSub.length;
       const orderedVars = [...nonFixedPool].sort((a, b) => varFreq[a] - varFreq[b] || a - b);
       const shift = attempt % Math.max(1, orderedVars.length);
       const pickedVars = [...orderedVars.slice(shift), ...orderedVars.slice(0, shift)].slice(0, needed);
       const candidate = [...fSub, ...pickedVars].sort((a, b) => a - b);
+      if (candidate.length !== 15) continue;
       const key = candidate.join('-');
       if (chosenKeys.has(key)) continue;
       const mask = criarMascara(candidate);
-      const reqDiff = attempt < 220 ? synthesisHamming : is18to21Universe ? 2 : 1;
+      const reqDiff = attempt < 180 ? synthesisHamming : attempt < 260 ? Math.min(2, synthesisHamming) : 1;
       if (!passesHammingDistance(mask, chosenMasks, reqDiff)) continue;
       const soma = candidate.reduce((acc, v) => acc + v, 0);
-      if (tierApplied < 4 && (soma < 155 || soma > 230)) continue;
+      if (attempt < 240 && tierApplied < 4 && (soma < 155 || soma > 235)) continue;
       const slotType: SumStratum =
         soma < sumBounds.centralMin ? 'baixa' : soma > sumBounds.centralMax ? 'alta' : 'ouro';
       registerChosen({
         dezenas: candidate,
         mask,
-        scorePonderado: 75,
-        ipMedio: 75,
-        forcaCicloMedio: 75,
+        scorePonderado: 72,
+        ipMedio: 72,
+        forcaCicloMedio: 72,
         matchedClusterId: 'Síntese Equilibrada',
         slotType,
+      });
+    }
+    if (chosenItems.length === 0) {
+      const fallback15 = sortedPool.slice(0, 15).sort((a, b) => a - b);
+      registerChosen({
+        dezenas: fallback15,
+        mask: criarMascara(fallback15),
+        scorePonderado: 70,
+        ipMedio: 70,
+        forcaCicloMedio: 70,
+        matchedClusterId: 'Garantia Zero-Vazio',
+        slotType: 'ouro',
       });
     }
   }

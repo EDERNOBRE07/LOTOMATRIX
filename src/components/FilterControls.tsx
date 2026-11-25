@@ -64,48 +64,48 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
 
   const [appliedNotice, setAppliedNotice] = React.useState<string | null>(null);
 
-  // Insights Diários da IA para calibrar os Filtros Matemáticos & Restrições Canônicas
+  // Preset Calibrado Auditado: Núcleo 4 Estatístico (Soma Ampla, Paridade, Moldura, Repetidas) sem Over-filtering
   const applyAIDailyInsightsPreset = () => {
-    // Carregar combinações de vazio padrão recomendadas
-    let voidPairs = filters.combinacoesVazioExcluidas || [];
-    try {
-      if (voidPairs.length === 0) {
-        const voidAnalysis = computeVoidHeatmap();
-        voidPairs = voidAnalysis.vaziosAbsolutos.slice(0, 6).map((v) => v.pair);
-      }
-    } catch (e) {
-      console.warn('Falha ao calcular mapa de vazios:', e);
-    }
-
     const fullPresetFilters: FilterCriteria = {
       ...filters,
-      paresMin: 6, // Equilíbrio Pro Auditado: 6 a 8 pares
-      paresMax: 8,
-      primosMin: 4, // Auditado: 4 a 7 primos
+      paresMin: 5,
+      paresMax: 9,
+      primosMin: 4,
       primosMax: 7,
-      somaMin: 175, // Auditado: 175 a 220 com estratificação de cauda ativa (75% 180–215 / 15% 216–230 / 10% 155–179)
-      somaMax: 220,
-      molduraMin: 8, // Auditado: 8 a 11 na moldura
-      molduraMax: 11,
-      fibonacciMin: 3, // Auditado: 3 a 6 Fibonacci
+      somaMin: 165,
+      somaMax: 225,
+      molduraMin: 8,
+      molduraMax: 12,
+      fibonacciMin: 3,
       fibonacciMax: 6,
-      repetidasMin: 7, // Auditado: 7 a 10 repetidas
-      repetidasMax: 10,
-      maxConsecutivas: 6, // Auditado: até 6 consecutivas
-      estratificacaoCaudaAtiva: true,
-      curvaAbcAtiva: true,
-      minDezenasClasseA: 11,
-      vaziosAtivos: true,
-      combinacoesVazioExcluidas: voidPairs,
-      robustezEstatisticaAtiva: true,
+      repetidasMin: 6,
+      repetidasMax: 11,
+      maxConsecutivas: 7,
+      estratificacaoCaudaAtiva: false,
+      curvaAbcAtiva: false,
+      vaziosAtivos: false,
+      robustezEstatisticaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      linhasMax: 5,
+      colunasMax: 5,
+      rankingHistoricoAtivo: false,
+      cruzAtiva: false,
+      extremidadesAtiva: false,
+      antiPadraoViciadoAtivo: false,
+      repetidasParidadeAtiva: false,
+      modoRigorFiltros: 'conservador',
       fechamentoPonderadoAtivo: true,
     };
 
-    saveCurvaAbcFilterConfig({ ativo: true, minClasseA: 11 });
+    saveCurvaAbcFilterConfig({ ativo: false, minClasseA: 10 });
     saveVoidExclusionConfig({
-      ativo: true,
-      paresExcluidos: voidPairs,
-      bloquearVaziosAbsolutos: true,
+      ativo: false,
+      paresExcluidos: [],
+      bloquearVaziosAbsolutos: false,
       bloquearVaziosRaros: false,
       dataAtualizacao: new Date().toISOString(),
     });
@@ -116,14 +116,14 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       window.dispatchEvent(
         new CustomEvent('lotosniper-void-filter-changed', {
           detail: {
-            ativo: true,
-            paresExcluidos: voidPairs,
+            ativo: false,
+            paresExcluidos: [],
           },
         })
       );
       window.dispatchEvent(
         new CustomEvent('lotosniper-curva-abc-changed', {
-          detail: { ativo: true, minClasseA: 11 },
+          detail: { ativo: false, minClasseA: 10 },
         })
       );
       window.dispatchEvent(
@@ -134,7 +134,7 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     }
 
     setAppliedNotice(
-      `✓ Equilíbrio Pro (Auditado) carregado: Soma 175–220 (Zona Central 180–215 + Caudas 75/15/10), 6–8 Pares, 4–7 Primos, 8–11 Moldura, 3–6 Fibonacci, 7–10 Repetidas e até 6 consecutivas!`
+      `✓ Núcleo Auditado carregado (Modo Conservador): Soma 165–225, 5–9 Pares, 8–12 Moldura, 6–11 Repetidas e Consecutivas ≤ 7. Regras secundárias movidas para Soft Scoring no scoreIA.`
     );
     setTimeout(() => setAppliedNotice(null), 6000);
   };
@@ -144,18 +144,27 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       ...filters,
       paresMin: 6,
       paresMax: 8,
-      primosMin: 5,
-      primosMax: 6,
-      somaMin: 180,
-      somaMax: 215,
-      molduraMin: 9,
+      primosMin: 4,
+      primosMax: 7,
+      somaMin: 175,
+      somaMax: 220,
+      molduraMin: 8,
       molduraMax: 11,
-      fibonacciMin: 4,
+      fibonacciMin: 3,
       fibonacciMax: 6,
       repetidasMin: 7,
-      repetidasMax: 9,
-      maxConsecutivas: 5,
-      estratificacaoCaudaAtiva: true,
+      repetidasMax: 10,
+      maxConsecutivas: 6,
+      estratificacaoCaudaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      rankingHistoricoAtivo: false,
+      cruzAtiva: false,
+      extremidadesAtiva: false,
+      antiPadraoViciadoAtivo: false,
     });
   };
 
@@ -163,19 +172,29 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
     onChange({
       ...filters,
       paresMin: 5,
-      paresMax: 9,
+      paresMax: 10,
       primosMin: 3,
-      primosMax: 7,
-      somaMin: 165,
-      somaMax: 225,
-      molduraMin: 8,
-      molduraMax: 12,
-      fibonacciMin: 3,
-      fibonacciMax: 6,
-      repetidasMin: 7,
-      repetidasMax: 11,
-      maxConsecutivas: 6,
-      estratificacaoCaudaAtiva: true,
+      primosMax: 8,
+      somaMin: 160,
+      somaMax: 230,
+      molduraMin: 7,
+      molduraMax: 13,
+      fibonacciMin: 2,
+      fibonacciMax: 7,
+      repetidasMin: 5,
+      repetidasMax: 12,
+      maxConsecutivas: 7,
+      estratificacaoCaudaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      rankingHistoricoAtivo: false,
+      cruzAtiva: false,
+      extremidadesAtiva: false,
+      antiPadraoViciadoAtivo: false,
+      modoRigorFiltros: 'agressivo',
     });
   };
 

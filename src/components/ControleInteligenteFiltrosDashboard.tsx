@@ -41,38 +41,18 @@ interface RigorModeDefinition {
 
 const RIGOR_MODES: RigorModeDefinition[] = [
   {
-    id: 'total',
-    stepLabel: 'MODO 1',
-    title: 'Total',
-    subtitle: 'Todos os Filtros Ativos',
-    description:
-      'Ativa integralmente todos os critérios configurados: Soma, Paridade, Moldura, Primos, Fibonacci, Repetidas + Paridade das Repetidas, Cruz, Consecutivas e Linhas/Colunas.',
-    highlights: [
-      'Soma + Paridade',
-      'Moldura + Primos',
-      'Repetidas + Par/Ímp Rep.',
-      'Cruz + Fibonacci',
-      'Linhas/Colunas',
-    ],
-    accentBorder: 'border-amber-400',
-    accentBg: 'bg-gradient-to-b from-amber-500/15 via-slate-900 to-slate-950',
-    accentText: 'text-amber-300',
-    accentBadge: 'bg-amber-400 text-slate-950',
-    icon: <ShieldCheck className="w-4 h-4" />,
-  },
-  {
     id: 'conservador',
-    stepLabel: 'MODO 2',
+    stepLabel: 'MODO 1 • PADRÃO',
     title: 'Conservador',
-    subtitle: 'Alto Impacto Estatístico',
+    subtitle: 'Núcleo Comprovado (Alta Performance)',
     description:
-      'Mantém ativos os filtros de maior peso matemático (Soma Central, Paridade, Moldura, Repetidas do Concurso e Primos), flexibilizando os filtros secundários.',
+      'Prioriza apenas os 4 filtros de alta comprovação estatística (Soma Ampla 165–225, Paridade 5–9, Moldura 8–12 e Repetidas 6–11) + Consecutivas ≤ 7. Regras secundárias atuam só como Soft Scoring no scoreIA, sem podar bilhetes premiados.',
     highlights: [
-      'Soma Central',
-      'Paridade',
-      'Moldura',
-      'Repetidas Concurso',
-      'Primos',
+      'Soma Ampla (165–225)',
+      'Paridade (5–9)',
+      'Moldura (8–12)',
+      'Repetidas (6–11)',
+      'Soft Scoring IA',
     ],
     accentBorder: 'border-emerald-400',
     accentBg: 'bg-gradient-to-b from-emerald-500/15 via-slate-900 to-slate-950',
@@ -82,11 +62,11 @@ const RIGOR_MODES: RigorModeDefinition[] = [
   },
   {
     id: 'agressivo',
-    stepLabel: 'MODO 3',
+    stepLabel: 'MODO 2',
     title: 'Agressivo',
-    subtitle: 'Indispensáveis • Caça 14/15',
+    subtitle: 'Ultra-Aberto • Cobertura Pura 14/15',
     description:
-      'Aplica exclusivamente os filtros indispensáveis (Soma ampla 160–230, equilíbrio básico Par/Ímpar 5–10 e controle de Consecutivas ≤ 7) para máxima velocidade e amplitude.',
+      'Aplica exclusivamente os filtros indispensáveis (Soma ampla 160–230, equilíbrio básico Par/Ímpar 5–10 e controle de Consecutivas ≤ 7) para máxima velocidade e cobertura combinatória.',
     highlights: [
       'Soma Ampla (160–230)',
       'Par/Ímpar (5–10)',
@@ -97,6 +77,24 @@ const RIGOR_MODES: RigorModeDefinition[] = [
     accentText: 'text-cyan-300',
     accentBadge: 'bg-cyan-400 text-slate-950',
     icon: <Zap className="w-4 h-4" />,
+  },
+  {
+    id: 'total',
+    stepLabel: 'MODO 3 • AVANÇADO',
+    title: 'Total',
+    subtitle: 'Manual • Risco de Over-filtering',
+    description:
+      'Aplica todos os critérios configurados manualmente em Filtros Inteligentes (Primos, Fibonacci e filtros opcionais de apostilas). Use com cautela: excesso de travas rígidas simultâneas reduz a taxa de premiação.',
+    highlights: [
+      'Núcleo 4 + Avançados',
+      'Primos + Fibonacci',
+      'Regras Opcionais Ativas',
+    ],
+    accentBorder: 'border-amber-400',
+    accentBg: 'bg-gradient-to-b from-amber-500/15 via-slate-900 to-slate-950',
+    accentText: 'text-amber-300',
+    accentBadge: 'bg-amber-400 text-slate-950',
+    icon: <ShieldCheck className="w-4 h-4" />,
   },
 ];
 
@@ -144,12 +142,20 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
       active: enabled && rigorMode !== 'agressivo',
     },
     {
-      label: `Primos ${effectiveFilters.primosMin}–${effectiveFilters.primosMax}`,
+      label: `Rep. #${latestDraw.concurso}: ${effectiveFilters.repetidasMin}–${effectiveFilters.repetidasMax}`,
       active: enabled && rigorMode !== 'agressivo',
     },
     {
-      label: `Rep. #${latestDraw.concurso}: ${effectiveFilters.repetidasMin}–${effectiveFilters.repetidasMax}`,
-      active: enabled && rigorMode !== 'agressivo',
+      label: `Consecutivas ≤ ${effectiveFilters.maxConsecutivas}`,
+      active: enabled,
+    },
+    {
+      label: `Primos ${effectiveFilters.primosMin}–${effectiveFilters.primosMax} (Soft)`,
+      active: enabled && rigorMode === 'total',
+    },
+    {
+      label: `Fibonacci ${effectiveFilters.fibonacciMin}–${effectiveFilters.fibonacciMax} (Soft)`,
+      active: enabled && rigorMode === 'total',
     },
     {
       label: `Paridade Rep. (${effectiveFilters.repetidasParesMin ?? 2}–${effectiveFilters.repetidasParesMax ?? 6}P / ${effectiveFilters.repetidasImparesMin ?? 2}–${effectiveFilters.repetidasImparesMax ?? 6}I)`,
@@ -160,38 +166,35 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
     },
     {
       label: `Cruz ${effectiveFilters.validacaoEstritaCruz ? '5–6 ★' : `${effectiveFilters.cruzMin ?? 4}–${effectiveFilters.cruzMax ?? 7}`}`,
-      active: enabled && rigorMode === 'total' && effectiveFilters.cruzAtiva !== false,
-    },
-    {
-      label: `Fibonacci ${effectiveFilters.fibonacciMin}–${effectiveFilters.fibonacciMax}`,
-      active: enabled && rigorMode === 'total',
-    },
-    {
-      label: `Consecutivas ≤ ${effectiveFilters.maxConsecutivas}`,
-      active: enabled,
+      active: enabled && rigorMode === 'total' && effectiveFilters.cruzAtiva === true,
     },
     {
       label: `Lin/Col ${effectiveFilters.linhasMin ?? 1}–${effectiveFilters.linhasMax ?? 5}`,
       active:
         enabled &&
         rigorMode === 'total' &&
-        effectiveFilters.linhasColunasAtivo !== false,
+        effectiveFilters.linhasColunasAtivo === true,
     },
     {
       label: `Extremidades B1/B15`,
       active:
         enabled &&
         rigorMode === 'total' &&
-        effectiveFilters.extremidadesAtiva !== false,
+        effectiveFilters.extremidadesAtiva === true,
     },
   ];
 
   const activeCount = filterBadges.filter((b) => b.active).length;
   const totalConfiguredCustomRules =
-    (baseFilters.repetidasParidadeAtiva ? 1 : 0) +
-    (baseFilters.cruzAtiva !== false ? 1 : 0) +
-    (baseFilters.extremidadesAtiva !== false ? 1 : 0) +
-    (baseFilters.hammingDinamicoAtivo ? 1 : 0);
+    (baseFilters.repetidasParidadeAtiva === true ? 1 : 0) +
+    (baseFilters.cruzAtiva === true ? 1 : 0) +
+    (baseFilters.extremidadesAtiva === true ? 1 : 0) +
+    (baseFilters.posicionalAtivo === true ? 1 : 0) +
+    (baseFilters.multiplosAtivo === true ? 1 : 0) +
+    (baseFilters.contagemDigitosAtiva === true ? 1 : 0) +
+    (baseFilters.somaAlgarismosAtiva === true ? 1 : 0) +
+    (baseFilters.linhasColunasAtivo === true ? 1 : 0) +
+    (baseFilters.rankingHistoricoAtivo === true ? 1 : 0);
 
   return (
     <section
@@ -376,8 +379,8 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
             </span>
           </span>
           {totalConfiguredCustomRules > 0 && enabled && rigorMode !== 'total' && (
-            <span className="text-[10px] font-mono text-amber-300/90">
-              Dica: selecione Modo Total para aplicar regras avançadas (Cruz / Paridade Repetidas / Extremidades)
+            <span className="text-[10px] font-mono text-emerald-300/90">
+              Blindagem ativa: {totalConfiguredCustomRules} regra(s) secundária(s) mantida(s) apenas como Soft Scoring no Modo {activeModeMeta.title}
             </span>
           )}
         </div>

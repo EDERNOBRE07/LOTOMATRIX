@@ -273,6 +273,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   });
 
   const [studioFilterMode, setStudioFilterMode] = useState<FilterRigorMode>(() => {
+    try {
+      const migrated = localStorage.getItem('lotosniper_studio_mode_v2_migrated');
+      if (!migrated) {
+        localStorage.setItem('lotosniper_studio_mode_v2_migrated', '1');
+        localStorage.setItem('lotosniper_studio_filter_mode', 'conservador');
+        return 'conservador';
+      }
+    } catch {}
     const fromCfg = activeFilterConfig?.modoRigorFiltros;
     if (fromCfg === 'total' || fromCfg === 'conservador' || fromCfg === 'agressivo') {
       return fromCfg;
@@ -283,7 +291,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         return saved;
       }
     } catch {}
-    return 'total';
+    return 'conservador';
   });
 
   // Motor selecionado no Passo 4 (Coluna Esquerda)
@@ -300,11 +308,28 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     if (lastHandledAppliedTokenRef.current === filtersAppliedNoticeToken) return;
     lastHandledAppliedTokenRef.current = filtersAppliedNoticeToken;
 
+    const currentF = filtersRef.current;
+    const hasExplicitAdvancedFilters = Boolean(
+      currentF.posicionalAtivo ||
+        currentF.multiplosAtivo ||
+        currentF.contagemDigitosAtiva ||
+        currentF.somaAlgarismosAtiva ||
+        currentF.linhasColunasAtivo ||
+        currentF.rankingHistoricoAtivo ||
+        currentF.cruzAtiva ||
+        currentF.extremidadesAtiva ||
+        currentF.curvaAbcAtiva ||
+        currentF.vaziosAtivos ||
+        currentF.robustezEstatisticaAtiva ||
+        currentF.repetidasParidadeAtiva
+    );
+    const targetMode: FilterRigorMode = hasExplicitAdvancedFilters ? 'total' : 'conservador';
+
     setStudioFiltersEnabled(true);
-    setStudioFilterMode('total');
+    setStudioFilterMode(targetMode);
     try {
       localStorage.setItem('lotosniper_studio_filters_enabled', 'true');
-      localStorage.setItem('lotosniper_studio_filter_mode', 'total');
+      localStorage.setItem('lotosniper_studio_filter_mode', targetMode);
     } catch {}
     setShowFiltersAppliedToast(true);
     const timer = window.setTimeout(() => {

@@ -238,11 +238,14 @@ export function handleGeneratorWorkerMessage(
       const kInfo = resolveRotativeFixedKofN(fixasSanitizadas.length, data.filters?.modoFixas);
       const targetHamming = getTargetHammingDistance(
         data.selectedNumbers.length,
-        data.maxTickets
+        data.maxTickets,
+        data.filters
       );
       const quotas = computeStratifiedQuotasWorker(
         data.maxTickets,
-        data.maxTickets >= 10 && data.selectedNumbers.length >= 16
+        data.maxTickets >= 10 &&
+          data.selectedNumbers.length >= 16 &&
+          data.filters?.estratificacaoCaudaAtiva === true
       );
 
       postMsg({
@@ -251,8 +254,8 @@ export function handleGeneratorWorkerMessage(
         percent: 15,
         message:
           kInfo.modo === 'rotativas'
-            ? `Configurando Fixas Rotativas (${kInfo.minK}–${kInfo.maxK} de ${fixasSanitizadas.length}) e cota Anti-Cisne Negro (${quotas.coreQuota}/${quotas.lowerQuota}/${quotas.upperQuota})...`
-            : 'Executando poda antecipada D1–D15, M3–M8, Dígitos 63–87, Cruz e Ranking...',
+            ? `Configurando Fixas Rotativas (${kInfo.minK}–${kInfo.maxK} de ${fixasSanitizadas.length}) e cobertura combinatória ótima...`
+            : 'Executando cobertura combinatória LJCR/Set Cover com filtros nucleares auditados...',
       });
 
       const baseSanitizedFilters: FilterCriteria = {
@@ -309,9 +312,28 @@ export function handleGeneratorWorkerMessage(
         }
       }
 
+      // Trava absoluta contra fechamentos vazios: se o pool tem >= 15 dezenas, força síntese de cobertura pura (Nível 3)
+      if (tickets.length === 0 && data.selectedNumbers.length >= 15) {
+        const emergencyFb = buildProgressiveFallbackFilters(baseSanitizedFilters, 3);
+        tickets = generateFechamentoCovering(
+          data.selectedNumbers,
+          data.targetHits,
+          data.maxTickets,
+          emergencyFb.filters,
+          data.drawDezenas,
+          data.aiScores,
+          3,
+          true
+        );
+        appliedFallbackLevel = 3;
+        appliedFallbackLabel = emergencyFb.label;
+        appliedFallbackDescription =
+          'Trava Zero-Vazio ativada: filtros secundários flexibilizados para garantir cobertura real.';
+      }
+
       if (tickets.length === 0) {
         throw new Error(
-          'Nenhuma combinação válida pôde ser gerada mesmo após os 3 níveis de Fallback Progressivo. Verifique dezenas fixas/excluídas.'
+          'Selecione pelo menos 15 dezenas válidas para gerar o fechamento.'
         );
       }
 

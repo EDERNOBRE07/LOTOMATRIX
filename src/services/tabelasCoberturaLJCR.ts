@@ -407,10 +407,67 @@ export function gerarComFixas(
   const fixasOrdenadas = [...dezenasFixas].sort((a, b) => a - b);
 
   if (!matriz) {
-    // Fallback: se matriz exata não catalogada, combina fixas com primeiras combinações
-    return varsOrdenadas.slice(0, vagas).map(() => {
-      return [...fixasOrdenadas, ...varsOrdenadas.slice(0, vagas)].sort((a, b) => a - b);
-    });
+    // Fallback combinatório real (evita cartões duplicados quando a chave exata não está catalogada)
+    if (vagas <= 0) {
+      return [fixasOrdenadas.slice(0, tamanhoJogo)];
+    }
+    if (varsOrdenadas.length <= vagas) {
+      return [[...fixasOrdenadas, ...varsOrdenadas].sort((a, b) => a - b)];
+    }
+    const allVarCombos: number[][] = [];
+    const maxSampleCombos = 2500;
+    const buildVarSubsets = (start: number, current: number[]) => {
+      if (allVarCombos.length >= maxSampleCombos) return;
+      if (current.length === vagas) {
+        allVarCombos.push([...current]);
+        return;
+      }
+      const needed = vagas - current.length;
+      for (let i = start; i <= varsOrdenadas.length - needed; i++) {
+        current.push(varsOrdenadas[i]);
+        buildVarSubsets(i + 1, current);
+        current.pop();
+        if (allVarCombos.length >= maxSampleCombos) return;
+      }
+    };
+    buildVarSubsets(0, []);
+
+    if (allVarCombos.length <= 24) {
+      return allVarCombos.map((sub) => [...fixasOrdenadas, ...sub].sort((a, b) => a - b));
+    }
+    const varMasks = allVarCombos.map((sub) => criarMascara(sub));
+    const uncovered = new Set<number>(varMasks.map((_, i) => i));
+    const chosen: number[][] = [];
+    const targetVarHits = Math.max(1, Math.min(vagas, garantiaVariavel));
+    const maxFallbackLines = Math.min(32, allVarCombos.length);
+
+    while (uncovered.size > 0 && chosen.length < maxFallbackLines) {
+      let bestIdx = -1;
+      let bestGain = -1;
+      const stride = Math.max(1, Math.floor(allVarCombos.length / 400));
+      for (let i = 0; i < allVarCombos.length; i += stride) {
+        let gain = 0;
+        const m = varMasks[i];
+        for (const u of uncovered) {
+          if (popcount(m & varMasks[u]) >= targetVarHits) gain++;
+        }
+        if (gain > bestGain) {
+          bestGain = gain;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx === -1 || bestGain <= 0) break;
+      const chosenMask = varMasks[bestIdx];
+      chosen.push([...fixasOrdenadas, ...allVarCombos[bestIdx]].sort((a, b) => a - b));
+      for (const u of Array.from(uncovered)) {
+        if (popcount(chosenMask & varMasks[u]) >= targetVarHits) {
+          uncovered.delete(u);
+        }
+      }
+    }
+    return chosen.length > 0
+      ? chosen
+      : [[...fixasOrdenadas, ...varsOrdenadas.slice(0, vagas)].sort((a, b) => a - b)];
   }
 
   return matriz.linhas.map((linha) => {
