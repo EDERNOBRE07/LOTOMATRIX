@@ -41,6 +41,8 @@ import {
   Activity,
   Compass,
   SlidersHorizontal,
+  Flame,
+  Snowflake,
 } from 'lucide-react';
 
 interface AIPredictorTabProps {
@@ -106,6 +108,299 @@ const CustomConfidenceTooltip: React.FC<CustomTooltipProps> = ({ active, payload
 };
 
 export type RiskLevel = 'conservador' | 'equilibrado' | 'ousado';
+
+interface Top5QuentesEFriasAIPanelProps {
+  aiPrediction: AIPredictionResponse | null;
+  fallbackScores: number[];
+  latestDraw: LotofacilDraw;
+  dynamicStats: DezenaStats[];
+  cyclePendingNumbers: number[];
+  isLoading: boolean;
+  onApplyTop18: () => void;
+  onFixHotNumbers?: (numbers: number[]) => void;
+}
+
+/**
+ * Componente dedicado que consome diretamente o estado `aiPrediction` (gerenciado em App.tsx)
+ * para exibir as 5 Dezenas Mais Quentes e as 5 Dezenas Mais Frias com gráfico de barras
+ * horizontal individual representando a intensidade do score de predição de cada dezena.
+ */
+const Top5QuentesEFriasAIPanel: React.FC<Top5QuentesEFriasAIPanelProps> = ({
+  aiPrediction,
+  fallbackScores,
+  latestDraw,
+  dynamicStats,
+  cyclePendingNumbers,
+  isLoading,
+  onApplyTop18,
+  onFixHotNumbers,
+}) => {
+  const [fixedFeedback, setFixedFeedback] = useState(false);
+
+  const { top5Quentes, top5Frias, meanScore, spreadScore, isDirectAI } = React.useMemo(() => {
+    const hasDirect = Boolean(
+      aiPrediction && Array.isArray(aiPrediction.scores) && aiPrediction.scores.length === 25
+    );
+    const activeScores = hasDirect && aiPrediction ? aiPrediction.scores : fallbackScores;
+    const keySet = new Set(aiPrediction?.dezenasChave || []);
+    const cycleSet = new Set(cyclePendingNumbers);
+    const latestSet = new Set(latestDraw.dezenas);
+
+    const ranked = Array.from({ length: 25 }, (_, i) => {
+      const numero = i + 1;
+      const raw = Number(activeScores[i]);
+      const score = Number(Math.min(99, Math.max(1, Number.isFinite(raw) ? raw : 50)).toFixed(1));
+      const stat = dynamicStats.find((s) => s.numero === numero);
+      return {
+        numero,
+        score,
+        atrasoAtual: stat?.atrasoAtual ?? 0,
+        pendenteCiclo: cycleSet.has(numero),
+        saiuUltimo: latestSet.has(numero),
+        isChaveIA: keySet.has(numero),
+      };
+    });
+
+    const mean = ranked.reduce((acc, item) => acc + item.score, 0) / 25;
+    const hot = [...ranked]
+      .sort((a, b) => b.score - a.score || a.numero - b.numero)
+      .slice(0, 5);
+    const hotSet = new Set(hot.map((h) => h.numero));
+    const cold = [...ranked]
+      .filter((item) => !hotSet.has(item.numero))
+      .sort((a, b) => a.score - b.score || b.atrasoAtual - a.atrasoAtual || a.numero - b.numero)
+      .slice(0, 5);
+
+    const avgHot = hot.reduce((acc, item) => acc + item.score, 0) / Math.max(1, hot.length);
+    const avgCold = cold.reduce((acc, item) => acc + item.score, 0) / Math.max(1, cold.length);
+
+    return {
+      top5Quentes: hot,
+      top5Frias: cold,
+      meanScore: Number(mean.toFixed(1)),
+      spreadScore: Number((avgHot - avgCold).toFixed(1)),
+      isDirectAI: hasDirect,
+    };
+  }, [aiPrediction, fallbackScores, dynamicStats, cyclePendingNumbers, latestDraw.dezenas]);
+
+  const confidence = aiPrediction?.taxaConfianca ?? 95.8;
+
+  return (
+    <section
+      aria-label="5 Dezenas Mais Quentes e 5 Dezenas Mais Frias da Predição IA"
+      className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 space-y-5"
+    >
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-sans text-emerald-400 font-medium">
+              {isDirectAI ? 'Estado live: aiPrediction' : 'Calibração estatística'}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>Confiança {confidence.toFixed(1)}%</span>
+            <span aria-hidden="true">·</span>
+            <span>Concurso #{latestDraw.concurso} → #{latestDraw.concurso + 1}</span>
+            <span aria-hidden="true">·</span>
+            <span>Amplitude +{spreadScore.toFixed(1)} pts</span>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+            Termômetro de Predição IA — 5 Dezenas Mais Quentes vs 5 Mais Frias
+          </h3>
+          <p className="text-xs text-slate-400 max-w-2xl">
+            Intensidade relativa dos escores calculados em <span className="font-mono text-slate-300">aiPrediction</span> (escala 0–100%, média do volante: {meanScore.toFixed(1)}%).
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {onFixHotNumbers && (
+            <button
+              type="button"
+              onClick={() => {
+                onFixHotNumbers(top5Quentes.slice(0, 3).map((q) => q.numero));
+                setFixedFeedback(true);
+                window.setTimeout(() => setFixedFeedback(false), 2500);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium transition cursor-pointer whitespace-nowrap"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>{fixedFeedback ? 'Top 3 Fixadas!' : 'Fixar Top 3 Quentes'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onApplyTop18}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+          >
+            <span>Usar Base IA (18 Dez.)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Loading Skeleton */}
+      {isLoading && !aiPrediction ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[0, 1].map((col) => (
+            <div
+              key={col}
+              className="rounded-xl border border-slate-800 bg-slate-950/75 p-4 space-y-3 animate-pulse"
+            >
+              <div className="h-4 w-44 bg-slate-800 rounded" />
+              {[0, 1, 2, 3, 4].map((row) => (
+                <div key={row} className="h-10 bg-slate-800/70 rounded-lg" />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Coluna Esquerda: 5 Dezenas Mais Quentes */}
+          <div className="rounded-xl border border-amber-500/30 bg-slate-950/80 p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-800/90">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+                <h4 className="text-sm font-semibold text-white">5 Dezenas Mais Quentes</h4>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-amber-400">
+                Pico {top5Quentes[0]?.score.toFixed(1)}%
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {top5Quentes.map((item, idx) => {
+                const delta = Number((item.score - meanScore).toFixed(1));
+                const barWidth = Math.min(100, Math.max(8, item.score));
+                return (
+                  <div key={`hot-${item.numero}`} className="flex items-center gap-3">
+                    <span className="w-5 text-[11px] font-mono tabular-nums text-slate-500 shrink-0">
+                      #{idx + 1}
+                    </span>
+
+                    <span className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 font-mono font-bold text-sm flex items-center justify-center shrink-0 tabular-nums">
+                      {String(item.numero).padStart(2, '0')}
+                    </span>
+
+                    {/* Pequeno Gráfico de Barras Horizontal da Intensidade do Score */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="text-slate-300 truncate">
+                          {item.pendenteCiclo
+                            ? 'Pendente do ciclo'
+                            : item.isChaveIA
+                            ? 'Dezena-chave IA'
+                            : item.saiuUltimo
+                            ? `Presente no #${latestDraw.concurso}`
+                            : `Atraso ${item.atrasoAtual}c`}
+                        </span>
+                        <span className="font-mono tabular-nums text-amber-300 font-semibold shrink-0">
+                          {item.score.toFixed(1)}%{' '}
+                          <span className="text-emerald-400 font-normal">
+                            ({delta >= 0 ? '+' : ''}
+                            {delta})
+                          </span>
+                        </span>
+                      </div>
+
+                      <div
+                        className="relative h-2.5 w-full rounded-full bg-slate-900 border border-slate-800 overflow-hidden"
+                        role="progressbar"
+                        aria-valuenow={Math.round(item.score)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`Intensidade do score da dezena ${item.numero}: ${item.score.toFixed(1)}%`}
+                      >
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-500"
+                          style={{ width: `${barWidth}%` }}
+                        />
+                        {/* Marcador da média geral do volante */}
+                        <span
+                          className="absolute top-0 bottom-0 w-px bg-slate-400/70"
+                          style={{ left: `${Math.min(98, Math.max(2, meanScore))}%` }}
+                          title={`Média do volante: ${meanScore.toFixed(1)}%`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Coluna Direita: 5 Dezenas Mais Frias */}
+          <div className="rounded-xl border border-sky-500/30 bg-slate-950/80 p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-800/90">
+              <div className="flex items-center gap-2">
+                <Snowflake className="w-4 h-4 text-sky-400 shrink-0" />
+                <h4 className="text-sm font-semibold text-white">5 Dezenas Mais Frias</h4>
+              </div>
+              <span className="text-[11px] font-mono tabular-nums text-sky-400">
+                Piso {top5Frias[0]?.score.toFixed(1)}%
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {top5Frias.map((item, idx) => {
+                const delta = Number((item.score - meanScore).toFixed(1));
+                const barWidth = Math.min(100, Math.max(8, item.score));
+                return (
+                  <div key={`cold-${item.numero}`} className="flex items-center gap-3">
+                    <span className="w-5 text-[11px] font-mono tabular-nums text-slate-500 shrink-0">
+                      #{idx + 1}
+                    </span>
+
+                    <span className="w-9 h-9 rounded-full bg-slate-800 text-sky-200 border border-sky-400/40 font-mono font-bold text-sm flex items-center justify-center shrink-0 tabular-nums">
+                      {String(item.numero).padStart(2, '0')}
+                    </span>
+
+                    {/* Pequeno Gráfico de Barras Horizontal da Intensidade do Score */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="text-slate-400 truncate">
+                          {item.atrasoAtual === 0
+                            ? `Recente (#${latestDraw.concurso})`
+                            : `Ausente há ${item.atrasoAtual} ${
+                                item.atrasoAtual === 1 ? 'concurso' : 'concursos'
+                              }`}
+                        </span>
+                        <span className="font-mono tabular-nums text-sky-300 font-semibold shrink-0">
+                          {item.score.toFixed(1)}%{' '}
+                          <span className="text-slate-500 font-normal">({delta})</span>
+                        </span>
+                      </div>
+
+                      <div
+                        className="relative h-2.5 w-full rounded-full bg-slate-900 border border-slate-800 overflow-hidden"
+                        role="progressbar"
+                        aria-valuenow={Math.round(item.score)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`Intensidade do score da dezena ${item.numero}: ${item.score.toFixed(1)}%`}
+                      >
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-sky-600 to-sky-400 transition-all duration-500"
+                          style={{ width: `${barWidth}%` }}
+                        />
+                        {/* Marcador da média geral do volante */}
+                        <span
+                          className="absolute top-0 bottom-0 w-px bg-slate-400/70"
+                          style={{ left: `${Math.min(98, Math.max(2, meanScore))}%` }}
+                          title={`Média do volante: ${meanScore.toFixed(1)}%`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
 
 export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
@@ -364,7 +659,19 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         </div>
       </div>
 
-      {/* DESTAQUE PRINCIPAL: TOP 5 QUENTES & TOP 5 FRIAS (ESTADO LIVE DE aiPrediction EM App.tsx) */}
+      {/* COMPONENTE DEDICADO: 5 DEZENAS MAIS QUENTES & 5 MAIS FRIAS COM BARRAS HORIZONTAIS DE SCORE (aiPrediction) */}
+      <Top5QuentesEFriasAIPanel
+        aiPrediction={prediction}
+        fallbackScores={scores}
+        latestDraw={latestDraw}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        isLoading={isLoading}
+        onApplyTop18={() => onApplyRecommendation(recomendadas18)}
+        onFixHotNumbers={onFixAnchors}
+      />
+
+      {/* COMBINAÇÕES IDEAIS SUGERIDAS PELA IA */}
       <DicasApostaIACard
         latestDraw={latestDraw}
         prediction={prediction}
@@ -375,6 +682,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         activeFilterConfig={activeFilterConfig}
         onApplyRecommendation={onApplyRecommendation}
         onFixHotNumbers={onFixAnchors}
+        hideHotColdGrid
       />
 
       {/* BARRA DE SINCRONIZAÇÃO COM FILTROS INTELIGENTES */}

@@ -30,6 +30,7 @@ interface DicasApostaIACardProps {
   activeFilterConfig?: FilterCriteria;
   onApplyRecommendation: (numbers: number[]) => void;
   onFixHotNumbers?: (numbers: number[]) => void;
+  hideHotColdGrid?: boolean;
 }
 
 interface RankedNumber {
@@ -51,6 +52,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
   activeFilterConfig,
   onApplyRecommendation,
   onFixHotNumbers,
+  hideHotColdGrid = false,
 }) => {
   const [copiedComboIdx, setCopiedComboIdx] = useState<number | null>(null);
   const [fixedApplied, setFixedApplied] = useState<boolean>(false);
@@ -235,42 +237,44 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
       className="bg-slate-900 rounded-xl border border-slate-800 p-5 sm:p-6 space-y-5"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="font-sans text-emerald-400 font-medium">
-              Confiança {taxaConfianca.toFixed(1)}%
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>Concurso #{latestDraw.concurso} → #{latestDraw.concurso + 1}</span>
-            <span aria-hidden="true">·</span>
-            <span className="font-sans">
-              {usingDirectPrediction ? 'Fonte: aiPrediction (App)' : 'Fonte: Ponderação Estatística'}
-            </span>
+      {!hideHotColdGrid && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-sans text-emerald-400 font-medium">
+                Confiança {taxaConfianca.toFixed(1)}%
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>Concurso #{latestDraw.concurso} → #{latestDraw.concurso + 1}</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-sans">
+                {usingDirectPrediction ? 'Fonte: aiPrediction (App)' : 'Fonte: Ponderação Estatística'}
+              </span>
+            </div>
+            <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+              Dicas de Aposta IA — Top 5 Quentes &amp; Top 5 Frias
+            </h3>
+            <p className="text-xs text-slate-400 max-w-2xl">
+              {prediction?.justificativaTecnica
+                ? prediction.justificativaTecnica
+                : `Extração direta dos 25 escores probabilísticos de aiPrediction destacando as 5 dezenas de maior tração e as 5 de menor propensão para o Concurso #${latestDraw.concurso + 1}.`}
+            </p>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
-            Dicas de Aposta IA — Top 5 Quentes &amp; Top 5 Frias
-          </h3>
-          <p className="text-xs text-slate-400 max-w-2xl">
-            {prediction?.justificativaTecnica
-              ? prediction.justificativaTecnica
-              : `Extração direta dos 25 escores probabilísticos de aiPrediction destacando as 5 dezenas de maior tração e as 5 de menor propensão para o Concurso #${latestDraw.concurso + 1}.`}
-          </p>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => onApplyRecommendation(suggestedCombos[2].dezenas)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition cursor-pointer shrink-0 whitespace-nowrap"
-        >
-          <span>Aplicar Base IA (18 Dez.)</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => onApplyRecommendation(suggestedCombos[2].dezenas)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <span>Aplicar Base IA (18 Dez.)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Loading Skeleton State */}
-      {isLoading && !prediction ? (
+      {!hideHotColdGrid && (isLoading && !prediction ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {[0, 1].map((col) => (
             <div
@@ -414,7 +418,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
             </motion.div>
           </div>
         </div>
-      )}
+      ))}
 
       {/* Combinações Ideais Sugeridas */}
       <div className="space-y-2.5">
