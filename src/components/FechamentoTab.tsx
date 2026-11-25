@@ -2991,6 +2991,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       </div>
 
       {/* ===================================================================== */}
+      {/* BATCH PROCESSOR: COMPARADOR SIMULTÂNEO SET COVER (17 · 18 · 19 DEZ.)  */}
+      {/* ===================================================================== */}
+      <BatchMatrixProcessor
+        latestDraw={latestDraw}
+        selectedNumbers={selectedNumbers}
+        fixedNumbers={fixedNumbers}
+        excludedNumbers={excludedNumbers}
+        effectiveFilters={effectiveFilters}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        aiScores={aiPrediction?.scores}
+        onApplyVariation={handleApplyBatchVariation}
+      />
+
+      {/* ===================================================================== */}
       {/* PASSO 1: SELECIONE A ESTRATÉGIA DE FECHAMENTO & MATRIZES ECONÔMICAS   */}
       {/* ===================================================================== */}
       <section className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-xl space-y-4">
@@ -4315,19 +4330,6 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           Resultados, Auditoria &amp; Ferramentas do Fechamento
         </h3>
       </div>
-
-      {/* Batch Processor: Comparador Simultâneo de Variações por Subset Pool (16–21 dezenas) */}
-      <BatchMatrixProcessor
-        latestDraw={latestDraw}
-        selectedNumbers={selectedNumbers}
-        fixedNumbers={fixedNumbers}
-        excludedNumbers={excludedNumbers}
-        effectiveFilters={effectiveFilters}
-        dynamicStats={dynamicStats}
-        cyclePendingNumbers={cyclePendingNumbers}
-        aiScores={aiPrediction?.scores}
-        onApplyVariation={handleApplyBatchVariation}
-      />
 
       {/* Atalho & Painel de Planejamento de Bolão Oficial Caixa */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">

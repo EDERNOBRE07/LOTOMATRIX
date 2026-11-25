@@ -29,6 +29,7 @@ interface DicasApostaIACardProps {
   cyclePendingNumbers?: number[];
   activeFilterConfig?: FilterCriteria;
   onApplyRecommendation: (numbers: number[]) => void;
+  onFixHotNumbers?: (numbers: number[]) => void;
 }
 
 interface RankedNumber {
@@ -37,6 +38,7 @@ interface RankedNumber {
   atrasoAtual: number;
   saiuUltimo: boolean;
   pendenteCiclo: boolean;
+  isChaveIA: boolean;
 }
 
 export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
@@ -48,8 +50,10 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
   cyclePendingNumbers = [],
   activeFilterConfig,
   onApplyRecommendation,
+  onFixHotNumbers,
 }) => {
   const [copiedComboIdx, setCopiedComboIdx] = useState<number | null>(null);
+  const [fixedApplied, setFixedApplied] = useState<boolean>(false);
   const usingDirectPrediction = Boolean(prediction?.scores && prediction.scores.length === 25);
 
   const taxaConfianca = prediction?.taxaConfianca ?? 95.8;
@@ -71,6 +75,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
 
   const rankedNumbers = useMemo<RankedNumber[]>(() => {
     const excluded = new Set(activeFilterConfig?.dezenasExcluidas || []);
+    const keySet = new Set(prediction?.dezenasChave || []);
     return Array.from({ length: 25 }, (_, i) => {
       const numero = i + 1;
       const stat = dynamicStats.find((s) => s.numero === numero);
@@ -80,9 +85,22 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
         atrasoAtual: stat?.atrasoAtual ?? 0,
         saiuUltimo: latestDraw.dezenas.includes(numero),
         pendenteCiclo: cyclePendingNumbers.includes(numero),
+        isChaveIA: keySet.has(numero),
       };
     });
-  }, [effectiveScores, dynamicStats, latestDraw.dezenas, cyclePendingNumbers, activeFilterConfig?.dezenasExcluidas]);
+  }, [
+    effectiveScores,
+    dynamicStats,
+    latestDraw.dezenas,
+    cyclePendingNumbers,
+    activeFilterConfig?.dezenasExcluidas,
+    prediction?.dezenasChave,
+  ]);
+
+  const meanScore = useMemo(() => {
+    const sum = rankedNumbers.reduce((acc, item) => acc + item.score, 0);
+    return Number((sum / Math.max(1, rankedNumbers.length)).toFixed(1));
+  }, [rankedNumbers]);
 
   const top5Quentes = useMemo(() => {
     return [...rankedNumbers]
@@ -97,6 +115,22 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
       .sort((a, b) => a.score - b.score || b.atrasoAtual - a.atrasoAtual || a.numero - b.numero)
       .slice(0, 5);
   }, [rankedNumbers, top5Quentes]);
+
+  const avgHotScore = useMemo(
+    () =>
+      Number(
+        (top5Quentes.reduce((acc, item) => acc + item.score, 0) / Math.max(1, top5Quentes.length)).toFixed(1)
+      ),
+    [top5Quentes]
+  );
+
+  const avgColdScore = useMemo(
+    () =>
+      Number(
+        (top5Frias.reduce((acc, item) => acc + item.score, 0) / Math.max(1, top5Frias.length)).toFixed(1)
+      ),
+    [top5Frias]
+  );
 
   const suggestedCombos = useMemo(() => {
     const excluded = new Set(activeFilterConfig?.dezenasExcluidas || []);
@@ -257,16 +291,31 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* 5 Dezenas Quentes */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <Flame className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="font-semibold text-white">
                   5 Dezenas Mais Quentes
                 </span>
               </div>
-              <span className="font-mono tabular-nums text-[11px] text-amber-400">
-                Maior escore IA
-              </span>
+              <div className="flex items-center gap-2 font-mono tabular-nums text-[11px]">
+                <span className="text-amber-400">
+                  Média {avgHotScore}% (+{(avgHotScore - meanScore).toFixed(1)} pts)
+                </span>
+                {onFixHotNumbers && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onFixHotNumbers(top5Quentes.slice(0, 3).map((q) => q.numero));
+                      setFixedApplied(true);
+                      window.setTimeout(() => setFixedApplied(false), 2500);
+                    }}
+                    className="font-sans px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition cursor-pointer"
+                  >
+                    {fixedApplied ? 'Fixadas!' : 'Fixar Top 3'}
+                  </button>
+                )}
+              </div>
             </div>
 
             <motion.div
@@ -282,9 +331,12 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
                   variants={staggerBallVariants}
                   className="flex flex-col items-center p-2.5 rounded-lg bg-slate-900 border border-amber-500/35"
                 >
-                  <span className="text-[10px] font-mono tabular-nums text-slate-500 self-start">
-                    #{rankIdx + 1}
-                  </span>
+                  <div className="w-full flex items-center justify-between text-[10px] font-mono tabular-nums">
+                    <span className="text-slate-500">#{rankIdx + 1}</span>
+                    {item.isChaveIA && (
+                      <span className="text-emerald-400 font-semibold">IA</span>
+                    )}
+                  </div>
                   <span className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 font-mono font-bold text-sm flex items-center justify-center mt-0.5 tabular-nums">
                     {item.numero.toString().padStart(2, '0')}
                   </span>
@@ -301,7 +353,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
                     {item.pendenteCiclo
                       ? 'Ciclo'
                       : item.saiuUltimo
-                      ? `Saiu`
+                      ? 'Saiu'
                       : `${item.atrasoAtual}c atr.`}
                   </span>
                 </motion.div>
@@ -311,7 +363,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
 
           {/* 5 Dezenas Frias */}
           <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <Snowflake className="w-4 h-4 text-sky-400 shrink-0" />
                 <span className="font-semibold text-white">
@@ -319,7 +371,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
                 </span>
               </div>
               <span className="font-mono tabular-nums text-[11px] text-sky-400">
-                Menor escore IA
+                Média {avgColdScore}% ({(avgColdScore - meanScore).toFixed(1)} pts)
               </span>
             </div>
 
@@ -336,9 +388,12 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
                   variants={staggerBallVariants}
                   className="flex flex-col items-center p-2.5 rounded-lg bg-slate-900 border border-sky-500/30"
                 >
-                  <span className="text-[10px] font-mono tabular-nums text-slate-500 self-start">
-                    #{rankIdx + 1}
-                  </span>
+                  <div className="w-full flex items-center justify-between text-[10px] font-mono tabular-nums">
+                    <span className="text-slate-500">#{rankIdx + 1}</span>
+                    <span className="text-slate-500">
+                      {(item.score - meanScore).toFixed(0)}
+                    </span>
+                  </div>
                   <span className="w-9 h-9 rounded-full bg-slate-800 text-sky-200 border border-sky-400/40 font-mono font-bold text-sm flex items-center justify-center mt-0.5 tabular-nums">
                     {item.numero.toString().padStart(2, '0')}
                   </span>

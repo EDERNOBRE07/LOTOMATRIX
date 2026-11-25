@@ -30,6 +30,7 @@ import {
   ChevronUp,
   ArrowRight,
   RotateCcw,
+  Award,
 } from 'lucide-react';
 
 export interface BatchMatrixVariationResult {
@@ -41,6 +42,9 @@ export interface BatchMatrixVariationResult {
   custoTotal: number;
   cobertura14Pct: number;
   cobertura13Pct: number;
+  setCoverEfficiencyPct: number;
+  overlapRedundancyPct: number;
+  uniqueContributionTickets: number;
   eficiencia14Por10Reais: number;
   eficienciaPorJogo: number;
   minHamming: number;
@@ -67,7 +71,10 @@ const AVAILABLE_POOL_SIZES = [16, 17, 18, 19, 20, 21] as const;
 type BudgetPreset = 'auto' | '12' | '16' | '24';
 type PoolSourceMode = 'ia_ciclo' | 'volante_atual' | 'frequencia';
 
-const PRESET_TICKETS_BY_POOL: Record<number, { mode14: FechamentoMode; mode13: FechamentoMode; autoTickets: number }> = {
+const PRESET_TICKETS_BY_POOL: Record<
+  number,
+  { mode14: FechamentoMode; mode13: FechamentoMode; autoTickets: number }
+> = {
   16: { mode14: '16_14_15', mode13: '16_14_15', autoTickets: 8 },
   17: { mode14: '17_14_15', mode13: '17_14_15', autoTickets: 8 },
   18: { mode14: '18_14_15', mode13: '18_13_14', autoTickets: 24 },
@@ -84,15 +91,20 @@ function popcount25(mask: number): number {
 }
 
 /**
- * Audita cobertura bitwise real (14+ e 13+ pontos) de uma variação de matriz
+ * Audita cobertura bitwise real (14+ e 13+ pontos) e eficiência de Set Cover
+ * (taxa de cobertura sem sobreposição redundante e bilhetes com contribuição única)
  * sobre o espaço C(poolSize, 15) exato (<= 18 dezenas) ou amostra estratificada (19–21 dezenas).
  */
-function auditVariationCoverageBitwise(
+function auditVariationSetCoverBitwise(
   subsetPool: number[],
-  tickets: GameTicket[]
+  tickets: GameTicket[],
+  targetHits: 14 | 13
 ): {
   cobertura14Pct: number;
   cobertura13Pct: number;
+  setCoverEfficiencyPct: number;
+  overlapRedundancyPct: number;
+  uniqueContributionTickets: number;
   minHamming: number;
   scenariosAudited: number;
   isExactAudit: boolean;
@@ -101,6 +113,9 @@ function auditVariationCoverageBitwise(
     return {
       cobertura14Pct: 0,
       cobertura13Pct: 0,
+      setCoverEfficiencyPct: 0,
+      overlapRedundancyPct: 0,
+      uniqueContributionTickets: 0,
       minHamming: 0,
       scenariosAudited: 0,
       isExactAudit: true,
@@ -162,27 +177,58 @@ function auditVariationCoverageBitwise(
 
   let covered14 = 0;
   let covered13 = 0;
+  let targetCoveredDistinct = 0;
+  let sumTicketTargetHits = 0;
+  const uniqueHitsByTicket = new Array<number>(ticketMasks.length).fill(0);
   const total = scenarioMasks.length || 1;
 
   for (let s = 0; s < scenarioMasks.length; s++) {
     const sMask = scenarioMasks[s];
     let bestHits = 0;
+    let targetCoveringCount = 0;
+    let soleCoveringTicketIdx = -1;
+
     for (let t = 0; t < ticketMasks.length; t++) {
       const hits = popcount25(sMask & ticketMasks[t]);
       if (hits > bestHits) bestHits = hits;
-      if (bestHits >= 14) break;
+      if (hits >= targetHits) {
+        targetCoveringCount++;
+        soleCoveringTicketIdx = t;
+      }
     }
+
     if (bestHits >= 14) {
       covered14++;
       covered13++;
     } else if (bestHits >= 13) {
       covered13++;
     }
+
+    if (targetCoveringCount > 0) {
+      targetCoveredDistinct++;
+      sumTicketTargetHits += targetCoveringCount;
+      if (targetCoveringCount === 1 && soleCoveringTicketIdx >= 0) {
+        uniqueHitsByTicket[soleCoveringTicketIdx]++;
+      }
+    }
   }
+
+  const uniqueContributionTickets = uniqueHitsByTicket.filter((c) => c > 0).length;
+  const rawSetCoverEfficiency =
+    sumTicketTargetHits > 0 ? (targetCoveredDistinct / sumTicketTargetHits) * 100 : 0;
+  const setCoverEfficiencyPct = Number(
+    Math.min(100, Math.max(0, rawSetCoverEfficiency)).toFixed(1)
+  );
+  const overlapRedundancyPct = Number(
+    Math.max(0, 100 - setCoverEfficiencyPct).toFixed(1)
+  );
 
   return {
     cobertura14Pct: Number(((covered14 / total) * 100).toFixed(1)),
     cobertura13Pct: Number(((covered13 / total) * 100).toFixed(1)),
+    setCoverEfficiencyPct,
+    overlapRedundancyPct,
+    uniqueContributionTickets,
     minHamming,
     scenariosAudited: scenarioMasks.length,
     isExactAudit,
@@ -231,7 +277,6 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
       } else if (poolSource === 'frequencia') {
         rankScore = freq + (atraso >= 2 ? 40 : 0) + (cycleSet.has(num) ? 60 : 0);
       } else {
-        // Score IA + Ciclo + leve bônus para dezenas já marcadas pelo usuário
         rankScore =
           aiScore * 1.45 +
           (cycleSet.has(num) ? 24 : 0) +
@@ -281,75 +326,83 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
     setIsProcessing(true);
     setAppliedPoolSize(null);
     const sortedSizes = [...selectedPoolSizes].sort((a, b) => a - b);
-    const batchOutput: BatchMatrixVariationResult[] = [];
+    setProgressLabel(
+      `Gerando fechamentos simultâneos para ${sortedSizes.join(', ')} dezenas e auditando eficiência Set Cover...`
+    );
 
-    for (let idx = 0; idx < sortedSizes.length; idx++) {
-      const poolSize = sortedSizes[idx];
-      setProgressLabel(
-        `Processando variação ${idx + 1}/${sortedSizes.length}: universo de ${poolSize} dezenas...`
-      );
+    // Permite pintura imediata do indicador antes de disparar o lote simultâneo
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 24));
 
-      // Libera o event loop para manter feedback visual fluido
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
+    const batchOutput = await Promise.all(
+      sortedSizes.map(
+        (poolSize) =>
+          new Promise<BatchMatrixVariationResult>((resolve) => {
+            window.setTimeout(() => {
+              const t0 = performance.now();
+              const subsetPool = rankedUniverse.slice(0, poolSize).sort((a, b) => a - b);
+              const presetMeta = PRESET_TICKETS_BY_POOL[poolSize] || PRESET_TICKETS_BY_POOL[18];
+              const mode: FechamentoMode =
+                targetHits === 14 ? presetMeta.mode14 : presetMeta.mode13;
+              const maxTickets =
+                budgetPreset === 'auto' ? presetMeta.autoTickets : Number(budgetPreset);
 
-      const t0 = performance.now();
-      const subsetPool = rankedUniverse.slice(0, poolSize).sort((a, b) => a - b);
-      const presetMeta = PRESET_TICKETS_BY_POOL[poolSize] || PRESET_TICKETS_BY_POOL[18];
-      const mode: FechamentoMode = targetHits === 14 ? presetMeta.mode14 : presetMeta.mode13;
-      const maxTickets =
-        budgetPreset === 'auto' ? presetMeta.autoTickets : Number(budgetPreset);
+              const subsetSet = new Set(subsetPool);
+              const scopedFilters: FilterCriteria = {
+                ...effectiveFilters,
+                dezenasFixas: fixedNumbers.filter((n) => subsetSet.has(n)),
+                dezenasExcluidas: excludedNumbers.filter((n) => !subsetSet.has(n)),
+              };
 
-      const subsetSet = new Set(subsetPool);
-      const scopedFilters: FilterCriteria = {
-        ...effectiveFilters,
-        dezenasFixas: fixedNumbers.filter((n) => subsetSet.has(n)),
-        dezenasExcluidas: excludedNumbers.filter((n) => !subsetSet.has(n)),
-      };
+              const tickets = generateFechamentoCovering(
+                subsetPool,
+                targetHits,
+                maxTickets,
+                scopedFilters,
+                latestDraw.dezenas,
+                aiScores
+              );
 
-      const tickets = generateFechamentoCovering(
-        subsetPool,
-        targetHits,
-        maxTickets,
-        scopedFilters,
-        latestDraw.dezenas,
-        aiScores
-      );
+              const audit = auditVariationSetCoverBitwise(subsetPool, tickets, targetHits);
+              const custoTotal = Number((tickets.length * VALOR_APOSTA_LOTOFACIL).toFixed(2));
+              const eficiencia14Por10Reais =
+                custoTotal > 0 ? Number((audit.cobertura14Pct / (custoTotal / 10)).toFixed(2)) : 0;
+              const eficienciaPorJogo =
+                tickets.length > 0 ? Number((audit.cobertura14Pct / tickets.length).toFixed(2)) : 0;
+              const avgScoreIA =
+                tickets.length > 0
+                  ? Number(
+                      (
+                        tickets.reduce((acc, t) => acc + (t.scoreIA ?? 75), 0) / tickets.length
+                      ).toFixed(1)
+                    )
+                  : 0;
 
-      const audit = auditVariationCoverageBitwise(subsetPool, tickets);
-      const custoTotal = Number((tickets.length * VALOR_APOSTA_LOTOFACIL).toFixed(2));
-      const eficiencia14Por10Reais =
-        custoTotal > 0 ? Number((audit.cobertura14Pct / (custoTotal / 10)).toFixed(2)) : 0;
-      const eficienciaPorJogo =
-        tickets.length > 0 ? Number((audit.cobertura14Pct / tickets.length).toFixed(2)) : 0;
-      const avgScoreIA =
-        tickets.length > 0
-          ? Number(
-              (
-                tickets.reduce((acc, t) => acc + (t.scoreIA ?? 75), 0) / tickets.length
-              ).toFixed(1)
-            )
-          : 0;
+              resolve({
+                poolSize,
+                mode,
+                subsetPool,
+                tickets,
+                targetHits,
+                custoTotal,
+                cobertura14Pct: audit.cobertura14Pct,
+                cobertura13Pct: audit.cobertura13Pct,
+                setCoverEfficiencyPct: audit.setCoverEfficiencyPct,
+                overlapRedundancyPct: audit.overlapRedundancyPct,
+                uniqueContributionTickets: audit.uniqueContributionTickets,
+                eficiencia14Por10Reais,
+                eficienciaPorJogo,
+                minHamming: audit.minHamming,
+                avgScoreIA,
+                scenariosAudited: audit.scenariosAudited,
+                isExactAudit: audit.isExactAudit,
+                durationMs: Math.max(1, Math.round(performance.now() - t0)),
+              });
+            }, 0);
+          })
+      )
+    );
 
-      batchOutput.push({
-        poolSize,
-        mode,
-        subsetPool,
-        tickets,
-        targetHits,
-        custoTotal,
-        cobertura14Pct: audit.cobertura14Pct,
-        cobertura13Pct: audit.cobertura13Pct,
-        eficiencia14Por10Reais,
-        eficienciaPorJogo,
-        minHamming: audit.minHamming,
-        avgScoreIA,
-        scenariosAudited: audit.scenariosAudited,
-        isExactAudit: audit.isExactAudit,
-        durationMs: Math.max(1, Math.round(performance.now() - t0)),
-      });
-    }
-
-    setResults(batchOutput);
+    setResults(batchOutput.sort((a, b) => a.poolSize - b.poolSize));
     setProgressLabel('');
     setIsProcessing(false);
   };
@@ -357,14 +410,20 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
   const summary = useMemo(() => {
     if (results.length === 0) return null;
     const bestEfficiency = [...results].sort(
-      (a, b) => b.eficiencia14Por10Reais - a.eficiencia14Por10Reais || b.cobertura14Pct - a.cobertura14Pct
+      (a, b) =>
+        b.eficiencia14Por10Reais - a.eficiencia14Por10Reais ||
+        b.setCoverEfficiencyPct - a.setCoverEfficiencyPct
+    )[0];
+    const bestSetCover = [...results].sort(
+      (a, b) =>
+        b.setCoverEfficiencyPct - a.setCoverEfficiencyPct || b.cobertura14Pct - a.cobertura14Pct
     )[0];
     const bestCoverage14 = [...results].sort(
       (a, b) => b.cobertura14Pct - a.cobertura14Pct || a.custoTotal - b.custoTotal
     )[0];
     const totalTickets = results.reduce((acc, r) => acc + r.tickets.length, 0);
     const totalMs = results.reduce((acc, r) => acc + r.durationMs, 0);
-    return { bestEfficiency, bestCoverage14, totalTickets, totalMs };
+    return { bestEfficiency, bestSetCover, bestCoverage14, totalTickets, totalMs };
   }, [results]);
 
   const chartData = useMemo(
@@ -374,6 +433,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
         poolSize: r.poolSize,
         cobertura14: r.cobertura14Pct,
         cobertura13: r.cobertura13Pct,
+        setCover: r.setCoverEfficiencyPct,
         eficiencia: r.eficiencia14Por10Reais,
         jogos: r.tickets.length,
         custo: r.custoTotal,
@@ -387,9 +447,16 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
     window.setTimeout(() => setAppliedPoolSize(null), 3500);
   };
 
+  const isPreset171819 =
+    selectedPoolSizes.length === 3 &&
+    selectedPoolSizes[0] === 17 &&
+    selectedPoolSizes[1] === 18 &&
+    selectedPoolSizes[2] === 19;
+
   return (
     <section
-      aria-label="Processador em Lote de Variações de Matriz"
+      id="batch-matrix-processor"
+      aria-label="Batch Processor de Fechamentos Simultâneos"
       className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 space-y-5"
     >
       {/* Header */}
@@ -397,17 +464,17 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Batch Processor</span>
+            <span className="text-emerald-400 font-medium">Batch Processor</span>
             <span aria-hidden="true">·</span>
-            <span>Set Cover Adaptativo</span>
+            <span>Comparativo Set Cover Lado a Lado</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono tabular-nums">Concurso #{latestDraw.concurso}</span>
           </div>
-          <h4 className="text-base font-semibold text-white tracking-tight">
-            Processador em Lote por Tamanho de Universo (Subset Pool)
-          </h4>
+          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+            Gerador Simultâneo de Fechamentos por Tamanho de Pool (17 · 18 · 19 Dezenas)
+          </h3>
           <p className="text-xs text-slate-400 max-w-2xl">
-            Gere múltiplas variações simultaneamente (ex.: 17, 18 e 19 dezenas) sob o mesmo critério de filtros e compare a eficiência real de cobertura 14+ e 13+ pontos por real investido.
+            Selecione múltiplos tamanhos de universo para gerar fechamentos em paralelo e comparar lado a lado a eficiência real de Set Cover, cobertura 14+/13+ pontos e retorno por R$ 10.
           </p>
         </div>
 
@@ -439,9 +506,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
             <span>
               {isProcessing
                 ? 'Processando Lote...'
-                : `Processar Lote (${selectedPoolSizes.length} ${
-                    selectedPoolSizes.length === 1 ? 'variação' : 'variações'
-                  })`}
+                : `Gerar ${selectedPoolSizes.length} Fechamentos Simultâneos`}
             </span>
           </button>
         </div>
@@ -451,8 +516,17 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 pb-4 border-b border-slate-800/80">
         {/* Subset Pool Sizes */}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-slate-300">
-            Tamanhos de Subset Pool (Dezenas)
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-medium text-slate-300">Tamanhos de Pool</span>
+            {!isPreset171819 && (
+              <button
+                type="button"
+                onClick={() => setSelectedPoolSizes([17, 18, 19])}
+                className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
+              >
+                Padrão 17·18·19
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {AVAILABLE_POOL_SIZES.map((size) => {
@@ -461,6 +535,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                 <button
                   key={size}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => togglePoolSize(size)}
                   className={`px-2.5 py-1.5 rounded-md font-mono tabular-nums text-xs font-semibold border transition cursor-pointer whitespace-nowrap shrink-0 ${
                     active
@@ -477,9 +552,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
         {/* Budget / Ticket Count */}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-slate-300">
-            Bilhetes por Variação
-          </div>
+          <div className="text-xs font-medium text-slate-300">Bilhetes por Pool</div>
           <div className="flex flex-wrap gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
             {(
               [
@@ -507,9 +580,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
         {/* Target Guarantee */}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-slate-300">
-            Garantia Combinatória
-          </div>
+          <div className="text-xs font-medium text-slate-300">Alvo Set Cover</div>
           <div className="flex gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
             {([14, 13] as const).map((hits) => (
               <button
@@ -530,9 +601,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
         {/* Pool Ranking Source */}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-slate-300">
-            Critério de Seleção das Dezenas
-          </div>
+          <div className="text-xs font-medium text-slate-300">Origem das Dezenas</div>
           <div className="flex gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
             {(
               [
@@ -570,14 +639,26 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
       {/* Empty State */}
       {!isProcessing && results.length === 0 && (
-        <div className="py-6 text-center space-y-2">
-          <p className="text-sm text-slate-300">
-            Selecione os tamanhos de universo desejados (padrão: 17, 18 e 19 dezenas) e clique em{' '}
-            <strong className="text-white">Processar Lote</strong>.
-          </p>
-          <p className="text-xs text-slate-500">
-            O motor audita cada variação via operações bitwise e identifica qual tamanho de pool entrega a maior cobertura real por R$ 10 investidos.
-          </p>
+        <div className="py-5 px-4 rounded-lg bg-slate-950/60 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-xs sm:text-sm text-slate-200">
+              Pools selecionados:{' '}
+              <strong className="font-mono text-emerald-400">
+                {selectedPoolSizes.map((s) => `${s} Dez.`).join(' · ')}
+              </strong>
+            </p>
+            <p className="text-xs text-slate-400">
+              Clique em <strong className="text-slate-200">Gerar {selectedPoolSizes.length} Fechamentos Simultâneos</strong> para comparar lado a lado a eficiência Set Cover, cobertura 14+/13+ e redundância de cada universo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRunBatch}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold transition cursor-pointer shrink-0 self-start sm:self-auto"
+          >
+            <Play className="w-3.5 h-3.5" />
+            <span>Comparar Agora</span>
+          </button>
         </div>
       )}
 
@@ -587,19 +668,19 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
           {/* KPI Summary Row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pb-4 border-b border-slate-800/80 font-mono tabular-nums">
             <div>
-              <div className="text-[11px] font-sans text-slate-400">Melhor Eficiência (14+ / R$ 10)</div>
+              <div className="text-[11px] font-sans text-slate-400">Melhor Eficiência Set Cover</div>
               <div className="mt-1 text-lg font-semibold text-emerald-400">
-                {summary.bestEfficiency.poolSize} Dezenas · {summary.bestEfficiency.eficiencia14Por10Reais.toFixed(1)}%
+                {summary.bestSetCover.poolSize} Dez. · {summary.bestSetCover.setCoverEfficiencyPct.toFixed(1)}%
               </div>
               <div className="text-[11px] font-sans text-slate-500">
-                {summary.bestEfficiency.cobertura14Pct.toFixed(1)}% em {summary.bestEfficiency.tickets.length} jogos
+                Redundância: {summary.bestSetCover.overlapRedundancyPct.toFixed(1)}% · {summary.bestSetCover.uniqueContributionTickets}/{summary.bestSetCover.tickets.length} únicos
               </div>
             </div>
 
             <div>
               <div className="text-[11px] font-sans text-slate-400">Maior Cobertura 14+ Pontos</div>
               <div className="mt-1 text-lg font-semibold text-white">
-                {summary.bestCoverage14.poolSize} Dezenas · {summary.bestCoverage14.cobertura14Pct.toFixed(1)}%
+                {summary.bestCoverage14.poolSize} Dez. · {summary.bestCoverage14.cobertura14Pct.toFixed(1)}%
               </div>
               <div className="text-[11px] font-sans text-slate-500">
                 13+ pts: {summary.bestCoverage14.cobertura13Pct.toFixed(1)}% · R${' '}
@@ -608,28 +689,217 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
             </div>
 
             <div>
-              <div className="text-[11px] font-sans text-slate-400">Variações / Bilhetes Gerados</div>
-              <div className="mt-1 text-lg font-semibold text-slate-100">
-                {results.length} lotes · {summary.totalTickets} jogos
+              <div className="text-[11px] font-sans text-slate-400">Melhor Retorno / R$ 10</div>
+              <div className="mt-1 text-lg font-semibold text-amber-300">
+                {summary.bestEfficiency.poolSize} Dez. · {summary.bestEfficiency.eficiencia14Por10Reais.toFixed(1)}%
               </div>
               <div className="text-[11px] font-sans text-slate-500">
-                Garantia alvo: {targetHits} pontos
+                {summary.bestEfficiency.tickets.length} bilhetes · alvo {targetHits} pts
               </div>
             </div>
 
             <div>
-              <div className="text-[11px] font-sans text-slate-400">Tempo Total de Auditoria</div>
+              <div className="text-[11px] font-sans text-slate-400">Lote Auditado (Bitwise)</div>
               <div className="mt-1 text-lg font-semibold text-sky-400">
-                {summary.totalMs} ms
+                {results.length} pools · {summary.totalTickets} jogos
               </div>
               <div className="text-[11px] font-sans text-slate-500">
-                Auditoria bitwise C(n, 15)
+                Execução simultânea em {summary.totalMs} ms
               </div>
             </div>
           </div>
 
-          {/* Comparative Coverage Efficiency Chart (Recharts) */}
-          <div className="h-56 w-full">
+          {/* Side-by-Side Comparison Cards (Lado a Lado por Tamanho de Pool) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-200">
+                Comparação Lado a Lado — Eficiência Set Cover por Pool
+              </span>
+              <span className="font-mono tabular-nums text-[11px] text-slate-500">
+                Alvo: {targetHits}+ pts · {results.map((r) => `${r.poolSize}D`).join(' vs ')}
+              </span>
+            </div>
+
+            <div
+              className={`grid grid-cols-1 gap-4 ${
+                results.length === 2
+                  ? 'md:grid-cols-2'
+                  : results.length >= 3
+                  ? 'md:grid-cols-2 xl:grid-cols-3'
+                  : ''
+              }`}
+            >
+              {results.map((item) => {
+                const isBestSetCover = item.poolSize === summary.bestSetCover.poolSize;
+                const isBestRoi = item.poolSize === summary.bestEfficiency.poolSize;
+                const isApplied = appliedPoolSize === item.poolSize;
+                const uniquePct =
+                  item.tickets.length > 0
+                    ? Math.round((item.uniqueContributionTickets / item.tickets.length) * 100)
+                    : 0;
+
+                return (
+                  <div
+                    key={`card-${item.poolSize}`}
+                    className={`rounded-xl border p-4 flex flex-col justify-between gap-4 transition ${
+                      isBestSetCover
+                        ? 'bg-emerald-950/20 border-emerald-500/50'
+                        : 'bg-slate-950/75 border-slate-800'
+                    }`}
+                  >
+                    <div className="space-y-3.5">
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-800/80">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-base font-bold text-white tabular-nums">
+                              Pool {item.poolSize} Dezenas
+                            </span>
+                            {isBestSetCover && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400">
+                                <Award className="w-3.5 h-3.5" />
+                                Líder Set Cover
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-mono tabular-nums text-slate-400 mt-0.5">
+                            {item.tickets.length} jogos · R$ {item.custoTotal.toFixed(2).replace('.', ',')} ·{' '}
+                            {item.isExactAudit ? `Exato (${item.scenariosAudited})` : `Amostra (${item.scenariosAudited})`}
+                          </div>
+                        </div>
+                        <div className="text-right font-mono tabular-nums shrink-0">
+                          <div className="text-[10px] font-sans text-slate-500">Set Cover</div>
+                          <div className="text-base font-bold text-emerald-400">
+                            {item.setCoverEfficiencyPct.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Coverage Bars */}
+                      <div className="space-y-2.5 font-mono tabular-nums text-xs">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="font-sans text-slate-400">Eficiência Set Cover (sem sobreposição)</span>
+                            <span className="text-emerald-400 font-semibold">
+                              {item.setCoverEfficiencyPct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-400"
+                              style={{ width: `${Math.min(100, item.setCoverEfficiencyPct)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="font-sans text-slate-400">Cobertura Real 14+ pontos</span>
+                            <span className="text-white font-semibold">{item.cobertura14Pct.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-amber-400"
+                              style={{ width: `${Math.min(100, item.cobertura14Pct)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="font-sans text-slate-400">Cobertura Real 13+ pontos</span>
+                            <span className="text-sky-400 font-semibold">{item.cobertura13Pct.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-sky-400"
+                              style={{ width: `${Math.min(100, item.cobertura13Pct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Compact Metric Grid */}
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 font-mono tabular-nums text-[11px]">
+                        <div>
+                          <div className="font-sans text-[10px] text-slate-500">Bilhetes Únicos</div>
+                          <div className="text-slate-200 font-semibold mt-0.5">
+                            {item.uniqueContributionTickets}/{item.tickets.length} ({uniquePct}%)
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-sans text-[10px] text-slate-500">Hamming / Redund.</div>
+                          <div className="text-slate-200 font-semibold mt-0.5">
+                            ≥{item.minHamming} · {item.overlapRedundancyPct.toFixed(0)}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-sans text-[10px] text-slate-500">Efic. / R$ 10</div>
+                          <div
+                            className={`font-semibold mt-0.5 ${
+                              isBestRoi ? 'text-amber-300' : 'text-slate-200'
+                            }`}
+                          >
+                            {item.eficiencia14Por10Reais.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Subset Pool Preview */}
+                      <div className="text-[11px] font-mono tabular-nums text-slate-400 leading-relaxed pt-1">
+                        {item.subsetPool.map((n) => String(n).padStart(2, '0')).join(' ')}
+                      </div>
+                    </div>
+
+                    {/* Card Footer Actions */}
+                    <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedPoolSize(
+                            expandedPoolSize === item.poolSize ? null : item.poolSize
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                      >
+                        {expandedPoolSize === item.poolSize ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                        <span>Ver bilhetes</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApply(item)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                          isApplied
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
+                            : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                        }`}
+                      >
+                        {isApplied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Aplicado ao Estúdio</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Aplicar Pool {item.poolSize}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Comparative Coverage & Set Cover Efficiency Chart (Recharts) */}
+          <div className="h-56 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 16, left: -16, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -654,9 +924,14 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                     return (
                       <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs font-mono tabular-nums space-y-1 shadow-xl">
                         <div className="font-semibold text-white border-b border-slate-800 pb-1">
-                          Universo {row.poolSize} Dezenas ({row.jogos} jogos · R$ {row.custo.toFixed(2).replace('.', ',')})
+                          Pool {row.poolSize} Dezenas ({row.jogos} jogos · R${' '}
+                          {row.custo.toFixed(2).replace('.', ',')})
                         </div>
                         <div className="flex justify-between gap-4 text-emerald-400">
+                          <span>Eficiência Set Cover:</span>
+                          <strong>{row.setCover}%</strong>
+                        </div>
+                        <div className="flex justify-between gap-4 text-amber-300">
                           <span>Cobertura 14+ pts:</span>
                           <strong>{row.cobertura14}%</strong>
                         </div>
@@ -664,30 +939,31 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                           <span>Cobertura 13+ pts:</span>
                           <strong>{row.cobertura13}%</strong>
                         </div>
-                        <div className="flex justify-between gap-4 text-amber-300">
-                          <span>Eficiência (14+ / R$10):</span>
-                          <strong>{row.eficiencia}%</strong>
-                        </div>
                       </div>
                     );
                   }}
                 />
-                <Legend
-                  wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }}
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
+                <Bar
+                  dataKey="setCover"
+                  name="Eficiência Set Cover (%)"
+                  fill="#10b981"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={34}
                 />
                 <Bar
                   dataKey="cobertura14"
                   name="Cobertura 14+ pts (%)"
-                  fill="#10b981"
+                  fill="#fbbf24"
                   radius={[4, 4, 0, 0]}
-                  maxBarSize={42}
+                  maxBarSize={34}
                 />
                 <Bar
                   dataKey="cobertura13"
                   name="Cobertura 13+ pts (%)"
                   fill="#38bdf8"
                   radius={[4, 4, 0, 0]}
-                  maxBarSize={42}
+                  maxBarSize={34}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -701,17 +977,17 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                   <th className="py-2.5 px-3 font-medium">Subset Pool</th>
                   <th className="py-2.5 px-3 font-medium text-right">Jogos</th>
                   <th className="py-2.5 px-3 font-medium text-right">Custo</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Cob. 14+ pts</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Cob. 13+ pts</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Efic. / R$10</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Set Cover</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Cob. 14+</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Cob. 13+</th>
+                  <th className="py-2.5 px-3 font-medium text-right">Únicos</th>
                   <th className="py-2.5 px-3 font-medium text-right">Hamming</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Score IA</th>
                   <th className="py-2.5 px-3 font-medium text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80 font-mono tabular-nums">
                 {results.map((item) => {
-                  const isWinner = item.poolSize === summary.bestEfficiency.poolSize;
+                  const isWinner = item.poolSize === summary.bestSetCover.poolSize;
                   const isExpanded = expandedPoolSize === item.poolSize;
                   const isApplied = appliedPoolSize === item.poolSize;
 
@@ -719,7 +995,9 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                     <React.Fragment key={item.poolSize}>
                       <tr
                         className={`transition-colors ${
-                          isWinner ? 'bg-emerald-950/20 hover:bg-emerald-950/30' : 'hover:bg-slate-800/30'
+                          isWinner
+                            ? 'bg-emerald-950/20 hover:bg-emerald-950/30'
+                            : 'hover:bg-slate-800/30'
                         }`}
                       >
                         <td className="py-2.5 px-3 font-sans">
@@ -729,7 +1007,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                             </span>
                             {isWinner && (
                               <span className="text-[11px] font-medium text-emerald-400">
-                                · Melhor eficiência
+                                · Melhor Set Cover
                               </span>
                             )}
                           </div>
@@ -739,24 +1017,26 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                               : `Amostra (${item.scenariosAudited} cenários)`}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right text-slate-200">{item.tickets.length}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-200">
+                          {item.tickets.length}
+                        </td>
                         <td className="py-2.5 px-3 text-right text-slate-300">
                           R$ {item.custoTotal.toFixed(2).replace('.', ',')}
                         </td>
                         <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
+                          {item.setCoverEfficiencyPct.toFixed(1)}%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-amber-300">
                           {item.cobertura14Pct.toFixed(1)}%
                         </td>
                         <td className="py-2.5 px-3 text-right text-sky-400">
                           {item.cobertura13Pct.toFixed(1)}%
                         </td>
-                        <td className="py-2.5 px-3 text-right font-semibold text-amber-300">
-                          {item.eficiencia14Por10Reais.toFixed(2)}%/R$10
+                        <td className="py-2.5 px-3 text-right text-slate-200">
+                          {item.uniqueContributionTickets}/{item.tickets.length}
                         </td>
                         <td className="py-2.5 px-3 text-right text-slate-300">
                           ≥{item.minHamming}
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-slate-200">
-                          {item.avgScoreIA.toFixed(1)}
                         </td>
                         <td className="py-2.5 px-3 text-right font-sans">
                           <div className="inline-flex items-center justify-end gap-1.5">
@@ -766,14 +1046,13 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                                 setExpandedPoolSize(isExpanded ? null : item.poolSize)
                               }
                               className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap"
-                              title="Inspecionar dezenas e bilhetes desta variação"
                             >
                               {isExpanded ? (
                                 <ChevronUp className="w-3 h-3" />
                               ) : (
                                 <ChevronDown className="w-3 h-3" />
                               )}
-                              <span>Detalhes</span>
+                              <span>Bilhetes</span>
                             </button>
                             <button
                               type="button"
@@ -807,11 +1086,14 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                               <span className="text-slate-400">
                                 Subset Pool ({item.poolSize} dezenas):{' '}
                                 <strong className="font-mono text-slate-200">
-                                  {item.subsetPool.map((n) => String(n).padStart(2, '0')).join(' · ')}
+                                  {item.subsetPool
+                                    .map((n) => String(n).padStart(2, '0'))
+                                    .join(' · ')}
                                 </strong>
                               </span>
                               <span className="font-mono text-[11px] text-slate-500">
-                                Eficiência/jogo: {item.eficienciaPorJogo.toFixed(2)}%
+                                Redundância: {item.overlapRedundancyPct.toFixed(1)}% · Score IA médio:{' '}
+                                {item.avgScoreIA.toFixed(1)}
                               </span>
                             </div>
 

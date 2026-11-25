@@ -158,24 +158,46 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   const activeFixas = activeFilterConfig?.dezenasFixas || [];
   const activeExcluidas = activeFilterConfig?.dezenasExcluidas || [];
 
+  const hasDirectAIPrediction = Boolean(
+    prediction && Array.isArray(prediction.scores) && prediction.scores.length === 25
+  );
+
+  // Usa os escores de aiPrediction (gerenciados em App.tsx) como fonte primária,
+  // aplicando apenas modulação opcional do perfil de risco e restrições de fixas/excluídas.
   const scores = React.useMemo(() => {
     const maxVezes = Math.max(...dynamicStats.map((s) => s.vezes), 1);
 
     return Array.from({ length: 25 }, (_, i) => {
       const num = i + 1;
       if (activeExcluidas.includes(num)) return 5;
+
       const stat = dynamicStats.find((s) => s.numero === num);
       const isCycle = cyclePendingNumbers.includes(num);
       const isRecentDraw = latestDraw.dezenas.includes(num);
       const isFibonacci = FIBONACCI_NUMBERS.includes(num);
 
-      // Score de tendência histórica recente (0-100)
+      if (hasDirectAIPrediction && prediction) {
+        const aiBase = Math.min(99, Math.max(1, Number(prediction.scores[i]) || 50));
+        let adjusted = aiBase;
+
+        if (riskLevel === 'conservador') {
+          const histAnchor = stat ? (stat.vezes / maxVezes) * 85 : 60;
+          adjusted = aiBase * 0.78 + (histAnchor + (isRecentDraw ? 10 : 0)) * 0.22;
+        } else if (riskLevel === 'ousado') {
+          const fiboBoost = (isFibonacci ? 8 : -2) + (isCycle ? 10 : 0);
+          adjusted = aiBase * 0.85 + (aiBase + fiboBoost) * 0.15;
+        }
+
+        if (activeFixas.includes(num)) adjusted = Math.max(adjusted, 98);
+        return Math.round(Math.min(99, Math.max(1, adjusted)));
+      }
+
+      // Fallback estatístico apenas enquanto aiPrediction ainda não foi populado
       const freqScore = stat ? (stat.vezes / maxVezes) * 70 : 45;
       const repScore = isRecentDraw ? 25 : 10;
       const cycleHistScore = isCycle ? 15 : 0;
       const histScore = Math.min(98, freqScore + repScore + cycleHistScore);
 
-      // Score de padrão Fibonacci & aceleração de quebra (0-100)
       let fiboScore = 40;
       if (isFibonacci) {
         fiboScore = 88;
@@ -184,15 +206,33 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       if (isCycle) fiboScore = Math.max(fiboScore, 96);
       if ([11, 20, 25, 10, 13, 24].includes(num)) fiboScore += 10;
 
-      // Ponderação canônica conforme riskLevel + prioridade de fixas ativas
       let blended = weights.hist * histScore + weights.fibo * fiboScore;
       if (activeFixas.includes(num)) blended = Math.max(blended, 98);
       return Math.round(Math.min(99, Math.max(35, blended)));
     });
-  }, [dynamicStats, cyclePendingNumbers, latestDraw.dezenas, weights, activeFixas, activeExcluidas]);
+  }, [
+    hasDirectAIPrediction,
+    prediction,
+    riskLevel,
+    dynamicStats,
+    cyclePendingNumbers,
+    latestDraw.dezenas,
+    weights,
+    activeFixas,
+    activeExcluidas,
+  ]);
 
   const recomendadas18 = React.useMemo(() => {
-    // Ranqueia dezenas 1 a 25 respeitando dezenas fixas e excluídas dos Filtros Inteligentes
+    if (
+      hasDirectAIPrediction &&
+      prediction?.dezenasRecomendadas18?.length === 18 &&
+      riskLevel === 'equilibrado' &&
+      activeFixas.length === 0 &&
+      activeExcluidas.length === 0
+    ) {
+      return [...prediction.dezenasRecomendadas18].sort((a, b) => a - b);
+    }
+
     const ranked = Array.from({ length: 25 }, (_, i) => ({
       numero: i + 1,
       score: scores[i],
@@ -207,7 +247,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       });
 
     return ranked.slice(0, 18).map((r) => r.numero).sort((a, b) => a - b);
-  }, [scores, activeFixas, activeExcluidas]);
+  }, [hasDirectAIPrediction, prediction, riskLevel, scores, activeFixas, activeExcluidas]);
 
   const goldenBets = React.useMemo(() => {
     return [
@@ -323,6 +363,19 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* DESTAQUE PRINCIPAL: TOP 5 QUENTES & TOP 5 FRIAS (ESTADO LIVE DE aiPrediction EM App.tsx) */}
+      <DicasApostaIACard
+        latestDraw={latestDraw}
+        prediction={prediction}
+        isLoading={isLoading}
+        fallbackScores={scores}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        activeFilterConfig={activeFilterConfig}
+        onApplyRecommendation={onApplyRecommendation}
+        onFixHotNumbers={onFixAnchors}
+      />
 
       {/* BARRA DE SINCRONIZAÇÃO COM FILTROS INTELIGENTES */}
       {activeFilterConfig && (
@@ -471,18 +524,6 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </button>
         </div>
       </div>
-
-      {/* COMPONENTE EXCLUSIVO: DICAS DE APOSTA IA (TOP 5 QUENTES, TOP 5 FRIAS & COMBINAÇÕES IDEAIS) */}
-      <DicasApostaIACard
-        latestDraw={latestDraw}
-        prediction={prediction}
-        isLoading={isLoading}
-        fallbackScores={scores}
-        dynamicStats={dynamicStats}
-        cyclePendingNumbers={cyclePendingNumbers}
-        activeFilterConfig={activeFilterConfig}
-        onApplyRecommendation={onApplyRecommendation}
-      />
 
       {/* COMPONENTE EXCLUSIVO: 3 DEZENAS ÂNCORAS SUGERIDAS PELA IA (CICLO & TENDÊNCIA ATUAL) */}
       <DezenasAncorasPredictorCard
