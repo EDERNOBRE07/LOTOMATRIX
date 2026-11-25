@@ -25,7 +25,7 @@ import {
 import { PRESETS_LOTOFACIL } from './presetsFiltros';
 import { saveFechamentoPrognostico } from './savedFechamentosStorage';
 import { FilterCriteria, GameTicket } from '../types/lotofacil';
-import { CONCURSO_ATUAL, DEZENAS_STATS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, DEZENAS_STATS, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 export interface TestAssertionResult {
   name: string;
@@ -87,15 +87,17 @@ export function runCombinatoricsValidationAssertions(): {
 
   // 3. Caso de Teste: Violação de Cruz da Lotofácil (< 4 ou > 7 dezenas)
   try {
-    // Apenas dezenas fora da Cruz (Cruz: 3, 8, 11, 12, 13, 14, 15, 18, 23)
-    const noCruzCombo = [1, 2, 4, 5, 6, 7, 9, 10, 16, 17, 19, 20, 21, 22, 24]; // 0 na Cruz
+    // Apenas dezenas fora da Cruz canônica ([2, 7, 11, 12, 13, 14, 15, 17, 22])
+    const noCruzCombo = Array.from({ length: 25 }, (_, i) => i + 1)
+      .filter((n) => !CRUZ_DEZENAS.includes(n))
+      .slice(0, 15); // 0 na Cruz
     const filterConfig: FilterCriteria = { ...DEFAULT_FILTERS, cruzAtiva: true, cruzMin: 4, cruzMax: 7 };
     const res = validateFilters(noCruzCombo, filterConfig, CONCURSO_ATUAL.dezenas);
     const hasCruzViolation = res.violations.some((v) => v.includes('Cruz'));
     record(
       'Validação da Cruz da Lotofácil',
-      res.isValid === false && hasCruzViolation,
-      `Combinação com 0 dezenas na Cruz devidamente podada pelo validador.`
+      res.isValid === false && hasCruzViolation && res.metrics.cruz === 0,
+      `Combinação com ${res.metrics.cruz} dezenas na Cruz devidamente podada pelo validador.`
     );
   } catch (err: any) {
     record('Validação da Cruz da Lotofácil', false, `Exceção: ${err.message}`);

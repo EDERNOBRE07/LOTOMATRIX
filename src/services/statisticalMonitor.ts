@@ -211,7 +211,7 @@ export function analyzeGameStatistics(
     });
   }
 
-  // 7. Filtro Avançado: Cruz da Lotofácil (9 dezenas centrais: 3, 8, 11, 12, 13, 14, 15, 18, 23)
+  // 7. Filtro Avançado: Cruz da Lotofácil (9 dezenas oficiais: 2, 7, 11, 12, 13, 14, 15, 17, 22)
   const isZonaDeOuroCruz = cruz >= 5 && cruz <= 6;
   if (cruz < 4) {
     anomalies.push({
