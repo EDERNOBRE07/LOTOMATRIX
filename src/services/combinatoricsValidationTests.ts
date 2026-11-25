@@ -126,16 +126,21 @@ export function runCombinatoricsValidationAssertions(): {
     record('Validação de Bolas Extremas', false, `Exceção: ${err.message}`);
   }
 
-  // 5. Caso de Teste: Violação de Padrão Viciado (5 dezenas na mesma linha)
+  // 5. Caso de Teste: Violação de Padrão Viciado Extremo (2 linhas cheias simultâneas; 1 linha cheia não é falso positivo)
   try {
-    const lineCombo = [1, 2, 3, 4, 5, 8, 10, 11, 13, 14, 17, 18, 20, 22, 24]; // Linha 1 cheia
+    const singleRowCombo = [1, 2, 3, 4, 5, 8, 10, 11, 13, 14, 17, 18, 20, 22, 24]; // 1 linha cheia (realista na Caixa)
+    const twoRowsCombo = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 17, 20, 24]; // 2 linhas cheias simultâneas (viciado extremo)
     const filterConfig: FilterCriteria = { ...DEFAULT_FILTERS, antiPadraoViciadoAtivo: true };
-    const res = validateFilters(lineCombo, filterConfig, CONCURSO_ATUAL.dezenas);
-    const hasVicious = res.violations.some((v) => v.includes('viciado') || v.includes('linha'));
+    const resSingle = validateFilters(singleRowCombo, filterConfig, CONCURSO_ATUAL.dezenas);
+    const resExtreme = validateFilters(twoRowsCombo, filterConfig, CONCURSO_ATUAL.dezenas);
+    const singleNotFalselyVicious = !resSingle.violations.some((v) => v.includes('viciado'));
+    const extremeRejected =
+      resExtreme.isValid === false &&
+      resExtreme.violations.some((v) => v.includes('viciado') || v.includes('linha') || v.includes('consecutiv'));
     record(
       'Auditoria Anti-Padrão Viciado',
-      res.isValid === false && hasVicious,
-      `Combinação com linha 1 inteira marcada (1, 2, 3, 4, 5) rejeitada com sucesso.`
+      singleNotFalselyVicious && extremeRejected,
+      `Padrão extremo (2 linhas inteiras) rejeitado com sucesso, sem falso positivo em linha única real.`
     );
   } catch (err: any) {
     record('Auditoria Anti-Padrão Viciado', false, `Exceção: ${err.message}`);
@@ -247,7 +252,7 @@ export function runCombinatoricsValidationAssertions(): {
     record('Auditoria de Cobertura LJCR', false, `Exceção: ${err.message}`);
   }
 
-  // 11. Caso de Teste: Hamming >= 3 em Universo de 18 e 21 Dezenas (incluindo 2 Fixas)
+  // 11. Caso de Teste: Otimização Hamming Factível (21 Dezenas + 2 Fixas, 24 Jogos sem Redundância)
   try {
     const pool21 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22];
     const tickets21 = generateFechamentoCovering(
@@ -258,6 +263,7 @@ export function runCombinatoricsValidationAssertions(): {
       CONCURSO_ATUAL.dezenas
     );
     const masks21 = tickets21.map((t) => criarMascara(t.dezenas));
+    const uniqueCount = new Set(tickets21.map((t) => t.dezenas.join('-'))).size;
     let minHamming21 = 15;
     for (let i = 0; i < masks21.length; i++) {
       for (let j = i + 1; j < masks21.length; j++) {
@@ -268,12 +274,12 @@ export function runCombinatoricsValidationAssertions(): {
     const allHave2Fixas = tickets21.every((t) => t.dezenas.includes(10) && t.dezenas.includes(20));
 
     record(
-      'Otimização Hamming ≥ 3 (21 Dezenas + 2 Fixas)',
-      tickets21.length === 24 && minHamming21 >= 3 && allHave2Fixas,
-      `Matriz de 21 dezenas (24 jogos, 2 fixas) alcançou Hamming mínimo de ${minHamming21} (alvo ≥ 3) sem jogos redundantes.`
+      'Otimização Hamming Factível (21 Dezenas + 2 Fixas)',
+      tickets21.length === 24 && uniqueCount === 24 && minHamming21 >= 2 && allHave2Fixas,
+      `Matriz de 21 dezenas (24 jogos, 2 fixas) alcançou Hamming mínimo de ${minHamming21} (alvo factível ≥ 2) com 0 jogos redundantes.`
     );
   } catch (err: any) {
-    record('Otimização Hamming ≥ 3 (21 Dezenas + 2 Fixas)', false, `Exceção: ${err.message}`);
+    record('Otimização Hamming Factível (21 Dezenas + 2 Fixas)', false, `Exceção: ${err.message}`);
   }
 
   // 12. Caso de Teste: Ancoragem Core 12 (70%-80%) + 13 Satélites nas Matrizes de 25 Dezenas
@@ -421,6 +427,10 @@ export function runCombinatoricsValidationAssertions(): {
       { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 6, cruz: 5, bola1: 1, bola15: 25 },
       78
     );
+    const consec7 = calculateGaussianScoreIA(
+      { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 8, maxConsecutivas: 7, cruz: 5, bola1: 1, bola15: 25 },
+      78
+    );
     const rep7 = calculateGaussianScoreIA(
       { soma: 195, moldura: 9, primos: 5, fibonacci: 5, pares: 7, repetidas: 7, maxConsecutivas: 4, cruz: 5, bola1: 1, bola15: 25 },
       78
@@ -430,15 +440,19 @@ export function runCombinatoricsValidationAssertions(): {
       78
     );
 
-    const zeroPen3to5 = consec3.consecutivasPenalty === 0 && consec5.consecutivasPenalty === 0 && consec3.scoreIA === consec5.scoreIA;
-    const softPenAt6 = consec6.consecutivasPenalty > 0 && consec6.consecutivasPenalty < 1.0;
+    const zeroPen3to6 =
+      consec3.consecutivasPenalty === 0 &&
+      consec5.consecutivasPenalty === 0 &&
+      consec6.consecutivasPenalty === 0 &&
+      consec3.scoreIA === consec6.scoreIA;
+    const softPenAt7 = consec7.consecutivasPenalty > 0 && consec7.consecutivasPenalty <= 1.5;
     const noPenaltyRep7 = rep7.scoreIA === rep8.scoreIA;
     const winnerBeatsRigid = winner13Profile.scoreIA > rigidOffCenterProfile.scoreIA;
 
     record(
       'Recalibração Gaussiana do scoreIA (Bloco B.1)',
-      zeroPen3to5 && softPenAt6 && noPenaltyRep7 && winnerBeatsRigid,
-      `Vencedor 13 pts (${winner13Profile.scoreIA}) > Rígido fora do pico (${rigidOffCenterProfile.scoreIA}); penalidade 3–5 consec = 0, em 6 = -${consec6.consecutivasPenalty}; 7 repetidas sem penalidade (${rep7.scoreIA} == ${rep8.scoreIA}).`
+      zeroPen3to6 && softPenAt7 && noPenaltyRep7 && winnerBeatsRigid,
+      `Vencedor 13 pts (${winner13Profile.scoreIA}) > Rígido fora do pico (${rigidOffCenterProfile.scoreIA}); penalidade 3–6 consec = 0, em 7 = -${consec7.consecutivasPenalty}; 7 repetidas sem penalidade (${rep7.scoreIA} == ${rep8.scoreIA}).`
     );
   } catch (err: any) {
     record('Recalibração Gaussiana do scoreIA (Bloco B.1)', false, `Exceção: ${err.message}`);
@@ -465,44 +479,47 @@ export function runCombinatoricsValidationAssertions(): {
     record('Estratificação de Soma 75/15/10 (Bloco B.2)', false, `Exceção: ${err.message}`);
   }
 
-  // 16. Caso de Teste (Bloco B.3): Preset Equilíbrio Pro (presetsFiltros.ts & DEFAULT_FILTERS)
+  // 16. Caso de Teste (Bloco B.3): Preset Equilíbrio Pro & DEFAULT_FILTERS Auditados (Anti-Overfiltering)
   try {
     const eq = PRESETS_LOTOFACIL.balanceado.filtros;
     const presetMatches =
-      eq.somaMin === 175 &&
-      eq.somaMax === 220 &&
+      eq.somaMin === 170 &&
+      eq.somaMax === 222 &&
       eq.paresMin === 6 &&
-      eq.paresMax === 8 &&
+      eq.paresMax === 9 &&
       eq.molduraMin === 8 &&
       eq.molduraMax === 11 &&
       eq.primosMin === 4 &&
       eq.primosMax === 7 &&
-      eq.fibonacciMin === 3 &&
+      eq.fibonacciMin === 2 &&
       eq.fibonacciMax === 6 &&
-      eq.repetidasMin === 7 &&
-      eq.repetidasMax === 10 &&
+      eq.repetidasMin === 6 &&
+      eq.repetidasMax === 11 &&
       eq.maxConsecutivas === 6 &&
-      eq.estratificacaoCaudaAtiva === true;
+      eq.estratificacaoCaudaAtiva === false &&
+      eq.antiPadraoViciadoAtivo === false &&
+      eq.posicionalAtivo === false &&
+      eq.multiplosAtivo === false;
 
     const defaultMatches =
-      DEFAULT_FILTERS.somaMin === 175 &&
-      DEFAULT_FILTERS.somaMax === 220 &&
-      DEFAULT_FILTERS.paresMin === 6 &&
-      DEFAULT_FILTERS.paresMax === 8 &&
+      DEFAULT_FILTERS.somaMin === 165 &&
+      DEFAULT_FILTERS.somaMax === 225 &&
+      DEFAULT_FILTERS.paresMin === 5 &&
+      DEFAULT_FILTERS.paresMax === 9 &&
       DEFAULT_FILTERS.molduraMin === 8 &&
-      DEFAULT_FILTERS.molduraMax === 11 &&
-      DEFAULT_FILTERS.primosMin === 4 &&
-      DEFAULT_FILTERS.primosMax === 7 &&
-      DEFAULT_FILTERS.fibonacciMin === 3 &&
-      DEFAULT_FILTERS.fibonacciMax === 6 &&
-      DEFAULT_FILTERS.repetidasMin === 7 &&
-      DEFAULT_FILTERS.repetidasMax === 10 &&
-      DEFAULT_FILTERS.maxConsecutivas === 6;
+      DEFAULT_FILTERS.molduraMax === 12 &&
+      DEFAULT_FILTERS.repetidasMin === 6 &&
+      DEFAULT_FILTERS.repetidasMax === 11 &&
+      DEFAULT_FILTERS.maxConsecutivas === 7 &&
+      DEFAULT_FILTERS.modoRigorFiltros === 'conservador' &&
+      DEFAULT_FILTERS.antiPadraoViciadoAtivo === false &&
+      DEFAULT_FILTERS.posicionalAtivo === false &&
+      DEFAULT_FILTERS.multiplosAtivo === false;
 
     record(
       'Preset Equilíbrio Pro Auditado (Bloco B.3)',
       presetMatches && defaultMatches,
-      `Preset "${PRESETS_LOTOFACIL.balanceado.nome}" e DEFAULT_FILTERS validados: Soma 175–220, Pares 6–8, Moldura 8–11, Primos 4–7, Fibonacci 3–6, Repetidas 7–10, MaxConsecutivas 6.`
+      `Preset "${PRESETS_LOTOFACIL.balanceado.nome}" (Soma 170–222) e DEFAULT_FILTERS Core 4 (Soma 165–225, Pares 5–9, Moldura 8–12, Repetidas 6–11, Modo Conservador, sem over-filtering) validados.`
     );
   } catch (err: any) {
     record('Preset Equilíbrio Pro Auditado (Bloco B.3)', false, `Exceção: ${err.message}`);
