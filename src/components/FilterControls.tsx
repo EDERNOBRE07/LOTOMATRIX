@@ -704,56 +704,285 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 2.1 Repetidas do Concurso Anterior */}
-            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Repeat className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-bold text-white">Repetidas Concurso #{latestDraw.concurso}</span>
-                  <FilterTooltip
-                    title="Repetidas do Concurso Anterior"
-                    description="Mede quantas das 15 dezenas do último sorteio se repetem no próximo. A média histórica da Lotofácil é 9 repetidas."
-                    impact="Impacto: Faixa 7–10 repetidas cobre mais de 84% de todos os concursos."
-                  />
-                </div>
-                <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">
-                  {filters.repetidasMin}–{filters.repetidasMax}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Calculado sobre as 15 dezenas de #{latestDraw.concurso}. Padrão canônico: 7 a 10 repetidas.
-              </p>
-              <div className="space-y-2">
-                <div>
-                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>Mínimo:</span>
-                    <span className="text-amber-300 font-bold">{filters.repetidasMin}</span>
+            {/* 2.1 Repetidas do Concurso Anterior + Subfiltro de Paridade (Pares / Ímpares) */}
+            {(() => {
+              const prevDrawPares = latestDraw.dezenas.filter((n) => n % 2 === 0).length;
+              const prevDrawImpares = latestDraw.dezenas.length - prevDrawPares;
+              const repPMin = filters.repetidasParesMin ?? 2;
+              const repPMax = Math.min(prevDrawPares, filters.repetidasParesMax ?? Math.min(6, prevDrawPares));
+              const repIMin = filters.repetidasImparesMin ?? 2;
+              const repIMax = Math.min(prevDrawImpares, filters.repetidasImparesMax ?? Math.min(6, prevDrawImpares));
+              const midTotal = Math.round(((filters.repetidasMin ?? 7) + (filters.repetidasMax ?? 10)) / 2);
+              const balancedP = Math.min(prevDrawPares, Math.floor(midTotal / 2));
+              const balancedI = Math.min(prevDrawImpares, midTotal - balancedP);
+
+              return (
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-amber-500/35 space-y-3 md:col-span-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-white">Repetidas Concurso #{latestDraw.concurso}</span>
+                      <FilterTooltip
+                        title="Repetidas do Concurso Anterior & Paridade"
+                        description="Mede quantas das 15 dezenas do último sorteio se repetem no próximo e permite definir quantas dessas repetidas devem ser Pares e quantas Ímpares."
+                        impact="Impacto: Faixa 7–10 repetidas cobre >84% dos sorteios; controlar Pares/Ímpares das repetidas evita viés de paridade na interseção."
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-slate-300 bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded tabular-nums">
+                        #{latestDraw.concurso}: {prevDrawPares}P / {prevDrawImpares}I
+                      </span>
+                      <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30 tabular-nums">
+                        {filters.repetidasMin}–{filters.repetidasMax} Rep.
+                      </span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max={filters.repetidasMax}
-                    value={filters.repetidasMin}
-                    onChange={(e) => update({ repetidasMin: parseInt(e.target.value, 10) })}
-                    className="w-full accent-amber-500 cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>Máximo:</span>
-                    <span className="text-amber-300 font-bold">{filters.repetidasMax}</span>
+                  <p className="text-[11px] text-slate-400">
+                    Calculado sobre as 15 dezenas de #{latestDraw.concurso} ({prevDrawPares} pares e {prevDrawImpares} ímpares). Padrão canônico: 7 a 10 repetidas.
+                  </p>
+
+                  {/* Sliders Total de Repetidas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>Mínimo Total:</span>
+                        <span className="text-amber-300 font-bold tabular-nums">{filters.repetidasMin}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="4"
+                        max={filters.repetidasMax}
+                        value={filters.repetidasMin}
+                        onChange={(e) => {
+                          const nextMin = parseInt(e.target.value, 10);
+                          update({ repetidasMin: nextMin });
+                        }}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>Máximo Total:</span>
+                        <span className="text-amber-300 font-bold tabular-nums">{filters.repetidasMax}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={filters.repetidasMin}
+                        max="13"
+                        value={filters.repetidasMax}
+                        onChange={(e) => {
+                          const nextMax = parseInt(e.target.value, 10);
+                          update({ repetidasMax: nextMax });
+                        }}
+                        className="w-full accent-amber-500 cursor-pointer"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min={filters.repetidasMin}
-                    max="12"
-                    value={filters.repetidasMax}
-                    onChange={(e) => update({ repetidasMax: parseInt(e.target.value, 10) })}
-                    className="w-full accent-amber-500 cursor-pointer"
-                  />
+
+                  {/* Subfiltro Granular: Paridade das Repetidas (dezenasDoBilhete ∩ concursoAnterior) */}
+                  <div className="pt-3 border-t border-slate-800/90 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <span className="text-[11px] font-bold text-amber-200 flex items-center gap-1.5">
+                          <span>Paridade nas Repetidas (Pares / Ímpares)</span>
+                          {filters.repetidasParidadeAtiva && (
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 tabular-nums">
+                              {repPMin}–{repPMax}P • {repIMin}–{repIMax}I
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block">
+                          Filtra estritamente a interseção (Bilhete ∩ #{latestDraw.concurso}) separando Pares e Ímpares.
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          update({
+                            repetidasParidadeAtiva: !filters.repetidasParidadeAtiva,
+                            repetidasParesMin: filters.repetidasParesMin ?? Math.max(1, balancedP - 1),
+                            repetidasParesMax: filters.repetidasParesMax ?? Math.min(prevDrawPares, balancedP + 1),
+                            repetidasImparesMin: filters.repetidasImparesMin ?? Math.max(1, balancedI - 1),
+                            repetidasImparesMax: filters.repetidasImparesMax ?? Math.min(prevDrawImpares, balancedI + 1),
+                          })
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                          filters.repetidasParidadeAtiva
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-black'
+                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-500/50 hover:text-white'
+                        }`}
+                      >
+                        {filters.repetidasParidadeAtiva ? 'Subfiltro Ativo' : 'Ativar Paridade'}
+                      </button>
+                    </div>
+
+                    {filters.repetidasParidadeAtiva && (
+                      <div className="space-y-2.5 bg-slate-900/70 border border-amber-500/25 rounded-xl p-3">
+                        {/* Proporções Rápidas Dinâmicas ajustadas ao total escolhido */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-mono text-slate-400 mr-1">Proporção:</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              update({
+                                repetidasParidadeAtiva: true,
+                                repetidasParesMin: Math.max(0, balancedP - 1),
+                                repetidasParesMax: Math.min(prevDrawPares, balancedP + 1),
+                                repetidasImparesMin: Math.max(0, balancedI - 1),
+                                repetidasImparesMax: Math.min(prevDrawImpares, balancedI + 1),
+                              })
+                            }
+                            className="px-2 py-1 rounded-md text-[10px] font-mono font-bold bg-slate-950 hover:bg-amber-500/20 text-amber-300 border border-amber-500/35 transition cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Equilibrado ({Math.max(0, balancedP - 1)}–{Math.min(prevDrawPares, balancedP + 1)}P / {Math.max(0, balancedI - 1)}–{Math.min(prevDrawImpares, balancedI + 1)}I)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              update({
+                                repetidasParidadeAtiva: true,
+                                repetidasParesMin: Math.min(prevDrawPares, Math.max(1, balancedP)),
+                                repetidasParesMax: prevDrawPares,
+                                repetidasImparesMin: Math.max(0, balancedI - 2),
+                                repetidasImparesMax: Math.min(prevDrawImpares, balancedI),
+                              })
+                            }
+                            className="px-2 py-1 rounded-md text-[10px] font-mono font-bold bg-slate-950 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/35 transition cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            + Pares Rep.
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              update({
+                                repetidasParidadeAtiva: true,
+                                repetidasParesMin: Math.max(0, balancedP - 2),
+                                repetidasParesMax: Math.min(prevDrawPares, balancedP),
+                                repetidasImparesMin: Math.min(prevDrawImpares, Math.max(1, balancedI)),
+                                repetidasImparesMax: prevDrawImpares,
+                              })
+                            }
+                            className="px-2 py-1 rounded-md text-[10px] font-mono font-bold bg-slate-950 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 transition cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            + Ímpares Rep.
+                          </button>
+                        </div>
+
+                        {/* Controles Min/Max Repetidas Pares vs Repetidas Ímpares */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="font-bold text-cyan-300">Repetidas Pares</span>
+                              <span className="text-white font-bold tabular-nums">
+                                {repPMin} a {repPMax} (máx {prevDrawPares})
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                                  <span>Mín P:</span>
+                                  <span className="text-cyan-300 font-bold tabular-nums">{repPMin}</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max={prevDrawPares}
+                                  value={repPMin}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    update({
+                                      repetidasParidadeAtiva: true,
+                                      repetidasParesMin: val,
+                                      repetidasParesMax: Math.max(val, repPMax),
+                                    });
+                                  }}
+                                  className="w-full accent-cyan-400 cursor-pointer h-1.5"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                                  <span>Máx P:</span>
+                                  <span className="text-cyan-300 font-bold tabular-nums">{repPMax}</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max={prevDrawPares}
+                                  value={repPMax}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    update({
+                                      repetidasParidadeAtiva: true,
+                                      repetidasParesMax: val,
+                                      repetidasParesMin: Math.min(val, repPMin),
+                                    });
+                                  }}
+                                  className="w-full accent-cyan-400 cursor-pointer h-1.5"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="font-bold text-emerald-300">Repetidas Ímpares</span>
+                              <span className="text-white font-bold tabular-nums">
+                                {repIMin} a {repIMax} (máx {prevDrawImpares})
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                                  <span>Mín I:</span>
+                                  <span className="text-emerald-300 font-bold tabular-nums">{repIMin}</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max={prevDrawImpares}
+                                  value={repIMin}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    update({
+                                      repetidasParidadeAtiva: true,
+                                      repetidasImparesMin: val,
+                                      repetidasImparesMax: Math.max(val, repIMax),
+                                    });
+                                  }}
+                                  className="w-full accent-emerald-400 cursor-pointer h-1.5"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                                  <span>Máx I:</span>
+                                  <span className="text-emerald-300 font-bold tabular-nums">{repIMax}</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max={prevDrawImpares}
+                                  value={repIMax}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    update({
+                                      repetidasParidadeAtiva: true,
+                                      repetidasImparesMax: val,
+                                      repetidasImparesMin: Math.min(val, repIMin),
+                                    });
+                                  }}
+                                  className="w-full accent-emerald-400 cursor-pointer h-1.5"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* 2.2 Moldura e Miolo (16 externas / 9 internas) */}
             <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
@@ -1063,171 +1292,244 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
               </div>
             </div>
 
-            {/* 2.5 FILTRO GEOMÉTRICO: CRUZ DA LOTOFÁCIL (9 DEZENAS CENTRAIS) */}
-            <div className="bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-blue-500/40 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Square className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
-                  <FilterTooltip
-                    title="Geometria da Cruz (Linha 3 + Coluna 3)"
-                    description="As 9 dezenas que formam a cruz central do volante (03, 08, 11, 12, 13, 14, 15, 18, 23)."
-                    impact="Impacto: 5–6 dezenas na Cruz compõem a Zona de Ouro geométrica (>72% dos concursos)."
-                  />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {(filters.cruzMin === 5 && filters.cruzMax === 6) && (
-                    <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded shadow-sm shadow-amber-500/20">
-                      ★ ZONA DE OURO
-                    </span>
-                  )}
-                  <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded border border-blue-400/40">
-                    {filters.cruzMin ?? 4}–{filters.cruzMax ?? 7} dezenas
-                  </span>
-                </div>
-              </div>
+            {/* 2.5 FILTRO GEOMÉTRICO: CRUZ DA LOTOFÁCIL (9 DEZENAS NO VOLANTE 5×5) */}
+            {(() => {
+              const isCruzEnabled = filters.cruzAtiva !== false;
+              const isStrictActive = Boolean(filters.strictValidation || filters.validacaoEstritaCruz);
+              const currentCruzMin = isStrictActive ? 5 : (filters.cruzMin ?? 4);
+              const currentCruzMax = isStrictActive ? 6 : (filters.cruzMax ?? 7);
+              const prevDrawCruzCount = latestDraw.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+              const poolCruzCount = selectedNumbers.filter((n) => CRUZ_DEZENAS.includes(n)).length;
 
-              <p className="text-[11px] text-slate-400">
-                Linha 3 e Coluna 3 (9 dezenas):{' '}
-                <span className="font-mono text-blue-300 font-bold">
-                  {CRUZ_DEZENAS.map((n) => n.toString().padStart(2, '0')).join(', ')}
-                </span>
-              </p>
-
-              {/* Modo Validação Estrita da Cruz (5 a 6 Dezenas) */}
-              <div
-                onClick={() => {
-                  const nextVal = !filters.validacaoEstritaCruz;
-                  update({
-                    validacaoEstritaCruz: nextVal,
-                    ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
-                  });
-                }}
-                className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition select-none ${
-                  filters.validacaoEstritaCruz
-                    ? 'bg-amber-500/15 border-amber-400/70 text-amber-100 shadow-sm'
-                    : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs ${
-                      filters.validacaoEstritaCruz
-                        ? 'bg-amber-400 text-slate-950 font-black'
-                        : 'bg-slate-800 text-slate-500'
-                    }`}
-                  >
-                    ★
+              return (
+                <div
+                  className={`p-4 rounded-2xl border-2 space-y-3 relative overflow-hidden transition ${
+                    isCruzEnabled
+                      ? 'bg-gradient-to-br from-blue-950/40 via-slate-950 to-slate-950 border-blue-500/45'
+                      : 'bg-slate-950/60 border-slate-800 opacity-85'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Square className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
+                      <FilterTooltip
+                        title="Geometria da Cruz no Volante 5×5"
+                        description="As 9 dezenas que formam a cruz no volante 5×5: [02, 07, 11, 12, 13, 14, 15, 17, 22]."
+                        impact="Impacto: Padrão recomendado de 4 a 7 dezenas (Zona de Ouro 5 a 6 dezenas)."
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {isCruzEnabled && currentCruzMin === 5 && currentCruzMax === 6 && (
+                        <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
+                          ★ ZONA DE OURO
+                        </span>
+                      )}
+                      <span className="font-mono text-xs font-bold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded border border-blue-400/40 tabular-nums">
+                        {isCruzEnabled ? `${currentCruzMin}–${currentCruzMax} dez` : 'Desligado'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          update({
+                            cruzAtiva: !isCruzEnabled,
+                            ...(!isCruzEnabled ? { cruzMin: currentCruzMin, cruzMax: currentCruzMax } : { strictValidation: false, validacaoEstritaCruz: false }),
+                          })
+                        }
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                          isCruzEnabled
+                            ? 'bg-blue-500 text-slate-950 border-blue-400 font-black'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {isCruzEnabled ? 'Ativo' : 'Ativar'}
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Modo Validação Estrita da Cruz</span>
-                      {filters.validacaoEstritaCruz && (
-                        <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded">
-                          ESTRITO (5-6)
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-slate-400">
+                      9 dezenas da Cruz no volante 5×5:{' '}
+                      <span className="font-mono text-blue-300 font-bold">
+                        {CRUZ_DEZENAS.map((n) => n.toString().padStart(2, '0')).join(', ')}
+                      </span>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400 tabular-nums">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                        Último #{latestDraw.concurso}: <strong className="text-blue-300">{prevDrawCruzCount}/9</strong> na Cruz
+                      </span>
+                      {selectedNumbers.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                          Pool atual: <strong className="text-emerald-300">{poolCruzCount}/9</strong> na Cruz
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      Poda rigorosa: descarta e bloqueia qualquer jogo fora da faixa de 5 a 6 na Cruz.
-                    </p>
                   </div>
-                </div>
-                <div
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 shrink-0 ${
-                    filters.validacaoEstritaCruz ? 'bg-amber-500' : 'bg-slate-700'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform duration-200 ${
-                      filters.validacaoEstritaCruz ? 'translate-x-4' : 'translate-x-0'
+
+                  {/* Modo Validação Estrita da Cruz (5 a 6 Dezenas) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !isStrictActive;
+                      update({
+                        cruzAtiva: true,
+                        validacaoEstritaCruz: nextVal,
+                        strictValidation: nextVal,
+                        cruzMin: nextVal ? 5 : 4,
+                        cruzMax: nextVal ? 6 : 7,
+                      });
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition text-left select-none ${
+                      isStrictActive && isCruzEnabled
+                        ? 'bg-amber-500/15 border-amber-400/70 text-amber-100 shadow-sm'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
-                  />
-                </div>
-              </div>
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs shrink-0 ${
+                          isStrictActive && isCruzEnabled
+                            ? 'bg-amber-400 text-slate-950 font-black'
+                            : 'bg-slate-800 text-slate-500'
+                        }`}
+                      >
+                        ★
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <span>Modo Validação Estrita da Cruz</span>
+                          {isStrictActive && isCruzEnabled && (
+                            <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded">
+                              ESTRITO (5–6)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          Poda rigorosa: mantém exclusivamente bilhetes com 5 ou 6 dezenas na Cruz.
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 shrink-0 ${
+                        isStrictActive && isCruzEnabled ? 'bg-amber-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform duration-200 ${
+                          isStrictActive && isCruzEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </div>
+                  </button>
 
-              {/* Botões Pré-definidos com Destaque para Zona de Ouro (5 a 6) */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => update({ cruzMin: 5, cruzMax: 6 })}
-                  className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
-                    filters.cruzMin === 5 && filters.cruzMax === 6
-                      ? 'bg-gradient-to-r from-amber-500/30 to-blue-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md shadow-amber-500/20'
-                      : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
-                  }`}
-                >
-                  <span className="flex items-center gap-1 font-black text-amber-300">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>5 a 6 Dezenas</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                    Zona de Ouro (&gt;72% histórico)
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => update({ cruzMin: 4, cruzMax: 7 })}
-                  className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
-                    filters.cruzMin === 4 && filters.cruzMax === 7
-                      ? 'bg-blue-500/30 border-blue-400 text-blue-200 ring-1 ring-blue-400/60 shadow-md shadow-blue-500/20'
-                      : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
-                  }`}
-                >
-                  <span className="font-bold text-blue-300">4 a 7 Dezenas</span>
-                  <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                    Padrão Amplo (&gt;92% histórico)
-                  </span>
-                </button>
-              </div>
-
-              {/* Sliders de Ajuste Fino Customizado (4 a 7) */}
-              <div className="space-y-2 pt-2 border-t border-slate-850">
-                <div className="flex justify-between items-center text-[10px] text-slate-400">
-                  <span>Ajuste Manual do Filtro:</span>
-                  <span className="font-mono text-blue-300 font-bold">
-                    Mín: {filters.cruzMin ?? 4} | Máx: {filters.cruzMax ?? 7}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[9px] text-slate-400 block mb-1">Mínimo na Cruz:</label>
-                    <input
-                      type="range"
-                      min="3"
-                      max="6"
-                      value={filters.cruzMin ?? 4}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
+                  {/* Botões Pré-definidos */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() =>
                         update({
-                          cruzMin: val,
-                          cruzMax: Math.max(val, filters.cruzMax ?? 7),
-                        });
-                      }}
-                      className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-400 block mb-1">Máximo na Cruz:</label>
-                    <input
-                      type="range"
-                      min="5"
-                      max="8"
-                      value={filters.cruzMax ?? 7}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
+                          cruzAtiva: true,
+                          validacaoEstritaCruz: false,
+                          strictValidation: false,
+                          cruzMin: 4,
+                          cruzMax: 7,
+                        })
+                      }
+                      className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
+                        isCruzEnabled && !isStrictActive && currentCruzMin === 4 && currentCruzMax === 7
+                          ? 'bg-blue-500/30 border-blue-400 text-blue-200 ring-1 ring-blue-400/60 shadow-md shadow-blue-500/20'
+                          : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-blue-300">4 a 7 Dezenas</span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        Padrão Recomendado (&gt;92%)
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
                         update({
-                          cruzMax: val,
-                          cruzMin: Math.min(val, filters.cruzMin ?? 4),
-                        });
-                      }}
-                      className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
-                    />
+                          cruzAtiva: true,
+                          validacaoEstritaCruz: true,
+                          strictValidation: true,
+                          cruzMin: 5,
+                          cruzMax: 6,
+                        })
+                      }
+                      className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer text-left flex flex-col justify-between ${
+                        isCruzEnabled && currentCruzMin === 5 && currentCruzMax === 6
+                          ? 'bg-gradient-to-r from-amber-500/30 to-blue-500/20 border-amber-400 text-amber-200 ring-1 ring-amber-400/60 shadow-md shadow-amber-500/20'
+                          : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1 font-black text-amber-300">
+                        <Sparkles className="w-3 h-3 text-amber-400" />
+                        <span>5 a 6 Dezenas</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                        Zona de Ouro (&gt;72%)
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Sliders de Ajuste Fino Customizado (0 a 9) */}
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div className="flex justify-between items-center text-[10px] text-slate-400">
+                      <span>Ajuste Manual (0 a 9 dezenas):</span>
+                      <span className="font-mono text-blue-300 font-bold tabular-nums">
+                        Mín: {currentCruzMin} | Máx: {currentCruzMax}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-1">Mínimo na Cruz:</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="9"
+                          value={currentCruzMin}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const nextMax = Math.max(val, currentCruzMax);
+                            update({
+                              cruzAtiva: true,
+                              validacaoEstritaCruz: false,
+                              strictValidation: false,
+                              cruzMin: val,
+                              cruzMax: nextMax,
+                            });
+                          }}
+                          className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block mb-1">Máximo na Cruz:</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="9"
+                          value={currentCruzMax}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const nextMin = Math.min(val, currentCruzMin);
+                            update({
+                              cruzAtiva: true,
+                              validacaoEstritaCruz: false,
+                              strictValidation: false,
+                              cruzMin: nextMin,
+                              cruzMax: val,
+                            });
+                          }}
+                          className="w-full accent-blue-400 cursor-pointer h-1.5 bg-slate-800 rounded"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* 2.6 FILTRO DE EXTREMIDADES (BOLA 1 E BOLA 15) */}
             <div className="bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 p-4 rounded-2xl border-2 border-emerald-500/40 space-y-3">

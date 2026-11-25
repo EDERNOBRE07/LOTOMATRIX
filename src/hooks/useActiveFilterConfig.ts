@@ -19,12 +19,28 @@ export function normalizeActiveFilterConfig(
     ...(partialConfig || {}),
   };
 
-  const isStrictCruz =
-    partialConfig?.strictValidation ??
-    partialConfig?.validacaoEstritaCruz ??
-    merged.strictValidation ??
-    merged.validacaoEstritaCruz ??
-    false;
+  // Resolve o modo estrito da Cruz respeitando exatamente o campo passado em partialConfig
+  let isStrictCruz: boolean;
+  if (partialConfig && 'strictValidation' in partialConfig && 'validacaoEstritaCruz' in partialConfig) {
+    isStrictCruz = Boolean(partialConfig.strictValidation && partialConfig.validacaoEstritaCruz);
+  } else if (partialConfig && 'strictValidation' in partialConfig) {
+    isStrictCruz = Boolean(partialConfig.strictValidation);
+  } else if (partialConfig && 'validacaoEstritaCruz' in partialConfig) {
+    isStrictCruz = Boolean(partialConfig.validacaoEstritaCruz);
+  } else {
+    isStrictCruz = Boolean(merged.strictValidation || merged.validacaoEstritaCruz);
+  }
+
+  // Se o usuário alterou manualmente cruzMin/cruzMax para fora de 5..6 sem ativar estrito, desliga estrito
+  const manualCruzChanged =
+    partialConfig &&
+    (('cruzMin' in partialConfig && partialConfig.cruzMin !== 5) ||
+      ('cruzMax' in partialConfig && partialConfig.cruzMax !== 6)) &&
+    partialConfig.validacaoEstritaCruz !== true &&
+    partialConfig.strictValidation !== true;
+  if (manualCruzChanged) {
+    isStrictCruz = false;
+  }
 
   const fixedSanitized = sanitizeDezenasFixas(merged.dezenasFixas || []);
   const modoFixasResolved: 'rotativas' | 'rigidas' =
@@ -35,8 +51,29 @@ export function normalizeActiveFilterConfig(
   const algMin = Math.max(15, Math.min(135, merged.somaAlgarismosMin ?? 63));
   const algMax = Math.max(algMin, Math.min(135, merged.somaAlgarismosMax ?? 87));
 
+  const rawCruzMin = Number.isFinite(Number(merged.cruzMin)) ? Number(merged.cruzMin) : 4;
+  const rawCruzMax = Number.isFinite(Number(merged.cruzMax)) ? Number(merged.cruzMax) : 7;
+  const safeCruzMin = Math.max(0, Math.min(9, Math.round(rawCruzMin)));
+  const safeCruzMax = Math.max(safeCruzMin, Math.min(9, Math.round(rawCruzMax)));
+
+  const rawRepPMin = Number.isFinite(Number(merged.repetidasParesMin)) ? Number(merged.repetidasParesMin) : 2;
+  const rawRepPMax = Number.isFinite(Number(merged.repetidasParesMax)) ? Number(merged.repetidasParesMax) : 6;
+  const safeRepPMin = Math.max(0, Math.min(12, Math.round(rawRepPMin)));
+  const safeRepPMax = Math.max(safeRepPMin, Math.min(12, Math.round(rawRepPMax)));
+
+  const rawRepIMin = Number.isFinite(Number(merged.repetidasImparesMin)) ? Number(merged.repetidasImparesMin) : 2;
+  const rawRepIMax = Number.isFinite(Number(merged.repetidasImparesMax)) ? Number(merged.repetidasImparesMax) : 6;
+  const safeRepIMin = Math.max(0, Math.min(13, Math.round(rawRepIMin)));
+  const safeRepIMax = Math.max(safeRepIMin, Math.min(13, Math.round(rawRepIMax)));
+
   return {
     ...merged,
+    // Subfiltro de Paridade nas Repetidas do Concurso Anterior
+    repetidasParidadeAtiva: Boolean(merged.repetidasParidadeAtiva),
+    repetidasParesMin: safeRepPMin,
+    repetidasParesMax: safeRepPMax,
+    repetidasImparesMin: safeRepIMin,
+    repetidasImparesMax: safeRepIMax,
     // 1. Intervalos Posicionais por Bola (D1 a D15)
     posicionalAtivo: merged.posicionalAtivo ?? true,
     // 2. Múltiplos M(3) a M(8) via Máscaras Bitwise
@@ -50,10 +87,10 @@ export function normalizeActiveFilterConfig(
     digitosMax: merged.digitosMax ?? 27,
     umDigitoMin: merged.umDigitoMin ?? 3,
     umDigitoMax: merged.umDigitoMax ?? 8,
-    // 4. Geometria da Cruz (9 dezenas centrais: Linha 3 + Coluna 3)
-    cruzAtiva: merged.cruzAtiva ?? true,
-    cruzMin: isStrictCruz ? 5 : (merged.cruzMin ?? 4),
-    cruzMax: isStrictCruz ? 6 : (merged.cruzMax ?? 7),
+    // 4. Geometria da Cruz (9 dezenas no volante 5×5: [2, 7, 11, 12, 13, 14, 15, 17, 22])
+    cruzAtiva: merged.cruzAtiva !== false,
+    cruzMin: isStrictCruz ? 5 : safeCruzMin,
+    cruzMax: isStrictCruz ? 6 : safeCruzMax,
     strictValidation: isStrictCruz,
     validacaoEstritaCruz: isStrictCruz,
     // 5. Equilíbrio de Ranking Histórico (Caps Top 5 / Top 10 / Top 15 / Top 20)

@@ -47,8 +47,8 @@ export const MASK_PRIMOS = criarMascara([2, 3, 5, 7, 11, 13, 17, 19, 23]);
 // 4. Fibonacci da Lotofácil (1, 2, 3, 5, 8, 13, 21) -> Valor: 1052823
 export const MASK_FIBONACCI = criarMascara([1, 2, 3, 5, 8, 13, 21]);
 
-// 5. Cruz da Lotofácil (Linha 3 e Coluna 3: 3, 8, 11, 12, 13, 14, 15, 18, 23)
-export const MASK_CRUZ = criarMascara([3, 8, 11, 12, 13, 14, 15, 18, 23]);
+// 5. Cruz da Lotofácil no volante 5×5 (Linha 3 + Coluna 2: 2, 7, 11, 12, 13, 14, 15, 17, 22)
+export const MASK_CRUZ = criarMascara([2, 7, 11, 12, 13, 14, 15, 17, 22]);
 
 // 6. Máscaras Bitwise de Múltiplos M(3) a M(8)
 export const MASK_M3 = criarMascara([3, 6, 9, 12, 15, 18, 21, 24]);

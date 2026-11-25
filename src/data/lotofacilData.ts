@@ -6,8 +6,8 @@ export const MOLDURA = [1, 2, 3, 4, 5, 6, 10, 11, 15, 16, 20, 21, 22, 23, 24, 25
 export const MIOLO = [7, 8, 9, 12, 13, 14, 17, 18, 19];
 export const FIBONACCI = [1, 2, 3, 5, 8, 13, 21];
 
-// Cruz da Lotofácil (Linha 3 e Coluna 3 no volante 5x5: 9 dezenas)
-export const CRUZ_DEZENAS = [3, 8, 11, 12, 13, 14, 15, 18, 23];
+// Cruz da Lotofácil no volante 5×5 (Linha 3 + Coluna 2: 9 dezenas)
+export const CRUZ_DEZENAS = [2, 7, 11, 12, 13, 14, 15, 17, 22];
 
 // Bolas Extremas (Bola 1 e Bola 15 do bilhete)
 export const BOLAS_EXTREMAS_INICIO = [1, 2, 3, 4]; // Ideal: 1 ou 2

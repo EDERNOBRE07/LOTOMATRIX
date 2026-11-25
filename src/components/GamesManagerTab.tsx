@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { GameTicket, LotofacilDraw, FechamentoExportMeta } from '../types/lotofacil';
-import { CONCURSO_ATUAL, RECENT_DRAWS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, RECENT_DRAWS, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { countMatches, DEFAULT_FILTERS, normalizeGameTickets } from '../services/combinatorics';
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import { ModuloConferenciaJogos } from './ModuloConferenciaJogos';
@@ -2623,8 +2623,7 @@ export const GamesManagerTab: React.FC<GamesManagerTabProps> = ({
                 const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
                 const isExtremidadesFora = b1 < 1 || b1 > 4 || b15 < 22 || b15 > 25;
                 const cruzCount =
-                  t.cruz ??
-                  t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+                  t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
                 const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
                 const roiAudit = roiByTicketId.get(id);
                 const ticketEfficiency = evaluateTicketConferenceEfficiency(

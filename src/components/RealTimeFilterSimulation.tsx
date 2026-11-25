@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FilterCriteria, LotofacilDraw } from '../types/lotofacil';
-import { CONCURSO_ATUAL } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { analyzeTicket, validateFilters } from '../services/combinatorics';
 import { getHistoricalNDraws } from '../services/historical100Draws';
 import {
@@ -389,29 +389,56 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
               </div>
 
               {/* Quick Metrics Badges */}
-              <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px] tabular-nums">
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.soma >= filters.somaMin && item.analysis.soma <= filters.somaMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  Soma: {item.analysis.soma}
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.pares >= filters.paresMin && item.analysis.pares <= filters.paresMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  {item.analysis.pares}P / {15 - item.analysis.pares}I
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.repetidas >= filters.repetidasMin && item.analysis.repetidas <= filters.repetidasMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  {item.analysis.repetidas} Rep.
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.moldura >= filters.molduraMin && item.analysis.moldura <= filters.molduraMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  {item.analysis.moldura} Mold.
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.primos >= filters.primosMin && item.analysis.primos <= filters.primosMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  {item.analysis.primos} Prim.
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.fibonacci >= filters.fibonacciMin && item.analysis.fibonacci <= filters.fibonacciMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  {item.analysis.fibonacci} Fibo
-                </span>
-                <span className={`px-1.5 py-0.5 rounded ${item.analysis.maxConsecutivas <= filters.maxConsecutivas ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
-                  Seq ≤{item.analysis.maxConsecutivas}
-                </span>
-              </div>
+              {(() => {
+                const cruzCount = item.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+                const isStrictCruz = Boolean(filters.strictValidation || filters.validacaoEstritaCruz);
+                const cMin = isStrictCruz ? 5 : (filters.cruzMin ?? 4);
+                const cMax = isStrictCruz ? 6 : (filters.cruzMax ?? 7);
+                const cruzOk = filters.cruzAtiva === false || (cruzCount >= cMin && cruzCount <= cMax);
+
+                const repInter = item.dezenas.filter((n) => latestDraw.dezenas.includes(n));
+                const repP = item.analysis.repetidasPares ?? repInter.filter((n) => n % 2 === 0).length;
+                const repI = item.analysis.repetidasImpares ?? repInter.filter((n) => n % 2 !== 0).length;
+                const repParityOk =
+                  !filters.repetidasParidadeAtiva ||
+                  (repP >= (filters.repetidasParesMin ?? 0) &&
+                    repP <= (filters.repetidasParesMax ?? 12) &&
+                    repI >= (filters.repetidasImparesMin ?? 0) &&
+                    repI <= (filters.repetidasImparesMax ?? 13));
+                const repTotalOk =
+                  item.analysis.repetidas >= filters.repetidasMin &&
+                  item.analysis.repetidas <= filters.repetidasMax &&
+                  repParityOk;
+
+                return (
+                  <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px] tabular-nums">
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.soma >= filters.somaMin && item.analysis.soma <= filters.somaMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      Soma: {item.analysis.soma}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.pares >= filters.paresMin && item.analysis.pares <= filters.paresMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      {item.analysis.pares}P / {15 - item.analysis.pares}I
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${repTotalOk ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      {item.analysis.repetidas} Rep. ({repP}P/{repI}I)
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${cruzOk ? 'bg-blue-950/60 text-blue-300 border border-blue-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      Cruz: {cruzCount}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.moldura >= filters.molduraMin && item.analysis.moldura <= filters.molduraMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      {item.analysis.moldura} Mold.
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.primos >= filters.primosMin && item.analysis.primos <= filters.primosMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      {item.analysis.primos} Prim.
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.fibonacci >= filters.fibonacciMin && item.analysis.fibonacci <= filters.fibonacciMax ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      {item.analysis.fibonacci} Fibo
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded ${item.analysis.maxConsecutivas <= filters.maxConsecutivas ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300 border border-rose-500/30 font-bold'}`}>
+                      Seq ≤{item.analysis.maxConsecutivas}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Dezenas Balls */}

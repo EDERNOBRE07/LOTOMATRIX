@@ -4,16 +4,18 @@ import { filterLayoutTransition } from '../utils/staggerAnimation';
 import {
   FechamentoMode,
   FilterCriteria,
+  FilterRigorMode,
   GameTicket,
   AIPredictionResponse,
   LotofacilDraw,
   DezenaStats,
   FechamentoExportMeta,
 } from '../types/lotofacil';
-import { CONCURSO_ATUAL, RECENT_DRAWS, DEZENAS_STATS, PRIMOS, MOLDURA } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, RECENT_DRAWS, DEZENAS_STATS, PRIMOS, MOLDURA, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 import { VolanteSelector } from './VolanteSelector';
 import { FilterControls } from './FilterControls';
+import { ControleInteligenteFiltrosDashboard } from './ControleInteligenteFiltrosDashboard';
 import {
   FECHAMENTO_PRESETS,
   generateFechamentoCovering,
@@ -41,6 +43,7 @@ import {
   calibrarFaixaSomaUniverso,
   getRotatedFixedBounds,
   resolveModoFixas,
+  resolveEffectiveFiltersForStudio,
 } from '../services/combinatorics';
 import { CentralUnificadaFechamento, UNIFIED_MATRIX_CATALOG, MatrixCatalogItem } from './CentralUnificadaFechamento';
 import { BentoGridFechamento } from './BentoGridFechamento';
@@ -148,6 +151,8 @@ interface FechamentoTabProps {
   isAILoading: boolean;
   activeFilterConfig?: FilterCriteria;
   onFiltersConfigChange?: (filters: FilterCriteria) => void;
+  onOpenFiltros?: () => void;
+  filtersAppliedNoticeToken?: number | null;
 }
 
 export const FechamentoTab: React.FC<FechamentoTabProps> = ({
@@ -163,6 +168,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   isAILoading,
   activeFilterConfig,
   onFiltersConfigChange,
+  onOpenFiltros,
+  filtersAppliedNoticeToken,
 }) => {
   const [mode, setMode] = useState<FechamentoMode>('18_14_15');
   const preset = FECHAMENTO_PRESETS[mode];
@@ -253,6 +260,87 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     onFiltersConfigChange?.(next);
     return next;
   };
+
+  // Controle Inteligente de Filtros no Estúdio (Passo 3: Master Switch + 3 Modos de Rigor)
+  const [studioFiltersEnabled, setStudioFiltersEnabled] = useState<boolean>(() => {
+    if (activeFilterConfig?.filtrosDesativadosNoFechamento === true) return false;
+    try {
+      const saved = localStorage.getItem('lotosniper_studio_filters_enabled');
+      if (saved === 'false') return false;
+      if (saved === 'true') return true;
+    } catch {}
+    return true;
+  });
+
+  const [studioFilterMode, setStudioFilterMode] = useState<FilterRigorMode>(() => {
+    const fromCfg = activeFilterConfig?.modoRigorFiltros;
+    if (fromCfg === 'total' || fromCfg === 'conservador' || fromCfg === 'agressivo') {
+      return fromCfg;
+    }
+    try {
+      const saved = localStorage.getItem('lotosniper_studio_filter_mode');
+      if (saved === 'total' || saved === 'conservador' || saved === 'agressivo') {
+        return saved;
+      }
+    } catch {}
+    return 'total';
+  });
+
+  // Motor selecionado no Passo 4 (Coluna Esquerda)
+  const [selectedMotor, setSelectedMotor] = useState<
+    'padrao' | 'ponderado' | 'estratificada' | 'fibonacci' | 'turbo'
+  >('padrao');
+
+  // Feedback visual quando o usuário clica "Aplicar Filtros no Estúdio de Fechamento"
+  const [showFiltersAppliedToast, setShowFiltersAppliedToast] = useState<boolean>(false);
+  const lastHandledAppliedTokenRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!filtersAppliedNoticeToken) return;
+    if (lastHandledAppliedTokenRef.current === filtersAppliedNoticeToken) return;
+    lastHandledAppliedTokenRef.current = filtersAppliedNoticeToken;
+
+    setStudioFiltersEnabled(true);
+    setStudioFilterMode('total');
+    try {
+      localStorage.setItem('lotosniper_studio_filters_enabled', 'true');
+      localStorage.setItem('lotosniper_studio_filter_mode', 'total');
+    } catch {}
+    setShowFiltersAppliedToast(true);
+    const timer = window.setTimeout(() => {
+      setShowFiltersAppliedToast(false);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [filtersAppliedNoticeToken]);
+
+  const handleToggleStudioFiltersEnabled = (nextEnabled: boolean) => {
+    setStudioFiltersEnabled(nextEnabled);
+    try {
+      localStorage.setItem('lotosniper_studio_filters_enabled', String(nextEnabled));
+    } catch {}
+    syncFilters((prev) => ({
+      ...prev,
+      filtrosDesativadosNoFechamento: !nextEnabled,
+    }));
+  };
+
+  const handleChangeStudioFilterMode = (nextMode: FilterRigorMode) => {
+    setStudioFilterMode(nextMode);
+    try {
+      localStorage.setItem('lotosniper_studio_filter_mode', nextMode);
+    } catch {}
+    syncFilters((prev) => ({
+      ...prev,
+      modoRigorFiltros: nextMode,
+      filtrosDesativadosNoFechamento: false,
+    }));
+  };
+
+  // Filtros efetivos após aplicação do Dashboard do Passo 3 (Ligar/Desligar + Total/Conservador/Agressivo)
+  const effectiveFilters = useMemo<FilterCriteria>(
+    () => resolveEffectiveFiltersForStudio(filters, studioFiltersEnabled, studioFilterMode),
+    [filters, studioFiltersEnabled, studioFilterMode]
+  );
 
   const lastExternalConfigSigRef = React.useRef<string>(
     activeFilterConfig ? JSON.stringify(activeFilterConfig) : ''
@@ -758,22 +846,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // Métricas de Auditoria dos Bilhetes Gerados em Tempo Real
   const auditMetrics = useMemo(() => {
-    const isCruzAtiva = filters.cruzAtiva !== false;
-    const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+    const isCruzAtiva = studioFiltersEnabled && effectiveFilters.cruzAtiva !== false;
+    const isExtremidadesAtiva = studioFiltersEnabled && effectiveFilters.extremidadesAtiva !== false;
+    const isEstritaCruz = effectiveFilters.validacaoEstritaCruz === true;
     let auditados = 0;
     let foraDoPadrao = 0;
 
     for (const t of generatedTickets) {
       const b1 = t.bola1 ?? t.dezenas[0];
       const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
-      const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
-      const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+      const cruzCount = t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+      const cruzFalhou =
+        isCruzAtiva &&
+        (isEstritaCruz
+          ? cruzCount < 5 || cruzCount > 6
+          : cruzCount < (effectiveFilters.cruzMin ?? 4) || cruzCount > (effectiveFilters.cruzMax ?? 7));
       const extremidadesFalhou =
         isExtremidadesAtiva &&
-        (b1 < (filters.bola1Min ?? 1) ||
-          b1 > (filters.bola1Max ?? 4) ||
-          b15 < (filters.bola15Min ?? 22) ||
-          b15 > (filters.bola15Max ?? 25));
+        (b1 < (effectiveFilters.bola1Min ?? 1) ||
+          b1 > (effectiveFilters.bola1Max ?? 4) ||
+          b15 < (effectiveFilters.bola15Min ?? 22) ||
+          b15 > (effectiveFilters.bola15Max ?? 25));
 
       if (cruzFalhou || extremidadesFalhou) {
         foraDoPadrao++;
@@ -785,20 +878,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     return { auditados, foraDoPadrao };
   }, [
     generatedTickets,
-    filters.cruzAtiva,
-    filters.extremidadesAtiva,
-    filters.cruzMin,
-    filters.cruzMax,
-    filters.bola1Min,
-    filters.bola1Max,
-    filters.bola15Min,
-    filters.bola15Max,
+    studioFiltersEnabled,
+    effectiveFilters.cruzAtiva,
+    effectiveFilters.validacaoEstritaCruz,
+    effectiveFilters.extremidadesAtiva,
+    effectiveFilters.cruzMin,
+    effectiveFilters.cruzMax,
+    effectiveFilters.bola1Min,
+    effectiveFilters.bola1Max,
+    effectiveFilters.bola15Min,
+    effectiveFilters.bola15Max,
   ]);
 
   // Bilhetes exibidos com suporte a filtro do monitoramento e auditoria em tempo real
   const displayedTickets = useMemo(() => {
-    const isCruzAtiva = filters.cruzAtiva !== false;
-    const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
+    const isCruzAtiva = studioFiltersEnabled && effectiveFilters.cruzAtiva !== false;
+    const isExtremidadesAtiva = studioFiltersEnabled && effectiveFilters.extremidadesAtiva !== false;
+    const isEstritaCruz = effectiveFilters.validacaoEstritaCruz === true;
 
     if (fechamentoFilter === 'improbable' && fechamentoMonitoringSummary) {
       const improbableIds = fechamentoMonitoringSummary.gamesWithAnomalies.map((g) => g.gameId);
@@ -810,14 +906,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       return generatedTickets.filter((t) => {
         const b1 = t.bola1 ?? t.dezenas[0];
         const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
-        const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
-        const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+        const cruzCount = t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+        const cruzFalhou =
+          isCruzAtiva &&
+          (isEstritaCruz
+            ? cruzCount < 5 || cruzCount > 6
+            : cruzCount < (effectiveFilters.cruzMin ?? 4) || cruzCount > (effectiveFilters.cruzMax ?? 7));
         const extremidadesFalhou =
           isExtremidadesAtiva &&
-          (b1 < (filters.bola1Min ?? 1) ||
-            b1 > (filters.bola1Max ?? 4) ||
-            b15 < (filters.bola15Min ?? 22) ||
-            b15 > (filters.bola15Max ?? 25));
+          (b1 < (effectiveFilters.bola1Min ?? 1) ||
+            b1 > (effectiveFilters.bola1Max ?? 4) ||
+            b15 < (effectiveFilters.bola15Min ?? 22) ||
+            b15 > (effectiveFilters.bola15Max ?? 25));
         return !cruzFalhou && !extremidadesFalhou;
       });
     }
@@ -825,14 +925,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       return generatedTickets.filter((t) => {
         const b1 = t.bola1 ?? t.dezenas[0];
         const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
-        const cruzCount = t.cruz ?? t.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
-        const cruzFalhou = isCruzAtiva && (cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+        const cruzCount = t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+        const cruzFalhou =
+          isCruzAtiva &&
+          (isEstritaCruz
+            ? cruzCount < 5 || cruzCount > 6
+            : cruzCount < (effectiveFilters.cruzMin ?? 4) || cruzCount > (effectiveFilters.cruzMax ?? 7));
         const extremidadesFalhou =
           isExtremidadesAtiva &&
-          (b1 < (filters.bola1Min ?? 1) ||
-            b1 > (filters.bola1Max ?? 4) ||
-            b15 < (filters.bola15Min ?? 22) ||
-            b15 > (filters.bola15Max ?? 25));
+          (b1 < (effectiveFilters.bola1Min ?? 1) ||
+            b1 > (effectiveFilters.bola1Max ?? 4) ||
+            b15 < (effectiveFilters.bola15Min ?? 22) ||
+            b15 > (effectiveFilters.bola15Max ?? 25));
         return cruzFalhou || extremidadesFalhou;
       });
     }
@@ -846,14 +950,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     generatedTickets,
     fechamentoFilter,
     fechamentoMonitoringSummary,
-    filters.cruzAtiva,
-    filters.extremidadesAtiva,
-    filters.cruzMin,
-    filters.cruzMax,
-    filters.bola1Min,
-    filters.bola1Max,
-    filters.bola15Min,
-    filters.bola15Max,
+    studioFiltersEnabled,
+    effectiveFilters.cruzAtiva,
+    effectiveFilters.validacaoEstritaCruz,
+    effectiveFilters.extremidadesAtiva,
+    effectiveFilters.cruzMin,
+    effectiveFilters.cruzMax,
+    effectiveFilters.bola1Min,
+    effectiveFilters.bola1Max,
+    effectiveFilters.bola15Min,
+    effectiveFilters.bola15Max,
   ]);
 
   // Seleção e aplicação instantânea de Presets Estatísticos (Conservador, Balanceado, Agressivo)
@@ -1808,12 +1914,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const start = performance.now();
 
     try {
-      const fullFilters: FilterCriteria = {
+      const baseWithVolante: FilterCriteria = {
         ...filters,
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
+        filtrosDesativadosNoFechamento: !studioFiltersEnabled,
+        modoRigorFiltros: studioFilterMode,
       };
-      syncFilters(fullFilters);
+      syncFilters(baseWithVolante);
+      const fullFilters: FilterCriteria = resolveEffectiveFiltersForStudio(
+        baseWithVolante,
+        studioFiltersEnabled,
+        studioFilterMode
+      );
 
       let tickets: GameTicket[] = [];
       const active25Pool = Array.from({ length: 25 }, (_, i) => i + 1);
@@ -2055,14 +2168,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const start = performance.now();
 
     try {
-      const fullFilters: FilterCriteria = {
+      const baseWithVolante: FilterCriteria = {
         ...filters,
         fechamentoPonderadoAtivo: true,
         robustezEstatisticaAtiva: true,
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
+        filtrosDesativadosNoFechamento: !studioFiltersEnabled,
+        modoRigorFiltros: studioFilterMode,
       };
-      syncFilters(fullFilters);
+      syncFilters(baseWithVolante);
+      const fullFilters: FilterCriteria = resolveEffectiveFiltersForStudio(
+        baseWithVolante,
+        studioFiltersEnabled,
+        studioFilterMode
+      );
 
       const result = await fechamentoWorkerClient.generatePonderado({
         mode,
@@ -2450,12 +2570,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     const start = performance.now();
 
     try {
-      const fullFilters: FilterCriteria = {
+      const baseWithVolante: FilterCriteria = {
         ...filters,
         dezenasFixas: fixedNumbers,
         dezenasExcluidas: excludedNumbers,
+        filtrosDesativadosNoFechamento: !studioFiltersEnabled,
+        modoRigorFiltros: studioFilterMode,
       };
-      syncFilters(fullFilters);
+      syncFilters(baseWithVolante);
+      const fullFilters: FilterCriteria = resolveEffectiveFiltersForStudio(
+        baseWithVolante,
+        studioFiltersEnabled,
+        studioFilterMode
+      );
 
       const tickets = gerarMatrizEstratificada(selectedNumbers, preset.jogosMaximos, {
         dezenasFixas: fixedNumbers,
@@ -2611,16 +2738,74 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     };
   };
 
+  const handleExecuteSelectedMotor = () => {
+    if (selectedMotor === 'turbo') {
+      setIsTurboModalOpen(true);
+      return;
+    }
+    if (selectedMotor === 'fibonacci') {
+      handleGenerateFibonacci();
+      return;
+    }
+    if (selectedMotor === 'ponderado') {
+      handleGeneratePonderado();
+      return;
+    }
+    if (selectedMotor === 'estratificada') {
+      handleGenerateEstratificada();
+      return;
+    }
+    handleGenerate();
+  };
+
+  const selectedMotorLabel =
+    selectedMotor === 'padrao'
+      ? 'Motor Padrão · Cobertura LJCR/Hamming'
+      : selectedMotor === 'ponderado'
+      ? 'Ponderação IA & Robustez 50'
+      : selectedMotor === 'estratificada'
+      ? 'Anti-Cisne Negro (75/15/10%)'
+      : selectedMotor === 'fibonacci'
+      ? 'Padrões Fibonacci (5 Jogos)'
+      : 'Gerador Turbo (Força Bruta 14 Pts)';
+
+  const canExecuteSelectedMotor =
+    !isGenerating &&
+    (selectedMotor === 'turbo' ||
+      selectedMotor === 'fibonacci' ||
+      isSpecial25Mode ||
+      selectedNumbers.length >= targetCount);
+
   return (
     <div className="space-y-6">
-      {/* Introduction Hero Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-emerald-950/40 to-slate-900 rounded-2xl border border-emerald-500/20 p-5 sm:p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+      {/* Feedback Toast quando vindo da aba Filtros Inteligentes */}
+      {showFiltersAppliedToast && (
+        <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-100 text-xs flex items-center justify-between gap-3 shadow-lg flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />
+            <span>
+              <strong className="text-amber-200 font-black">Filtros customizados aplicados e ativos!</strong>{' '}
+              O Estúdio de Fechamento foi sincronizado no <strong className="text-white">Modo 1 — Total</strong> com todas as suas regras da aba Filtros Inteligentes.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFiltersAppliedToast(false)}
+            className="text-amber-300/80 hover:text-white text-xs font-bold px-2 py-1 rounded-lg hover:bg-amber-500/20 transition cursor-pointer shrink-0"
+          >
+            Dispensar
+          </button>
+        </div>
+      )}
+
+      {/* Hero Compacto do Estúdio de Fechamento */}
+      <div className="bg-gradient-to-r from-slate-900 via-emerald-950/35 to-slate-900 rounded-2xl border border-emerald-500/25 p-5 sm:p-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 relative z-10">
           <div>
             <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>Garantia Matemática Comprovada</span>
               </div>
@@ -2629,7 +2814,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAutoSaveModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-indigo-300 text-xs font-bold transition cursor-pointer shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-indigo-300 text-xs font-bold transition cursor-pointer shadow-sm whitespace-nowrap shrink-0"
                   title="Recuperar configurações e jogos das últimas 10 gerações salvas no localStorage"
                 >
                   <History className="w-3.5 h-3.5" />
@@ -2640,45 +2825,41 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <button
                 type="button"
                 onClick={() => setIsErrorLogsModalOpen(true)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold transition cursor-pointer shadow-sm ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition cursor-pointer shadow-sm whitespace-nowrap shrink-0 ${
                   errorLogsCount > 0
-                    ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/50 text-rose-300 animate-pulse'
+                    ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/50 text-rose-300'
                     : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
                 }`}
                 title="Dossiê de Erros, Telemetria e Diagnóstico Assíncrono do Motor de Fechamento"
               >
                 <Bug className="w-3.5 h-3.5" />
-                <span>Telemetria & Diagnóstico {errorLogsCount > 0 ? `(${errorLogsCount})` : ''}</span>
+                <span>Diagnóstico {errorLogsCount > 0 ? `(${errorLogsCount})` : ''}</span>
               </button>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              Otimizador de Fechamentos para 14 Pontos
+              Estúdio de Fechamentos para 14 Pontos
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mt-1 leading-relaxed">
-              Algoritmo de cobertura exata combinatória (Covering Design). Ao acertar as 15
-              sorteadas dentro das suas {targetCount} dezenas selecionadas, a matriz garante
-              no mínimo 14 pontos (com alta probabilidade de 15 pontos), reduzindo os custos
-              de aposta em até <strong className="text-emerald-400 font-mono">97.1%</strong>.
+              Fluxo sequencial de 6 etapas com cobertura combinatória exata (Covering Design): ao acertar as 15 sorteadas dentro das suas {targetCount} dezenas, a matriz garante no mínimo 14 pontos com economia de até <strong className="text-emerald-400 font-mono tabular-nums">97.1%</strong>.
             </p>
           </div>
 
-          {/* Quick Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs shrink-0">
             <div>
               <span className="text-slate-400 text-[11px] block">Aposta Pura (Caixa):</span>
-              <strong className="text-slate-300 font-mono text-sm">
+              <strong className="text-slate-300 font-mono tabular-nums text-sm">
                 R$ {rawCaixaCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </strong>
             </div>
             <div>
               <span className="text-slate-400 text-[11px] block">Matriz Pro (Fechamento):</span>
-              <strong className="text-emerald-400 font-mono text-sm font-bold">
+              <strong className="text-emerald-400 font-mono tabular-nums text-sm font-bold">
                 R$ {totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </strong>
             </div>
             <div className="col-span-2 sm:col-span-1">
               <span className="text-slate-400 text-[11px] block">Economia Real:</span>
-              <strong className="text-amber-400 font-mono text-sm font-bold flex items-center gap-1">
+              <strong className="text-amber-400 font-mono tabular-nums text-sm font-bold flex items-center gap-1">
                 <TrendingDown className="w-3.5 h-3.5" />
                 {preset.reducaoPercentual}%
               </strong>
@@ -2687,17 +2868,25 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         </div>
       </div>
 
-      {/* Mode Selection Carousel (15 a 25 Dezenas + Estratégias Especiais) */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            1. Selecione a Estratégia de Fechamento &amp; Matrizes Econômicas:
-          </label>
-          <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full self-start sm:self-auto">
+      {/* ===================================================================== */}
+      {/* PASSO 1: SELECIONE A ESTRATÉGIA DE FECHAMENTO & MATRIZES ECONÔMICAS   */}
+      {/* ===================================================================== */}
+      <section className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-400 text-slate-950 font-mono font-black text-xs shrink-0">
+              1
+            </span>
+            <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+              Selecione a Estratégia de Fechamento &amp; Matrizes Econômicas
+            </h3>
+          </div>
+          <span className="text-[11px] font-mono text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-lg self-start sm:self-auto whitespace-nowrap">
             Ativa: {preset.nome} ({preset.jogosMaximos} Jogos • {preset.garantia})
           </span>
         </div>
 
+        {/* Grid de Estratégias & Fechamentos */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2.5">
           {(
             [
@@ -2767,10 +2956,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       : `${p.dezenasNecessarias} Dezenas`}
                   </span>
                   <div className="text-right shrink-0">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold block">
+                    <span className="text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold block">
                       {p.jogosMaximos}j
                     </span>
-                    <span className="text-[10px] font-mono font-bold text-amber-300 block mt-0.5">
+                    <span className="text-[10px] font-mono tabular-nums font-bold text-amber-300 block mt-0.5">
                       R$ {custoFechamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -2818,21 +3007,179 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           </div>
         )}
-      </div>
 
-      {/* Seletor de Modelos de Prognósticos & Estratégias */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            2. Selecione o Modelo de Prognóstico da Matriz ({targetCount} Dezenas):
-          </label>
-          <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-full self-start sm:self-auto">
+        {/* Catálogo Integrado de Matrizes Econômicas / LJCR (15 a 25 Dezenas) */}
+        <div className="pt-3 border-t border-slate-800/80 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-black text-white uppercase tracking-wide">
+                Catálogo de Matrizes Econômicas &amp; LJCR (15 a 25 Dezenas)
+              </span>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                70,7% dos ROIs &gt; 50%
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {UNIFIED_MATRIX_CATALOG.filter((m) => m.altaEficiencia).map((item) => {
+                const isActiveRec = selectedCatalogId
+                  ? selectedCatalogId === item.id && mode === item.mode
+                  : mode === item.mode && targetCount === item.dezenas;
+                return (
+                  <button
+                    key={`fast-${item.id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCatalogUniverse(item.dezenas);
+                      setSelectedCatalogId(item.id);
+                      handleSelectClosingStrategy(item.mode);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActiveRec
+                        ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-sm'
+                        : 'bg-slate-950/80 text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/20'
+                    }`}
+                  >
+                    {item.dezenas} Dez • {item.jogos}J
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
+              const isHighEffTab = size === 16 || size === 17 || size === 18;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCatalogUniverse(size);
+                    const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
+                    if (firstMatrix) {
+                      setSelectedCatalogId(firstMatrix.id);
+                      handleSelectClosingStrategy(firstMatrix.mode);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
+                    selectedCatalogUniverse === size
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                      : isHighEffTab
+                      ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
+                  {isHighEffTab && (
+                    <span
+                      className={`text-[9px] font-mono uppercase px-1 rounded font-black ${
+                        selectedCatalogUniverse === size
+                          ? 'bg-slate-950/20 text-slate-950'
+                          : 'bg-emerald-500/20 text-emerald-300'
+                      }`}
+                    >
+                      Alta Efic.
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {UNIFIED_MATRIX_CATALOG.filter((m) => m.dezenas === selectedCatalogUniverse).map((item) => {
+              const isSelected = selectedCatalogId
+                ? selectedCatalogId === item.id && mode === item.mode
+                : mode === item.mode && targetCount === item.dezenas;
+              const custoItem = item.jogos * VALOR_APOSTA_LOTOFACIL;
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => {
+                    setSelectedCatalogId(item.id);
+                    handleSelectClosingStrategy(item.mode);
+                  }}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between text-left group ${
+                    isSelected
+                      ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-1 ring-emerald-400/20 shadow-lg shadow-emerald-500/10'
+                      : item.altaEficiencia
+                      ? 'bg-emerald-950/15 hover:bg-emerald-950/30 border-emerald-500/35 hover:border-emerald-400/60'
+                      : 'bg-slate-950/80 hover:bg-slate-800/70 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1 gap-1">
+                      <span className="text-xs font-mono font-bold text-white">
+                        {item.dezenas} Dez • {item.jogos} {item.jogos === 1 ? 'Jogo' : 'Jogos'}
+                      </span>
+                      {item.tag && (
+                        <span
+                          className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-bold ${
+                            item.altaEficiencia
+                              ? 'bg-emerald-400 text-slate-950 border-emerald-300'
+                              : item.coreSatelites
+                              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}
+                        >
+                          {item.tag}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-black text-emerald-400 tracking-tight">
+                      {item.garantia}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">
+                      {item.condicao}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <span className="text-xs font-mono tabular-nums font-bold text-amber-300">
+                      R$ {custoItem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition ${
+                        isSelected
+                          ? 'bg-emerald-400 text-slate-950 font-black'
+                          : 'bg-slate-800 text-slate-300 group-hover:bg-slate-700'
+                      }`}
+                    >
+                      {isSelected ? '✓ Ativa' : 'Escolher'}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ===================================================================== */}
+      {/* PASSO 2: SELECIONE O MODELO DE PROGNÓSTICO DA MATRIZ (18 DEZENAS)     */}
+      {/* ===================================================================== */}
+      <section className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-xl space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-cyan-400 text-slate-950 font-mono font-black text-xs shrink-0">
+              2
+            </span>
+            <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+              Selecione o Modelo de Prognóstico da Matriz ({targetCount} Dezenas)
+            </h3>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/35 whitespace-nowrap">
+              {targetCount === 18 ? 'Padrão Ouro · 18 Dezenas' : `Universo ${targetCount} Dezenas`}
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-cyan-300 font-bold bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-1 rounded-lg self-start sm:self-auto">
             Modelo Ativo: {strategyName}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
-          {/* Modelo 1: ⚡ Fechamento Clássico */}
+          {/* Modelo 1: Fechamento Clássico */}
           <button
             type="button"
             onClick={() => applyStrategyModel('⚡ Fechamento Clássico (9 Repetidas + 9 Ausentes)')}
@@ -2843,7 +3190,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+              <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shrink-0">
                 <Zap className="w-4 h-4 fill-current" />
               </span>
               <div>
@@ -2860,7 +3207,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 2: 🤖 Top 18 IA */}
+          {/* Modelo 2: Top 18 IA */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Top 18 IA')}
@@ -2871,7 +3218,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/40">
+              <span className="p-1.5 rounded-lg bg-teal-500/20 text-teal-400 border border-teal-500/40 shrink-0">
                 <Sparkles className="w-4 h-4" />
               </span>
               <div>
@@ -2879,7 +3226,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   Top 18 IA
                 </span>
                 <span className="text-[10px] font-mono font-bold text-teal-400">
-                  Calor & Probabilidade IA
+                  Calor &amp; Probabilidade IA
                 </span>
               </div>
             </div>
@@ -2888,18 +3235,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 3: 🧠⚡ Insights de Filtros da IA */}
+          {/* Modelo 3: Insights de Filtros da IA */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Insights de Filtros da IA')}
             className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
               strategyName.includes('Insights de Filtros da IA') || activeModel === 'Insights de Filtros da IA'
-                ? 'bg-gradient-to-br from-cyan-500/25 via-emerald-500/20 to-slate-900 border-2 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-2 ring-cyan-400/50 scale-[1.01]'
+                ? 'bg-gradient-to-br from-cyan-500/25 via-emerald-500/20 to-slate-900 border-2 border-cyan-400 shadow-lg shadow-cyan-500/25 ring-1 ring-cyan-400/50'
                 : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+              <span className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shrink-0">
                 <Sparkles className="w-4 h-4 fill-cyan-400/30" />
               </span>
               <div>
@@ -2916,7 +3263,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 4: 🔄 Fechar Ciclo */}
+          {/* Modelo 4: Fechar Ciclo */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Fechar Ciclo (2, 7, 10)')}
@@ -2927,12 +3274,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+              <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
                 <RefreshCw className="w-4 h-4" />
               </span>
               <div>
                 <span className="font-bold text-xs sm:text-sm text-white block">
-                  Fechar Ciclo (2, 7, 10)
+                  Fechar Ciclo
                 </span>
                 <span className="text-[10px] font-mono font-bold text-amber-400">
                   Dezenas de Alta Pressão
@@ -2944,7 +3291,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
 
-          {/* Modelo 5: ⚖️ Equilíbrio Canônico */}
+          {/* Modelo 5: Equilíbrio Canônico */}
           <button
             type="button"
             onClick={() => applyStrategyModel('Equilíbrio Canônico')}
@@ -2955,7 +3302,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             }`}
           >
             <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/40">
+              <span className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shrink-0">
                 <ShieldCheck className="w-4 h-4" />
               </span>
               <div>
@@ -2972,635 +3319,67 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </p>
           </button>
         </div>
-      </div>
+      </section>
 
-      {/* Totalizador de Custos - Cálculo Automático do Investimento */}
-      <TotalizadorDeCustos
-        preset={preset}
-        mode={mode}
-        targetCount={targetCount}
-        totalJogos={generatedTickets.length || preset.jogosMaximos}
-        onGoToGamesManager={
-          onGoToGamesManager
-            ? () => onGoToGamesManager(generatedTickets, getCurrentExportMeta())
-            : undefined
-        }
-      />
+      {/* ===================================================================== */}
+      {/* PASSO 3: NOVO DASHBOARD INTERATIVO — CONTROLE INTELIGENTE DE FILTROS  */}
+      {/* ===================================================================== */}
+      <div className="space-y-3">
+        <ControleInteligenteFiltrosDashboard
+          enabled={studioFiltersEnabled}
+          onToggleEnabled={handleToggleStudioFiltersEnabled}
+          rigorMode={studioFilterMode}
+          onChangeRigorMode={handleChangeStudioFilterMode}
+          baseFilters={filters}
+          effectiveFilters={effectiveFilters}
+          latestDraw={latestDraw}
+          onOpenFiltros={onOpenFiltros}
+          justAppliedFromFiltros={showFiltersAppliedToast}
+        />
 
-      {/* Success Notification for Document Strategy Pool */}
-      {documentMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md animate-in fade-in flex-wrap">
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{documentMessage}</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {documentMessage.includes('salvo com sucesso') && (
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
-                }}
-                className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5"
-              >
-                <span>Ver Jogos Salvos</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button
-              onClick={() => setDocumentMessage(null)}
-              className="text-emerald-400/70 hover:text-emerald-200 text-xs font-semibold cursor-pointer px-2 py-1"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* ESTÚDIO DE FECHAMENTOS: LAYOUT EXECUTIVO DE 2 COLUNAS & FLUXO CONTÍNUO     */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* COLUNA ESQUERDA: Volante Interativo 5×5 + Ações Rápidas de Seleção */}
-        <div className="lg:col-span-5 xl:col-span-5 space-y-4">
-          {/* Volante Oficial 5x5 */}
-          <VolanteSelector
-            selectedNumbers={selectedNumbers}
-            fixedNumbers={fixedNumbers}
-            excludedNumbers={excludedNumbers}
-            aiScores={aiPrediction?.scores}
-            statsList={dynamicStats}
-            cyclePendingNumbers={cyclePendingNumbers}
-            latestDraw={latestDraw}
-            onToggleNumber={handleToggleNumber}
-            onSetFixed={handleSetFixed}
-            onSetExcluded={handleSetExcluded}
-            onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
-            onStrategySelect={(stratName) => {
-              setStrategyName(stratName);
-              setActiveModel(stratName);
-            }}
-            activeStrategy={strategyName}
-            activeMode={mode}
-            onActivateErre4Mode={(excl4, comp21) => {
-              setMode('erre_4_21');
-              setExcludedNumbers(excl4);
-              setSelectedNumbers(comp21);
-              setFixedNumbers((prev) => prev.filter((n) => !excl4.includes(n)));
-              const p = FECHAMENTO_PRESETS['erre_4_21'];
-              setStrategyName(p.nome);
-              setActiveModel(p.nome);
-              setDocumentMessage(
-                `✓ Modo Erre Apenas 4 ativado! Excluídas [${excl4.map((n) => n.toString().padStart(2, '0')).join(', ')}] e selecionadas as 21 dezenas complementares.`
-              );
-              soundService.playGoldenZoneSuccessChime();
-              setTimeout(() => setDocumentMessage(null), 6000);
-            }}
-            onClear={() => {
-              setSelectedNumbers([]);
-              setFixedNumbers([]);
-              setExcludedNumbers([]);
-            }}
-            targetCount={targetCount}
-          />
-
-          {/* Atalhos Rápidos de Preenchimento & Contador de Dezenas */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
-                Preenchimento Inteligente
-              </span>
-              <span className="text-xs font-mono font-bold text-emerald-400">
-                {selectedNumbers.length}/{targetCount} no Volante
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleApplyTop18}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition cursor-pointer"
-              >
-                🎯 Top IA
-              </button>
-              <button
-                type="button"
-                onClick={() => applyStrategyModel('Fechar Ciclo')}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer"
-              >
-                🔄 Fechar Ciclo ({cyclePendingNumbers?.length || 0})
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyParesDeOuro}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30 transition cursor-pointer"
-              >
-                👑 Par de Ouro [11, 20]
-              </button>
-              <button
-                type="button"
-                onClick={() => applyStrategyModel('Equilíbrio Canônico')}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition cursor-pointer"
-              >
-                ⚖️ Canônico
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyDailyAIInsights}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer"
-              >
-                📄 9x9 Rep/Aus
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedNumbers([]);
-                  setFixedNumbers([]);
-                  setExcludedNumbers([]);
-                }}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-              >
-                Limpar
-              </button>
-            </div>
-
-            {selectedNumbers.length < targetCount && (
-              <button
-                type="button"
-                onClick={() => {
-                  const available = Array.from({ length: 25 }, (_, i) => i + 1)
-                    .filter((n) => !selectedNumbers.includes(n) && !excludedNumbers.includes(n))
-                    .sort((a, b) => {
-                      const scoreA = aiPrediction?.scores ? aiPrediction.scores[a - 1] : 0;
-                      const scoreB = aiPrediction?.scores ? aiPrediction.scores[b - 1] : 0;
-                      return scoreB - scoreA;
-                    });
-                  const needed = Math.max(0, targetCount - selectedNumbers.length);
-                  setSelectedNumbers([...selectedNumbers, ...available.slice(0, needed)].sort((a, b) => a - b));
-                  soundService.playFilterClick();
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                <span>Completar com Top IA (+{targetCount - selectedNumbers.length} dezenas)</span>
-              </button>
-            )}
-          </div>
-
-          {/* Módulos de Apoio Colapsáveis (Mapa de Calor 50 / Tendência de Ciclo) */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <button
-              type="button"
-              onClick={() => setIsVolanteSupportOpen((prev) => !prev)}
-              className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-amber-400" />
-                <span>Mapa de Calor 50 &amp; Tendência de Ciclo</span>
-              </div>
-              {isVolanteSupportOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-
-            {isVolanteSupportOpen && (
-              <div className="p-4 pt-1 border-t border-slate-800/80 space-y-4">
-                <MapaCalorVolante50Component
-                  latestDraw={latestDraw}
-                  selectedNumbers={selectedNumbers}
-                  fixedNumbers={fixedNumbers}
-                  excludedNumbers={excludedNumbers}
-                  onToggleNumber={handleToggleNumber}
-                  onSetFixed={handleSetFixed}
-                  onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
-                  onClear={() => {
-                    setSelectedNumbers([]);
-                    setFixedNumbers([]);
-                    setExcludedNumbers([]);
-                  }}
-                />
-
-                <PainelTendenciaCiclo
-                  latestDraw={latestDraw}
-                  dynamicStats={dynamicStats}
-                  cyclePendingNumbers={cyclePendingNumbers}
-                  concursosNoCiclo={concursosNoCiclo}
-                  config={cycleTendencyConfig}
-                  onChangeConfig={setCycleTendencyConfig}
-                  onApplyToVolante={handleApplyCycleTendencyToVolante}
-                  targetCount={targetCount}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* COLUNA DIREITA: Bento Grid 4 Motores + Catálogo de Matrizes + Filtros Progressivos */}
-        <div className="lg:col-span-7 xl:col-span-7 space-y-4">
-          {/* 1. Bento Grid dos 4 Motores Rápidos */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <Zap className="w-4 h-4 fill-current" />
-                </span>
-                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
-                  Motores Cirúrgicos de Geração Rápida
-                </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700 font-bold">
-                  100% AUDITADOS
-                </span>
-              </div>
-              <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-                R$ 3,50 / aposta Caixa
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
-              {/* Card 1: GERADOR TURBO */}
-              <button
-                type="button"
-                onClick={() => setIsTurboModalOpen(true)}
-                className="h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-emerald-500/40 bg-gradient-to-b from-slate-900 to-emerald-950/30 hover:border-emerald-400 hover:from-slate-850 hover:to-emerald-950/50 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all text-left group cursor-pointer"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-sm">
-                      &lt; 2s • WORKER
-                    </span>
-                    <Zap className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform fill-current" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-emerald-300 transition-colors">
-                    Gerador Turbo
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                    Força Bruta 14 Pts • 100% Auditado
-                  </p>
-                </div>
-                <div className="pt-2 mt-2 border-t border-emerald-500/20 flex items-center justify-between text-[10px] text-emerald-400 font-bold">
-                  <span>Execução Paralela</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 2: PADRÕES FIBONACCI */}
-              <button
-                type="button"
-                onClick={handleGenerateFibonacci}
-                disabled={isGenerating}
-                className="h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-sky-500/40 bg-gradient-to-b from-slate-900 to-sky-950/30 hover:border-sky-400 hover:from-slate-850 hover:to-sky-950/50 shadow-lg shadow-sky-500/10 hover:shadow-sky-500/25 transition-all text-left group cursor-pointer disabled:opacity-60"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-sky-400 text-slate-950 shadow-sm">
-                      5 JOGOS
-                    </span>
-                    <Sparkles className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-sky-300 transition-colors">
-                    Padrões Fibonacci
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                    ≥ 3 Fibo • Regra de Ouro (190–210)
-                  </p>
-                </div>
-                <div className="pt-2 mt-2 border-t border-sky-500/20 flex items-center justify-between text-[10px] text-sky-400 font-bold">
-                  <span>Série Áurea</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 3: FECHAMENTO PONDERADO */}
-              <button
-                type="button"
-                onClick={handleGeneratePonderado}
-                disabled={selectedNumbers.length < targetCount || isGenerating}
-                className={`h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-purple-500/40 bg-gradient-to-b from-slate-900 to-purple-950/30 hover:border-purple-400 hover:from-slate-850 hover:to-purple-950/50 shadow-lg shadow-purple-500/10 hover:shadow-purple-500/25 transition-all text-left group cursor-pointer ${
-                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-purple-400 text-slate-950 shadow-sm">
-                      IP &amp; ROBUSTEZ
-                    </span>
-                    <Flame className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform fill-current" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-purple-300 transition-colors">
-                    Fechamento Ponderado
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                    Frequência × Atraso • 50 Apurações
-                  </p>
-                </div>
-                <div className="pt-2 mt-2 border-t border-purple-500/20 flex items-center justify-between text-[10px] text-purple-400 font-bold">
-                  <span>Índice Performance</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Card 4: ANTI-CISNE NEGRO */}
-              <button
-                type="button"
-                onClick={handleGenerateEstratificada}
-                disabled={selectedNumbers.length < targetCount || isGenerating}
-                className={`h-full min-h-[145px] flex flex-col justify-between p-3.5 rounded-xl border border-amber-500/50 bg-gradient-to-b from-slate-900 to-amber-950/30 hover:border-amber-400 hover:from-slate-850 hover:to-amber-950/50 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/25 transition-all text-left group cursor-pointer ${
-                  selectedNumbers.length < targetCount || isGenerating ? 'opacity-60 cursor-not-allowed' : ''
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 shadow-sm">
-                      75/15/10% • PRO
-                    </span>
-                    <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <h4 className="text-sm font-black text-white tracking-tight group-hover:text-amber-300 transition-colors">
-                    Anti-Cisne Negro
-                  </h4>
-                  <p className="text-[11px] text-slate-300 mt-1 font-medium">
-                    Matriz Estratificada 3 Níveis
-                  </p>
-                </div>
-                <div className="pt-2 mt-2 border-t border-amber-500/20 flex items-center justify-between text-[10px] text-amber-300 font-bold">
-                  <span>Blindagem #3825</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* 2. Catálogo Unificado de Matrizes Combinatórias (15 a 21 Dezenas) */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center font-mono">
-                  M
-                </span>
-                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
-                  Catálogo de Matrizes de 15 a 25 Dezenas
-                </h3>
-              </div>
-              <span className="text-[11px] font-mono text-slate-400">
-                Ativa: <strong className="text-emerald-400">{targetCount} Dezenas ({preset.garantia})</strong>
-              </span>
-            </div>
-
-            {/* Destaque Recomendação Automática — Alta Eficiência */}
-            <div className="p-2.5 rounded-xl bg-emerald-950/35 border border-emerald-500/35 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wide flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-emerald-400" />
-                  Recomendação Automática • Alta Eficiência (16, 17 e 18 Dez • 6, 12 ou 24 Jogos)
-                </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                  70,7% dos ROIs &gt; 50%
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {UNIFIED_MATRIX_CATALOG.filter((m) => m.altaEficiencia).map((item) => {
-                  const isActiveRec = selectedCatalogId
-                    ? selectedCatalogId === item.id && mode === item.mode
-                    : mode === item.mode && targetCount === item.dezenas;
-                  return (
-                    <button
-                      key={`fast-${item.id}`}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCatalogUniverse(item.dezenas);
-                        setSelectedCatalogId(item.id);
-                        handleSelectClosingStrategy(item.mode);
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                        isActiveRec
-                          ? 'bg-emerald-400 text-slate-950 border-emerald-300 shadow-sm'
-                          : 'bg-slate-950/80 text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/20'
-                      }`}
-                    >
-                      {item.dezenas} Dez • {item.jogos}J
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Abas de Universo 15 a 25 */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-              {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
-                const isHighEffTab = size === 16 || size === 17 || size === 18;
-                return (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCatalogUniverse(size);
-                      const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
-                      if (firstMatrix) {
-                        setSelectedCatalogId(firstMatrix.id);
-                        handleSelectClosingStrategy(firstMatrix.mode);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
-                      selectedCatalogUniverse === size
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
-                        : isHighEffTab
-                        ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                    }`}
-                  >
-                    <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
-                    {isHighEffTab && (
-                      <span
-                        className={`text-[9px] font-mono uppercase px-1 py-0.2 rounded font-black ${
-                          selectedCatalogUniverse === size
-                            ? 'bg-slate-950/20 text-slate-950'
-                            : 'bg-emerald-500/20 text-emerald-300'
-                        }`}
-                      >
-                        Alta Efic.
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Cards de Matrizes para o Universo Selecionado */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {UNIFIED_MATRIX_CATALOG.filter((m) => m.dezenas === selectedCatalogUniverse).map((item) => {
-                const isSelected = selectedCatalogId
-                  ? selectedCatalogId === item.id && mode === item.mode
-                  : mode === item.mode && targetCount === item.dezenas;
-                const custoItem = item.jogos * VALOR_APOSTA_LOTOFACIL;
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      setSelectedCatalogId(item.id);
-                      handleSelectClosingStrategy(item.mode);
-                    }}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative group ${
-                      isSelected
-                        ? 'bg-gradient-to-b from-slate-900 via-emerald-950/40 to-slate-900 border-2 border-emerald-400 ring-2 ring-emerald-400/20 shadow-lg shadow-emerald-500/10'
-                        : item.altaEficiencia
-                        ? 'bg-emerald-950/15 hover:bg-emerald-950/30 border-emerald-500/35 hover:border-emerald-400/60'
-                        : 'bg-slate-950/80 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-mono font-bold text-white">
-                          {item.dezenas} Dez • {item.jogos} {item.jogos === 1 ? 'Jogo' : 'Jogos'}
-                        </span>
-                        {item.tag && (
-                          <span
-                            className={`text-[9px] font-mono px-1.5 py-0.2 rounded border font-bold ${
-                              item.altaEficiencia
-                                ? 'bg-emerald-400 text-slate-950 border-emerald-300'
-                                : item.coreSatelites
-                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                                : 'bg-slate-800 text-slate-300 border-slate-700'
-                            }`}
-                          >
-                            {item.tag}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs font-black text-emerald-400 tracking-tight">
-                        {item.garantia}
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">
-                        {item.condicao}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
-                      <span className="text-xs font-mono font-bold text-amber-300">
-                        R$ {custoItem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg transition ${
-                          isSelected
-                            ? 'bg-emerald-400 text-slate-950 font-black'
-                            : 'bg-slate-800 text-slate-300 group-hover:bg-slate-700'
-                        }`}
-                      >
-                        {isSelected ? '✓ Ativa' : 'Escolher'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3. Presets de Filtros Canônicos com Layout Transition Fluido (Framer Motion) */}
-          <motion.div
-            layout
-            transition={filterLayoutTransition}
-            className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5"
+        {/* Drawer Colapsável: Ajuste Fino, Fixas Rotativas & Distância de Hamming */}
+        <motion.div
+          layout
+          transition={filterLayoutTransition}
+          className="bg-slate-900/85 border border-slate-800 rounded-2xl overflow-hidden shadow-lg"
+        >
+          <button
+            type="button"
+            onClick={() => setIsAdvancedFiltersOpen((prev) => !prev)}
+            className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer"
           >
-            <motion.div
-              layout="position"
-              className="flex items-center justify-between pb-2 border-b border-slate-800/80"
-            >
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                  <Filter className="w-4 h-4" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <Sliders className="w-4 h-4 text-sky-400" />
+              <span>Ajuste Fino Avançado, Modo de Fixas (K/N) &amp; Distância de Hamming</span>
+              {filters.hammingDinamicoAtivo && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                  Hamming Ativo
                 </span>
-                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase flex items-center gap-2 flex-wrap">
-                  <span>Filtros Canônicos &amp; Proteção Estatística</span>
-                  {filters.hammingDinamicoAtivo && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 normal-case">
-                      Hamming Priorizado
-                    </span>
-                  )}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAdvancedFiltersOpen((prev) => !prev)}
-                className="text-xs font-bold text-sky-400 hover:text-sky-300 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>{isAdvancedFiltersOpen ? 'Recolher Ajuste Fino' : 'Ajuste Fino Avançado'}</span>
-                {isAdvancedFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-            </motion.div>
+              )}
+              {fixedNumbers.length > 0 && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                  {fixedNumbers.length} Fixas ({filters.modoFixas === 'rigidas' ? 'Rígidas' : 'Rotativas'})
+                </span>
+              )}
+            </div>
+            <span className="inline-flex items-center gap-1 text-sky-400 shrink-0">
+              <span>{isAdvancedFiltersOpen ? 'Recolher' : 'Expandir'}</span>
+              {isAdvancedFiltersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </span>
+          </button>
 
-            {/* 4 Presets Rápidos */}
-            <motion.div layout transition={filterLayoutTransition} className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.conservador)}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.presetEstatistico === 'conservador'
-                    ? 'bg-emerald-500/20 border-emerald-400 text-white shadow-md shadow-emerald-500/20'
-                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="text-xs font-bold text-emerald-400">🛡️ Conservador</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Soma 165–225 • ±2σ</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.balanceado)}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.presetEstatistico === 'balanceado' || (!filters.presetEstatistico && filters.somaMin === 175)
-                    ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md shadow-cyan-500/20'
-                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="text-xs font-bold text-cyan-400">⚖️ Equilíbrio Pro</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Soma 175–220 • Recomendado</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.agressivo)}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.presetEstatistico === 'agressivo'
-                    ? 'bg-purple-500/20 border-purple-400 text-white shadow-md shadow-purple-500/20'
-                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="text-xs font-bold text-purple-400">⚡ Agressivo</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Central 180–215 • Sniper</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  syncFilters((prev) => ({
-                    ...prev,
-                    somaMin: 175,
-                    somaMax: 220,
-                    maxConsecutivas: 6,
-                    autoCalibrarSomaUniverso: true,
-                    estratificacaoCaudaAtiva: true,
-                    presetEstatistico: 'custom',
-                  }));
-                  soundService.playFilterClick();
-                }}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  filters.presetEstatistico === 'custom' && filters.estratificacaoCaudaAtiva !== false
-                    ? 'bg-amber-500/20 border-amber-400 text-white shadow-md shadow-amber-500/20'
-                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
-              >
-                <div className="text-xs font-bold text-amber-400">👑 Proteção Caudas</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">75% Central / 15% Alta / 10% Baixa</div>
-              </button>
-            </motion.div>
-
-            {/* Contêiner Flex com Reordenação Fluida: Ao ativar Distância de Hamming, o card promove-se ao topo dos controles ativos */}
-            <motion.div layout transition={filterLayoutTransition} className="flex flex-col gap-3.5">
-              {/* Barra de Controle Direto: Fixas Rotativas (K de N), Alerta de Risco Combinatório & Auto-Calibração Universo */}
+          <AnimatePresence initial={false}>
+            {isAdvancedFiltersOpen && (
               <motion.div
-                key="fixas-soma-controls"
+                key="advanced-filters-drawer"
                 layout
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
                 transition={filterLayoutTransition}
-                style={{ order: filters.hammingDinamicoAtivo ? 2 : 1 }}
+                className="p-4 pt-2 border-t border-slate-800/80 space-y-4"
               >
+                {/* Controles Diretos: Fixas Rotativas + Auto-Calibração Universo */}
                 {(() => {
                   const uniCal = calibrarFaixaSomaUniverso(selectedNumbers);
                   const kBounds = getRotatedFixedBounds(fixedNumbers.length, filters.modoFixas);
@@ -3608,7 +3387,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   const fixasRisk = assessFixedNumbersRisk(fixedNumbers.length, activeModoFixas);
                   const showRiskAlert = fixasRisk.level === 'atencao' || fixasRisk.level === 'critico';
                   return (
-                    <div className="space-y-2.5 pt-1">
+                    <div className="space-y-2.5">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                         <div
                           className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 border ${
@@ -3620,7 +3399,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           <div className="min-w-0">
                             <span className="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
                               <span>Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})</span>
-                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              <span className="text-[9px] font-mono px-1.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                                 Rec. máx. 2–3
                               </span>
                             </span>
@@ -3729,15 +3508,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     </div>
                   );
                 })()}
-              </motion.div>
 
-              {/* Filtro Avançado: Distância de Hamming Dinâmica (reordena suavemente quando ativo) */}
-              <motion.div
-                key="hamming-card-container"
-                layout
-                transition={filterLayoutTransition}
-                style={{ order: filters.hammingDinamicoAtivo ? 1 : 2 }}
-              >
                 <FiltroHammingDinamicoCard
                   filters={filters}
                   onChange={(f) => handleFiltersChange(f, false)}
@@ -3746,138 +3517,670 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   maxTickets={preset.jogosMaximos}
                   generatedTickets={generatedTickets}
                 />
+
+                <EquilibrioEstruturalSelector
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  selectedNumbers={selectedNumbers}
+                  latestDraw={latestDraw}
+                />
+
+                <FilterControls
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
+                  latestDraw={latestDraw}
+                  selectedNumbers={selectedNumbers}
+                  soundAlertEnabled={soundAlertEnabled}
+                  onToggleSoundAlert={handleToggleSoundAlert}
+                />
+
+                <ModuloRobustezEstatistica
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, true)}
+                  dynamicStats={dynamicStats}
+                  latestDraw={latestDraw}
+                  discardedByRobustezCount={discardedByRobustezCount}
+                  totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
+                  onGeneratePonderado={handleGeneratePonderado}
+                  isGenerating={isGenerating}
+                />
+
+                <SomaScatterPlot
+                  latestDraw={latestDraw}
+                  currentSomaMin={filters.somaMin}
+                  currentSomaMax={filters.somaMax}
+                  onApplySomaRange={(min, max) =>
+                    handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
+                  }
+                />
               </motion.div>
-            </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
 
-            {/* Drawer Expandível de Ajuste Fino */}
-            <AnimatePresence initial={false}>
-              {isAdvancedFiltersOpen && (
-                <motion.div
-                  key="advanced-filters-drawer"
-                  layout
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={filterLayoutTransition}
-                  className="pt-3 border-t border-slate-800/80 space-y-4"
+      {/* Notificações de Estratégia / Ações */}
+      {documentMessage && (
+        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-md flex-wrap">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{documentMessage}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {documentMessage.includes('salvo com sucesso') && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+                }}
+                className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-yellow-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-sm flex items-center gap-1.5"
+              >
+                <span>Ver Jogos Salvos</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDocumentMessage(null)}
+              className="text-emerald-400/70 hover:text-emerald-200 text-xs font-semibold cursor-pointer px-2 py-1"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* PASSO 4: GRID LADO A LADO — MOTORES (ESQ) × VOLANTE OFICIAL 5×5 (DIR) */}
+      {/* ===================================================================== */}
+      <section className="space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-400 text-slate-950 font-mono font-black text-xs shrink-0">
+              4
+            </span>
+            <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+              Motores de Fechamento &amp; Volante Oficial Interativo 5×5
+            </h3>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            Escolha o motor à esquerda, valide suas {targetCount} dezenas no volante à direita e gere o fechamento.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* COLUNA ESQUERDA: Motores de Fechamento + Botão Principal "Gerar Fechamento" */}
+          <div className="lg:col-span-5 space-y-4">
+            <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/35">
+                    <Cpu className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-white uppercase tracking-wide">
+                      Motores de Fechamento
+                    </h4>
+                    <span className="text-[11px] text-slate-400 block">
+                      Selecione o algoritmo combinatório e clique em Gerar Fechamento
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-emerald-400 border border-slate-700 font-bold shrink-0">
+                  100% AUDITADOS
+                </span>
+              </div>
+
+              {/* Lista Interativa dos 5 Motores */}
+              <div className="space-y-2">
+                {/* Motor 1: Padrão (Cobertura Hamming / LJCR) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('padrao');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'padrao'
+                      ? 'bg-emerald-500/15 border-emerald-400 ring-1 ring-emerald-400/40 shadow-md shadow-emerald-500/10'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
+                  }`}
                 >
-                  <EquilibrioEstruturalSelector
-                    filters={filters}
-                    onChange={(f) => handleFiltersChange(f, true)}
-                    selectedNumbers={selectedNumbers}
-                    latestDraw={latestDraw}
-                  />
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'padrao'
+                          ? 'bg-emerald-400 text-slate-950 border-emerald-300'
+                          : 'bg-slate-900 text-emerald-400 border-slate-700'
+                      }`}
+                    >
+                      <Layers className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Motor Padrão · Cobertura LJCR / Hamming
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">
+                          RECOMENDADO
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Covering Design oficial para {preset.jogosMaximos} bilhetes ({preset.garantia}) respeitando o Modo de Filtros ativo.
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'padrao' ? 'border-emerald-400 bg-emerald-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'padrao' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
 
-                  <FilterControls
-                    filters={filters}
-                    onChange={(f) => handleFiltersChange(f, true)}
-                    onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
-                    latestDraw={latestDraw}
-                    selectedNumbers={selectedNumbers}
-                    soundAlertEnabled={soundAlertEnabled}
-                    onToggleSoundAlert={handleToggleSoundAlert}
-                  />
+                {/* Motor 2: Ponderação IA & Robustez */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('ponderado');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'ponderado'
+                      ? 'bg-purple-500/15 border-purple-400 ring-1 ring-purple-400/40 shadow-md shadow-purple-500/10'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'ponderado'
+                          ? 'bg-purple-400 text-slate-950 border-purple-300'
+                          : 'bg-slate-900 text-purple-400 border-slate-700'
+                      }`}
+                    >
+                      <Flame className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Ponderação IA &amp; Robustez 50
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/35">
+                          IP SCORE
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Ranqueamento por Frequência × Atraso nos últimos 50 concursos com filtro de robustez estatística.
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'ponderado' ? 'border-purple-400 bg-purple-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'ponderado' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
 
-                  <ModuloRobustezEstatistica
-                    filters={filters}
-                    onChange={(f) => handleFiltersChange(f, true)}
-                    dynamicStats={dynamicStats}
-                    latestDraw={latestDraw}
-                    discardedByRobustezCount={discardedByRobustezCount}
-                    totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
-                    onGeneratePonderado={handleGeneratePonderado}
-                    isGenerating={isGenerating}
-                  />
+                {/* Motor 3: Anti-Cisne Negro (Estratificado 75/15/10%) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('estratificada');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'estratificada'
+                      ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/40 shadow-md shadow-amber-500/10'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'estratificada'
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-900 text-amber-400 border-slate-700'
+                      }`}
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Anti-Cisne Negro · Matriz Estratificada
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/35">
+                          75/15/10%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Cobertura em 3 faixas de soma (75% Central, 15% Cauda Alta, 10% Cauda Baixa) contra desvios extremos.
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'estratificada' ? 'border-amber-400 bg-amber-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'estratificada' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
 
-                  <SomaScatterPlot
-                    latestDraw={latestDraw}
-                    currentSomaMin={filters.somaMin}
-                    currentSomaMax={filters.somaMax}
-                    onApplySomaRange={(min, max) =>
-                      handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
-                    }
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+                {/* Motor 4: Gerador Turbo (Força Bruta 14 Pts) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('turbo');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'turbo'
+                      ? 'bg-teal-500/15 border-teal-400 ring-1 ring-teal-400/40 shadow-md shadow-teal-500/10'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'turbo'
+                          ? 'bg-teal-400 text-slate-950 border-teal-300'
+                          : 'bg-slate-900 text-teal-400 border-slate-700'
+                      }`}
+                    >
+                      <Zap className="w-4 h-4 fill-current" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Turbo Brute-Force · 14 Pts
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/35">
+                          &lt; 2s WORKER
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Execução paralela em força bruta com auditoria instantânea de cobertura 14 pontos.
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'turbo' ? 'border-teal-400 bg-teal-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'turbo' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
 
-          {/* 4. Sticky HUD Action Bar */}
-          <div className="sticky bottom-2 z-20 pt-2">
-            <div className="bg-slate-950/95 border-2 border-emerald-500/50 backdrop-blur-xl rounded-2xl p-4 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Universo</span>
-                  <span className="font-mono font-bold text-white text-xs">
-                    {selectedNumbers.length}/{targetCount} Dez
+                {/* Motor 5: Padrões Fibonacci */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('fibonacci');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'fibonacci'
+                      ? 'bg-sky-500/15 border-sky-400 ring-1 ring-sky-400/40 shadow-md shadow-sky-500/10'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'fibonacci'
+                          ? 'bg-sky-400 text-slate-950 border-sky-300'
+                          : 'bg-slate-900 text-sky-400 border-slate-700'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Padrões Fibonacci · Série Áurea
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/35">
+                          5 JOGOS
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        5 bilhetes calibrados com ≥ 3 dezenas de Fibonacci e Regra de Ouro (Soma 190–210).
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'fibonacci' ? 'border-sky-400 bg-sky-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'fibonacci' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
+              </div>
+
+              {/* Resumo Instantâneo da Matriz Pronta */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                    Universo no Volante
+                  </span>
+                  <span className="font-mono tabular-nums font-bold text-white text-xs">
+                    {selectedNumbers.length}/{targetCount} Dezenas
                   </span>
                 </div>
 
                 <div
-                  className={`p-2 rounded-xl border ${
+                  className={`p-2.5 rounded-xl border ${
                     fixedNumbers.length > RECOMMENDED_MAX_FIXAS
                       ? 'bg-amber-950/40 border-amber-500/50'
-                      : 'bg-slate-900 border-slate-800'
+                      : 'bg-slate-950/80 border-slate-800'
                   }`}
                 >
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">
                     Fixas (Rec. 2–3)
                   </span>
                   <span
-                    className={`font-mono font-bold text-xs ${
+                    className={`font-mono tabular-nums font-bold text-xs ${
                       fixedNumbers.length > RECOMMENDED_MAX_FIXAS ? 'text-amber-300' : 'text-amber-400'
                     }`}
                   >
                     {fixedNumbers.length}/{MAX_DEZENAS_FIXAS}{' '}
-                    {fixedNumbers.length > RECOMMENDED_MAX_FIXAS
-                      ? '⚠️ Risco'
-                      : fixedNumbers.length >= 3 && filters.modoFixas !== 'rigidas'
-                      ? '(Rotativas)'
-                      : 'Dezenas'}
+                    {fixedNumbers.length >= 3 && filters.modoFixas !== 'rigidas' ? '(Rotativas)' : 'Dez'}
                   </span>
                 </div>
 
-                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Jogos</span>
-                  <span className="font-mono font-bold text-white text-xs">
-                    {preset.jogosMaximos} Bilhetes
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                    Filtros (Passo 3)
+                  </span>
+                  <span
+                    className={`font-mono font-bold text-xs ${
+                      studioFiltersEnabled ? 'text-emerald-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {studioFiltersEnabled
+                      ? `Ligados · ${
+                          studioFilterMode === 'total'
+                            ? 'Total'
+                            : studioFilterMode === 'conservador'
+                            ? 'Conservador'
+                            : 'Agressivo'
+                        }`
+                      : 'Desligados (Livre)'}
                   </span>
                 </div>
 
-                <div className="bg-slate-900 p-2 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Investimento</span>
-                  <span className="font-mono font-bold text-emerald-400 text-xs">
-                    R$ {(preset.jogosMaximos * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                    Investimento Estimado
+                  </span>
+                  <span className="font-mono tabular-nums font-bold text-amber-300 text-xs">
+                    {preset.jogosMaximos}j · R${' '}
+                    {(preset.jogosMaximos * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 shrink-0">
+              {/* Botão Principal de Destaque: Gerar Fechamento */}
+              <div className="space-y-2 pt-1">
                 <button
                   type="button"
-                  onClick={handleGenerate}
-                  disabled={(!isSpecial25Mode && selectedNumbers.length < targetCount) || isGenerating}
-                  className={`w-full sm:w-auto px-6 py-3 rounded-xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-xl ${
-                    (isSpecial25Mode || selectedNumbers.length >= targetCount) && !isGenerating
-                      ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 hover:from-emerald-300 hover:to-teal-300 text-slate-950 shadow-emerald-500/30 hover:scale-102 active:scale-95 ring-2 ring-emerald-300'
+                  onClick={handleExecuteSelectedMotor}
+                  disabled={!canExecuteSelectedMotor}
+                  className={`w-full px-5 py-3.5 rounded-xl font-black text-sm transition cursor-pointer flex items-center justify-center gap-2.5 shadow-xl ${
+                    canExecuteSelectedMotor
+                      ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 hover:from-amber-300 hover:via-yellow-300 hover:to-emerald-300 text-slate-950 shadow-amber-500/25 active:scale-[0.99] ring-2 ring-amber-300/60'
                       : 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-70'
                   }`}
                 >
-                  <Zap className="w-4 h-4 fill-current" />
+                  <Zap className="w-5 h-5 fill-current shrink-0" />
                   <span>
                     {isGenerating
-                      ? 'Processando Matriz...'
-                      : !isSpecial25Mode && selectedNumbers.length < targetCount
-                      ? `Faltam ${targetCount - selectedNumbers.length} Dezenas`
-                      : 'Gerar Fechamento Agora'}
+                      ? 'Processando Matriz no Worker...'
+                      : !canExecuteSelectedMotor
+                      ? `Selecione mais ${Math.max(0, targetCount - selectedNumbers.length)} Dezenas no Volante`
+                      : 'Gerar Fechamento'}
                   </span>
                 </button>
+                <p className="text-[11px] text-center text-slate-400 font-mono">
+                  Motor ativo: <strong className="text-slate-200">{selectedMotorLabel}</strong>
+                </p>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
+          {/* COLUNA DIREITA: Volante Oficial Interativo 5×5 + Preenchimento Inteligente */}
+          <div className="lg:col-span-7 space-y-4">
+            <VolanteSelector
+              selectedNumbers={selectedNumbers}
+              fixedNumbers={fixedNumbers}
+              excludedNumbers={excludedNumbers}
+              aiScores={aiPrediction?.scores}
+              statsList={dynamicStats}
+              cyclePendingNumbers={cyclePendingNumbers}
+              latestDraw={latestDraw}
+              onToggleNumber={handleToggleNumber}
+              onSetFixed={handleSetFixed}
+              onSetExcluded={handleSetExcluded}
+              onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+              onStrategySelect={(stratName) => {
+                setStrategyName(stratName);
+                setActiveModel(stratName);
+              }}
+              activeStrategy={strategyName}
+              activeMode={mode}
+              onActivateErre4Mode={(excl4, comp21) => {
+                setMode('erre_4_21');
+                setExcludedNumbers(excl4);
+                setSelectedNumbers(comp21);
+                setFixedNumbers((prev) => prev.filter((n) => !excl4.includes(n)));
+                const p = FECHAMENTO_PRESETS['erre_4_21'];
+                setStrategyName(p.nome);
+                setActiveModel(p.nome);
+                setDocumentMessage(
+                  `✓ Modo Erre Apenas 4 ativado! Excluídas [${excl4.map((n) => n.toString().padStart(2, '0')).join(', ')}] e selecionadas as 21 dezenas complementares.`
+                );
+                soundService.playGoldenZoneSuccessChime();
+                setTimeout(() => setDocumentMessage(null), 6000);
+              }}
+              onClear={() => {
+                setSelectedNumbers([]);
+                setFixedNumbers([]);
+                setExcludedNumbers([]);
+              }}
+              targetCount={targetCount}
+            />
+
+            {/* Atalhos Rápidos de Preenchimento do Volante */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                  Preenchimento Inteligente do Volante
+                </span>
+                <span className="text-xs font-mono tabular-nums font-bold text-emerald-400">
+                  {selectedNumbers.length}/{targetCount} no Volante
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleApplyTop18}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 transition cursor-pointer"
+                >
+                  🎯 Top IA
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyStrategyModel('Fechar Ciclo')}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 transition cursor-pointer"
+                >
+                  🔄 Fechar Ciclo ({cyclePendingNumbers?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyParesDeOuro}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 hover:bg-yellow-500/30 transition cursor-pointer"
+                >
+                  👑 Par de Ouro [11, 20]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyStrategyModel('Equilíbrio Canônico')}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition cursor-pointer"
+                >
+                  ⚖️ Canônico
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyDailyAIInsights}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer"
+                >
+                  📄 9x9 Rep/Aus
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNumbers([]);
+                    setFixedNumbers([]);
+                    setExcludedNumbers([]);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  Limpar
+                </button>
+              </div>
+
+              {selectedNumbers.length < targetCount && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const available = Array.from({ length: 25 }, (_, i) => i + 1)
+                      .filter((n) => !selectedNumbers.includes(n) && !excludedNumbers.includes(n))
+                      .sort((a, b) => {
+                        const scoreA = aiPrediction?.scores ? aiPrediction.scores[a - 1] : 0;
+                        const scoreB = aiPrediction?.scores ? aiPrediction.scores[b - 1] : 0;
+                        return scoreB - scoreA;
+                      });
+                    const needed = Math.max(0, targetCount - selectedNumbers.length);
+                    setSelectedNumbers([...selectedNumbers, ...available.slice(0, needed)].sort((a, b) => a - b));
+                    soundService.playFilterClick();
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Completar com Top IA (+{targetCount - selectedNumbers.length} dezenas)</span>
+                </button>
+              )}
+            </div>
+
+            {/* Módulos de Apoio Colapsáveis (Mapa de Calor 50 / Tendência de Ciclo) */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              <button
+                type="button"
+                onClick={() => setIsVolanteSupportOpen((prev) => !prev)}
+                className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400" />
+                  <span>Mapa de Calor 50 &amp; Tendência de Ciclo</span>
+                </div>
+                {isVolanteSupportOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {isVolanteSupportOpen && (
+                <div className="p-4 pt-1 border-t border-slate-800/80 space-y-4">
+                  <MapaCalorVolante50Component
+                    latestDraw={latestDraw}
+                    selectedNumbers={selectedNumbers}
+                    fixedNumbers={fixedNumbers}
+                    excludedNumbers={excludedNumbers}
+                    onToggleNumber={handleToggleNumber}
+                    onSetFixed={handleSetFixed}
+                    onSelectSet={(nums) => setSelectedNumbers(nums.slice(0, targetCount))}
+                    onClear={() => {
+                      setSelectedNumbers([]);
+                      setFixedNumbers([]);
+                      setExcludedNumbers([]);
+                    }}
+                  />
+
+                  <PainelTendenciaCiclo
+                    latestDraw={latestDraw}
+                    dynamicStats={dynamicStats}
+                    cyclePendingNumbers={cyclePendingNumbers}
+                    concursosNoCiclo={concursosNoCiclo}
+                    config={cycleTendencyConfig}
+                    onChangeConfig={setCycleTendencyConfig}
+                    onApplyToVolante={handleApplyCycleTendencyToVolante}
+                    targetCount={targetCount}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===================================================================== */}
+      {/* PASSO 5: TOTALIZADOR DE CUSTOS                                        */}
+      {/* ===================================================================== */}
+      <section className="space-y-2.5">
+        <div className="flex items-center gap-2.5 px-1">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-400 text-slate-950 font-mono font-black text-xs shrink-0">
+            5
+          </span>
+          <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+            Totalizador de Custos
+          </h3>
+        </div>
+
+        <TotalizadorDeCustos
+          preset={preset}
+          mode={mode}
+          targetCount={targetCount}
+          totalJogos={generatedTickets.length || preset.jogosMaximos}
+          isGenerated={generatedTickets.length > 0}
+          title={
+            generatedTickets.length > 0
+              ? 'Totalizador de Custos dos Jogos Gerados'
+              : 'Totalizador de Custos do Fechamento'
+          }
+          subtitle={
+            generatedTickets.length > 0
+              ? `Investimento total calculado automaticamente: ${generatedTickets.length} jogos × R$ 3,50 = R$ ${(
+                  generatedTickets.length * VALOR_APOSTA_LOTOFACIL
+                ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+              : undefined
+          }
+          onGoToGamesManager={
+            onGoToGamesManager
+              ? () => onGoToGamesManager(generatedTickets, getCurrentExportMeta())
+              : undefined
+          }
+        />
+      </section>
+
+      {/* ===================================================================== */}
+      {/* PASSO 6: DEMAIS ITENS E RESULTADOS DO FECHAMENTO                      */}
+      {/* ===================================================================== */}
+      <div className="flex items-center gap-2.5 px-1 pt-1">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-slate-700 text-white font-mono font-black text-xs shrink-0">
+          6
+        </span>
+        <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+          Resultados, Auditoria &amp; Ferramentas do Fechamento
+        </h3>
+      </div>
 
       {/* Atalho & Painel de Planejamento de Bolão Oficial Caixa */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -3890,7 +4193,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               <h4 className="text-xs sm:text-sm font-bold text-white tracking-tight">
                 Calculadora de Bolão Oficial (Normas Caixa Econômica Federal)
               </h4>
-              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+              <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg">
                 MÍN. R$ 12,00 / BOLÃO • COTA R$ 4,00
               </span>
             </div>
@@ -3903,10 +4206,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         <button
           type="button"
           onClick={() => setShowBolaoSimulator((prev) => !prev)}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border shrink-0 ${
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer border shrink-0 whitespace-nowrap ${
             showBolaoSimulator
               ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
-              : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
           }`}
         >
           <Calculator className="w-3.5 h-3.5 text-current" />
@@ -4410,24 +4713,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </div>
             )}
 
-          {/* Componente Totalizador de Custos para os Fechamentos Gerados */}
-          <TotalizadorDeCustos
-
-            preset={preset}
-            mode={mode}
-            targetCount={targetCount}
-            totalJogos={generatedTickets.length}
-            isGenerated={true}
-            title="Totalizador de Custos dos Jogos Gerados"
-            subtitle={`Investimento total calculado automaticamente: ${generatedTickets.length} jogos × R$ 3,50 = R$ ${(
-              generatedTickets.length * VALOR_APOSTA_LOTOFACIL
-            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            onGoToGamesManager={
-              onGoToGamesManager
-                ? () => onGoToGamesManager(generatedTickets, getCurrentExportMeta())
-                : undefined
-            }
-          />
+          {/* Totalizador de Custos já exibido no Passo 5 acima */}
 
           {/* Indicador de Cobertura Matemática e Garantia Efetiva (LJCR & Pós-Filtros) */}
           {indicadorGarantia && (
@@ -4549,7 +4835,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400">
-                      Linha 3 e Coluna 3: [03, 08, 11, 12, 13, 14, 15, 18, 23]
+                      Cruz 5×5 Oficial: [02, 07, 11, 12, 13, 14, 15, 17, 22]
                     </p>
                   </div>
                 </div>
@@ -4629,8 +4915,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   const nextVal = !filters.validacaoEstritaCruz;
                   const updated: FilterCriteria = {
                     ...filters,
+                    cruzAtiva: true,
                     validacaoEstritaCruz: nextVal,
-                    ...(nextVal ? { cruzMin: 5, cruzMax: 6 } : {}),
+                    strictValidation: nextVal,
+                    cruzMin: nextVal ? 5 : 4,
+                    cruzMax: nextVal ? 6 : 7,
                   };
                   handleFiltersChange(updated, true);
                   setGoldenGlowTrigger(Date.now());
@@ -4718,25 +5007,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             {displayedTickets.map((ticket) => {
               const b1 = ticket.bola1 ?? ticket.dezenas[0];
               const b15 = ticket.bola15 ?? ticket.dezenas[ticket.dezenas.length - 1];
-              const cruzCount =
-                ticket.cruz ??
-                ticket.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+              const cruzCount = ticket.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
 
-              const isCruzAtiva = filters.cruzAtiva !== false;
-              const isExtremidadesAtiva = filters.extremidadesAtiva !== false;
-              const isEstritaCruz = filters.validacaoEstritaCruz === true;
+              const isCruzAtiva = studioFiltersEnabled && effectiveFilters.cruzAtiva !== false;
+              const isExtremidadesAtiva = studioFiltersEnabled && effectiveFilters.extremidadesAtiva !== false;
+              const isEstritaCruz = effectiveFilters.validacaoEstritaCruz === true;
 
               const cruzFalhou =
                 isCruzAtiva &&
                 (isEstritaCruz
                   ? cruzCount < 5 || cruzCount > 6
-                  : cruzCount < (filters.cruzMin ?? 4) || cruzCount > (filters.cruzMax ?? 7));
+                  : cruzCount < (effectiveFilters.cruzMin ?? 4) || cruzCount > (effectiveFilters.cruzMax ?? 7));
               const extremidadesFalhou =
                 isExtremidadesAtiva &&
-                (b1 < (filters.bola1Min ?? 1) ||
-                  b1 > (filters.bola1Max ?? 4) ||
-                  b15 < (filters.bola15Min ?? 22) ||
-                  b15 > (filters.bola15Max ?? 25));
+                (b1 < (effectiveFilters.bola1Min ?? 1) ||
+                  b1 > (effectiveFilters.bola1Max ?? 4) ||
+                  b15 < (effectiveFilters.bola15Min ?? 22) ||
+                  b15 > (effectiveFilters.bola15Max ?? 25));
 
               const isForaDoPadrao = cruzFalhou || extremidadesFalhou;
               const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
@@ -4848,9 +5135,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
                       Soma: {ticket.soma}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                      {ticket.repetidas} Rep. #{latestDraw.concurso}
-                    </span>
+                    {(() => {
+                      const prevSet = new Set(latestDraw.dezenas);
+                      const repPares =
+                        ticket.repetidasPares ??
+                        ticket.dezenas.filter((n) => prevSet.has(n) && n % 2 === 0).length;
+                      const repImpares =
+                        ticket.repetidasImpares ??
+                        ticket.dezenas.filter((n) => prevSet.has(n) && n % 2 !== 0).length;
+                      return (
+                        <span
+                          className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono"
+                          title={`Interseção com Concurso #${latestDraw.concurso}: ${repPares} Pares e ${repImpares} Ímpares`}
+                        >
+                          {ticket.repetidas} Rep. ({repPares}P/{repImpares}I) #{latestDraw.concurso}
+                        </span>
+                      );
+                    })()}
                     <span
                       className={`px-1.5 py-0.5 rounded font-mono border ${
                         extremidadesFalhou

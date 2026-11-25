@@ -21,7 +21,7 @@ import {
   StatisticalAnomaly,
 } from '../services/statisticalMonitor';
 import { FilterCriteria } from '../types/lotofacil';
-import { CONCURSO_ATUAL } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, CRUZ_DEZENAS } from '../data/lotofacilData';
 
 interface StatisticalMonitoringAlertProps {
   summary: MonitoringSummary;
@@ -138,8 +138,7 @@ export const StatisticalMonitoringAlert: React.FC<StatisticalMonitoringAlertProp
           !dezenasExcluidas.some((n) => game.dezenas.includes(n));
 
         const cruzCount =
-          game.cruz ??
-          game.dezenas.filter((n) => [3, 8, 11, 12, 13, 14, 15, 18, 23].includes(n)).length;
+          game.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
         const crOk = cruzCount >= cruzMin && cruzCount <= cruzMax;
         if (cruzCount >= 5 && cruzCount <= 6) cruzZonaOuroCount++;
 

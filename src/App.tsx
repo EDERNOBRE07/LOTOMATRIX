@@ -955,6 +955,23 @@ export default function App() {
     setActiveTab('simulador');
   };
 
+  const [filtersAppliedNoticeToken, setFiltersAppliedNoticeToken] = useState<number | null>(null);
+
+  const handleApplyFiltersToFechamento = () => {
+    // Persiste e sincroniza as regras ativas no estado global, ativa o Estúdio de Fechamento e sobe suavemente ao topo
+    setActiveFilterConfig((prev) => ({
+      ...prev,
+      filtrosDesativadosNoFechamento: false,
+    }));
+    handleSelectStudioTab('fechamento');
+    setFiltersAppliedNoticeToken(Date.now());
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Dev Server Health Check Alert Banner (Activates if server connection or assets fail) */}
@@ -1332,6 +1349,15 @@ export default function App() {
               isAILoading={isAILoading}
               activeFilterConfig={activeFilterConfig}
               onFiltersConfigChange={setActiveFilterConfig}
+              onOpenFiltros={() => {
+                handleSelectStudioTab('filtros');
+                try {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                } catch {
+                  window.scrollTo(0, 0);
+                }
+              }}
+              filtersAppliedNoticeToken={filtersAppliedNoticeToken}
             />
           )}
 
@@ -1342,7 +1368,7 @@ export default function App() {
               onResetFilters={resetToCanonicalFilters}
               latestDraw={latestDraw}
               aiPrediction={aiPrediction}
-              onApplyToFechamento={() => setActiveTab('fechamento')}
+              onApplyToFechamento={handleApplyFiltersToFechamento}
             />
           )}
 

@@ -4,6 +4,7 @@ import {
   PRIMOS,
   MOLDURA,
   FIBONACCI,
+  CRUZ_DEZENAS,
   DEZENAS_STATS,
   CONCURSO_ATUAL,
 } from '../data/lotofacilData';
@@ -54,7 +55,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   activeMode,
 }) => {
   const [visualMode, setVisualMode] = useState<
-    'normal' | 'moldura' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc' | 'pivo_9'
+    'normal' | 'moldura' | 'cruz' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc' | 'pivo_9'
   >('normal');
   const [clickMode, setClickMode] = useState<'select' | 'fix' | 'exclude' | 'exclude_4'>(
     activeMode === 'erre_4_21' ? 'exclude_4' : 'select'
@@ -249,6 +250,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
     const impares = count - pares;
     const molduraCount = selectedNumbers.filter((n) => MOLDURA.includes(n)).length;
     const mioloCount = count - molduraCount;
+    const cruzCount = selectedNumbers.filter((n) => CRUZ_DEZENAS.includes(n)).length;
     const primosCount = selectedNumbers.filter((n) => PRIMOS.includes(n)).length;
     const fibCount = selectedNumbers.filter((n) => FIBONACCI.includes(n)).length;
     const soma = selectedNumbers.reduce((acc, curr) => acc + curr, 0);
@@ -261,6 +263,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       impares,
       molduraCount,
       mioloCount,
+      cruzCount,
       primosCount,
       fibCount,
       soma,
@@ -610,10 +613,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Paridade (Pares / Ímpares)">
               <span className="text-slate-500">P/I:</span> <strong className="text-white">{volanteStats.pares}P</strong> / <strong className="text-white">{volanteStats.impares}I</strong>
             </span>
-            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Distribuição Moldura e Miolo">
-              <span className="text-slate-500">M/C:</span> <strong className="text-amber-300">{volanteStats.molduraCount}M</strong> / <strong className="text-cyan-300">{volanteStats.mioloCount}C</strong>
+            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 tabular-nums" title="Distribuição Geométrica: Moldura (16), Miolo (9) e Cruz (9)">
+              <span className="text-slate-500">Mold:</span> <strong className="text-amber-300">{volanteStats.molduraCount}</strong>
+              <span className="text-slate-600 mx-1">·</span>
+              <span className="text-slate-500">Miolo:</span> <strong className="text-cyan-300">{volanteStats.mioloCount}</strong>
+              <span className="text-slate-600 mx-1">·</span>
+              <span className="text-slate-500">Cruz:</span>{' '}
+              <strong className={volanteStats.cruzCount >= 4 && volanteStats.cruzCount <= 7 ? 'text-blue-300' : 'text-amber-300'}>
+                {volanteStats.cruzCount}/9
+              </strong>
             </span>
-            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300" title="Soma das dezenas selecionadas (Faixa ideal: 185 a 215)">
+            <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 tabular-nums" title="Soma das dezenas selecionadas (Faixa ideal: 185 a 215)">
               <span className="text-slate-500">Soma:</span>{' '}
               <strong className={volanteStats.soma >= 185 && volanteStats.soma <= 215 ? 'text-emerald-400 font-bold' : 'text-amber-300'}>
                 {volanteStats.soma}
@@ -687,6 +697,17 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             }`}
           >
             Moldura (16)
+          </button>
+          <button
+            onClick={() => setVisualMode('cruz')}
+            className={`px-2.5 py-1 rounded-lg transition text-[11px] cursor-pointer ${
+              visualMode === 'cruz'
+                ? 'bg-blue-500/25 text-blue-300 border border-blue-400/60 font-semibold'
+                : 'bg-slate-800/60 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Cruz Canônica 5×5: [02, 07, 11, 12, 13, 14, 15, 17, 22]"
+          >
+            Cruz (9)
           </button>
           <button
             onClick={() => setVisualMode('primos')}
@@ -967,6 +988,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
 
             // Visual overlay highlights
             const isMolduraNumber = MOLDURA.includes(num);
+            const isCruzNumber = CRUZ_DEZENAS.includes(num);
             const isPrimoNumber = PRIMOS.includes(num);
             const isFibonacciNumber = FIBONACCI.includes(num);
             const isCriticalDelay = cyclePendingNumbers.includes(num) || atraso >= 3;
@@ -976,6 +998,9 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
 
             if (visualMode === 'moldura' && isMolduraNumber) {
               borderStyle = 'border-amber-500/70 shadow-sm shadow-amber-500/10';
+            } else if (visualMode === 'cruz' && isCruzNumber) {
+              borderStyle = 'border-blue-400 shadow-sm shadow-blue-500/20';
+              if (!isSelected) bgStyle = 'bg-blue-950/40 text-blue-200 border-blue-400/70';
             } else if (visualMode === 'primos' && isPrimoNumber) {
               borderStyle = 'border-purple-500/70 shadow-sm shadow-purple-500/10';
             } else if (visualMode === 'fibonacci' && isFibonacciNumber) {

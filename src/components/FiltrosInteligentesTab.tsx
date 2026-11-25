@@ -71,6 +71,7 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
 
   const activeRulesCount = useMemo(() => {
     let count = 7; // Soma, Pares, Moldura/Miolo, Primos, Fibonacci, Repetidas, Consecutivas
+    if (filters.repetidasParidadeAtiva) count++;
     if (filters.estratificacaoCaudaAtiva) count++;
     if (filters.cruzAtiva !== false) count++;
     if (filters.extremidadesAtiva !== false) count++;
@@ -85,6 +86,14 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
     if (filters.vaziosAtivos) count++;
     return count;
   }, [filters]);
+
+  const handleApplyAndNavigate = () => {
+    onChangeFilters({
+      ...filters,
+      filtrosDesativadosNoFechamento: false,
+    });
+    onApplyToFechamento();
+  };
 
   const notifySynced = (msg: string) => {
     setSyncToast(msg);
@@ -224,8 +233,8 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
 
             <button
               type="button"
-              onClick={onApplyToFechamento}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition cursor-pointer"
+              onClick={handleApplyAndNavigate}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition cursor-pointer whitespace-nowrap shrink-0"
             >
               <span>Aplicar Filtros no Estúdio de Fechamento</span>
               <ArrowRight className="w-4 h-4" />
@@ -258,7 +267,7 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
         selectedNumbers={effectivePool}
         latestDraw={latestDraw}
         aiScores={aiPrediction?.scores}
-        onApplyToFechamento={onApplyToFechamento}
+        onApplyToFechamento={handleApplyAndNavigate}
       />
 
       {/* 3. Volante Interativo de Dezenas Fixas e Excluídas (Sincronizado Globalmente) */}
@@ -441,8 +450,8 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
         </div>
         <button
           type="button"
-          onClick={onApplyToFechamento}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition cursor-pointer shrink-0"
+          onClick={handleApplyAndNavigate}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition cursor-pointer whitespace-nowrap shrink-0"
         >
           <span>Aplicar Filtros no Estúdio de Fechamento</span>
           <ArrowRight className="w-4 h-4" />

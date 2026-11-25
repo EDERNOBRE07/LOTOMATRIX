@@ -11,7 +11,7 @@ import {
   VALOR_APOSTA_LOTOFACIL,
 } from '../services/combinatorics';
 import { getHistorical100Draws } from '../services/historical100Draws';
-import { CONCURSO_ATUAL } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, CRUZ_DEZENAS } from '../data/lotofacilData';
 import {
   History,
   ChevronDown,
@@ -23,7 +23,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
-const CRUZ_NUMBERS = new Set([3, 8, 11, 12, 13, 14, 15, 18, 23]);
+const CRUZ_NUMBERS = new Set(CRUZ_DEZENAS);
 
 // Premiação média de referência Caixa por faixa de acerto (Lotofácil 15 dezenas — aposta R$ 3,50)
 const PRIZE_TABLE_ESTIMATE: Record<number, number> = {

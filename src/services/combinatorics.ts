@@ -14,6 +14,7 @@ import {
 } from '../data/lotofacilData';
 import {
   FilterCriteria,
+  FilterRigorMode,
   GameTicket,
   FechamentoMode,
   SimulationResult,
@@ -450,6 +451,60 @@ export function buildProgressiveFallbackFilters(
 ): ProgressiveFallbackConfig {
   const base: FilterCriteria = baseFilters ? { ...baseFilters } : { ...DEFAULT_FILTERS };
 
+  // Se o usuário desligou a Chave Geral de Filtros no Estúdio, ignora todos os filtros estatísticos imediatamente
+  if (base.filtrosDesativadosNoFechamento === true) {
+    return {
+      level: 3,
+      filters: {
+        ...base,
+        paresMin: 0,
+        paresMax: 15,
+        minPares: 0,
+        maxPares: 15,
+        primosMin: 0,
+        primosMax: 9,
+        minPrimos: 0,
+        maxPrimos: 9,
+        somaMin: 120,
+        somaMax: 285,
+        minSoma: 120,
+        maxSoma: 285,
+        molduraMin: 0,
+        molduraMax: 16,
+        minMoldura: 0,
+        maxMoldura: 16,
+        fibonacciMin: 0,
+        fibonacciMax: 7,
+        repetidasMin: 0,
+        repetidasMax: 15,
+        repetidasParidadeAtiva: false,
+        maxConsecutivas: 15,
+        autoCalibrarSomaUniverso: false,
+        cruzAtiva: false,
+        validacaoEstritaCruz: false,
+        strictValidation: false,
+        extremidadesAtiva: false,
+        apenasZonaDeOuroPrimos: false,
+        antiColisaoHistoricaAtiva: false,
+        antiPadraoViciadoAtivo: false,
+        curvaAbcAtiva: false,
+        vaziosAtivos: false,
+        robustezEstatisticaAtiva: false,
+        posicionalAtivo: false,
+        multiplosAtivo: false,
+        contagemDigitosAtiva: false,
+        somaAlgarismosAtiva: false,
+        linhasColunasAtivo: false,
+        quadrantesAtivo: false,
+        rankingHistoricoAtivo: false,
+        palpiteIneditoAtivo: false,
+      },
+      label: 'Filtros Desligados',
+      description: 'Chave Geral desligada: geração pura de cobertura combinatória respeitando apenas fixas e excluídas.',
+      bypassCanonicalAnomaly: true,
+    };
+  }
+
   if (level === 0) {
     return {
       level: 0,
@@ -487,6 +542,7 @@ export function buildProgressiveFallbackFilters(
         maxConsecutivas: Math.max(6, base.maxConsecutivas ?? 6),
         repetidasMin: Math.min(7, base.repetidasMin ?? 7),
         repetidasMax: Math.max(10, base.repetidasMax ?? 10),
+        repetidasParidadeAtiva: false,
         somaMin,
         somaMax,
         minSoma: somaMin,
@@ -535,6 +591,7 @@ export function buildProgressiveFallbackFilters(
       fibonacciMax: 7,
       repetidasMin: 0,
       repetidasMax: 15,
+      repetidasParidadeAtiva: false,
       maxConsecutivas: 15,
       autoCalibrarSomaUniverso: false,
       cruzAtiva: false,
@@ -552,6 +609,7 @@ export function buildProgressiveFallbackFilters(
       contagemDigitosAtiva: false,
       somaAlgarismosAtiva: false,
       linhasColunasAtivo: false,
+      quadrantesAtivo: false,
       rankingHistoricoAtivo: false,
       palpiteIneditoAtivo: false,
     },
@@ -1493,6 +1551,8 @@ export function analyzeTicket(
   let fibonacci = 0;
   let cruz = 0;
   let repetidas = 0;
+  let repetidasPares = 0;
+  let repetidasImpares = 0;
   let scoreSum = 0;
 
   for (const n of sorted) {
@@ -1504,7 +1564,11 @@ export function analyzeTicket(
     if (isMiolo(n)) miolo++;
     if (isFibonacci(n)) fibonacci++;
     if (isCruz(n)) cruz++;
-    if (concursoAnterior.includes(n)) repetidas++;
+    if (concursoAnterior.includes(n)) {
+      repetidas++;
+      if (n % 2 === 0) repetidasPares++;
+      else repetidasImpares++;
+    }
 
     if (aiScores && aiScores[n - 1] !== undefined) {
       scoreSum += aiScores[n - 1];
@@ -1560,6 +1624,8 @@ export function analyzeTicket(
     bola1,
     bola15,
     repetidas,
+    repetidasPares,
+    repetidasImpares,
     maxConsecutivas,
     scoreIA,
     somaAlgarismos,
@@ -1675,6 +1741,8 @@ export interface FilterValidationResult {
     cruz: number;
     fibonacci: number;
     repetidas: number;
+    repetidasPares: number;
+    repetidasImpares: number;
     maxConsecutivas: number;
     bola1: number;
     bola15: number;
@@ -1741,14 +1809,39 @@ export function validateFilters(
     );
   }
 
-  // 6. Repetidas do Concurso Anterior
+  // 6. Repetidas do Concurso Anterior (+ Subfiltro de Paridade das Repetidas: dezenas ∩ concursoAnterior)
+  const repetidasIntersecao = dezenas.filter((n) => concursoAnterior.includes(n));
+  const repCount = analysis.repetidas ?? repetidasIntersecao.length;
+  const repParesCount =
+    analysis.repetidasPares ?? repetidasIntersecao.filter((n) => n % 2 === 0).length;
+  const repImparesCount =
+    analysis.repetidasImpares ?? repetidasIntersecao.filter((n) => n % 2 !== 0).length;
+
   if (
-    analysis.repetidas < activeFilterConfig.repetidasMin ||
-    analysis.repetidas > activeFilterConfig.repetidasMax
+    repCount < activeFilterConfig.repetidasMin ||
+    repCount > activeFilterConfig.repetidasMax
   ) {
     violations.push(
-      `Repetidas fora da faixa: ${analysis.repetidas} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
+      `Repetidas fora da faixa: ${repCount} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
     );
+  }
+
+  if (activeFilterConfig.repetidasParidadeAtiva) {
+    const rpMin = activeFilterConfig.repetidasParesMin ?? 0;
+    const rpMax = activeFilterConfig.repetidasParesMax ?? 12;
+    const riMin = activeFilterConfig.repetidasImparesMin ?? 0;
+    const riMax = activeFilterConfig.repetidasImparesMax ?? 13;
+
+    if (repParesCount < rpMin || repParesCount > rpMax) {
+      violations.push(
+        `Repetidas Pares fora da faixa: ${repParesCount}P (esperado: ${rpMin}-${rpMax}P)`
+      );
+    }
+    if (repImparesCount < riMin || repImparesCount > riMax) {
+      violations.push(
+        `Repetidas Ímpares fora da faixa: ${repImparesCount}I (esperado: ${riMin}-${riMax}I)`
+      );
+    }
   }
 
   // 7. Sequência Consecutiva Máxima
@@ -1758,10 +1851,10 @@ export function validateFilters(
     );
   }
 
-  // 8. Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
-  const cruzCount = analysis.cruz ?? dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
+  // 8. Cruz da Lotofácil no volante 5×5 ([2, 7, 11, 12, 13, 14, 15, 17, 22]: padrão 4 a 7, Zona de Ouro: 5 a 6)
+  const cruzCount = dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
   const isEstrita = activeFilterConfig.strictValidation === true || activeFilterConfig.validacaoEstritaCruz === true;
-  if (isEstrita || (activeFilterConfig.cruzAtiva !== false && activeFilterConfig.cruzMin !== undefined)) {
+  if (activeFilterConfig.cruzAtiva !== false) {
     const cMin = isEstrita ? 5 : (activeFilterConfig.cruzMin ?? 4);
     const cMax = isEstrita ? 6 : (activeFilterConfig.cruzMax ?? 7);
     if (cruzCount < cMin || cruzCount > cMax) {
@@ -1998,7 +2091,9 @@ export function validateFilters(
       moldura: analysis.moldura,
       cruz: cruzCount,
       fibonacci: analysis.fibonacci,
-      repetidas: analysis.repetidas,
+      repetidas: repCount,
+      repetidasPares: repParesCount,
+      repetidasImpares: repImparesCount,
       maxConsecutivas: analysis.maxConsecutivas,
       bola1: b1,
       bola15: b15,
@@ -2262,11 +2357,16 @@ export function generateMinimumSetCoverFechamento({
   const isCandidateValid = (nums: number[]): boolean => {
     if (!checkFixasCompliance(nums)) return false;
     if (bypassAnomaly) {
-      // Nível 3: mantém apenas cobertura combinatória + Hamming + fixas/excluídas
+      // Nível 3 ou Filtros Desligados: mantém apenas cobertura combinatória + Hamming + fixas/excluídas
       return true;
     }
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
-    if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
+    const skipHardCanonical =
+      effectiveCoreFilters?.modoRigorFiltros === 'agressivo' ||
+      effectiveCoreFilters?.modoRigorFiltros === 'conservador';
+    if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
+      return false;
+    }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
@@ -2980,7 +3080,12 @@ export function generateFechamentoCovering(
     if (!checkFixasCompliance(nums)) return false;
     if (bypassAnomaly) return true;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
-    if (isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) return false;
+    const skipHardCanonical =
+      effectiveCoreFilters?.modoRigorFiltros === 'agressivo' ||
+      effectiveCoreFilters?.modoRigorFiltros === 'conservador';
+    if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
+      return false;
+    }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
@@ -5061,8 +5166,13 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   fibonacciMax: 6,
   repetidasMin: 7, // Auditado: 7 a 10 repetidas do concurso anterior (pico 7–9)
   repetidasMax: 10,
+  repetidasParidadeAtiva: false, // Subfiltro opcional de paridade (Pares / Ímpares) dentro das repetidas
+  repetidasParesMin: 2,
+  repetidasParesMax: 6,
+  repetidasImparesMin: 2,
+  repetidasImparesMax: 6,
   maxConsecutivas: 6, // Auditado: até 6 consecutivas (penalidade zero entre 3 e 5)
-  cruzMin: 4, // Cruz da Lotofácil (Linha 3 e Coluna 3: padrão 4 a 7 dezenas, Zona de Ouro: 5 a 6)
+  cruzMin: 4, // Cruz da Lotofácil no volante 5×5 ([2, 7, 11, 12, 13, 14, 15, 17, 22]: padrão 4 a 7, Zona de Ouro: 5 a 6)
   cruzMax: 7,
   cruzAtiva: true,
   bola1Min: 1, // Bola 1 deve ser 1, 2, 3 ou 4 (idealmente 1 ou 2)
@@ -5119,7 +5229,177 @@ export const DEFAULT_FILTERS: FilterCriteria = {
   hammingDinamicoAtivo: false,
   hammingModo: 'auto',
   hammingMinimoPersonalizado: 3,
+  filtrosDesativadosNoFechamento: false,
+  modoRigorFiltros: 'total',
 };
+
+/**
+ * Resolve o conjunto efetivo de FilterCriteria para o Estúdio de Fechamento
+ * conforme a Chave Geral (Ligar/Desligar) e o Modo de Rigor selecionado:
+ * - Desligado: desativa todos os filtros estatísticos, preservando apenas Fixas e Excluídas.
+ * - Modo 1 — Total: aplica 100% dos filtros configurados em Filtros Inteligentes.
+ * - Modo 2 — Conservador: mantém os filtros de alto impacto estatístico (Soma Central,
+ *   Paridade, Moldura, Repetidas do Concurso e Primos) e flexibiliza os secundários.
+ * - Modo 3 — Agressivo: mantém apenas os filtros indispensáveis (Soma ampla 160–230,
+ *   Paridade básica 5–10 e Consecutivas ≤ 7) para máxima velocidade e amplitude combinatória.
+ */
+export function resolveEffectiveFiltersForStudio(
+  baseFilters: FilterCriteria,
+  enabled: boolean,
+  rigorMode: FilterRigorMode
+): FilterCriteria {
+  if (!enabled) {
+    return {
+      ...baseFilters,
+      filtrosDesativadosNoFechamento: true,
+      modoRigorFiltros: rigorMode,
+      paresMin: 0,
+      paresMax: 15,
+      minPares: 0,
+      maxPares: 15,
+      primosMin: 0,
+      primosMax: 9,
+      minPrimos: 0,
+      maxPrimos: 9,
+      somaMin: 120,
+      somaMax: 285,
+      minSoma: 120,
+      maxSoma: 285,
+      molduraMin: 0,
+      molduraMax: 16,
+      minMoldura: 0,
+      maxMoldura: 16,
+      fibonacciMin: 0,
+      fibonacciMax: 7,
+      repetidasMin: 0,
+      repetidasMax: 15,
+      repetidasParidadeAtiva: false,
+      maxConsecutivas: 15,
+      autoCalibrarSomaUniverso: false,
+      cruzAtiva: false,
+      validacaoEstritaCruz: false,
+      strictValidation: false,
+      extremidadesAtiva: false,
+      apenasZonaDeOuroPrimos: false,
+      antiColisaoHistoricaAtiva: false,
+      antiPadraoViciadoAtivo: false,
+      curvaAbcAtiva: false,
+      vaziosAtivos: false,
+      robustezEstatisticaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      quadrantesAtivo: false,
+      rankingHistoricoAtivo: false,
+      palpiteIneditoAtivo: false,
+    };
+  }
+
+  if (rigorMode === 'total') {
+    return {
+      ...baseFilters,
+      filtrosDesativadosNoFechamento: false,
+      modoRigorFiltros: 'total',
+    };
+  }
+
+  if (rigorMode === 'conservador') {
+    const somaMin = Math.min(Math.max(baseFilters.somaMin ?? 175, 165), 185);
+    const somaMax = Math.max(Math.min(baseFilters.somaMax ?? 220, 225), 210);
+    return {
+      ...baseFilters,
+      filtrosDesativadosNoFechamento: false,
+      modoRigorFiltros: 'conservador',
+      // Alto impacto estatístico mantido: Soma Central, Paridade, Moldura, Repetidas e Primos
+      somaMin,
+      somaMax,
+      minSoma: somaMin,
+      maxSoma: somaMax,
+      paresMin: baseFilters.paresMin ?? 6,
+      paresMax: baseFilters.paresMax ?? 9,
+      molduraMin: baseFilters.molduraMin ?? 8,
+      molduraMax: baseFilters.molduraMax ?? 11,
+      repetidasMin: baseFilters.repetidasMin ?? 7,
+      repetidasMax: baseFilters.repetidasMax ?? 10,
+      primosMin: baseFilters.primosMin ?? 4,
+      primosMax: baseFilters.primosMax ?? 7,
+      maxConsecutivas: Math.max(6, baseFilters.maxConsecutivas ?? 6),
+      // Filtros secundários flexibilizados
+      repetidasParidadeAtiva: false,
+      fibonacciMin: 1,
+      fibonacciMax: 7,
+      cruzAtiva: false,
+      validacaoEstritaCruz: false,
+      strictValidation: false,
+      extremidadesAtiva: false,
+      apenasZonaDeOuroPrimos: false,
+      antiPadraoViciadoAtivo: false,
+      curvaAbcAtiva: false,
+      vaziosAtivos: false,
+      robustezEstatisticaAtiva: false,
+      posicionalAtivo: false,
+      multiplosAtivo: false,
+      contagemDigitosAtiva: false,
+      somaAlgarismosAtiva: false,
+      linhasColunasAtivo: false,
+      quadrantesAtivo: false,
+      rankingHistoricoAtivo: false,
+      antiColisaoHistoricaAtiva: true,
+      palpiteIneditoAtivo: true,
+    };
+  }
+
+  // Modo 3 — Agressivo: apenas filtros indispensáveis (Soma ampla, Par/Ímpar básico, Consecutivas)
+  return {
+    ...baseFilters,
+    filtrosDesativadosNoFechamento: false,
+    modoRigorFiltros: 'agressivo',
+    somaMin: 160,
+    somaMax: 230,
+    minSoma: 160,
+    maxSoma: 230,
+    paresMin: 5,
+    paresMax: 10,
+    minPares: 5,
+    maxPares: 10,
+    maxConsecutivas: 7,
+    autoCalibrarSomaUniverso: false,
+    // Demais filtros liberados para máxima velocidade e amplitude combinatória
+    primosMin: 0,
+    primosMax: 9,
+    minPrimos: 0,
+    maxPrimos: 9,
+    molduraMin: 0,
+    molduraMax: 16,
+    minMoldura: 0,
+    maxMoldura: 16,
+    fibonacciMin: 0,
+    fibonacciMax: 7,
+    repetidasMin: 0,
+    repetidasMax: 15,
+    repetidasParidadeAtiva: false,
+    cruzAtiva: false,
+    validacaoEstritaCruz: false,
+    strictValidation: false,
+    extremidadesAtiva: false,
+    apenasZonaDeOuroPrimos: false,
+    antiColisaoHistoricaAtiva: true,
+    palpiteIneditoAtivo: true,
+    antiPadraoViciadoAtivo: false,
+    curvaAbcAtiva: false,
+    vaziosAtivos: false,
+    robustezEstatisticaAtiva: false,
+    posicionalAtivo: false,
+    multiplosAtivo: false,
+    contagemDigitosAtiva: false,
+    somaAlgarismosAtiva: false,
+    linhasColunasAtivo: false,
+    quadrantesAtivo: false,
+    rankingHistoricoAtivo: false,
+  };
+}
 
 /**
  * Combinations formula nCr = n! / (r! * (n - r)!)

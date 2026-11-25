@@ -53,6 +53,12 @@ export interface FilterCriteria {
   fibonacciMax: number;
   repetidasMin: number;
   repetidasMax: number;
+  // Subfiltro de Paridade nas Repetidas do Concurso Anterior (interseção Pares / Ímpares)
+  repetidasParidadeAtiva?: boolean;
+  repetidasParesMin?: number;
+  repetidasParesMax?: number;
+  repetidasImparesMin?: number;
+  repetidasImparesMax?: number;
   maxConsecutivas: number;
   dezenasFixas: number[];
   dezenasExcluidas: number[];
@@ -122,7 +128,12 @@ export interface FilterCriteria {
   maxPrimos?: number;
   minMoldura?: number;
   maxMoldura?: number;
+  // Controle Inteligente de Filtros no Estúdio de Fechamento (Chave Geral + 3 Modos)
+  filtrosDesativadosNoFechamento?: boolean;
+  modoRigorFiltros?: FilterRigorMode;
 }
+
+export type FilterRigorMode = 'total' | 'conservador' | 'agressivo';
 
 export type FechamentoMode = 
   | '16_14_15'
@@ -171,6 +182,8 @@ export interface GameTicket {
   bola1?: number;
   bola15?: number;
   repetidas: number;
+  repetidasPares?: number;
+  repetidasImpares?: number;
 
   maxConsecutivas: number;
   scoreIA: number;
