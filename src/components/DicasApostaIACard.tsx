@@ -23,6 +23,7 @@ import {
 interface DicasApostaIACardProps {
   latestDraw?: LotofacilDraw;
   prediction: AIPredictionResponse | null;
+  isLoading?: boolean;
   fallbackScores?: number[];
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];
@@ -41,6 +42,7 @@ interface RankedNumber {
 export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
   latestDraw = CONCURSO_ATUAL,
   prediction,
+  isLoading = false,
   fallbackScores,
   dynamicStats = DEZENAS_STATS,
   cyclePendingNumbers = [],
@@ -48,6 +50,7 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
   onApplyRecommendation,
 }) => {
   const [copiedComboIdx, setCopiedComboIdx] = useState<number | null>(null);
+  const usingDirectPrediction = Boolean(prediction?.scores && prediction.scores.length === 25);
 
   const taxaConfianca = prediction?.taxaConfianca ?? 95.8;
 
@@ -195,129 +198,168 @@ export const DicasApostaIACard: React.FC<DicasApostaIACardProps> = ({
   return (
     <section
       aria-label="Dicas de Aposta IA"
-      className="bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/20 rounded-2xl border border-amber-500/35 p-5 sm:p-6 shadow-2xl space-y-5"
+      className="bg-slate-900 rounded-xl border border-slate-800 p-5 sm:p-6 space-y-5"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-400">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-              Dicas de Aposta IA
-            </h3>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 tabular-nums">
-              Precisão: {taxaConfianca.toFixed(1)}%
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-sans text-emerald-400 font-medium">
+              Confiança {taxaConfianca.toFixed(1)}%
             </span>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 tabular-nums">
-              Concurso #{latestDraw.concurso}
+            <span aria-hidden="true">·</span>
+            <span>Concurso #{latestDraw.concurso} → #{latestDraw.concurso + 1}</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-sans">
+              {usingDirectPrediction ? 'Fonte: aiPrediction (App)' : 'Fonte: Ponderação Estatística'}
             </span>
           </div>
-          <p className="text-xs text-slate-400">
-            Leitura direta de <span className="font-mono text-slate-300">aiPrediction.scores</span> e{' '}
-            <span className="font-mono text-slate-300">taxaConfianca</span> destacando as 5 dezenas mais quentes, as 5 mais frias e combinações calibradas para o Concurso #{latestDraw.concurso + 1}.
+          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+            Dicas de Aposta IA — Top 5 Quentes &amp; Top 5 Frias
+          </h3>
+          <p className="text-xs text-slate-400 max-w-2xl">
+            {prediction?.justificativaTecnica
+              ? prediction.justificativaTecnica
+              : `Extração direta dos 25 escores probabilísticos de aiPrediction destacando as 5 dezenas de maior tração e as 5 de menor propensão para o Concurso #${latestDraw.concurso + 1}.`}
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => onApplyRecommendation(suggestedCombos[2].dezenas)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-105 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition cursor-pointer shrink-0 whitespace-nowrap"
         >
           <span>Aplicar Base IA (18 Dez.)</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Top 5 Quentes vs Top 5 Frias */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* 5 Dezenas Quentes */}
-        <div className="bg-slate-950/85 border border-amber-500/35 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span className="text-xs sm:text-sm font-bold text-white">
-                Top 5 Dezenas Quentes (Maior Score)
+      {/* Loading Skeleton State */}
+      {isLoading && !prediction ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[0, 1].map((col) => (
+            <div
+              key={col}
+              className="bg-slate-950/75 border border-slate-800 rounded-lg p-4 space-y-3 animate-pulse"
+            >
+              <div className="h-4 w-48 bg-slate-800 rounded" />
+              <div className="grid grid-cols-5 gap-2">
+                {[0, 1, 2, 3, 4].map((cell) => (
+                  <div key={cell} className="h-24 bg-slate-800/80 rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* Top 5 Quentes vs Top 5 Frias */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* 5 Dezenas Quentes */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-semibold text-white">
+                  5 Dezenas Mais Quentes
+                </span>
+              </div>
+              <span className="font-mono tabular-nums text-[11px] text-amber-400">
+                Maior escore IA
               </span>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Prioridade Alta
-            </span>
+
+            <motion.div
+              key={`quentes-${latestDraw.concurso}-${taxaConfianca}`}
+              variants={staggerContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-5 gap-2"
+            >
+              {top5Quentes.map((item, rankIdx) => (
+                <motion.div
+                  key={item.numero}
+                  variants={staggerBallVariants}
+                  className="flex flex-col items-center p-2.5 rounded-lg bg-slate-900 border border-amber-500/35"
+                >
+                  <span className="text-[10px] font-mono tabular-nums text-slate-500 self-start">
+                    #{rankIdx + 1}
+                  </span>
+                  <span className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 font-mono font-bold text-sm flex items-center justify-center mt-0.5 tabular-nums">
+                    {item.numero.toString().padStart(2, '0')}
+                  </span>
+                  <span className="text-xs font-mono font-semibold text-amber-300 mt-1.5 tabular-nums">
+                    {item.score}%
+                  </span>
+                  <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                    <div
+                      className="h-full bg-amber-400 rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(10, item.score))}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-1 tabular-nums truncate max-w-full">
+                    {item.pendenteCiclo
+                      ? 'Ciclo'
+                      : item.saiuUltimo
+                      ? `Saiu`
+                      : `${item.atrasoAtual}c atr.`}
+                  </span>
+                </motion.div>
+              ))}
+            </motion.div>
           </div>
 
-          <motion.div
-            key={`quentes-${latestDraw.concurso}-${taxaConfianca}`}
-            variants={staggerContainerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-5 gap-2"
-          >
-            {top5Quentes.map((item) => (
-              <motion.div
-                key={item.numero}
-                variants={staggerBallVariants}
-                className="flex flex-col items-center p-2.5 rounded-xl bg-gradient-to-b from-amber-500/20 to-slate-900 border border-amber-400/50 shadow-md"
-              >
-                <span className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-mono font-black text-sm flex items-center justify-center shadow-sm">
-                  {item.numero.toString().padStart(2, '0')}
+          {/* 5 Dezenas Frias */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Snowflake className="w-4 h-4 text-sky-400 shrink-0" />
+                <span className="font-semibold text-white">
+                  5 Dezenas Mais Frias
                 </span>
-                <span className="text-xs font-mono font-black text-amber-300 mt-1.5 tabular-nums">
-                  {item.score}%
-                </span>
-                <span className="text-[9px] font-mono text-slate-400 mt-0.5">
-                  {item.pendenteCiclo
-                    ? 'Ciclo'
-                    : item.saiuUltimo
-                    ? `Saiu #${latestDraw.concurso}`
-                    : `${item.atrasoAtual}c atr.`}
-                </span>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-
-        {/* 5 Dezenas Frias */}
-        <div className="bg-slate-950/85 border border-sky-500/30 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Snowflake className="w-4 h-4 text-sky-400" />
-              <span className="text-xs sm:text-sm font-bold text-white">
-                Top 5 Dezenas Frias (Menor Score)
+              </div>
+              <span className="font-mono tabular-nums text-[11px] text-sky-400">
+                Menor escore IA
               </span>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
-              Cautela / Poda
-            </span>
-          </div>
 
-          <motion.div
-            key={`frias-${latestDraw.concurso}-${taxaConfianca}`}
-            variants={staggerContainerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-5 gap-2"
-          >
-            {top5Frias.map((item) => (
-              <motion.div
-                key={item.numero}
-                variants={staggerBallVariants}
-                className="flex flex-col items-center p-2.5 rounded-xl bg-gradient-to-b from-sky-950/50 to-slate-900 border border-sky-500/35 shadow-md"
-              >
-                <span className="w-9 h-9 rounded-full bg-slate-800 text-sky-200 border border-sky-400/40 font-mono font-black text-sm flex items-center justify-center">
-                  {item.numero.toString().padStart(2, '0')}
-                </span>
-                <span className="text-xs font-mono font-bold text-sky-300 mt-1.5 tabular-nums">
-                  {item.score}%
-                </span>
-                <span className="text-[9px] font-mono text-slate-400 mt-0.5">
-                  {item.atrasoAtual === 0 ? 'Recente' : `${item.atrasoAtual}c atr.`}
-                </span>
-              </motion.div>
-            ))}
-          </motion.div>
+            <motion.div
+              key={`frias-${latestDraw.concurso}-${taxaConfianca}`}
+              variants={staggerContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-5 gap-2"
+            >
+              {top5Frias.map((item, rankIdx) => (
+                <motion.div
+                  key={item.numero}
+                  variants={staggerBallVariants}
+                  className="flex flex-col items-center p-2.5 rounded-lg bg-slate-900 border border-sky-500/30"
+                >
+                  <span className="text-[10px] font-mono tabular-nums text-slate-500 self-start">
+                    #{rankIdx + 1}
+                  </span>
+                  <span className="w-9 h-9 rounded-full bg-slate-800 text-sky-200 border border-sky-400/40 font-mono font-bold text-sm flex items-center justify-center mt-0.5 tabular-nums">
+                    {item.numero.toString().padStart(2, '0')}
+                  </span>
+                  <span className="text-xs font-mono font-semibold text-sky-300 mt-1.5 tabular-nums">
+                    {item.score}%
+                  </span>
+                  <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+                    <div
+                      className="h-full bg-sky-400 rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(8, item.score))}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-1 tabular-nums truncate max-w-full">
+                    {item.atrasoAtual === 0 ? 'Recente' : `${item.atrasoAtual}c atr.`}
+                  </span>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Combinações Ideais Sugeridas */}
       <div className="space-y-2.5">

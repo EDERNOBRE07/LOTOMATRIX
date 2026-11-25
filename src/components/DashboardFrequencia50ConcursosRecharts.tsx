@@ -12,7 +12,7 @@ import {
   Cell,
 } from 'recharts';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
-import { CONCURSO_ATUAL, DEZENAS_STATS, MOLDURA, MIOLO } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, DEZENAS_STATS, MOLDURA, MIOLO, RECENT_DRAWS } from '../data/lotofacilData';
 import { getHistoricalNDraws } from '../services/historical100Draws';
 import { soundService } from '../services/soundAlert';
 import {
@@ -62,8 +62,20 @@ export const DashboardFrequencia50ConcursosRecharts: React.FC<
   const [filterGroup, setFilterGroup] = useState<FilterGroup>('todas');
   const [hoveredDezena, setHoveredDezena] = useState<Dezena50Data | null>(null);
 
-  // Recupera os últimos 50 concursos reais/históricos
+  // Recupera exatamente os últimos 50 concursos baseando-se diretamente em RECENT_DRAWS + latestDraw
   const draws50 = useMemo(() => {
+    const merged: LotofacilDraw[] = [latestDraw];
+    const seen = new Set<number>([latestDraw.concurso]);
+    for (const draw of RECENT_DRAWS) {
+      if (!seen.has(draw.concurso)) {
+        merged.push(draw);
+        seen.add(draw.concurso);
+      }
+    }
+    merged.sort((a, b) => b.concurso - a.concurso);
+    if (merged.length >= 50) {
+      return merged.slice(0, 50);
+    }
     return getHistoricalNDraws(50, latestDraw);
   }, [latestDraw]);
 

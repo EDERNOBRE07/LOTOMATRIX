@@ -12,6 +12,7 @@ import {
   Plus,
   Check,
   Share2,
+  Flame,
 } from 'lucide-react';
 
 interface HeatmapTabProps {
@@ -50,6 +51,13 @@ interface NumberFreqSummary {
   isMoldura: boolean;
   isPrimo: boolean;
   inLatest: boolean;
+  currentDelay: number;
+  avgGap100: number;
+  overdueRatio: number;
+  recent15Count: number;
+  isPendingCycle: boolean;
+  latentProbabilityPct: number;
+  latentTier: 'alto' | 'moderado' | 'saturado';
 }
 
 const MOLDURA_SET = new Set(MOLDURA);
@@ -63,6 +71,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
 }) => {
   const [matrixMode, setMatrixMode] = useState<'correlacao' | 'coocorrencia'>('correlacao');
   const [freqSortMode, setFreqSortMode] = useState<'numero' | 'frequencia'>('frequencia');
+  const [showProbabilityOverlay, setShowProbabilityOverlay] = useState<boolean>(false);
   const [clusterThreshold, setClusterThreshold] = useState<60 | 65 | 70>(60);
   const [clusterMetricMode, setClusterMetricMode] = useState<'media' | 'bilateral'>('media');
   const [hoveredClusterNode, setHoveredClusterNode] = useState<number | null>(null);
@@ -162,18 +171,103 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
     );
     topPairs.sort((p1, p2) => p2.correlation - p1.correlation || p2.coOccurrence - p1.coOccurrence);
 
-    const freqList: NumberFreqSummary[] = Array.from({ length: 25 }, (_, i) => ({
-      dezena: i + 1,
-      count: counts[i],
-      pct: Number(((counts[i] / N) * 100).toFixed(1)),
-      cumulativeSeries: cumulative[i],
-      logisticScore: logistic.scores[i] ?? 50,
-      isMoldura: MOLDURA_SET.has(i + 1),
-      isPrimo: PRIMOS_SET.has(i + 1),
-      inLatest: latestSet.has(i + 1),
-    }));
+    // Ciclo aberto real (passada cronológica direta sobre os últimos 100 concursos)
+    const cycleSeen = new Set<number>();
+    for (let t = 0; t < N; t++) {
+      for (const num of draws100Asc[t].dezenas) {
+        cycleSeen.add(num);
+      }
+      if (cycleSeen.size === 25 && t < N - 1) {
+        cycleSeen.clear();
+      }
+    }
+    const cyclePendingSet = new Set<number>();
+    if (cycleSeen.size < 25) {
+      for (let d = 1; d <= 25; d++) {
+        if (!cycleSeen.has(d)) cyclePendingSet.add(d);
+      }
+    }
+
+    const recentWindow = Math.min(15, N);
+    const freqList: NumberFreqSummary[] = Array.from({ length: 25 }, (_, i) => {
+      const dezena = i + 1;
+      const pct = Number(((counts[i] / N) * 100).toFixed(1));
+      const logisticScore = logistic.scores[i] ?? 50;
+
+      // Atraso atual consecutivo no final da janela de 100 concursos
+      let currentDelay = 0;
+      for (let t = N - 1; t >= 0; t--) {
+        if (presence[i][t] === 1) break;
+        currentDelay++;
+      }
+
+      // Intervalo médio entre saídas nos últimos 100 concursos
+      let gapSum = 0;
+      let gapCount = 0;
+      let lastHitIdx = -1;
+      for (let t = 0; t < N; t++) {
+        if (presence[i][t] === 1) {
+          if (lastHitIdx !== -1) {
+            gapSum += t - lastHitIdx - 1;
+            gapCount++;
+          }
+          lastHitIdx = t;
+        }
+      }
+      const avgGap100 = Number(
+        (gapCount > 0 ? gapSum / gapCount : (N - counts[i]) / Math.max(1, counts[i])).toFixed(2)
+      );
+      const overdueRatio = Number((currentDelay / Math.max(0.75, avgGap100)).toFixed(2));
+
+      let recent15Count = 0;
+      for (let t = N - recentWindow; t < N; t++) {
+        recent15Count += presence[i][t];
+      }
+
+      const isPendingCycle = cyclePendingSet.has(dezena);
+
+      // Potencial Latente de Próximo Ciclo (derivado dos 100 concursos):
+      // combina reversão à média (60%), pressão de atraso relativo, tensão de curto prazo (15c),
+      // pendência no ciclo aberto de 25 dezenas e peso logístico.
+      const meanReversionDelta = (60 - pct) * 0.72;
+      const overduePressure = Math.min(18, overdueRatio * 5.2);
+      const shortTermTension = ((recentWindow * 0.6 - recent15Count) / Math.max(1, recentWindow * 0.6)) * 8.5;
+      const cycleBoost = isPendingCycle ? 14.5 : 0;
+      const logisticBlend = (logisticScore - 50) * 0.28;
+
+      const rawLatent = 58 + meanReversionDelta + overduePressure + shortTermTension + cycleBoost + logisticBlend;
+      const latentProbabilityPct = Number(Math.max(36, Math.min(95, rawLatent)).toFixed(1));
+      const latentTier: 'alto' | 'moderado' | 'saturado' =
+        latentProbabilityPct >= 72 ? 'alto' : latentProbabilityPct >= 56 ? 'moderado' : 'saturado';
+
+      return {
+        dezena,
+        count: counts[i],
+        pct,
+        cumulativeSeries: cumulative[i],
+        logisticScore,
+        isMoldura: MOLDURA_SET.has(dezena),
+        isPrimo: PRIMOS_SET.has(dezena),
+        inLatest: latestSet.has(dezena),
+        currentDelay,
+        avgGap100,
+        overdueRatio,
+        recent15Count,
+        isPendingCycle,
+        latentProbabilityPct,
+        latentTier,
+      };
+    });
 
     const sortedByFreq = [...freqList].sort((a, b) => b.count - a.count || a.dezena - b.dezena);
+    const sortedByLatentPotential = [...freqList].sort(
+      (a, b) =>
+        b.latentProbabilityPct - a.latentProbabilityPct ||
+        b.currentDelay - a.currentDelay ||
+        a.dezena - b.dezena
+    );
+    const topLatentSet = new Set(sortedByLatentPotential.slice(0, 8).map((item) => item.dezena));
+    const cyclePendingList = Array.from(cyclePendingSet).sort((a, b) => a - b);
 
     return {
       drawsCount: N,
@@ -181,6 +275,9 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       lastConcurso: draws100Asc[N - 1]?.concurso ?? latestDraw.concurso,
       freqList,
       sortedByFreq,
+      sortedByLatentPotential,
+      topLatentSet,
+      cyclePendingList,
       coMatrix,
       corrMatrix,
       allPairs: topPairs,
@@ -189,6 +286,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       topNegativePairs: [...topPairs].reverse().slice(0, 5),
       hottest: sortedByFreq[0],
       coldest: sortedByFreq[sortedByFreq.length - 1],
+      topLatent: sortedByLatentPotential[0],
     };
   }, [latestDraw]);
 
@@ -372,6 +470,14 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
     setManualSelection(top18);
   };
 
+  const selectTop18ByLatentPotential = () => {
+    const top18 = analytics.sortedByLatentPotential
+      .slice(0, 18)
+      .map((item) => item.dezena)
+      .sort((a, b) => a - b);
+    setManualSelection(top18);
+  };
+
   const handleSendManualPool = () => {
     if (manualSelection.length < 15) return;
     try {
@@ -392,7 +498,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
 
     const width = 760;
     const height = 230;
-    const margin = { top: 20, right: 16, bottom: 34, left: 38 };
+    const margin = { top: 20, right: showProbabilityOverlay ? 44 : 16, bottom: 34, left: 38 };
     const innerW = width - margin.left - margin.right;
     const innerH = height - margin.top - margin.bottom;
 
@@ -463,6 +569,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .attr('width', x.bandwidth())
       .attr('height', (d) => Math.max(2, innerH - y(d.count)))
       .attr('rx', 3)
+      .attr('opacity', showProbabilityOverlay ? 0.52 : 1)
       .attr('fill', (d) =>
         manualSelection.includes(d.dezena)
           ? '#10b981'
@@ -487,19 +594,93 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
         toggleManualNumber(d.dezena);
       });
 
-    // Value labels above bars
-    g.selectAll('text.bar-val')
-      .data(data)
-      .enter()
-      .append('text')
-      .attr('class', 'bar-val')
-      .attr('x', (d) => (x(String(d.dezena).padStart(2, '0')) ?? 0) + x.bandwidth() / 2)
-      .attr('y', (d) => y(d.count) - 4)
-      .attr('text-anchor', 'middle')
-      .attr('fill', (d) => (d.dezena === focusedNumber ? '#f8fafc' : '#94a3b8'))
-      .attr('font-size', 9.5)
-      .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
-      .text((d) => d.count);
+    // Value labels above bars (ocultados quando o overlay de probabilidade exibe seus próprios marcadores)
+    if (!showProbabilityOverlay) {
+      g.selectAll('text.bar-val')
+        .data(data)
+        .enter()
+        .append('text')
+        .attr('class', 'bar-val')
+        .attr('x', (d) => (x(String(d.dezena).padStart(2, '0')) ?? 0) + x.bandwidth() / 2)
+        .attr('y', (d) => y(d.count) - 4)
+        .attr('text-anchor', 'middle')
+        .attr('fill', (d) => (d.dezena === focusedNumber ? '#f8fafc' : '#94a3b8'))
+        .attr('font-size', 9.5)
+        .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
+        .text((d) => d.count);
+    }
+
+    // Overlay de Potencial Latente (100 concursos) sobre o gráfico de barras
+    if (showProbabilityOverlay) {
+      const yProb = d3.scaleLinear().domain([30, 100]).range([innerH, 0]);
+
+      const probLine = d3
+        .line<NumberFreqSummary>()
+        .x((d) => (x(String(d.dezena).padStart(2, '0')) ?? 0) + x.bandwidth() / 2)
+        .y((d) => yProb(d.latentProbabilityPct))
+        .curve(d3.curveMonotoneX);
+
+      g.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', '#34d399')
+        .attr('stroke-width', 2)
+        .attr('d', probLine)
+        .style('pointer-events', 'none');
+
+      g.selectAll('circle.prob-dot')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'prob-dot')
+        .attr('cx', (d) => (x(String(d.dezena).padStart(2, '0')) ?? 0) + x.bandwidth() / 2)
+        .attr('cy', (d) => yProb(d.latentProbabilityPct))
+        .attr('r', (d) => (d.latentTier === 'alto' ? 4.2 : 3))
+        .attr('fill', (d) =>
+          d.latentTier === 'alto'
+            ? '#10b981'
+            : d.latentTier === 'moderado'
+            ? '#fbbf24'
+            : '#64748b'
+        )
+        .attr('stroke', '#020617')
+        .attr('stroke-width', 1.2)
+        .style('cursor', 'pointer')
+        .on('mouseenter', (_event, d) => setFocusedNumber(d.dezena))
+        .on('click', (_event, d) => {
+          setFocusedNumber(d.dezena);
+          toggleManualNumber(d.dezena);
+        });
+
+      g.selectAll('text.prob-lbl')
+        .data(data.filter((d) => d.latentTier === 'alto' || d.dezena === focusedNumber))
+        .enter()
+        .append('text')
+        .attr('class', 'prob-lbl')
+        .attr('x', (d) => (x(String(d.dezena).padStart(2, '0')) ?? 0) + x.bandwidth() / 2)
+        .attr('y', (d) => yProb(d.latentProbabilityPct) - 7)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#6ee7b7')
+        .attr('font-size', 8.5)
+        .attr('font-weight', '600')
+        .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
+        .style('pointer-events', 'none')
+        .text((d) => `${Math.round(d.latentProbabilityPct)}%`);
+
+      // Right Y Axis for Latent Probability %
+      g.append('g')
+        .attr('transform', `translate(${innerW},0)`)
+        .call(d3.axisRight(yProb).ticks(4).tickFormat((val) => `${val}%`))
+        .call((sel) => sel.select('.domain').attr('stroke', '#065f46'))
+        .call((sel) => sel.selectAll('line').attr('stroke', '#065f46'))
+        .call((sel) =>
+          sel
+            .selectAll('text')
+            .attr('fill', '#34d399')
+            .attr('font-size', 9.5)
+            .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
+        );
+    }
 
     // X Axis
     g.append('g')
@@ -527,7 +708,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
           .attr('font-size', 10)
           .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
       );
-  }, [analytics, freqSortMode, focusedNumber, manualSelection]);
+  }, [analytics, freqSortMode, focusedNumber, manualSelection, showProbabilityOverlay]);
 
   // D3 Render 2: Curva de Frequência Acumulada (100 concursos) para a dezena em foco
   useEffect(() => {
@@ -680,6 +861,8 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       }
     }
 
+    const latentDiagColor = d3.scaleSequential(d3.interpolateYlGn).domain([36, 95]);
+
     // Column labels (top)
     g.selectAll('text.col-lbl')
       .data(labels)
@@ -689,12 +872,17 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .attr('x', (d) => (band(d) ?? 0) + band.bandwidth() / 2)
       .attr('y', -8)
       .attr('text-anchor', 'middle')
-      .attr('fill', (_d, idx) =>
-        hoveredCell && hoveredCell.col === idx + 1 ? '#f8fafc' : '#94a3b8'
-      )
+      .attr('fill', (_d, idx) => {
+        if (hoveredCell && hoveredCell.col === idx + 1) return '#f8fafc';
+        if (showProbabilityOverlay && analytics.topLatentSet.has(idx + 1)) return '#34d399';
+        return '#94a3b8';
+      })
       .attr('font-size', 9.5)
       .attr('font-weight', (_d, idx) =>
-        hoveredCell && hoveredCell.col === idx + 1 ? '700' : '500'
+        (hoveredCell && hoveredCell.col === idx + 1) ||
+        (showProbabilityOverlay && analytics.topLatentSet.has(idx + 1))
+          ? '700'
+          : '500'
       )
       .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
       .text((d) => d);
@@ -708,12 +896,17 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .attr('x', -6)
       .attr('y', (d) => (band(d) ?? 0) + band.bandwidth() / 2 + 3)
       .attr('text-anchor', 'end')
-      .attr('fill', (_d, idx) =>
-        hoveredCell && hoveredCell.row === idx + 1 ? '#f8fafc' : '#94a3b8'
-      )
+      .attr('fill', (_d, idx) => {
+        if (hoveredCell && hoveredCell.row === idx + 1) return '#f8fafc';
+        if (showProbabilityOverlay && analytics.topLatentSet.has(idx + 1)) return '#34d399';
+        return '#94a3b8';
+      })
       .attr('font-size', 9.5)
       .attr('font-weight', (_d, idx) =>
-        hoveredCell && hoveredCell.row === idx + 1 ? '700' : '500'
+        (hoveredCell && hoveredCell.row === idx + 1) ||
+        (showProbabilityOverlay && analytics.topLatentSet.has(idx + 1))
+          ? '700'
+          : '500'
       )
       .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
       .text((d) => d);
@@ -730,17 +923,30 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .attr('height', band.bandwidth())
       .attr('rx', 2)
       .attr('fill', (d) => {
-        if (d.row === d.col) return '#0f172a';
+        if (d.row === d.col) {
+          if (showProbabilityOverlay) {
+            const p = analytics.freqList[d.row - 1]?.latentProbabilityPct ?? 55;
+            return latentDiagColor(p);
+          }
+          return '#0f172a';
+        }
         if (matrixMode === 'correlacao') {
           return corrColor(Math.max(-0.32, Math.min(0.32, d.correlation)));
         }
         return coColor(d.coOccurrence);
       })
+      .attr('opacity', (d) => {
+        if (!showProbabilityOverlay || d.row === d.col) return 1;
+        const pRow = analytics.freqList[d.row - 1]?.latentProbabilityPct ?? 55;
+        const pCol = analytics.freqList[d.col - 1]?.latentProbabilityPct ?? 55;
+        const jointLatent = Math.sqrt(pRow * pCol);
+        return jointLatent >= 68 ? 1 : 0.42;
+      })
       .attr('stroke', (d) => {
         if (hoveredCell && hoveredCell.row === d.row && hoveredCell.col === d.col) {
           return '#f8fafc';
         }
-        if (d.row === d.col) return '#334155';
+        if (d.row === d.col) return showProbabilityOverlay ? '#065f46' : '#334155';
         return 'none';
       })
       .attr('stroke-width', (d) =>
@@ -759,7 +965,7 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
         }
       });
 
-    // Diagonal frequency number inside diagonal cells
+    // Diagonal frequency or latent probability inside diagonal cells
     g.selectAll('text.diag-val')
       .data(cells.filter((c) => c.row === c.col))
       .enter()
@@ -768,12 +974,21 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
       .attr('x', (d) => (band(String(d.col).padStart(2, '0')) ?? 0) + band.bandwidth() / 2)
       .attr('y', (d) => (band(String(d.row).padStart(2, '0')) ?? 0) + band.bandwidth() / 2 + 3)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#cbd5e1')
-      .attr('font-size', 8.5)
+      .attr('fill', (d) => {
+        if (!showProbabilityOverlay) return '#cbd5e1';
+        const p = analytics.freqList[d.row - 1]?.latentProbabilityPct ?? 55;
+        return p >= 70 ? '#f8fafc' : '#0f172a';
+      })
+      .attr('font-size', showProbabilityOverlay ? 7.8 : 8.5)
+      .attr('font-weight', showProbabilityOverlay ? '700' : '500')
       .attr('font-family', 'ui-monospace, SFMono-Regular, Menlo, monospace')
       .style('pointer-events', 'none')
-      .text((d) => d.coOccurrence);
-  }, [analytics, matrixMode, hoveredCell]);
+      .text((d) => {
+        if (!showProbabilityOverlay) return d.coOccurrence;
+        const p = analytics.freqList[d.row - 1]?.latentProbabilityPct ?? 55;
+        return `${Math.round(p)}%`;
+      });
+  }, [analytics, matrixMode, hoveredCell, showProbabilityOverlay]);
 
   // D3 Render 4: Grafo Force-Directed de Cluster de Correlação (>60% nos últimos 100 concursos)
   useEffect(() => {
@@ -1102,6 +1317,35 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
                 {(analytics.topPositivePairs[0]?.correlation ?? 0).toFixed(2)}
               </div>
             </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showProbabilityOverlay}
+              onClick={() => setShowProbabilityOverlay((prev) => !prev)}
+              className={`inline-flex items-center gap-2.5 px-3 py-2 rounded-lg border font-sans text-xs font-medium transition cursor-pointer ${
+                showProbabilityOverlay
+                  ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200'
+                  : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600'
+              }`}
+            >
+              <Flame
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  showProbabilityOverlay ? 'text-emerald-400' : 'text-slate-400'
+                }`}
+              />
+              <span>Probability Heatmaps (100c)</span>
+              <span
+                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                  showProbabilityOverlay ? 'bg-emerald-500' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-slate-950 transition-transform ${
+                    showProbabilityOverlay ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`}
+                />
+              </span>
+            </button>
           </div>
         </div>
 
@@ -1122,6 +1366,15 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {showProbabilityOverlay && (
+              <button
+                type="button"
+                onClick={selectTop18ByLatentPotential}
+                className="px-3 py-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-xs font-medium text-emerald-200 transition cursor-pointer"
+              >
+                Top 18 Potencial Latente
+              </button>
+            )}
             <button
               type="button"
               onClick={selectTop18ByFreqAndCorr}
@@ -1164,6 +1417,171 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Probability Heatmaps Overlay (100 Concursos — Potencial Latente do Próximo Ciclo) */}
+      {showProbabilityOverlay && (
+        <section className="bg-slate-900 border border-emerald-500/30 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-slate-100">
+                <Flame className="w-4 h-4 text-emerald-400 shrink-0" />
+                <h3 className="text-sm font-semibold tracking-tight">
+                  Probability Heatmaps — Potencial Latente do Próximo Ciclo (Últimos {analytics.drawsCount} Concursos)
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Combina reversão à média de 100 concursos, pressão de atraso relativo, tensão nos últimos 15 sorteios, pendência de ciclo aberto e peso logístico.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs font-mono tabular-nums text-slate-400">
+              <span>
+                Líder latente:{' '}
+                <strong className="text-emerald-400">
+                  {String(analytics.topLatent.dezena).padStart(2, '0')} ({analytics.topLatent.latentProbabilityPct}%)
+                </strong>
+              </span>
+              <span>·</span>
+              <span>
+                Pendentes no ciclo:{' '}
+                <strong className="text-amber-300">{analytics.cyclePendingList.length}</strong>
+              </span>
+              <span>·</span>
+              <span>
+                Alta latência (≥72%):{' '}
+                <strong className="text-emerald-300">
+                  {analytics.freqList.filter((d) => d.latentTier === 'alto').length}
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            {/* Volante 5x5 com Gradiente de Calor de Probabilidade Latente */}
+            <div className="xl:col-span-7">
+              <div className="flex items-center justify-between mb-3 text-xs text-slate-400">
+                <span>Volante 5×5 de Calor Probabilístico (clique para selecionar dezenas)</span>
+                <span className="font-mono tabular-nums text-[11px] text-slate-500">
+                  Escala: Slate (&lt;56%) · Âmbar (56–71%) · Esmeralda (≥72%)
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {analytics.freqList.map((item) => {
+                  const isSelected = manualSelection.includes(item.dezena);
+                  const isFocused = focusedNumber === item.dezena;
+                  const heatClass =
+                    item.latentProbabilityPct >= 80
+                      ? 'bg-emerald-500/30 border-emerald-400/70 text-emerald-100'
+                      : item.latentProbabilityPct >= 72
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200'
+                      : item.latentProbabilityPct >= 62
+                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+                      : item.latentProbabilityPct >= 56
+                      ? 'bg-slate-800/90 border-slate-700 text-slate-200'
+                      : 'bg-slate-950 border-slate-800/90 text-slate-400';
+
+                  return (
+                    <button
+                      key={item.dezena}
+                      type="button"
+                      onMouseEnter={() => setFocusedNumber(item.dezena)}
+                      onClick={() => {
+                        setFocusedNumber(item.dezena);
+                        toggleManualNumber(item.dezena);
+                      }}
+                      className={`relative p-2.5 rounded-lg border text-left transition cursor-pointer ${heatClass} ${
+                        isSelected
+                          ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-950'
+                          : isFocused
+                          ? 'ring-1 ring-sky-400'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-baseline justify-between gap-1 font-mono tabular-nums">
+                        <span className="text-sm font-bold">
+                          {String(item.dezena).padStart(2, '0')}
+                        </span>
+                        <span className="text-xs font-semibold">
+                          {item.latentProbabilityPct.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1 w-full rounded-full bg-slate-950/70 overflow-hidden">
+                        <div
+                          className={`h-full ${
+                            item.latentTier === 'alto'
+                              ? 'bg-emerald-400'
+                              : item.latentTier === 'moderado'
+                              ? 'bg-amber-400'
+                              : 'bg-slate-500'
+                          }`}
+                          style={{ width: `${Math.min(100, item.latentProbabilityPct)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono tabular-nums opacity-85">
+                        <span>a:{item.currentDelay}</span>
+                        <span>{item.isPendingCycle ? 'Ciclo' : `${item.count}c`}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Ranking Top 8 Potencial Latente */}
+            <div className="xl:col-span-5 border border-slate-800 rounded-xl bg-slate-950/60 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200">
+                  Top 8 Dezenas — Maior Potencial Latente
+                </span>
+                <button
+                  type="button"
+                  onClick={selectTop18ByLatentPotential}
+                  className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
+                >
+                  Carregar Top 18
+                </button>
+              </div>
+              <div className="divide-y divide-slate-800/80">
+                {analytics.sortedByLatentPotential.slice(0, 8).map((item, idx) => {
+                  const isSelected = manualSelection.includes(item.dezena);
+                  return (
+                    <div
+                      key={item.dezena}
+                      onMouseEnter={() => setFocusedNumber(item.dezena)}
+                      className="px-4 py-2.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-900/70 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 font-mono tabular-nums">
+                        <span className="text-slate-500 w-5">#{idx + 1}</span>
+                        <span className="font-bold text-slate-100">
+                          {String(item.dezena).padStart(2, '0')}
+                        </span>
+                        <span className="text-emerald-400 font-semibold">
+                          {item.latentProbabilityPct.toFixed(1)}%
+                        </span>
+                        <span className="text-slate-500 font-sans text-[11px] truncate">
+                          {item.count}/100 · atraso {item.currentDelay}
+                          {item.isPendingCycle ? ' · pendente ciclo' : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleManualNumber(item.dezena)}
+                        className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-medium transition cursor-pointer ${
+                          isSelected
+                            ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                            : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600'
+                        }`}
+                      >
+                        {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                        {isSelected ? 'No pool' : 'Pool'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Row 1: D3 Frequency Bar Chart + D3 Cumulative Curve */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -1318,6 +1736,14 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
                 <span className="text-slate-200">
                   Dezena <strong>{String(hoveredCell.row).padStart(2, '0')}</strong> (Diagonal) ·{' '}
                   {hoveredCell.coOccurrence} aparições em {analytics.drawsCount} concursos
+                  {showProbabilityOverlay && analytics.freqList[hoveredCell.row - 1] && (
+                    <>
+                      {' '}· Potencial Latente{' '}
+                      <strong className="text-emerald-400">
+                        {analytics.freqList[hoveredCell.row - 1].latentProbabilityPct.toFixed(1)}%
+                      </strong>
+                    </>
+                  )}
                 </span>
               ) : (
                 <span className="text-slate-200">
@@ -1343,16 +1769,34 @@ export const HeatmapTab: React.FC<HeatmapTabProps> = ({
                     {hoveredCell.correlation >= 0 ? '+' : ''}
                     {hoveredCell.correlation.toFixed(3)}
                   </strong>
+                  {showProbabilityOverlay &&
+                    analytics.freqList[hoveredCell.row - 1] &&
+                    analytics.freqList[hoveredCell.col - 1] && (
+                      <>
+                        {' '}· Latente Conjunto{' '}
+                        <strong className="text-emerald-400">
+                          {Math.sqrt(
+                            analytics.freqList[hoveredCell.row - 1].latentProbabilityPct *
+                              analytics.freqList[hoveredCell.col - 1].latentProbabilityPct
+                          ).toFixed(1)}
+                          %
+                        </strong>
+                      </>
+                    )}
                 </span>
               )
             ) : (
               <span className="text-slate-400 font-sans">
-                Passe o cursor sobre a matriz para inspecionar a correlação exata entre qualquer par de dezenas.
+                {showProbabilityOverlay
+                  ? 'Overlay ativo: diagonal exibe % de potencial latente; pares de alta latência permanecem em destaque.'
+                  : 'Passe o cursor sobre a matriz para inspecionar a correlação exata entre qualquer par de dezenas.'}
               </span>
             )}
 
             <span className="text-[11px] text-slate-500 font-sans">
-              {matrixMode === 'correlacao'
+              {showProbabilityOverlay
+                ? 'Diagonal: Calor probabilístico (100c) · Rótulos esmeralda = Top 8 latentes'
+                : matrixMode === 'correlacao'
                 ? 'Escala: Vermelho (repulsão) · Claro (neutro) · Azul (afinidade)'
                 : 'Escala: Claro (baixa co-ocorrência) → Azul profundo (alta co-ocorrência)'}
             </span>

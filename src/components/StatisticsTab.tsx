@@ -2893,6 +2893,12 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
       {/* SUBTAB: DISPERSÃO SOMAS DA MATRIZ ESTRATIFICADA (RECHARTS 75/15/10%) */}
       {activeSubTab === 'dispersao_estratificada' && (
         <div className="space-y-6">
+          <DashboardFrequencia50ConcursosRecharts
+            latestDraw={latestDraw}
+            statsList={dynamicWindowStats}
+            cyclePendingNumbers={cyclePendingNumbers}
+            onApplyNumbers={onApplyNumbers}
+          />
           <MapaCalorDezenas100Card
             latestDraw={latestDraw}
             statsList={dynamicWindowStats}

@@ -476,6 +476,7 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
       <DicasApostaIACard
         latestDraw={latestDraw}
         prediction={prediction}
+        isLoading={isLoading}
         fallbackScores={scores}
         dynamicStats={dynamicStats}
         cyclePendingNumbers={cyclePendingNumbers}

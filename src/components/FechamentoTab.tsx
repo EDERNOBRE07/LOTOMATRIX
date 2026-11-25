@@ -57,6 +57,7 @@ import { BolaoOficialCaixaCalculator } from './BolaoOficialCaixaCalculator';
 import { FiltroTendencia3Concursos } from './FiltroTendencia3Concursos';
 import { ModuloRobustezEstatistica } from './ModuloRobustezEstatistica';
 import { FiltroHammingDinamicoCard } from './FiltroHammingDinamicoCard';
+import { BatchMatrixProcessor, BatchMatrixVariationResult } from './BatchMatrixProcessor';
 
 import { generateFechamentoTxtContent } from '../services/txtExportFormatter';
 import {
@@ -2710,6 +2711,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
   };
 
+  // Aplica uma variação gerada no Batch Processor diretamente no Estúdio de Fechamento
+  const handleApplyBatchVariation = (variation: BatchMatrixVariationResult) => {
+    setMode(variation.mode);
+    setSelectedNumbers(variation.subsetPool);
+    setGeneratedTickets(variation.tickets);
+    setStrategyName(
+      `Batch ${variation.poolSize} Dez. (${variation.tickets.length} Jogos · ${variation.cobertura14Pct.toFixed(1)}% 14+)`
+    );
+    setDocumentMessage(
+      `Variação de ${variation.poolSize} dezenas (${variation.tickets.length} bilhetes · cobertura 14+ de ${variation.cobertura14Pct.toFixed(1)}%) aplicada ao estúdio.`
+    );
+    setTimeout(() => setDocumentMessage(null), 5000);
+  };
+
   // Copy all tickets in standard text format
   const handleCopyAll = () => {
     if (generatedTickets.length === 0) return;
@@ -4300,6 +4315,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           Resultados, Auditoria &amp; Ferramentas do Fechamento
         </h3>
       </div>
+
+      {/* Batch Processor: Comparador Simultâneo de Variações por Subset Pool (16–21 dezenas) */}
+      <BatchMatrixProcessor
+        latestDraw={latestDraw}
+        selectedNumbers={selectedNumbers}
+        fixedNumbers={fixedNumbers}
+        excludedNumbers={excludedNumbers}
+        effectiveFilters={effectiveFilters}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        aiScores={aiPrediction?.scores}
+        onApplyVariation={handleApplyBatchVariation}
+      />
 
       {/* Atalho & Painel de Planejamento de Bolão Oficial Caixa */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
