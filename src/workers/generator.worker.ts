@@ -20,7 +20,10 @@ import {
   getTargetHammingDistance,
   buildProgressiveFallbackFilters,
   ProgressiveFallbackLevel,
+  validateFilters,
+  analyzeTicket,
 } from '../services/combinatorics';
+import { getHistoricalNDraws } from '../services/historical100Draws';
 import {
   FilterCriteria,
   GameTicket,
@@ -200,10 +203,21 @@ export interface GeneratorWorkerSpecialMatrixStart {
   aiScores?: number[];
 }
 
+export interface GeneratorWorkerFilterSimulationStart {
+  type: 'SIMULATE_FILTERS';
+  jobId: string;
+  filters: FilterCriteria;
+  latestDraw: LotofacilDraw;
+  sampleCount?: number;
+  previewGames?: { dezenas: number[]; label: string }[];
+  aiScores?: number[];
+}
+
 export type GeneratorWorkerIncomingMessage =
   | GeneratorWorkerCoveringStart
   | GeneratorWorkerPonderadoStart
-  | GeneratorWorkerSpecialMatrixStart;
+  | GeneratorWorkerSpecialMatrixStart
+  | GeneratorWorkerFilterSimulationStart;
 
 /**
  * Processa mensagens do Web Worker de forma desacoplada (permite testes diretos e execução em thread Worker).
@@ -436,6 +450,119 @@ export function handleGeneratorWorkerMessage(
         payload: {
           tickets,
           count: tickets.length,
+        },
+      });
+    } else if (data.type === 'SIMULATE_FILTERS') {
+      const startedAt = Date.now();
+      const TOTAL_LOTOFACIL_COMBOS = 3268760;
+      const sampleCount = Math.max(5000, Math.min(250000, data.sampleCount ?? 100000));
+      const latestDraw = data.latestDraw;
+      const filters = data.filters;
+
+      postMsg({
+        type: 'PROGRESS',
+        jobId,
+        percent: 10,
+        message: `Web Worker avaliando ${sampleCount.toLocaleString('pt-BR')} combinações de C(25,15)...`,
+      });
+
+      let seed = 38362026;
+      const nextRand = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+
+      const baseNums = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      ];
+      let passedSamples = 0;
+      const chunkSize = Math.max(5000, Math.floor(sampleCount / 4));
+
+      for (let i = 0; i < sampleCount; i++) {
+        // Partial Fisher-Yates for 15 numbers
+        const arr = baseNums.slice();
+        for (let j = 24; j >= 10; j--) {
+          const k = Math.floor(nextRand() * (j + 1));
+          const tmp = arr[j];
+          arr[j] = arr[k];
+          arr[k] = tmp;
+        }
+        const cand = arr.slice(10, 25).sort((a, b) => a - b);
+        if (validateFilters(cand, filters, latestDraw.dezenas).isValid) {
+          passedSamples++;
+        }
+
+        if ((i + 1) % chunkSize === 0 && i + 1 < sampleCount) {
+          const pct = Math.min(82, 15 + Math.round(((i + 1) / sampleCount) * 65));
+          postMsg({
+            type: 'PROGRESS',
+            jobId,
+            percent: pct,
+            message: `Processando ${(i + 1).toLocaleString('pt-BR')}/${sampleCount.toLocaleString('pt-BR')} combinações em Web Worker...`,
+          });
+        }
+      }
+
+      const survivalRatio = passedSamples / sampleCount;
+      const estimatedPassingCombos = Math.round(TOTAL_LOTOFACIL_COMBOS * survivalRatio);
+      const reductionPercent = Number(((1 - survivalRatio) * 100).toFixed(1));
+
+      // Historical backtest on last 10 & 50 draws
+      const draws50 = getHistoricalNDraws(50, latestDraw);
+      const historicalFilters: FilterCriteria = {
+        ...filters,
+        dezenasFixas: [],
+        dezenasExcluidas: [],
+        antiColisaoHistoricaAtiva: false,
+        palpiteIneditoAtivo: false,
+      };
+
+      let approved10 = 0;
+      let approved50 = 0;
+      for (let i = 0; i < draws50.length; i++) {
+        const current = draws50[i];
+        const prevDezenas = draws50[i + 1]?.dezenas ?? latestDraw.dezenas;
+        if (validateFilters(current.dezenas, historicalFilters, prevDezenas).isValid) {
+          approved50++;
+          if (i < 10) approved10++;
+        }
+      }
+
+      const rate10 =
+        draws50.length > 0 ? Math.round((approved10 / Math.min(10, draws50.length)) * 100) : 0;
+      const rate50 = draws50.length > 0 ? Math.round((approved50 / draws50.length) * 100) : 0;
+
+      const previewResults = (data.previewGames || []).map((game, idx) => {
+        const analysis = analyzeTicket(game.dezenas, latestDraw.dezenas, data.aiScores);
+        const validation = validateFilters(game.dezenas, filters, latestDraw.dezenas);
+        return {
+          ...game,
+          index: idx + 1,
+          analysis,
+          passes: validation.isValid,
+          failureReasons: validation.violations,
+        };
+      });
+
+      const durationMs = Math.max(1, Date.now() - startedAt);
+
+      postMsg({
+        type: 'DONE_FILTER_SIMULATION',
+        jobId,
+        payload: {
+          estimatedPassingCombos,
+          reductionPercent,
+          survivalPct: Number((survivalRatio * 100).toFixed(2)),
+          evaluatedSamples: sampleCount,
+          passedSamples,
+          durationMs,
+          approved10,
+          total10: Math.min(10, draws50.length),
+          rate10,
+          approved50,
+          total50: draws50.length,
+          rate50,
+          previewResults,
         },
       });
     }

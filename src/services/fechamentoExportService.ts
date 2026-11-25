@@ -15,15 +15,18 @@ export interface FechamentoExportOptions {
   tickets: GameTicket[];
   latestDraw: LotofacilDraw;
   meta?: FechamentoExportMeta | null;
+  filters?: FilterCriteria;
 }
 
 /**
- * Exporta a lista de jogos para um arquivo PDF com formatação profissional (A4, tabelas estilizadas e cabeçalho executivo).
+ * Exporta a lista de jogos para um arquivo PDF com formatação profissional para impressão
+ * (A4, cabeçalho Dark/Gold LotoSniper AI Pro, telemetria completa de filtros, classificação Zona de Ouro e paginação X/Y).
  */
 export function exportFechamentoToPdf({
   tickets,
   latestDraw,
   meta,
+  filters,
 }: FechamentoExportOptions): void {
   if (!tickets || tickets.length === 0) return;
 
@@ -49,69 +52,91 @@ export function exportFechamentoToPdf({
       ? meta.selectedNumbers
       : Array.from(new Set(tickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
 
-  const fixedNumbers = meta?.fixedNumbers || [];
-  const excludedNumbers = meta?.excludedNumbers || [];
+  const fixedNumbers = meta?.fixedNumbers || filters?.dezenasFixas || [];
+  const excludedNumbers = meta?.excludedNumbers || filters?.dezenasExcluidas || [];
 
-  // 1. CABEÇALHO ELEGANTE (DARK SLATE & EMERALD ACCENTS)
+  const goldenCount = tickets.filter((t) => {
+    const s = t.soma ?? t.dezenas.reduce((acc, c) => acc + c, 0);
+    return s >= 180 && s <= 215;
+  }).length;
+  const avgSoma = Math.round(
+    tickets.reduce((acc, t) => acc + (t.soma ?? t.dezenas.reduce((a, b) => a + b, 0)), 0) /
+      Math.max(1, tickets.length)
+  );
+
+  // 1. CABEÇALHO EXECUTIVO PARA IMPRESSÃO (DARK OBSIDIAN & GOLD ACCENTS)
   doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, pageWidth, 38, 'F');
+  doc.rect(0, 0, pageWidth, 40, 'F');
 
-  // Faixa de destaque dourada / esmeralda no topo
-  doc.setFillColor(16, 185, 129); // emerald-500
-  doc.rect(0, 0, pageWidth, 3, 'F');
+  // Faixa de destaque Dourada Imperial no topo
+  doc.setFillColor(245, 158, 11); // amber-500
+  doc.rect(0, 0, pageWidth, 3.5, 'F');
 
   // Título e Branding
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.setTextColor(255, 255, 255);
-  doc.text('LOTOSNIPER', 14, 16);
+  doc.setTextColor(251, 191, 36); // amber-400
+  doc.text('LOTOSNIPER AI PRO', 14, 15.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(148, 163, 184); // slate-400
-  doc.text('PRECISÃO CIRÚRGICA MATEMÁTICA • LOTOFÁCIL CAIXA', 14, 22);
+  doc.setFontSize(8.5);
+  doc.setTextColor(203, 213, 225); // slate-300
+  doc.text('RELATÓRIO TÉCNICO PARA IMPRESSÃO • FECHAMENTO OTIMIZADO LOTOFÁCIL', 14, 21.5);
 
   // Badge de Garantia / Status
-  doc.setFillColor(6, 78, 59); // emerald-900
-  doc.roundedRect(pageWidth - 68, 10, 54, 8, 2, 2, 'F');
+  doc.setFillColor(120, 53, 15); // amber-900
+  doc.setDrawColor(245, 158, 11);
+  doc.roundedRect(pageWidth - 72, 9.5, 58, 9, 2, 2, 'FD');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(52, 211, 153); // emerald-400
-  doc.text(`GARANTIA: ${garantia.toUpperCase()}`, pageWidth - 41, 15.5, { align: 'center' });
+  doc.setFontSize(8);
+  doc.setTextColor(253, 224, 71); // yellow-300
+  doc.text(`GARANTIA: ${garantia.toUpperCase()}`, pageWidth - 43, 15.2, { align: 'center' });
 
   // Metadados do Concurso na barra superior
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.setTextColor(203, 213, 225);
-  doc.text(`Concurso Alvo: #${concursoAlvo} (Ref. Base: #${concursoBase} • ${dataConcurso})`, 14, 32);
-  doc.text(`Total: ${totalJogos} Jogos | Investimento: R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, pageWidth - 14, 32, { align: 'right' });
+  doc.setTextColor(226, 232, 240);
+  doc.text(`Concurso Alvo: #${concursoAlvo} (Base Caixa: #${concursoBase} • ${dataConcurso})`, 14, 32.5);
+  doc.text(
+    `Total: ${totalJogos} Jogos | Investimento: R$ ${custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    pageWidth - 14,
+    32.5,
+    { align: 'right' }
+  );
 
-  // 2. CARD RESUMO ESTRATÉGICO
-  let startY = 44;
+  // 2. CARD RESUMO ESTRATÉGICO & TELEMETRIA DE FILTROS
+  const startY = 45;
   doc.setFillColor(248, 250, 252); // slate-50
-  doc.setDrawColor(226, 232, 240); // slate-200
-  doc.roundedRect(14, startY, pageWidth - 28, 22, 2, 2, 'FD');
+  doc.setDrawColor(203, 213, 225); // slate-300
+  doc.roundedRect(14, startY, pageWidth - 28, 30, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(30, 41, 59); // slate-800
-  doc.text('PARÂMETROS DA MATRIZ:', 18, startY + 6);
+  doc.setTextColor(15, 23, 42);
+  doc.text('PARÂMETROS DA MATRIZ & FILTROS APLICADOS:', 18, startY + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`• Estratégia: ${strategyName}`, 18, startY + 11);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`• Estratégia: ${strategyName} | Soma Média: ${avgSoma} (${goldenCount}/${totalJogos} na Zona Central 180–215)`, 18, startY + 11.5);
   doc.text(
     `• Universo (${selectedNumbers.length} Dezenas): ${selectedNumbers.map((n) => n.toString().padStart(2, '0')).join(' ')}`,
     18,
-    startY + 16
+    startY + 16.5
   );
 
   const fixStr = fixedNumbers.length > 0 ? fixedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ') : 'Nenhuma';
   const excStr = excludedNumbers.length > 0 ? excludedNumbers.map((n) => n.toString().padStart(2, '0')).join(', ') : 'Nenhuma';
-  doc.text(`• Fixas: ${fixStr} | Excluídas: ${excStr}`, 18, startY + 20);
+  doc.text(`• Fixas: ${fixStr} | Excluídas: ${excStr}`, 18, startY + 21.5);
 
-  // 3. TABELA DOS JOGOS FORMATADOS (jspdf-autotable)
+  const filterSummary = filters
+    ? `• Filtros: Soma ${filters.somaMin}–${filters.somaMax} | ${filters.paresMin}–${filters.paresMax}P | Moldura ${filters.molduraMin}–${filters.molduraMax} | Repetidas ${filters.repetidasMin}–${filters.repetidasMax}${
+        filters.hammingDinamicoAtivo ? ` | Hamming ≥ ${filters.hammingMinimoPersonalizado ?? 3}` : ''
+      }`
+    : '• Filtros: Equilíbrio Canônico LotoSniper AI Pro (Poda Bitwise & Anti-Cisne Negro)';
+  doc.text(filterSummary, 18, startY + 26.5);
+
+  // 3. TABELA DOS JOGOS FORMATADOS PARA IMPRESSÃO (jspdf-autotable)
   const previousDrawDezenas = latestDraw?.dezenas || [];
 
   const tableBody = tickets.map((t) => {
@@ -122,6 +147,14 @@ export function exportFechamentoToPdf({
     const moldura = t.moldura ?? t.dezenas.filter((n) => MOLDURA.includes(n)).length;
     const cruz = t.cruz ?? t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
     const repetidas = t.repetidas ?? (previousDrawDezenas.length > 0 ? t.dezenas.filter((n) => previousDrawDezenas.includes(n)).length : '-');
+    const faixaTag =
+      soma >= 190 && soma <= 210
+        ? 'Ouro'
+        : soma >= 180 && soma <= 215
+        ? 'Central'
+        : soma > 215
+        ? 'C.Alta'
+        : 'C.Baixa';
 
     const formattedNumbers = t.dezenas.map((n) => n.toString().padStart(2, '0')).join('  ');
 
@@ -129,7 +162,8 @@ export function exportFechamentoToPdf({
       `#${t.index.toString().padStart(2, '0')}`,
       formattedNumbers,
       soma.toString(),
-      `${pares}P / ${impares}I`,
+      faixaTag,
+      `${pares}P/${impares}I`,
       primos.toString(),
       moldura.toString(),
       cruz.toString(),
@@ -138,63 +172,83 @@ export function exportFechamentoToPdf({
   });
 
   autoTable(doc, {
-    startY: startY + 26,
+    startY: startY + 34,
     head: [
       [
         'Jogo',
         'Dezenas Escolhidas para Aposta (15 Números)',
         'Soma',
-        'Paridade',
-        'Primos',
-        'Moldura',
+        'Zona',
+        'Parid.',
+        'Prim.',
+        'Mold.',
         'Cruz',
-        'Repet.',
+        'Rep.',
       ],
     ],
-
     body: tableBody,
-    theme: 'striped',
+    theme: 'grid',
     headStyles: {
       fillColor: [15, 23, 42],
-      textColor: [248, 250, 252],
-      fontSize: 8,
+      textColor: [251, 191, 36],
+      fontSize: 7.5,
       fontStyle: 'bold',
       halign: 'center',
+      lineColor: [51, 65, 85],
+      lineWidth: 0.2,
     },
     bodyStyles: {
       fontSize: 8,
-      textColor: [30, 41, 59],
+      textColor: [15, 23, 42],
       halign: 'center',
       cellPadding: 2,
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
     },
     columnStyles: {
-      0: { cellWidth: 14, fontStyle: 'bold' },
+      0: { cellWidth: 12, fontStyle: 'bold' },
       1: { cellWidth: 'auto', halign: 'left', fontStyle: 'bold', font: 'courier' },
-      2: { cellWidth: 16 },
-      3: { cellWidth: 20 },
+      2: { cellWidth: 12, fontStyle: 'bold' },
+      3: { cellWidth: 14 },
       4: { cellWidth: 15 },
-      5: { cellWidth: 16 },
-      6: { cellWidth: 15 },
+      5: { cellWidth: 11 },
+      6: { cellWidth: 11 },
+      7: { cellWidth: 11 },
+      8: { cellWidth: 11 },
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
-    margin: { left: 14, right: 14 },
-    didDrawPage: (data) => {
-      // Rodapé da página
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `LotoSniper © 2026 • Gerado em ${new Date().toLocaleString('pt-BR')} • Página ${data.pageNumber}`,
-        14,
-        pageHeight - 8
-      );
-      doc.text('Pronto para marcação nos volantes oficiais da Caixa', pageWidth - 14, pageHeight - 8, {
-        align: 'right',
-      });
+    didParseCell: (hookData) => {
+      if (hookData.section === 'body' && hookData.column.index === 3) {
+        if (hookData.cell.raw === 'Ouro') {
+          hookData.cell.styles.textColor = [180, 83, 9];
+          hookData.cell.styles.fontStyle = 'bold';
+        } else if (hookData.cell.raw === 'Central') {
+          hookData.cell.styles.textColor = [5, 150, 105];
+        }
+      }
     },
+    margin: { left: 14, right: 14, bottom: 16 },
   });
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, pageHeight - 12, pageWidth - 14, pageHeight - 12);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `LotoSniper AI Pro • Gerado em ${new Date().toLocaleString('pt-BR')} • Página ${p} de ${totalPages}`,
+      14,
+      pageHeight - 7.5
+    );
+    doc.text('Layout Otimizado para Impressão A4 e Conferência Caixa', pageWidth - 14, pageHeight - 7.5, {
+      align: 'right',
+    });
+  }
 
   // Salva e aciona download automático no browser
   const filename = `lotosniper_concurso_${concursoAlvo}_${totalJogos}_jogos.pdf`;

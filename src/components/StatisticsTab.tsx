@@ -17,7 +17,13 @@ import { HistoricoAcertosAcumuladosChart } from './HistoricoAcertosAcumuladosCha
 import { ResumoPerformanceMensal } from './ResumoPerformanceMensal';
 import { CorrelacaoCustoRetornoScatterRecharts } from './CorrelacaoCustoRetornoScatterRecharts';
 import { MapaCalorDezenas100Card } from './MapaCalorDezenas100Card';
+import { motion } from 'framer-motion';
 import { getHistoricalNDraws } from '../services/historical100Draws';
+import {
+  staggerContainerVariants,
+  staggerBallVariants,
+  staggerCardVariants,
+} from '../utils/staggerAnimation';
 
 import { FrequencyDelayChart } from './FrequencyDelayChart';
 import { MonteCarloSimulation } from './MonteCarloSimulation';
@@ -364,54 +370,102 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </div>
         </div>
 
+        {/* Dezenas do Concurso Ativo (Revelação Suave Staggered Fade-In) */}
+        <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 text-xs">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-bold text-white">
+              Resultado Base #{latestDraw.concurso} ({latestDraw.data}):
+            </span>
+          </div>
+          <motion.div
+            key={`stats-draw-${latestDraw.concurso}-${(latestDraw.dezenas || []).join('-')}`}
+            variants={staggerContainerVariants}
+            initial="hidden"
+            animate="visible"
+            className="flex flex-wrap items-center gap-1.5"
+          >
+            {(latestDraw.dezenas || []).map((num) => (
+              <motion.span
+                key={num}
+                variants={staggerBallVariants}
+                className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-xs flex items-center justify-center shadow-sm border border-amber-300/80"
+              >
+                {num.toString().padStart(2, '0')}
+              </motion.span>
+            ))}
+          </motion.div>
+        </div>
+
         {/* Destaques dinâmicos da janela selecionada */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
               Maiores Atrasos ({contestInterval} conc.):
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <motion.div
+              key={`delayed-${latestDraw.concurso}-${contestInterval}`}
+              variants={staggerContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex flex-wrap items-center gap-1.5"
+            >
               {topDelayedWindow.map((item) => (
-                <span
+                <motion.span
                   key={item.numero}
+                  variants={staggerBallVariants}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-mono tabular-nums"
                 >
                   <strong>{item.numero.toString().padStart(2, '0')}</strong>
                   <span className="text-rose-400/80">({item.atrasoAtual}c)</span>
-                </span>
+                </motion.span>
               ))}
-            </div>
+            </motion.div>
           </div>
 
           <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-xs font-medium text-slate-400 whitespace-nowrap">
               Maior Frequência ({contestInterval} conc.):
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <motion.div
+              key={`frequent-${latestDraw.concurso}-${contestInterval}`}
+              variants={staggerContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex flex-wrap items-center gap-1.5"
+            >
               {topFrequentWindow.map((item) => (
-                <span
+                <motion.span
                   key={item.numero}
+                  variants={staggerBallVariants}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-mono tabular-nums"
                 >
                   <strong>{item.numero.toString().padStart(2, '0')}</strong>
                   <span className="text-emerald-400/80">
                     ({item.vezes}/{contestInterval})
                   </span>
-                </span>
+                </motion.span>
               ))}
-            </div>
+            </motion.div>
           </div>
         </div>
 
         {showWindowGrid && (
-          <div className="grid grid-cols-5 sm:grid-cols-9 lg:grid-cols-[repeat(13,minmax(0,1fr))] gap-1.5 pt-1">
+          <motion.div
+            key={`grid-${latestDraw.concurso}-${contestInterval}`}
+            variants={staggerContainerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-5 sm:grid-cols-9 lg:grid-cols-[repeat(13,minmax(0,1fr))] gap-1.5 pt-1"
+          >
             {dynamicWindowStats.map((dez) => {
               const pct = Math.round((dez.vezes / contestInterval) * 100);
               const isHighDelay = dez.atrasoAtual >= 3;
               const isHot = pct >= 68;
               return (
-                <div
+                <motion.div
                   key={dez.numero}
+                  variants={staggerCardVariants}
                   className={`rounded-lg border p-1.5 text-center transition ${
                     isHighDelay
                       ? 'bg-rose-950/35 border-rose-500/40'
@@ -434,10 +488,10 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                   >
                     {dez.atrasoAtual}c atr.
                   </div>
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </section>
 
@@ -2008,7 +2062,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
               <tbody className="divide-y divide-slate-800/60 font-mono">
                 {sortedDezenas.map((dez) => {
                   const isHighDelay = dez.atrasoAtual >= 3;
-                  const isCycleKey = dez.numero === 17 || dez.numero === 22;
+                  const isCycleKey = cyclePendingNumbers.includes(dez.numero);
 
                   return (
                     <tr
@@ -2032,7 +2086,7 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
                           </span>
                           {isCycleKey && (
                             <span className="text-[10px] font-sans font-black text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
-                              CICLO 804
+                              CICLO PENDENTE
                             </span>
                           )}
                         </div>

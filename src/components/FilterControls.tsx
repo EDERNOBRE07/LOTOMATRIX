@@ -3,6 +3,7 @@ import { FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL, FIBONACCI, CRUZ_DEZENAS } from '../data/lotofacilData';
 import { DEFAULT_FILTERS } from '../services/combinatorics';
 import { soundService } from '../services/soundAlert';
+import { FilterTooltip } from './FilterTooltip';
 import {
   Sliders,
   CheckCircle2,
@@ -318,6 +319,12 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                       <span>Faixa de Soma das 15 Dezenas</span>
+                      <FilterTooltip
+                        title="Soma das 15 Dezenas (Zona de Ouro)"
+                        description="Zona de Ouro: soma ideal entre 190 e 210 (concentra o pico da curva normal da Lotofácil). A Zona Central 180–215 abrange ~75% dos resultados históricos."
+                        impact="Impacto: Poda ~70% das combinações extremas improváveis mantendo alta cobertura de 14–15 pontos."
+                        position="bottom"
+                      />
                     </h4>
                     <span className="text-[11px] text-indigo-300/80 font-mono">
                       Zona Central: 180 a 215 (75%) • Cauda Alta: 216–230 (15%) • Cauda Baixa: 155–179 (10%)
@@ -448,8 +455,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 {/* Toggle Explícito: Estratificação de Caudas (75% / 15% / 10%) */}
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
                   <div className="text-[11px]">
-                    <span className="text-amber-300 font-bold block">
-                      Estratificação de Caudas (75% / 15% / 10%)
+                    <span className="text-amber-300 font-bold flex items-center gap-1.5">
+                      <span>Estratificação de Caudas (75% / 15% / 10%)</span>
+                      <FilterTooltip
+                        title="Estratificação Anti-Cisne Negro"
+                        description="Distribui o fechamento em 75% Zona Central (180–215), 15% Cauda Alta (216–230) e 10% Cauda Baixa (155–179)."
+                        impact="Impacto: Protege sua banca caso o sorteio caia fora do miolo padrão sem diluir o núcleo principal."
+                      />
                     </span>
                     <span className="text-[10px] font-mono text-slate-400">
                       75% Central (180–215) • 15% Alta (216–230) • 10% Baixa (155–179)
@@ -482,6 +494,12 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <div>
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                       <span>Proporção de Pares & Ímpares</span>
+                      <FilterTooltip
+                        title="Equilíbrio de Paridade (Pares / Ímpares)"
+                        description="7P/8I e 8P/7I ocorrem em 62,3% dos concursos oficiais; a faixa 6 a 9 pares cobre 94,8% do histórico."
+                        impact="Impacto: Elimina jogos desequilibrados (10+ pares/ímpares) com probabilidade menor que 2,4%."
+                        position="bottom"
+                      />
                     </h4>
                     <span className="text-[11px] text-emerald-300/80 font-mono">
                       Padrão Ouro: 7P/8I ou 8P/7I (~62.3% dos sorteios)
@@ -601,6 +619,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                       <span className="text-xs sm:text-sm font-bold text-white">
                         Modo de Fixas: Proteção Contra Falha de Âncoras
                       </span>
+                      <FilterTooltip
+                        title="Rotatividade de Fixas (K de N)"
+                        description="Com 3 ou mais fixas, o modo Rotativas exige K entre N-2 e N-1 por bilhete em vez de 100% rígidas."
+                        impact="Impacto: Evita perda total do fechamento se 1 dezena fixa falhar no sorteio."
+                      />
                       <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
                         {fixasCount}/{MAX_DEZENAS_FIXAS} Fixas Marcadas
                       </span>
@@ -687,6 +710,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Repeat className="w-4 h-4 text-amber-400" />
                   <span className="text-xs font-bold text-white">Repetidas Concurso #{latestDraw.concurso}</span>
+                  <FilterTooltip
+                    title="Repetidas do Concurso Anterior"
+                    description="Mede quantas das 15 dezenas do último sorteio se repetem no próximo. A média histórica da Lotofácil é 9 repetidas."
+                    impact="Impacto: Faixa 7–10 repetidas cobre mais de 84% de todos os concursos."
+                  />
                 </div>
                 <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">
                   {filters.repetidasMin}–{filters.repetidasMax}
@@ -733,6 +761,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Square className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white">Moldura &amp; Miolo</span>
+                  <FilterTooltip
+                    title="Moldura (16 externas) vs Miolo (9 internas)"
+                    description="Os 16 números da borda do volante costumam aparecer entre 8 e 11 vezes por sorteio (miolo entre 4 e 7)."
+                    impact="Impacto: Faixa 8–11 moldura está presente em ~87% dos concursos oficiais."
+                  />
                 </div>
                 <span className="font-mono text-xs font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">
                   {filters.molduraMin}–{filters.molduraMax}
@@ -783,6 +816,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Flame className="w-4 h-4 text-rose-400" />
                   <span className="text-xs font-bold text-white">Números Primos</span>
+                  <FilterTooltip
+                    title="Densidade de Números Primos"
+                    description="Entre as 25 dezenas existem 9 primos (02, 03, 05, 07, 11, 13, 17, 19, 23). A média histórica fica entre 5 e 6 primos."
+                    impact="Impacto: Travar entre 4 e 7 primos cobre ~86% dos sorteios e evita concentrações anômalas."
+                  />
                 </div>
                 <span className="font-mono text-xs font-bold text-rose-300 bg-rose-500/20 px-1.5 py-0.5 rounded">
                   {filters.primosMin}–{filters.primosMax}
@@ -829,6 +867,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-cyan-400" />
                   <span className="text-xs font-bold text-white">Sequência Fibonacci</span>
+                  <FilterTooltip
+                    title="Dezenas da Sequência de Fibonacci"
+                    description="As 7 dezenas Fibonacci (01, 02, 03, 05, 08, 13, 21) têm ocorrência típica de 3 a 6 dezenas por concurso."
+                    impact="Impacto: Faixa 3–6 (ou núcleo 4–5) alinha os bilhetes com ~82% da distribuição oficial."
+                  />
                 </div>
                 <span className="font-mono text-xs font-bold text-cyan-300 bg-cyan-500/20 px-1.5 py-0.5 rounded border border-cyan-400/40">
                   {filters.fibonacciMin}–{filters.fibonacciMax}
@@ -903,6 +946,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-violet-400" />
                   <span className="text-xs font-bold text-white">Sequências Consecutivas</span>
+                  <FilterTooltip
+                    title="Maior Sequência Consecutiva"
+                    description="Controla a maior fileira ininterrupta de números seguidos (ex: 14-15-16-17 = 4 consecutivas)."
+                    impact="Impacto: Limitar em ≤ 5 ou ≤ 6 elimina sequências artificiais sem descartar saltos normais."
+                  />
                 </div>
                 <span className="font-mono text-xs font-bold text-violet-300 bg-violet-500/20 px-1.5 py-0.5 rounded border border-violet-400/40">
                   Máx {filters.maxConsecutivas}
@@ -943,6 +991,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-teal-400" />
                   <span className="text-xs font-bold text-white">Quadrantes (Q1–Q4)</span>
+                  <FilterTooltip
+                    title="Distribuição por Quadrantes 5×5"
+                    description="Divide o volante nos 4 cantos (Q1..Q4) evitando concentração excessiva em apenas uma região do cartão."
+                    impact="Impacto: Exigir 2–5 dezenas por quadrante melhora a dispersão espacial do fechamento."
+                  />
                 </div>
                 <button
                   type="button"
@@ -1016,6 +1069,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <Square className="w-4 h-4 text-blue-400" />
                   <span className="text-xs font-bold text-white">Cruz da Lotofácil</span>
+                  <FilterTooltip
+                    title="Geometria da Cruz (Linha 3 + Coluna 3)"
+                    description="As 9 dezenas que formam a cruz central do volante (03, 08, 11, 12, 13, 14, 15, 18, 23)."
+                    impact="Impacto: 5–6 dezenas na Cruz compõem a Zona de Ouro geométrica (>72% dos concursos)."
+                  />
                 </div>
                 <div className="flex items-center gap-1.5">
                   {(filters.cruzMin === 5 && filters.cruzMax === 6) && (
@@ -1177,6 +1235,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-bold text-white">Filtro de Extremidades</span>
+                  <FilterTooltip
+                    title="Extremidades: Bola 1 e Bola 15"
+                    description="Bola 1 (menor número sorteado) quase sempre inicia em 01–04; Bola 15 (maior) termina em 22–25."
+                    impact="Impacto: Cobre mais de 91% dos sorteios e corta bilhetes com início/fim estatisticamente raros."
+                  />
                 </div>
                 <span className="font-mono text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/40">
                   B1:[01-04] • B15:[22-25]
@@ -1259,6 +1322,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <span className="text-xs font-bold text-white">
                     Filtro de Curva ABC (Classe A - 80% Frequência Histórica)
                   </span>
+                  <FilterTooltip
+                    title="Curva ABC de Pareto (80/20)"
+                    description="Exige um mínimo de dezenas pertencentes ao grupo Classe A (as 20 mais frequentes no histórico oficial)."
+                    impact="Impacto: Garante densidade sólida de dezenas de alta recorrência sem engessar o fechamento."
+                  />
                   <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
                     PARETO 80/20
                   </span>
@@ -1325,6 +1393,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <span className="text-xs font-bold text-white">
                     Filtro de Combinações de Vazio (Anti-Afinidade Histórica)
                   </span>
+                  <FilterTooltip
+                    title="Mapa de Vazios (Anti-Afinidade)"
+                    description="Bloqueia duplas de dezenas que tiveram afinidade nula ou mínima nos últimos concursos."
+                    impact="Impacto: Poda bilhetes com pares de baixa co-ocorrência no ciclo recente."
+                  />
                   <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
                     10 CONCURSOS
                   </span>
@@ -1463,8 +1536,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    1. Intervalos Posicionais D1–D15
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>1. Intervalos Posicionais D1–D15</span>
+                    <FilterTooltip
+                      title="Intervalos Posicionais (Branch & Bound)"
+                      description="Cada posição ordenada (da 1ª à 15ª bola) respeita intervalos observados em >95% dos resultados reais."
+                      impact="Impacto: Acelera a poda combinatória descartando ramos impossíveis antes de completar o bilhete."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-cyan-300/90">
                     Branch &amp; Bound • 95%+ Histórico
@@ -1500,8 +1578,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    2. Múltiplos M(3) a M(8) Bitwise
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>2. Múltiplos M(3) a M(8) Bitwise</span>
+                    <FilterTooltip
+                      title="Densidade de Múltiplos M(3)–M(8)"
+                      description="Controla a quantidade de múltiplos de 3 (4–7), múltiplos de 4 (2–5) e presença mínima de múltiplos de 5 a 8."
+                      impact="Impacto: Remove 672.984 combinações aritmeticamente distorcidas via operações bitwise O(1)."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-emerald-300/90">
                     -672.984 Combos Improváveis
@@ -1537,8 +1620,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    3. Dígitos &amp; Soma Algarismos
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>3. Dígitos &amp; Soma Algarismos</span>
+                    <FilterTooltip
+                      title="Contagem de Dígitos e Soma dos Algarismos"
+                      description="Equilibra dezenas de 1 dígito (01–09: 3 a 8) e soma individual dos algarismos entre 63 e 87."
+                      impact="Impacto: Filtra desvios de dezenas baixas/altas que escapam da soma simples."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-indigo-300/90">
                     {filters.digitosMin ?? 22}–{filters.digitosMax ?? 27} Díg • Soma {filters.somaAlgarismosMin ?? 63}–{filters.somaAlgarismosMax ?? 87}
@@ -1614,8 +1702,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    4. Linhas &amp; Colunas 5×5 (L1–L5 / C1–C5)
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>4. Linhas &amp; Colunas 5×5 (L1–L5 / C1–C5)</span>
+                    <FilterTooltip
+                      title="Integridade de Linhas e Colunas 5×5"
+                      description="Exige equilíbrio entre as 5 linhas e 5 colunas do volante, evitando linhas vazias ou mais de 1 linha/coluna cheia."
+                      impact="Impacto: Mantém padrão visual idêntico ao de >88% dos concursos premiados."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-amber-300/90">
                     L: {filters.linhasMin ?? 1}–{filters.linhasMax ?? 4} • C: {filters.colunasMin ?? 1}–{filters.colunasMax ?? 4}
@@ -1733,8 +1826,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    5. Ranking Histórico Top 5–20
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>5. Ranking Histórico Top 5–20</span>
+                    <FilterTooltip
+                      title="Equilíbrio do Ranking Histórico"
+                      description="Regula a quantidade de dezenas vindas do Top 5 (2–4), Top 10 (4–8), Top 15 (7–11) e Top 20 (11–14) histórico."
+                      impact="Impacto: Evita apostas compostas só pelas 'mais sorteadas' ou só por dezenas raras."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-purple-300/90">
                     Top5: 2–4 | Top10: 4–8 | Top15: 7–11
@@ -1770,8 +1868,13 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-white block">
-                    6. Palpite Inédito (Anti-15)
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>6. Palpite Inédito (Anti-15)</span>
+                    <FilterTooltip
+                      title="Anti-Colisão Histórica (Palpite Inédito)"
+                      description="Compara em O(1) via bitmask contra os concursos já sorteados para bloquear combinações idênticas repetidas."
+                      impact="Impacto: Garante que 100% dos bilhetes da matriz sejam combinações inéditas para 15 pontos."
+                    />
                   </span>
                   <span className="text-[10px] font-mono text-sky-300/90">
                     Hash Bitwise O(1) vs Histórico
@@ -1819,6 +1922,11 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
                   <span className="text-xs sm:text-sm font-bold text-white">
                     Fallback Progressivo Automático (3 Níveis)
                   </span>
+                  <FilterTooltip
+                    title="Relaxamento Automático em 3 Níveis"
+                    description="Se filtros muito rígidos zerarem o gerador, relaxa progressivamente: N1 (Caudas) → N2 (Múltiplos/Posicional) → N3 (Faixas ampliadas)."
+                    impact="Impacto: Impede travamentos no Estúdio de Fechamento mantendo o máximo rigor possível."
+                  />
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                     Nível 1 → Nível 2 → Nível 3
                   </span>

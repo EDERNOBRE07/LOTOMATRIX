@@ -14,6 +14,8 @@ import { FilterControls } from './FilterControls';
 import { RealTimeFilterSimulation } from './RealTimeFilterSimulation';
 import { DesempenhoFiltrosUltimos10Recharts } from './DesempenhoFiltrosUltimos10Recharts';
 import { DispersaoSomaEstratificadaRecharts } from './DispersaoSomaEstratificadaRecharts';
+import { DistribuicaoProbabilidadeFiltrosDashboard } from './DistribuicaoProbabilidadeFiltrosDashboard';
+import { FilterTooltip } from './FilterTooltip';
 import {
   SlidersHorizontal,
   ArrowRight,
@@ -24,6 +26,7 @@ import {
   CheckCircle2,
   Sparkles,
   Trash2,
+  Download,
 } from 'lucide-react';
 
 interface FiltrosInteligentesTabProps {
@@ -86,6 +89,38 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
   const notifySynced = (msg: string) => {
     setSyncToast(msg);
     setTimeout(() => setSyncToast(null), 2800);
+  };
+
+  const handleExportFiltersJson = () => {
+    try {
+      const snapshot = {
+        app: 'LotoSniper AI Pro',
+        tipo: 'SnapshotConfiguracaoFiltros',
+        exportadoEm: new Date().toISOString(),
+        concursoReferencia: latestDraw.concurso,
+        dataConcurso: latestDraw.data,
+        presetAtivo: activePresetId,
+        regrasAtivas: activeRulesCount,
+        filtros: filters,
+      };
+      const jsonString = JSON.stringify(snapshot, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateSlug = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `lotosniper_filtros_c${latestDraw.concurso}_${dateSlug}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      notifySynced(
+        `Configuração exportada com sucesso (${link.download}) — ${activeRulesCount} regras ativas incluídas.`
+      );
+    } catch (err) {
+      console.error('[Exportar Configuração de Filtros] Erro:', err);
+      notifySynced('Não foi possível exportar o arquivo JSON de filtros.');
+    }
   };
 
   const handleSelectPreset = (preset: PresetLotoFacilItem) => {
@@ -167,6 +202,16 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
           <div className="flex items-center flex-wrap gap-2.5 shrink-0">
             <button
               type="button"
+              onClick={handleExportFiltersJson}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/45 text-xs font-bold transition cursor-pointer"
+              title="Baixar arquivo JSON com o snapshot completo de todos os filtros ativos"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar Configuração de Filtros</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 onResetFilters();
                 notifySynced('Filtros restaurados para o padrão canônico Equilíbrio Pro.');
@@ -226,6 +271,11 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
             <div>
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap">
                 <span>Dezenas Fixas &amp; Excluídas (Volante 5×5)</span>
+                <FilterTooltip
+                  title="Âncoras Fixas e Exclusão Estratégica"
+                  description="Dezenas Fixas entram obrigatoriamente (ou em rotação K-de-N com 3+ fixas). Excluídas são removidas de todos os bilhetes."
+                  impact="Impacto: Recomendado manter até 3 fixas para não comprometer o Hit Rate se uma âncora falhar."
+                />
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
                   {fixas.length} Fixas
                 </span>
@@ -369,7 +419,13 @@ export const FiltrosInteligentesTab: React.FC<FiltrosInteligentesTabProps> = ({
         selectedNumbers={effectivePool}
       />
 
-      {/* 6. Gráficos Analíticos de Validação (Últimos 10 Concursos & Dispersão Estratificada) */}
+      {/* 6. Dashboard Recharts: Distribuição de Probabilidade (Filtros Selecionados vs Últimos 100 Concursos) */}
+      <DistribuicaoProbabilidadeFiltrosDashboard
+        filters={filters}
+        latestDraw={latestDraw}
+      />
+
+      {/* 7. Gráficos Analíticos de Validação (Últimos 10 Concursos & Dispersão Estratificada) */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <DesempenhoFiltrosUltimos10Recharts latestDraw={latestDraw} filters={filters} />
         <DispersaoSomaEstratificadaRecharts />

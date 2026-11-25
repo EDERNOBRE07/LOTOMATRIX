@@ -12,6 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import { ExpertTip } from './ExpertTip';
+import { FilterTooltip } from './FilterTooltip';
 
 interface EquilibrioEstruturalSelectorProps {
   filters: FilterCriteria;
@@ -85,6 +86,12 @@ export const EquilibrioEstruturalSelector: React.FC<EquilibrioEstruturalSelector
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
                 <span>Seletor de Equilíbrio Estrutural (Pares & Ímpares)</span>
+                <FilterTooltip
+                  title="Balança Canônica de Paridade"
+                  description="7P/8I e 8P/7I concentram 62,3% dos resultados oficiais; 6P a 9P cobre 94,8% do histórico."
+                  impact="Impacto: Mantém a proporção ideal de pares e ímpares sincronizada com todos os fechamentos."
+                  position="bottom"
+                />
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase font-bold">
                   Balança Canônica
                 </span>

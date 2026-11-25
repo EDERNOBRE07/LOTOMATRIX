@@ -4,20 +4,168 @@ import { CONCURSO_ATUAL, DEZENAS_STATS, RECENT_DRAWS } from '../data/lotofacilDa
 const LOCAL_STORAGE_KEY = 'lotosniper_live_draw_v1';
 const LOCAL_STORAGE_LAST_SYNC = 'lotosniper_last_sync_timestamp';
 
+export interface SyncDiagnosticLogEntry {
+  id: string;
+  timestamp: string;
+  endpointLabel: string;
+  url: string;
+  attempt: number;
+  maxRetries: number;
+  level: 'info' | 'warn' | 'error' | 'success';
+  category: 'request' | 'cors' | 'timeout' | 'http' | 'checksum' | 'sync';
+  status?: number;
+  durationMs?: number;
+  isCorsSuspected?: boolean;
+  checksum?: string;
+  message: string;
+}
+
+const MAX_DIAGNOSTIC_LOGS = 60;
+const syncDiagnosticLogs: SyncDiagnosticLogEntry[] = [];
+
+function recordSyncDiagnostic(entry: Omit<SyncDiagnosticLogEntry, 'id' | 'timestamp'>): SyncDiagnosticLogEntry {
+  const fullEntry: SyncDiagnosticLogEntry = {
+    ...entry,
+    id: `sync-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: new Date().toISOString(),
+  };
+  syncDiagnosticLogs.unshift(fullEntry);
+  if (syncDiagnosticLogs.length > MAX_DIAGNOSTIC_LOGS) {
+    syncDiagnosticLogs.length = MAX_DIAGNOSTIC_LOGS;
+  }
+
+  const logPrefix = `[LotoSniper Caixa Sync] [${fullEntry.endpointLabel}]`;
+  if (fullEntry.level === 'error') {
+    console.error(`${logPrefix} (${fullEntry.category.toUpperCase()}) ${fullEntry.message}`, fullEntry);
+  } else if (fullEntry.level === 'warn') {
+    console.warn(`${logPrefix} (${fullEntry.category.toUpperCase()}) ${fullEntry.message}`, fullEntry);
+  } else {
+    console.log(`${logPrefix} ${fullEntry.message}`);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('lotosniper-sync-diagnostics', { detail: fullEntry }));
+  }
+  return fullEntry;
+}
+
+export function getSyncDiagnosticLogs(): SyncDiagnosticLogEntry[] {
+  return [...syncDiagnosticLogs];
+}
+
+export function clearSyncDiagnosticLogs(): void {
+  syncDiagnosticLogs.length = 0;
+}
+
+/**
+ * Computes a deterministic 32-bit FNV-1a integrity checksum for a Lotofácil draw payload.
+ */
+export function computeDrawChecksum(
+  draw: Pick<LotofacilDraw, 'concurso' | 'data' | 'dezenas'>
+): string {
+  const sortedDezenas = [...(draw.dezenas || [])]
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n))
+    .sort((a, b) => a - b)
+    .map((n) => n.toString().padStart(2, '0'))
+    .join(',');
+  const canonical = `${Number(draw.concurso)}|${String(draw.data || '').trim()}|${sortedDezenas}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) {
+    hash ^= canonical.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `LF-${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+}
+
+/**
+ * Validates structural and mathematical integrity of a parsed Lotofácil draw
+ * and verifies optional upstream checksums.
+ */
+export function verifyDrawIntegrity(
+  draw: LotofacilDraw | null | undefined,
+  expectedChecksum?: string
+): { valid: boolean; checksum: string; reasons: string[] } {
+  const reasons: string[] = [];
+  if (!draw || typeof draw !== 'object') {
+    return { valid: false, checksum: 'LF-00000000', reasons: ['Objeto de sorteio ausente ou inválido'] };
+  }
+
+  if (!Number.isInteger(draw.concurso) || draw.concurso < 1 || draw.concurso > 999999) {
+    reasons.push(`Número de concurso inválido: ${draw.concurso}`);
+  }
+
+  if (!draw.data || typeof draw.data !== 'string' || draw.data.trim().length < 6) {
+    reasons.push('Data de apuração ausente ou malformada');
+  }
+
+  if (!Array.isArray(draw.dezenas) || draw.dezenas.length !== 15) {
+    reasons.push(`Quantidade de dezenas inválida (${Array.isArray(draw.dezenas) ? draw.dezenas.length : 0} != 15)`);
+  } else {
+    const unique = new Set(draw.dezenas);
+    if (unique.size !== 15) {
+      reasons.push('Dezenas duplicadas detectadas no sorteio');
+    }
+    const outOfRange = draw.dezenas.some((n) => !Number.isInteger(n) || n < 1 || n > 25);
+    if (outOfRange) {
+      reasons.push('Dezenas fora do intervalo oficial [01..25]');
+    }
+  }
+
+  const checksum = computeDrawChecksum({
+    concurso: draw.concurso,
+    data: draw.data,
+    dezenas: draw.dezenas || [],
+  });
+
+  if (expectedChecksum && expectedChecksum !== checksum) {
+    reasons.push(`Checksum divergente (recebido ${expectedChecksum}, calculado ${checksum})`);
+  }
+
+  return {
+    valid: reasons.length === 0,
+    checksum,
+    reasons,
+  };
+}
+
+function isCrossOriginUrl(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  if (typeof window === 'undefined' || !window.location?.origin) return true;
+  try {
+    return new URL(url).origin !== window.location.origin;
+  } catch {
+    return true;
+  }
+}
+
+function detectCorsError(err: any, url: string): { isCors: boolean; detail: string } {
+  const msg = String(err?.message || err || '');
+  const crossOrigin = isCrossOriginUrl(url);
+  const looksLikeFetchCorsBlock =
+    crossOrigin &&
+    (err?.name === 'TypeError' ||
+      /failed to fetch|networkerror|load failed|cors|access-control-allow-origin|cross-origin/i.test(msg));
+
+  if (looksLikeFetchCorsBlock) {
+    return {
+      isCors: true,
+      detail: `Bloqueio CORS ou erro de rede cross-origin em ${url} (${msg}). Navegador bloqueou leitura direta; acionando fallback.`,
+    };
+  }
+  return { isCors: false, detail: msg };
+}
+
 export interface SyncResult {
   draw: LotofacilDraw;
   source: 'caixa-oficial' | 'espelho-api' | 'base-local-verificada' | 'cache-local';
   timestamp: string;
   isNewerThanBaseline: boolean;
   message: string;
+  integrityChecksum?: string;
+  integrityVerified?: boolean;
 }
 
-/**
- * Fetch latest Lotofácil result:
- * 1. Tries the full-stack server endpoint /api/lotofacil/status
- * 2. If running on static Hostinger, tries direct public APIs with fallback
- * 3. Falls back to localStorage or verified baseline (Concurso 3800)
- */
 interface FetchWithRetryOptions extends RequestInit {
   timeoutMs?: number;
   maxRetries?: number;
@@ -26,33 +174,49 @@ interface FetchWithRetryOptions extends RequestInit {
 }
 
 /**
- * Executes a fetch request with exponential backoff retry (up to maxRetries).
- * Logs detailed telemetry including HTTP status code and response headers for each attempt.
- * Retries silently on transient network errors / timeouts / 5xx before escalating.
+ * Executes a fetch request with exponential backoff + jitter retry.
+ * Logs detailed real-time telemetry including HTTP status, response headers,
+ * CORS detection, and request duration for each attempt.
  */
 export async function fetchWithExponentialBackoff(
   url: string,
   options: FetchWithRetryOptions = {}
-): Promise<{ ok: boolean; status: number; statusText: string; headers: Record<string, string>; data: any }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  data: any;
+  corsBlocked?: boolean;
+}> {
   const {
     timeoutMs = 7000,
     maxRetries = 3,
-    baseDelayMs = 750,
+    baseDelayMs = 600,
     endpointLabel = 'Caixa API',
     ...fetchInit
   } = options;
 
   let attempt = 0;
   let lastError: any = null;
+  let corsBlocked = false;
+  const crossOrigin = isCrossOriginUrl(url);
 
   while (attempt < maxRetries) {
     attempt++;
+    const startedAt = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    console.log(
-      `[LotoSniper Caixa Sync] [${endpointLabel}] Tentativa ${attempt}/${maxRetries} iniciada: ${url}`
-    );
+    recordSyncDiagnostic({
+      endpointLabel,
+      url,
+      attempt,
+      maxRetries,
+      level: 'info',
+      category: 'request',
+      message: `Tentativa ${attempt}/${maxRetries} iniciada: ${url}`,
+    });
 
     try {
       const res = await fetch(url, {
@@ -61,8 +225,8 @@ export async function fetchWithExponentialBackoff(
         signal: controller.signal,
       });
       clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
 
-      // Extract headers into a clean readable object for diagnostics
       const headersObj: Record<string, string> = {};
       try {
         res.headers.forEach((value, key) => {
@@ -70,35 +234,50 @@ export async function fetchWithExponentialBackoff(
         });
       } catch {}
 
-      console.log(
-        `[LotoSniper Caixa Sync] [${endpointLabel}] Tentativa ${attempt}/${maxRetries} respondeu:`,
-        {
+      if (crossOrigin && !headersObj['access-control-allow-origin']) {
+        recordSyncDiagnostic({
+          endpointLabel,
           url,
+          attempt,
+          maxRetries,
+          level: 'warn',
+          category: 'cors',
           status: res.status,
-          statusText: res.statusText,
-          headers: headersObj,
-        }
-      );
+          durationMs,
+          isCorsSuspected: true,
+          message: `Cabeçalho Access-Control-Allow-Origin ausente/restrito na resposta cross-origin (${durationMs}ms).`,
+        });
+      }
 
       if (res.ok) {
         let json: any = null;
         try {
           json = await res.json();
         } catch (jsonErr) {
-          console.warn(`[LotoSniper Caixa Sync] Falha ao fazer parse JSON do payload:`, jsonErr);
+          recordSyncDiagnostic({
+            endpointLabel,
+            url,
+            attempt,
+            maxRetries,
+            level: 'warn',
+            category: 'checksum',
+            status: res.status,
+            durationMs,
+            message: `Falha ao fazer parse JSON do payload: ${String(jsonErr)}`,
+          });
         }
 
-        console.log(
-          `[LotoSniper Caixa Sync] [${endpointLabel}] Sucesso (HTTP ${res.status}) na tentativa ${attempt}. Payload:`,
-          json
-            ? {
-                concurso: json.concurso || json.numero || json.latestDraw?.concurso,
-                data: json.data || json.dataApuracao || json.latestDraw?.data,
-                dezenasCount:
-                  (json.dezenas || json.listaDezenas || json.latestDraw?.dezenas)?.length || 0,
-              }
-            : 'corpo vazio'
-        );
+        recordSyncDiagnostic({
+          endpointLabel,
+          url,
+          attempt,
+          maxRetries,
+          level: 'success',
+          category: 'http',
+          status: res.status,
+          durationMs,
+          message: `HTTP ${res.status} (${durationMs}ms) • Concurso ${json?.concurso || json?.numero || json?.latestDraw?.concurso || 'N/D'}`,
+        });
 
         return {
           ok: true,
@@ -106,42 +285,85 @@ export async function fetchWithExponentialBackoff(
           statusText: res.statusText,
           headers: headersObj,
           data: json,
+          corsBlocked: false,
         };
       }
 
-      // If response is not ok (e.g. 500, 502, 503, 429), log and retry if attempts remain
-      console.warn(
-        `[LotoSniper Caixa Sync] [${endpointLabel}] Tentativa ${attempt}/${maxRetries} falhou com status HTTP ${res.status} (${res.statusText}).`
-      );
+      recordSyncDiagnostic({
+        endpointLabel,
+        url,
+        attempt,
+        maxRetries,
+        level: 'warn',
+        category: 'http',
+        status: res.status,
+        durationMs,
+        message: `Tentativa ${attempt}/${maxRetries} retornou HTTP ${res.status} (${res.statusText}) em ${durationMs}ms.`,
+      });
       lastError = new Error(`HTTP ${res.status}: ${res.statusText}`);
+
+      // Do not waste retries on explicit 404/400 client errors
+      if (res.status === 400 || res.status === 404) {
+        break;
+      }
     } catch (err: any) {
       clearTimeout(timer);
+      const durationMs = Date.now() - startedAt;
       const isAbort = err?.name === 'AbortError';
-      const msg = isAbort ? `Timeout de requisição (${timeoutMs}ms)` : err?.message || String(err);
+      const corsInfo = detectCorsError(err, url);
+      if (corsInfo.isCors) {
+        corsBlocked = true;
+      }
 
-      console.warn(
-        `[LotoSniper Caixa Sync] [${endpointLabel}] Tentativa ${attempt}/${maxRetries} interrompida: ${msg}`
-      );
+      recordSyncDiagnostic({
+        endpointLabel,
+        url,
+        attempt,
+        maxRetries,
+        level: 'warn',
+        category: isAbort ? 'timeout' : corsInfo.isCors ? 'cors' : 'http',
+        durationMs,
+        isCorsSuspected: corsInfo.isCors,
+        message: isAbort
+          ? `Timeout após ${timeoutMs}ms na tentativa ${attempt}/${maxRetries}.`
+          : corsInfo.detail,
+      });
       lastError = err;
+
+      // On hard CORS preflight/read block in browser, retrying the exact cross-origin URL immediately adds latency; break to fallback
+      if (corsInfo.isCors) {
+        break;
+      }
     }
 
-    // If more attempts remain, apply exponential backoff + jitter silently
     if (attempt < maxRetries) {
       const exponentialDelay = baseDelayMs * Math.pow(2, attempt - 1);
-      const jitter = Math.floor(Math.random() * 200);
+      const jitter = Math.floor(Math.random() * 180);
       const totalWaitMs = exponentialDelay + jitter;
 
-      console.log(
-        `[LotoSniper Caixa Sync] [${endpointLabel}] Aplicando backoff exponencial silencioso: aguardando ${totalWaitMs}ms antes da tentativa ${attempt + 1}/${maxRetries}...`
-      );
+      recordSyncDiagnostic({
+        endpointLabel,
+        url,
+        attempt,
+        maxRetries,
+        level: 'info',
+        category: 'request',
+        message: `Backoff exponencial: aguardando ${totalWaitMs}ms antes da tentativa ${attempt + 1}/${maxRetries}.`,
+      });
       await new Promise((resolve) => setTimeout(resolve, totalWaitMs));
     }
   }
 
-  console.error(
-    `[LotoSniper Caixa Sync] [${endpointLabel}] Esgotadas todas as ${maxRetries} tentativas para ${url}. Último erro:`,
-    lastError?.message || lastError
-  );
+  recordSyncDiagnostic({
+    endpointLabel,
+    url,
+    attempt,
+    maxRetries,
+    level: 'error',
+    category: corsBlocked ? 'cors' : 'http',
+    isCorsSuspected: corsBlocked,
+    message: `Esgotadas tentativas para ${url}: ${lastError?.message || lastError || 'Erro de conexão'}`,
+  });
 
   return {
     ok: false,
@@ -149,24 +371,31 @@ export async function fetchWithExponentialBackoff(
     statusText: lastError?.message || 'Erro de conexão',
     headers: {},
     data: null,
+    corsBlocked,
   };
 }
 
 /**
  * Fetch latest Lotofácil result:
- * 1. Tries the full-stack server endpoint /api/lotofacil/status with exponential backoff & detailed logs
- * 2. If running on static Hostinger, tries direct public APIs with exponential backoff & detailed logs
- * 3. Falls back to localStorage or verified baseline (Concurso 3817)
+ * 1. Tries the full-stack server endpoint /api/lotofacil/status with exponential backoff & checksum validation
+ * 2. If needed, tries direct official Caixa endpoints and verified mirrors with CORS detection
+ * 3. Falls back to localStorage or verified baseline (Concurso #3836+)
  */
 export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<SyncResult> {
-  console.log(`[LotoSniper Caixa Sync] Iniciando ciclo de sincronização (forceFresh: ${forceFresh})...`);
+  recordSyncDiagnostic({
+    endpointLabel: 'Orquestrador Sync',
+    url: '/api/lotofacil/status',
+    attempt: 1,
+    maxRetries: 1,
+    level: 'info',
+    category: 'sync',
+    message: `Iniciando sincronização (forceFresh=${forceFresh}, baseline=#${CONCURSO_ATUAL.concurso}).`,
+  });
 
-  // If forceFresh is requested, remove stale local cache to avoid getting stuck
   if (forceFresh) {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       localStorage.removeItem(LOCAL_STORAGE_LAST_SYNC);
-      console.log('[LotoSniper Caixa Sync] Cache local anterior expurgado para busca direta.');
     } catch {}
   }
 
@@ -181,15 +410,27 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
         Pragma: 'no-cache',
       },
       cache: 'no-store',
-      maxRetries: 2,
+      maxRetries: 3,
       baseDelayMs: 350,
       timeoutMs: 10000,
     });
 
     if (result.ok && result.data && result.data.success && result.data.latestDraw) {
       const draw = normalizeDraw(result.data.latestDraw);
-      // Only accept if draw is at least as new as our verified baseline (#3836+)
-      if (draw.concurso >= CONCURSO_ATUAL.concurso) {
+      const integrity = verifyDrawIntegrity(draw, result.data.checksum);
+
+      if (!integrity.valid) {
+        recordSyncDiagnostic({
+          endpointLabel: 'Backend Server Proxy',
+          url: serverUrl,
+          attempt: 1,
+          maxRetries: 1,
+          level: 'error',
+          category: 'checksum',
+          checksum: integrity.checksum,
+          message: `Falha de integridade/checksum no payload do servidor: ${integrity.reasons.join('; ')}`,
+        });
+      } else if (draw.concurso >= CONCURSO_ATUAL.concurso) {
         saveToCache(draw);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: draw }));
@@ -200,20 +441,39 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
             : result.data.source === 'base-local-verificada'
             ? 'base-local-verificada'
             : 'caixa-oficial';
-        console.log(
-          `[LotoSniper Caixa Sync] Sincronização validada com sucesso! Concurso #${draw.concurso} (${draw.data}) via ${resolvedSource}.`
-        );
+
+        recordSyncDiagnostic({
+          endpointLabel: 'Backend Server Proxy',
+          url: serverUrl,
+          attempt: 1,
+          maxRetries: 1,
+          level: 'success',
+          category: 'checksum',
+          checksum: integrity.checksum,
+          message: `Integridade verificada (${integrity.checksum}) para Concurso #${draw.concurso} (${draw.data}) via ${resolvedSource}.`,
+        });
+
         return {
           draw,
           source: resolvedSource,
           timestamp: new Date().toISOString(),
           isNewerThanBaseline: draw.concurso > CONCURSO_ATUAL.concurso,
           message: `Concurso #${draw.concurso} (${draw.data}) sincronizado em tempo real.`,
+          integrityChecksum: integrity.checksum,
+          integrityVerified: true,
         };
       }
     }
   } catch (err) {
-    console.warn('[LotoSniper Caixa Sync] Backend sync falhou ou não alcançável, tentando endpoints diretos:', err);
+    recordSyncDiagnostic({
+      endpointLabel: 'Backend Server Proxy',
+      url: '/api/lotofacil/status',
+      attempt: 1,
+      maxRetries: 1,
+      level: 'warn',
+      category: 'http',
+      message: `Proxy indisponível (${String(err)}), iniciando fallback direto com detecção de CORS.`,
+    });
   }
 
   // 2. Client-side fallback: parallel direct official Caixa API (+ probe next contest) & reliable mirrors
@@ -254,15 +514,30 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
           endpointLabel: apiTarget.label,
           headers: { Accept: 'application/json' },
           cache: 'no-store',
-          maxRetries: 1,
-          baseDelayMs: 300,
-          timeoutMs: 4000,
+          maxRetries: 2,
+          baseDelayMs: 400,
+          timeoutMs: 4500,
         });
         if (!result.ok || !result.data) return null;
         const parsed = parseExternalPayload(result.data);
         if (!parsed || parsed.concurso < CONCURSO_ATUAL.concurso) return null;
+        const integrity = verifyDrawIntegrity(parsed);
+        if (!integrity.valid) {
+          recordSyncDiagnostic({
+            endpointLabel: apiTarget.label,
+            url: apiTarget.url,
+            attempt: 1,
+            maxRetries: 1,
+            level: 'error',
+            category: 'checksum',
+            checksum: integrity.checksum,
+            message: `Payload rejeitado por falha de integridade: ${integrity.reasons.join('; ')}`,
+          });
+          return null;
+        }
         return {
           draw: parsed,
+          checksum: integrity.checksum,
           source: (apiTarget.isCaixa ? 'caixa-oficial' : 'espelho-api') as SyncResult['source'],
           label: apiTarget.label,
         };
@@ -272,10 +547,11 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     let bestExternalDraw: LotofacilDraw | null = null;
     let bestExternalSource: SyncResult['source'] = 'espelho-api';
     let bestExternalLabel = '';
+    let bestExternalChecksum = '';
 
     for (const item of settled) {
       if (item.status !== 'fulfilled' || !item.value) continue;
-      const { draw: parsed, source, label } = item.value;
+      const { draw: parsed, source, label, checksum } = item.value;
       if (
         !bestExternalDraw ||
         parsed.concurso > bestExternalDraw.concurso ||
@@ -286,6 +562,7 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
         bestExternalDraw = parsed;
         bestExternalSource = source;
         bestExternalLabel = label;
+        bestExternalChecksum = checksum;
       }
     }
 
@@ -300,27 +577,41 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
         timestamp: new Date().toISOString(),
         isNewerThanBaseline: bestExternalDraw.concurso > CONCURSO_ATUAL.concurso,
         message: `Concurso #${bestExternalDraw.concurso} (${bestExternalDraw.data}) carregado via ${bestExternalLabel}.`,
+        integrityChecksum: bestExternalChecksum,
+        integrityVerified: true,
       };
     }
   } catch (err) {
-    console.warn('[LotoSniper Caixa Sync] Erro geral ao consultar espelhos públicos:', err);
+    recordSyncDiagnostic({
+      endpointLabel: 'Espelhos Públicos',
+      url: 'https://servicebus2.caixa.gov.br',
+      attempt: 1,
+      maxRetries: 1,
+      level: 'warn',
+      category: 'sync',
+      message: `Erro geral ao consultar espelhos públicos: ${String(err)}`,
+    });
   }
 
   // 3. Fallback to localStorage cache only if it is equal or newer than CONCURSO_ATUAL (#3836+)
   if (!forceFresh) {
     const cached = loadFromCache();
-    if (cached && cached.concurso >= CONCURSO_ATUAL.concurso) {
+    const cacheCheck = verifyDrawIntegrity(cached);
+    if (cached && cacheCheck.valid && cached.concurso >= CONCURSO_ATUAL.concurso) {
       return {
         draw: cached,
         source: 'base-local-verificada',
         timestamp: localStorage.getItem(LOCAL_STORAGE_LAST_SYNC) || new Date().toISOString(),
         isNewerThanBaseline: cached.concurso > CONCURSO_ATUAL.concurso,
         message: `Concurso #${cached.concurso} (${cached.data}) ativo e sincronizado.`,
+        integrityChecksum: cacheCheck.checksum,
+        integrityVerified: true,
       };
     }
   }
 
   // 4. Default Verified Baseline (Concurso #3836 - 23/11/2026)
+  const baselineCheck = verifyDrawIntegrity(CONCURSO_ATUAL);
   saveToCache(CONCURSO_ATUAL);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('lotosniper-concurso-updated', { detail: CONCURSO_ATUAL }));
@@ -331,6 +622,8 @@ export async function syncLatestLotofacil(forceFresh: boolean = false): Promise<
     timestamp: new Date().toISOString(),
     isNewerThanBaseline: false,
     message: `Concurso #${CONCURSO_ATUAL.concurso} (${CONCURSO_ATUAL.data}) ativo (Base Oficial Consolidada Caixa).`,
+    integrityChecksum: baselineCheck.checksum,
+    integrityVerified: baselineCheck.valid,
   };
 }
 
@@ -356,7 +649,10 @@ export async function fetchConcursoByNumber(concurso: number): Promise<Lotofacil
       }
     );
     if (proxyRes.ok && proxyRes.data?.success && proxyRes.data?.draw) {
-      return normalizeDraw(proxyRes.data.draw);
+      const normalized = normalizeDraw(proxyRes.data.draw);
+      if (verifyDrawIntegrity(normalized).valid) {
+        return normalized;
+      }
     }
   } catch {}
 
@@ -367,13 +663,16 @@ export async function fetchConcursoByNumber(concurso: number): Promise<Lotofacil
         endpointLabel: `Caixa Direto #${concurso}`,
         headers: { Accept: 'application/json' },
         cache: 'no-store',
-        maxRetries: 1,
+        maxRetries: 2,
         baseDelayMs: 400,
         timeoutMs: 5000,
       }
     );
     if (directRes.ok && directRes.data) {
-      return parseExternalPayload(directRes.data);
+      const parsed = parseExternalPayload(directRes.data);
+      if (parsed && verifyDrawIntegrity(parsed).valid) {
+        return parsed;
+      }
     }
   } catch {}
 

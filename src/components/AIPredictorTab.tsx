@@ -23,6 +23,7 @@ import { AIRecommendationsBacktest10Module } from './AIRecommendationsBacktest10
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 import { DezenasAncorasPredictorCard } from './DezenasAncorasPredictorCard';
 import { D3ConservadorVsOusadoChart } from './D3ConservadorVsOusadoChart';
+import { DicasApostaIACard } from './DicasApostaIACard';
 import {
   Sparkles,
   Cpu,
@@ -470,6 +471,17 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* COMPONENTE EXCLUSIVO: DICAS DE APOSTA IA (TOP 5 QUENTES, TOP 5 FRIAS & COMBINAÇÕES IDEAIS) */}
+      <DicasApostaIACard
+        latestDraw={latestDraw}
+        prediction={prediction}
+        fallbackScores={scores}
+        dynamicStats={dynamicStats}
+        cyclePendingNumbers={cyclePendingNumbers}
+        activeFilterConfig={activeFilterConfig}
+        onApplyRecommendation={onApplyRecommendation}
+      />
 
       {/* COMPONENTE EXCLUSIVO: 3 DEZENAS ÂNCORAS SUGERIDAS PELA IA (CICLO & TENDÊNCIA ATUAL) */}
       <DezenasAncorasPredictorCard

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FilterCriteria, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { analyzeTicket, validateFilters } from '../services/combinatorics';
@@ -11,6 +11,7 @@ import {
   Layers,
   ShieldCheck,
   BarChart3,
+  Cpu,
 } from 'lucide-react';
 
 interface RealTimeFilterSimulationProps {
@@ -22,30 +23,76 @@ interface RealTimeFilterSimulationProps {
 }
 
 const TOTAL_LOTOFACIL_COMBOS = 3268760;
+const WORKER_SAMPLE_SIZE = 100000;
 
-// Deterministic PRNG for stable Monte Carlo combination pass-rate sampling
-function createDeterministicSamples(count: number): number[][] {
+interface WorkerImpactStats {
+  estimatedPassingCombos: number;
+  reductionPercent: number;
+  survivalPct: number;
+  evaluatedSamples: number;
+  durationMs: number;
+  approved10: number;
+  total10: number;
+  rate10: number;
+  approved50: number;
+  total50: number;
+  rate50: number;
+}
+
+function runFastSyncBaseline(filters: FilterCriteria, latestDraw: LotofacilDraw): WorkerImpactStats {
+  const startedAt = Date.now();
   let seed = 38362026;
   const nextRand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-
-  const samples: number[][] = [];
-  for (let i = 0; i < count; i++) {
-    const nums = Array.from({ length: 25 }, (_, idx) => idx + 1);
-    for (let j = 24; j > 0; j--) {
+  const quickCount = 600;
+  let passed = 0;
+  const baseNums = Array.from({ length: 25 }, (_, i) => i + 1);
+  for (let i = 0; i < quickCount; i++) {
+    const arr = baseNums.slice();
+    for (let j = 24; j >= 10; j--) {
       const k = Math.floor(nextRand() * (j + 1));
-      const tmp = nums[j];
-      nums[j] = nums[k];
-      nums[k] = tmp;
+      const tmp = arr[j];
+      arr[j] = arr[k];
+      arr[k] = tmp;
     }
-    samples.push(nums.slice(0, 15).sort((a, b) => a - b));
+    const cand = arr.slice(10, 25).sort((a, b) => a - b);
+    if (validateFilters(cand, filters, latestDraw.dezenas).isValid) passed++;
   }
-  return samples;
+  const survivalRatio = passed / quickCount;
+  const draws50 = getHistoricalNDraws(50, latestDraw);
+  const historicalFilters: FilterCriteria = {
+    ...filters,
+    dezenasFixas: [],
+    dezenasExcluidas: [],
+    antiColisaoHistoricaAtiva: false,
+    palpiteIneditoAtivo: false,
+  };
+  let approved10 = 0;
+  let approved50 = 0;
+  for (let i = 0; i < draws50.length; i++) {
+    const current = draws50[i];
+    const prevDezenas = draws50[i + 1]?.dezenas ?? latestDraw.dezenas;
+    if (validateFilters(current.dezenas, historicalFilters, prevDezenas).isValid) {
+      approved50++;
+      if (i < 10) approved10++;
+    }
+  }
+  return {
+    estimatedPassingCombos: Math.round(TOTAL_LOTOFACIL_COMBOS * survivalRatio),
+    reductionPercent: Number(((1 - survivalRatio) * 100).toFixed(1)),
+    survivalPct: Number((survivalRatio * 100).toFixed(2)),
+    evaluatedSamples: quickCount,
+    durationMs: Math.max(1, Date.now() - startedAt),
+    approved10,
+    total10: Math.min(10, draws50.length),
+    rate10: draws50.length > 0 ? Math.round((approved10 / Math.min(10, draws50.length)) * 100) : 0,
+    approved50,
+    total50: draws50.length,
+    rate50: draws50.length > 0 ? Math.round((approved50 / draws50.length) * 100) : 0,
+  };
 }
-
-const MONTE_CARLO_SAMPLES = createDeterministicSamples(600);
 
 export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> = ({
   filters,
@@ -54,6 +101,14 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
   aiScores,
   onApplyToFechamento,
 }) => {
+  const [workerStats, setWorkerStats] = useState<WorkerImpactStats>(() =>
+    runFastSyncBaseline(filters, latestDraw)
+  );
+  const [isWorkerRunning, setIsWorkerRunning] = useState<boolean>(false);
+  const [workerProgressPct, setWorkerProgressPct] = useState<number>(100);
+  const workerRef = useRef<Worker | null>(null);
+  const activeJobIdRef = useRef<string>('');
+
   // Deterministic preview set of 5 candidate games from the active pool
   const previewGames = useMemo(() => {
     const pool =
@@ -113,58 +168,87 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
     });
   }, [previewGames, filters, latestDraw.dezenas, aiScores]);
 
-  // Real-time impact telemetry: estimated surviving combinations in C(25,15) + approval rate on last 10 & 50 contests
-  const impactStats = useMemo(() => {
-    // 1. Sample C(25,15) universe (without user-specific fixas/excluidas blocking random draws unless set)
-    let passedSamples = 0;
-    for (const sample of MONTE_CARLO_SAMPLES) {
-      if (validateFilters(sample, filters, latestDraw.dezenas).isValid) {
-        passedSamples++;
+  // Offload 100.000-combination universe evaluation to dedicated Web Worker without blocking UI thread
+  useEffect(() => {
+    if (typeof Worker === 'undefined') {
+      setWorkerStats(runFastSyncBaseline(filters, latestDraw));
+      setIsWorkerRunning(false);
+      return;
+    }
+
+    if (!workerRef.current) {
+      try {
+        workerRef.current = new Worker(
+          new URL('../workers/generator.worker.ts', import.meta.url),
+          { type: 'module' }
+        );
+      } catch {
+        setWorkerStats(runFastSyncBaseline(filters, latestDraw));
+        return;
       }
     }
-    const survivalRatio = passedSamples / MONTE_CARLO_SAMPLES.length;
-    const estimatedPassingCombos = Math.round(TOTAL_LOTOFACIL_COMBOS * survivalRatio);
-    const reductionPercent = Number(((1 - survivalRatio) * 100).toFixed(1));
 
-    // 2. Historical approval rate on the last 10 and 50 official draws
-    const draws50 = getHistoricalNDraws(50, latestDraw);
-    // For historical backtest of structural rules, ignore anti-colisão & personal fixed/excluded numbers
-    const historicalFilters: FilterCriteria = {
-      ...filters,
-      dezenasFixas: [],
-      dezenasExcluidas: [],
-      antiColisaoHistoricaAtiva: false,
-      palpiteIneditoAtivo: false,
+    const worker = workerRef.current;
+    const jobId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    activeJobIdRef.current = jobId;
+
+    const handleMessage = (event: MessageEvent<any>) => {
+      const msg = event.data;
+      if (!msg || msg.jobId !== activeJobIdRef.current) return;
+      if (msg.type === 'PROGRESS') {
+        setWorkerProgressPct(Number(msg.percent) || 25);
+      } else if (msg.type === 'DONE_FILTER_SIMULATION' && msg.payload) {
+        setWorkerStats({
+          estimatedPassingCombos: msg.payload.estimatedPassingCombos,
+          reductionPercent: msg.payload.reductionPercent,
+          survivalPct: msg.payload.survivalPct,
+          evaluatedSamples: msg.payload.evaluatedSamples,
+          durationMs: msg.payload.durationMs,
+          approved10: msg.payload.approved10,
+          total10: msg.payload.total10,
+          rate10: msg.payload.rate10,
+          approved50: msg.payload.approved50,
+          total50: msg.payload.total50,
+          rate50: msg.payload.rate50,
+        });
+        setWorkerProgressPct(100);
+        setIsWorkerRunning(false);
+      } else if (msg.type === 'ERROR') {
+        setWorkerStats(runFastSyncBaseline(filters, latestDraw));
+        setIsWorkerRunning(false);
+      }
     };
 
-    let approved10 = 0;
-    let approved50 = 0;
-    for (let i = 0; i < draws50.length; i++) {
-      const current = draws50[i];
-      const prevDezenas = draws50[i + 1]?.dezenas ?? latestDraw.dezenas;
-      const ok = validateFilters(current.dezenas, historicalFilters, prevDezenas).isValid;
-      if (ok) {
-        approved50++;
-        if (i < 10) approved10++;
-      }
-    }
+    worker.onmessage = handleMessage;
+    setIsWorkerRunning(true);
+    setWorkerProgressPct(10);
 
-    const rate10 = draws50.length > 0 ? Math.round((approved10 / Math.min(10, draws50.length)) * 100) : 0;
-    const rate50 = draws50.length > 0 ? Math.round((approved50 / draws50.length) * 100) : 0;
+    const debounceTimer = setTimeout(() => {
+      if (activeJobIdRef.current !== jobId) return;
+      worker.postMessage({
+        type: 'SIMULATE_FILTERS',
+        jobId,
+        filters,
+        latestDraw,
+        sampleCount: WORKER_SAMPLE_SIZE,
+      });
+    }, 120);
 
-    return {
-      estimatedPassingCombos,
-      reductionPercent,
-      survivalPct: Number((survivalRatio * 100).toFixed(1)),
-      approved10,
-      total10: Math.min(10, draws50.length),
-      rate10,
-      approved50,
-      total50: draws50.length,
-      rate50,
+    return () => {
+      clearTimeout(debounceTimer);
     };
   }, [filters, latestDraw]);
 
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
+
+  const impactStats = workerStats;
   const passingCount = evaluationResults.filter((r) => r.passes).length;
   const passRate = Math.round((passingCount / evaluationResults.length) * 100);
 
@@ -182,9 +266,15 @@ export const RealTimeFilterSimulation: React.FC<RealTimeFilterSimulationProps> =
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 uppercase">
                 Concurso #{latestDraw.concurso}
               </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                <Cpu className={`w-3 h-3 ${isWorkerRunning ? 'animate-spin text-amber-300' : 'text-emerald-400'}`} />
+                {isWorkerRunning
+                  ? `Web Worker (${workerProgressPct}%)...`
+                  : `Web Worker • ${impactStats.evaluatedSamples.toLocaleString('pt-BR')} comb. (${impactStats.durationMs}ms)`}
+              </span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Avalia instantaneamente a poda no universo de 3.268.760 combinações e a taxa de aprovação histórica nos concursos oficiais.
+              Avalia em thread paralela (Web Worker) a poda no universo de 3.268.760 combinações e a taxa de aprovação histórica sem travar a interface.
             </p>
           </div>
         </div>

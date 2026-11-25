@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { filterLayoutTransition } from '../utils/staggerAnimation';
 import {
   FechamentoMode,
   FilterCriteria,
@@ -74,6 +76,7 @@ import { fechamentoWorkerClient, CombinatoricsProgress } from '../services/fecha
 import { exportFechamentoToPdf, exportFechamentoToCsv } from '../services/fechamentoExportService';
 import { exportCartoesJogosToPdf } from '../services/cartoesJogosPdfGenerator';
 import { VolantesImpressaoModal } from './VolantesImpressaoModal';
+import { ExportPDFModal } from './ExportPDFModal';
 import { exportarParaCologaLGodoi } from '../services/exportadorCologaLGodoi';
 import { checkAndAuditUnresolvedCrash } from '../services/fechamentoPreflightSnapshot';
 import { MapaCalorVolante50Component } from './MapaCalorVolante50Component';
@@ -411,6 +414,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [workerProgress, setWorkerProgress] = useState<CombinatoricsProgress | null>(null);
   const [goldenGlowTrigger, setGoldenGlowTrigger] = useState<number>(0);
   const [isPrintVolantesModalOpen, setIsPrintVolantesModalOpen] = useState(false);
+  const [isExportPdfModalOpen, setIsExportPdfModalOpen] = useState(false);
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [isVolanteSupportOpen, setIsVolanteSupportOpen] = useState(false);
   const [selectedCatalogUniverse, setSelectedCatalogUniverse] = useState<number>(targetCount);
@@ -2205,8 +2209,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         tickets: generatedTickets,
         latestDraw,
         meta: getCurrentExportMeta(),
+        filters,
       });
-      setDocumentMessage('✓ Dossiê de jogos em PDF formatado baixado com sucesso!');
+      setDocumentMessage('✓ Dossiê de jogos em PDF formatado para impressão baixado com sucesso!');
       setTimeout(() => setDocumentMessage(null), 4000);
     } catch (err: any) {
       console.error('[Export PDF] Erro:', err);
@@ -3487,15 +3492,27 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           </div>
 
-          {/* 3. Presets de Filtros Canônicos com Progressive Disclosure */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+          {/* 3. Presets de Filtros Canônicos com Layout Transition Fluido (Framer Motion) */}
+          <motion.div
+            layout
+            transition={filterLayoutTransition}
+            className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3.5"
+          >
+            <motion.div
+              layout="position"
+              className="flex items-center justify-between pb-2 border-b border-slate-800/80"
+            >
               <div className="flex items-center gap-2">
                 <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30">
                   <Filter className="w-4 h-4" />
                 </span>
-                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase">
-                  Filtros Canônicos &amp; Proteção Estatística
+                <h3 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase flex items-center gap-2 flex-wrap">
+                  <span>Filtros Canônicos &amp; Proteção Estatística</span>
+                  {filters.hammingDinamicoAtivo && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 normal-case">
+                      Hamming Priorizado
+                    </span>
+                  )}
                 </h3>
               </div>
               <button
@@ -3507,10 +3524,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <span>{isAdvancedFiltersOpen ? 'Recolher Ajuste Fino' : 'Ajuste Fino Avançado'}</span>
                 {isAdvancedFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
-            </div>
+            </motion.div>
 
             {/* 4 Presets Rápidos */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <motion.div layout transition={filterLayoutTransition} className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleSelectStatisticalPreset(PRESETS_LOTOFACIL.conservador)}
@@ -3573,190 +3590,217 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <div className="text-xs font-bold text-amber-400">👑 Proteção Caudas</div>
                 <div className="text-[10px] text-slate-400 mt-0.5">75% Central / 15% Alta / 10% Baixa</div>
               </button>
-            </div>
+            </motion.div>
 
-            {/* Barra de Controle Direto: Fixas Rotativas (K de N), Alerta de Risco Combinatório & Auto-Calibração Universo */}
-            {(() => {
-              const uniCal = calibrarFaixaSomaUniverso(selectedNumbers);
-              const kBounds = getRotatedFixedBounds(fixedNumbers.length, filters.modoFixas);
-              const activeModoFixas = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
-              const fixasRisk = assessFixedNumbersRisk(fixedNumbers.length, activeModoFixas);
-              const showRiskAlert = fixasRisk.level === 'atencao' || fixasRisk.level === 'critico';
-              return (
-                <div className="space-y-2.5 pt-1">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div
-                      className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 border ${
-                        showRiskAlert
-                          ? 'bg-amber-950/35 border-amber-500/50'
-                          : 'bg-slate-950/80 border-slate-800'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
-                          <span>Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                            Rec. máx. 2–3
-                          </span>
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400 block truncate">
-                          {fixedNumbers.length >= 3 && kBounds.modo === 'rotativas'
-                            ? `Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedNumbers.length} por cartão)`
-                            : fixedNumbers.length > 0 && activeModoFixas === 'rigidas'
-                            ? 'Rígidas (100% em todos os bilhetes)'
-                            : 'Padrão auditado: até 2–3 fixas (80% dos 13 pts)'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rotativas' }, false)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                            activeModoFixas === 'rotativas'
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+            {/* Contêiner Flex com Reordenação Fluida: Ao ativar Distância de Hamming, o card promove-se ao topo dos controles ativos */}
+            <motion.div layout transition={filterLayoutTransition} className="flex flex-col gap-3.5">
+              {/* Barra de Controle Direto: Fixas Rotativas (K de N), Alerta de Risco Combinatório & Auto-Calibração Universo */}
+              <motion.div
+                key="fixas-soma-controls"
+                layout
+                transition={filterLayoutTransition}
+                style={{ order: filters.hammingDinamicoAtivo ? 2 : 1 }}
+              >
+                {(() => {
+                  const uniCal = calibrarFaixaSomaUniverso(selectedNumbers);
+                  const kBounds = getRotatedFixedBounds(fixedNumbers.length, filters.modoFixas);
+                  const activeModoFixas = filters.modoFixas === 'rigidas' ? 'rigidas' : 'rotativas';
+                  const fixasRisk = assessFixedNumbersRisk(fixedNumbers.length, activeModoFixas);
+                  const showRiskAlert = fixasRisk.level === 'atencao' || fixasRisk.level === 'critico';
+                  return (
+                    <div className="space-y-2.5 pt-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 border ${
+                            showRiskAlert
+                              ? 'bg-amber-950/35 border-amber-500/50'
+                              : 'bg-slate-950/80 border-slate-800'
                           }`}
                         >
-                          Rotativas (K/N)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rigidas' }, false)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
-                            activeModoFixas === 'rigidas'
-                              ? 'bg-amber-500 text-slate-950 border-amber-400'
-                              : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
-                          }`}
-                        >
-                          Rígidas
-                        </button>
-                      </div>
-                    </div>
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold text-slate-200 flex items-center gap-1.5">
+                              <span>Modo de Fixas ({fixedNumbers.length}/{MAX_DEZENAS_FIXAS})</span>
+                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                Rec. máx. 2–3
+                              </span>
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 block truncate">
+                              {fixedNumbers.length >= 3 && kBounds.modo === 'rotativas'
+                                ? `Rotativas (${kBounds.minK}–${kBounds.maxK} de ${fixedNumbers.length} por cartão)`
+                                : fixedNumbers.length > 0 && activeModoFixas === 'rigidas'
+                                ? 'Rígidas (100% em todos os bilhetes)'
+                                : 'Padrão auditado: até 2–3 fixas (80% dos 13 pts)'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rotativas' }, false)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                activeModoFixas === 'rotativas'
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                  : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                              }`}
+                            >
+                              Rotativas (K/N)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleFiltersChange({ ...filters, modoFixas: 'rigidas' }, false)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                activeModoFixas === 'rigidas'
+                                  ? 'bg-amber-500 text-slate-950 border-amber-400'
+                                  : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                              }`}
+                            >
+                              Rígidas
+                            </button>
+                          </div>
+                        </div>
 
-                    <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold text-slate-200 block">
-                          Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400 block truncate">
-                          Central: 180–215 {preset.jogosMaximos >= 10 ? '• Caudas: 155–179 (10%) / 216–230 (15%)' : ''}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextAuto = filters.autoCalibrarSomaUniverso === false;
-                          handleFiltersChange(
-                            {
-                              ...filters,
-                              autoCalibrarSomaUniverso: nextAuto,
-                              somaMin: nextAuto ? uniCal.somaMin : filters.somaMin,
-                              somaMax: nextAuto ? uniCal.somaMax : filters.somaMax,
-                            },
-                            false
-                          );
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0 ${
-                          filters.autoCalibrarSomaUniverso !== false
-                            ? 'bg-indigo-500 text-white border-indigo-400'
-                            : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
-                        }`}
-                      >
-                        {filters.autoCalibrarSomaUniverso !== false ? 'μ_U ± 20 Auto ✓' : 'Manual'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {showRiskAlert && (
-                    <div
-                      className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                        fixasRisk.level === 'critico'
-                          ? 'bg-rose-950/45 border-rose-500/50 text-rose-100'
-                          : 'bg-amber-950/40 border-amber-500/45 text-amber-100'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle
-                          className={`w-4 h-4 shrink-0 mt-0.5 ${
-                            fixasRisk.level === 'critico' ? 'text-rose-400' : 'text-amber-400'
-                          }`}
-                        />
-                        <div className="text-[11px] leading-snug">
-                          <strong className="block font-black">{fixasRisk.title}</strong>
-                          <span className="text-slate-300">{fixasRisk.message}</span>
+                        <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2">
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold text-slate-200 block">
+                              Soma Calibrada do Universo (μ_U = <span className="font-mono text-indigo-300">{uniCal.mediaUniverso.toFixed(1)}</span>)
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 block truncate">
+                              Central: 180–215 {preset.jogosMaximos >= 10 ? '• Caudas: 155–179 (10%) / 216–230 (15%)' : ''}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextAuto = filters.autoCalibrarSomaUniverso === false;
+                              handleFiltersChange(
+                                {
+                                  ...filters,
+                                  autoCalibrarSomaUniverso: nextAuto,
+                                  somaMin: nextAuto ? uniCal.somaMin : filters.somaMin,
+                                  somaMax: nextAuto ? uniCal.somaMax : filters.somaMax,
+                                },
+                                false
+                              );
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0 ${
+                              filters.autoCalibrarSomaUniverso !== false
+                                ? 'bg-indigo-500 text-white border-indigo-400'
+                                : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-white'
+                            }`}
+                          >
+                            {filters.autoCalibrarSomaUniverso !== false ? 'μ_U ± 20 Auto ✓' : 'Manual'}
+                          </button>
                         </div>
                       </div>
-                      {fixedNumbers.length > RECOMMENDED_MAX_FIXAS && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const trimmed = fixedNumbers.slice(0, RECOMMENDED_MAX_FIXAS);
-                            setFixedNumbers(trimmed);
-                            syncFilters((prev) => ({ ...prev, dezenasFixas: trimmed }));
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] shrink-0 transition cursor-pointer"
+
+                      {showRiskAlert && (
+                        <div
+                          className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                            fixasRisk.level === 'critico'
+                              ? 'bg-rose-950/45 border-rose-500/50 text-rose-100'
+                              : 'bg-amber-950/40 border-amber-500/45 text-amber-100'
+                          }`}
                         >
-                          Reduzir para {RECOMMENDED_MAX_FIXAS} Fixas
-                        </button>
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle
+                              className={`w-4 h-4 shrink-0 mt-0.5 ${
+                                fixasRisk.level === 'critico' ? 'text-rose-400' : 'text-amber-400'
+                              }`}
+                            />
+                            <div className="text-[11px] leading-snug">
+                              <strong className="block font-black">{fixasRisk.title}</strong>
+                              <span className="text-slate-300">{fixasRisk.message}</span>
+                            </div>
+                          </div>
+                          {fixedNumbers.length > RECOMMENDED_MAX_FIXAS && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const trimmed = fixedNumbers.slice(0, RECOMMENDED_MAX_FIXAS);
+                                setFixedNumbers(trimmed);
+                                syncFilters((prev) => ({ ...prev, dezenasFixas: trimmed }));
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] shrink-0 transition cursor-pointer"
+                            >
+                              Reduzir para {RECOMMENDED_MAX_FIXAS} Fixas
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  );
+                })()}
+              </motion.div>
 
-            {/* Filtro Avançado: Distância de Hamming Dinâmica (baseado nos últimos 5 resultados) */}
-            <FiltroHammingDinamicoCard
-              filters={filters}
-              onChange={(f) => handleFiltersChange(f, false)}
-              latestDraw={latestDraw}
-              universeSize={selectedNumbers.length || targetCount}
-              maxTickets={preset.jogosMaximos}
-              generatedTickets={generatedTickets}
-            />
+              {/* Filtro Avançado: Distância de Hamming Dinâmica (reordena suavemente quando ativo) */}
+              <motion.div
+                key="hamming-card-container"
+                layout
+                transition={filterLayoutTransition}
+                style={{ order: filters.hammingDinamicoAtivo ? 1 : 2 }}
+              >
+                <FiltroHammingDinamicoCard
+                  filters={filters}
+                  onChange={(f) => handleFiltersChange(f, false)}
+                  latestDraw={latestDraw}
+                  universeSize={selectedNumbers.length || targetCount}
+                  maxTickets={preset.jogosMaximos}
+                  generatedTickets={generatedTickets}
+                />
+              </motion.div>
+            </motion.div>
 
             {/* Drawer Expandível de Ajuste Fino */}
-            {isAdvancedFiltersOpen && (
-              <div className="pt-3 border-t border-slate-800/80 space-y-4 animate-in fade-in duration-200">
-                <EquilibrioEstruturalSelector
-                  filters={filters}
-                  onChange={(f) => handleFiltersChange(f, true)}
-                  selectedNumbers={selectedNumbers}
-                  latestDraw={latestDraw}
-                />
+            <AnimatePresence initial={false}>
+              {isAdvancedFiltersOpen && (
+                <motion.div
+                  key="advanced-filters-drawer"
+                  layout
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={filterLayoutTransition}
+                  className="pt-3 border-t border-slate-800/80 space-y-4"
+                >
+                  <EquilibrioEstruturalSelector
+                    filters={filters}
+                    onChange={(f) => handleFiltersChange(f, true)}
+                    selectedNumbers={selectedNumbers}
+                    latestDraw={latestDraw}
+                  />
 
-                <FilterControls
-                  filters={filters}
-                  onChange={(f) => handleFiltersChange(f, true)}
-                  onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
-                  latestDraw={latestDraw}
-                  selectedNumbers={selectedNumbers}
-                  soundAlertEnabled={soundAlertEnabled}
-                  onToggleSoundAlert={handleToggleSoundAlert}
-                />
+                  <FilterControls
+                    filters={filters}
+                    onChange={(f) => handleFiltersChange(f, true)}
+                    onReset={() => handleFiltersChange(DEFAULT_FILTERS, true)}
+                    latestDraw={latestDraw}
+                    selectedNumbers={selectedNumbers}
+                    soundAlertEnabled={soundAlertEnabled}
+                    onToggleSoundAlert={handleToggleSoundAlert}
+                  />
 
-                <ModuloRobustezEstatistica
-                  filters={filters}
-                  onChange={(f) => handleFiltersChange(f, true)}
-                  dynamicStats={dynamicStats}
-                  latestDraw={latestDraw}
-                  discardedByRobustezCount={discardedByRobustezCount}
-                  totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
-                  onGeneratePonderado={handleGeneratePonderado}
-                  isGenerating={isGenerating}
-                />
+                  <ModuloRobustezEstatistica
+                    filters={filters}
+                    onChange={(f) => handleFiltersChange(f, true)}
+                    dynamicStats={dynamicStats}
+                    latestDraw={latestDraw}
+                    discardedByRobustezCount={discardedByRobustezCount}
+                    totalCombinacoesAvaliadas={totalCombinacoesAvaliadas}
+                    onGeneratePonderado={handleGeneratePonderado}
+                    isGenerating={isGenerating}
+                  />
 
-                <SomaScatterPlot
-                  latestDraw={latestDraw}
-                  currentSomaMin={filters.somaMin}
-                  currentSomaMax={filters.somaMax}
-                  onApplySomaRange={(min, max) =>
-                    handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
-                  }
-                />
-              </div>
-            )}
-          </div>
+                  <SomaScatterPlot
+                    latestDraw={latestDraw}
+                    currentSomaMin={filters.somaMin}
+                    currentSomaMax={filters.somaMax}
+                    onApplySomaRange={(min, max) =>
+                      handleFiltersChange({ ...filters, somaMin: min, somaMax: max }, true)
+                    }
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           {/* 4. Sticky HUD Action Bar */}
           <div className="sticky bottom-2 z-20 pt-2">
@@ -4252,10 +4296,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 type="button"
                 onClick={handleExportPDF}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition cursor-pointer shadow-md shadow-rose-500/20"
-                title="Exportar dossiê oficial formatado em PDF pronto para conferência e impressão"
+                title="Baixar relatório executivo em PDF A4 pronto para impressão"
               >
                 <FileText className="w-3.5 h-3.5 text-white" />
                 <span>Exportar PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsExportPdfModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/10"
+                title="Pré-visualizar relatório de impressão profissional A4 e volantes Gold para PDF"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <span>Prévia PDF Pro</span>
               </button>
               <button
                 type="button"
@@ -5003,6 +5056,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         onClose={() => setIsPrintVolantesModalOpen(false)}
         tickets={generatedTickets}
         fechamentoNome={preset.nome}
+      />
+
+      {/* MODAL PROFISSIONAL DE IMPRESSÃO / EXPORTAÇÃO PDF A4 GOLD */}
+      <ExportPDFModal
+        isOpen={isExportPdfModalOpen}
+        onClose={() => setIsExportPdfModalOpen(false)}
+        tickets={generatedTickets}
+        latestDraw={latestDraw}
+        fechamentoMeta={getCurrentExportMeta()}
       />
     </div>
   );

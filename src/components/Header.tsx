@@ -15,9 +15,11 @@ import {
   Check,
   BookOpen,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { LotofacilDraw } from '../types/lotofacil';
 import { LotoSniperLogo } from './LotoSniperLogo';
 import { DevServerHealthStatus } from './DevServerHealthStatus';
+import { staggerBallVariants, staggerContainerVariants } from '../utils/staggerAnimation';
 
 export type HeaderAppTheme = 'gold' | 'high_contrast' | 'slate';
 
@@ -520,22 +522,29 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* 15 Dezenas Sorteadas no Último Concurso */}
+          {/* 15 Dezenas Sorteadas no Último Concurso (Staggered Fade-In ao Atualizar Concurso) */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
               Dezenas:
             </span>
-            <div className="flex items-center gap-1 flex-wrap">
+            <motion.div
+              key={`header-dezenas-${latestDraw.concurso}-${(latestDraw.dezenas || []).join('-')}`}
+              variants={staggerContainerVariants}
+              initial="hidden"
+              animate="visible"
+              className="flex items-center gap-1 flex-wrap"
+            >
               {(latestDraw.dezenas || []).map((num) => (
-                <span
+                <motion.span
                   key={num}
+                  variants={staggerBallVariants}
                   className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
                   title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${latestDraw.concurso}`}
                 >
                   {num.toString().padStart(2, '0')}
-                </span>
+                </motion.span>
               ))}
-            </div>
+            </motion.div>
           </div>
 
           {/* Número Oficial de Ganhadores com 15 Pontos e 14 Pontos */}

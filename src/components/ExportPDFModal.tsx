@@ -47,11 +47,8 @@ export const ExportPDFModal: React.FC<ExportPDFModalProps> = ({
     ? savedFechamento.tickets
     : propTickets;
 
-  // Veto categórico de bilhetes com alerta estatístico de soma < 180 (blindagem da Zona de Ouro)
-  const validTickets = sourceTickets.filter((t) => {
-    const soma = t.soma ?? t.dezenas.reduce((acc, curr) => acc + curr, 0);
-    return soma >= 180;
-  });
+  // Preserva todos os bilhetes gerados (incluindo Zona Central 180-215 e Caudas Estratégicas)
+  const validTickets = sourceTickets;
 
   // Metadados do fechamento
   const resolvedConcurso = Number(savedFechamento?.concurso || fechamentoMeta?.concurso || latestDraw.concurso) || CONCURSO_ATUAL.concurso;

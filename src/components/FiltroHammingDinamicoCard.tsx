@@ -1,5 +1,7 @@
 import React, { useMemo, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Sliders, Sparkles, Activity, CheckCircle2, Info } from 'lucide-react';
+import { filterLayoutTransition } from '../utils/staggerAnimation';
 import { FilterCriteria, GameTicket, LotofacilDraw } from '../types/lotofacil';
 import { CONCURSO_ATUAL } from '../data/lotofacilData';
 import { getHistoricalNDraws } from '../services/historical100Draws';
@@ -149,10 +151,12 @@ export const FiltroHammingDinamicoCard: React.FC<FiltroHammingDinamicoCardProps>
     TOLERANCE_DESCRIPTIONS[configuredThreshold] || TOLERANCE_DESCRIPTIONS[3];
 
   return (
-    <div
+    <motion.div
+      layout
+      transition={filterLayoutTransition}
       className={`rounded-xl border p-4 space-y-4 transition-colors ${
         isEnabled
-          ? 'bg-slate-950/90 border-amber-500/50'
+          ? 'bg-slate-950/95 border-amber-400/70 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/25'
           : 'bg-slate-950/65 border-slate-800'
       }`}
     >
@@ -168,9 +172,14 @@ export const FiltroHammingDinamicoCard: React.FC<FiltroHammingDinamicoCardProps>
               Sugestão: Hamming ≥ {recommendation.suggestedMinHamming}
             </span>
           </div>
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+          <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
             <Sliders className="w-4 h-4 text-amber-400 shrink-0" />
             <span>Distância de Hamming Dinâmica</span>
+            {isEnabled && (
+              <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/50">
+                PRIORIZADO • dH ≥ {effectiveAppliedThreshold}
+              </span>
+            )}
           </h4>
         </div>
 
@@ -203,7 +212,7 @@ export const FiltroHammingDinamicoCard: React.FC<FiltroHammingDinamicoCardProps>
       </div>
 
       {/* Diagnóstico dos Últimos 5 Resultados */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 pt-3 border-t border-slate-800/80">
+      <motion.div layout transition={filterLayoutTransition} className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 pt-3 border-t border-slate-800/80">
         <div className="lg:col-span-6 space-y-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
@@ -354,7 +363,7 @@ export const FiltroHammingDinamicoCard: React.FC<FiltroHammingDinamicoCardProps>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
