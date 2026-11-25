@@ -271,6 +271,7 @@ export interface CriticalDelayMonitorConfig {
   includeCycleNumbersAutomatically: boolean;
   extraSelectedNumbers: number[];
   threshold: number;
+  notifyWhenDrawn?: boolean;
   updatedAt?: string;
 }
 
@@ -278,6 +279,7 @@ export const DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG: CriticalDelayMonitorConfig =
   includeCycleNumbersAutomatically: true,
   extraSelectedNumbers: [5, 10, 13, 20, 24],
   threshold: 5,
+  notifyWhenDrawn: true,
 };
 
 export function getCriticalDelayMonitorConfig(): CriticalDelayMonitorConfig {
@@ -300,6 +302,8 @@ export function getCriticalDelayMonitorConfig(): CriticalDelayMonitorConfig {
           typeof parsed?.threshold === 'number' && parsed.threshold >= 2 && parsed.threshold <= 15
             ? parsed.threshold
             : getDetailedNotificationRules().events.atrasosCriticos.threshold ?? 5,
+        notifyWhenDrawn:
+          parsed?.notifyWhenDrawn !== undefined ? Boolean(parsed.notifyWhenDrawn) : true,
         updatedAt: parsed?.updatedAt,
       };
     }
@@ -315,6 +319,7 @@ export function getCriticalDelayMonitorConfig(): CriticalDelayMonitorConfig {
           : DEFAULT_CRITICAL_DELAY_MONITOR_CONFIG.extraSelectedNumbers,
         threshold:
           typeof opp?.criticalDelayThreshold === 'number' ? opp.criticalDelayThreshold : 5,
+        notifyWhenDrawn: true,
       };
     }
   } catch {}
@@ -332,6 +337,7 @@ export function saveCriticalDelayMonitorConfig(config: CriticalDelayMonitorConfi
       )
     ).sort((a, b) => a - b),
     threshold: Math.max(2, Math.min(15, Number(config.threshold) || 5)),
+    notifyWhenDrawn: config.notifyWhenDrawn !== false,
     updatedAt: new Date().toISOString(),
   };
 

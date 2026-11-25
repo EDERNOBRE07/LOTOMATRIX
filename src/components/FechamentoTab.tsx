@@ -136,6 +136,7 @@ import {
   Printer,
   Users,
   Calculator,
+  Share2,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -506,6 +507,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [sharedStrategyFeedback, setSharedStrategyFeedback] = useState<'shared' | 'copied' | null>(null);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [documentMessage, setDocumentMessage] = useState<string | null>(null);
   const [generationType, setGenerationType] = useState<'matriz' | 'fibonacci' | 'turbo'>('matriz');
@@ -2724,6 +2726,86 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setTimeout(() => setCopiedAll(false), 2000);
   };
 
+  // Compartilhamento social da estratégia atual e dos bilhetes gerados (Web Share API + fallback clipboard)
+  const handleShareStrategy = async () => {
+    if (generatedTickets.length === 0) return;
+
+    const concursoBase = resolveConcursoBase(latestDraw.concurso, CONCURSO_ATUAL.concurso);
+    const concursoAlvo = Number(concursoBase) + 1;
+    const custoTotalFmt = (generatedTickets.length * VALOR_APOSTA_LOTOFACIL).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+    });
+    const ticketsLines = generatedTickets
+      .map(
+        (t) =>
+          `J${t.index.toString().padStart(2, '0')}: ${t.dezenas
+            .map((n) => n.toString().padStart(2, '0'))
+            .join(' ')}`
+      )
+      .join('\n');
+
+    const shareTitle = `LotoSniper AI Pro • ${preset.nome} (#${concursoAlvo})`;
+    const shareText = [
+      `LotoSniper AI Pro • Concurso Alvo #${concursoAlvo} (Base #${concursoBase})`,
+      `Estratégia: ${preset.nome} (${strategyName})`,
+      `Garantia: ${preset.garantia} | ${generatedTickets.length} jogos | Investimento: R$ ${custoTotalFmt}`,
+      `Dezenas (${selectedNumbers.length}): ${selectedNumbers
+        .map((n) => n.toString().padStart(2, '0'))
+        .join(' ')}`,
+      '',
+      ticketsLines,
+    ].join('\n');
+
+    const copyFallback = async () => {
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(shareText);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = shareText;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        setSharedStrategyFeedback('copied');
+        setDocumentMessage(
+          `Resumo da estratégia (${generatedTickets.length} jogos • R$ ${custoTotalFmt}) copiado para a área de transferência.`
+        );
+        setTimeout(() => setSharedStrategyFeedback(null), 2500);
+        setTimeout(() => setDocumentMessage(null), 5000);
+      } catch {
+        setDocumentMessage('Não foi possível copiar o resumo da estratégia neste navegador.');
+        setTimeout(() => setDocumentMessage(null), 4000);
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+        });
+        setSharedStrategyFeedback('shared');
+        setDocumentMessage(
+          `Estratégia ${preset.nome} (${generatedTickets.length} jogos) compartilhada com sucesso.`
+        );
+        setTimeout(() => setSharedStrategyFeedback(null), 2500);
+        setTimeout(() => setDocumentMessage(null), 5000);
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        await copyFallback();
+        return;
+      }
+    }
+
+    await copyFallback();
+  };
+
   const handleCopyTicket = (ticket: GameTicket) => {
     const text = ticket.dezenas.map((n) => n.toString().padStart(2, '0')).join(' ');
     navigator.clipboard.writeText(text);
@@ -4183,6 +4265,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           targetCount={targetCount}
           totalJogos={generatedTickets.length || preset.jogosMaximos}
           isGenerated={generatedTickets.length > 0}
+          tickets={generatedTickets}
+          activeFilters={effectiveFilters}
+          filterConfigId={studioFiltersEnabled ? studioFilterMode : 'desativado'}
+          concursoBase={resolveConcursoBase(latestDraw.concurso, CONCURSO_ATUAL.concurso)}
           title={
             generatedTickets.length > 0
               ? 'Totalizador de Custos dos Jogos Gerados'
@@ -4616,6 +4702,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   <>
                     <Copy className="w-3.5 h-3.5" />
                     <span>Copiar Todos (TXT)</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleShareStrategy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-semibold transition cursor-pointer"
+                title="Compartilhar resumo da estratégia e bilhetes gerados (Web Share ou copiar para área de transferência)"
+              >
+                {sharedStrategyFeedback === 'shared' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Compartilhado!</span>
+                  </>
+                ) : sharedStrategyFeedback === 'copied' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Resumo Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Compartilhar Estratégia</span>
                   </>
                 )}
               </button>

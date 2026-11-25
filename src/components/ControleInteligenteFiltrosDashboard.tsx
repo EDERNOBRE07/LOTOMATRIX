@@ -13,7 +13,43 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
-import { computeSoftFilterPriorityScore } from '../services/combinatorics';
+import { computeSoftFilterPriorityScore, SoftFilterPriorityResult } from '../services/combinatorics';
+
+export interface DashboardQueuePriorityBreakdown {
+  inRange: SoftFilterPriorityResult & { soma: number; repetidas: number };
+  atypicalWinner: SoftFilterPriorityResult & { soma: number; repetidas: number };
+  somaSoftActive: boolean;
+  repetidasSoftActive: boolean;
+}
+
+export function evaluateDashboardSoftQueuePriority(
+  effectiveFilters: FilterCriteria
+): DashboardQueuePriorityBreakdown {
+  const targetSoma = Math.round((effectiveFilters.somaMin + effectiveFilters.somaMax) / 2);
+  const targetRep = Math.round((effectiveFilters.repetidasMin + effectiveFilters.repetidasMax) / 2);
+  const outlierSoma = Math.max(125, effectiveFilters.somaMin - 14);
+  const outlierRep = Math.max(3, effectiveFilters.repetidasMin - 2);
+
+  return {
+    inRange: {
+      soma: targetSoma,
+      repetidas: targetRep,
+      ...computeSoftFilterPriorityScore({ soma: targetSoma, repetidas: targetRep }, effectiveFilters),
+    },
+    atypicalWinner: {
+      soma: outlierSoma,
+      repetidas: outlierRep,
+      ...computeSoftFilterPriorityScore({ soma: outlierSoma, repetidas: outlierRep }, effectiveFilters),
+    },
+    somaSoftActive: effectiveFilters.softScoringSomaAtivo !== false,
+    repetidasSoftActive: effectiveFilters.softScoringRepetidasAtivo !== false,
+  };
+}
+
+function formatSignedBonus(val: number): string {
+  const fixed = val.toFixed(1);
+  return val >= 0 ? `+${fixed}` : fixed;
+}
 
 interface ControleInteligenteFiltrosDashboardProps {
   enabled: boolean;
@@ -132,24 +168,9 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
 
   const activeModeMeta = RIGOR_MODES.find((m) => m.id === rigorMode) || RIGOR_MODES[0];
 
-  const isSomaSoft = enabled && effectiveFilters.softScoringSomaAtivo !== false;
-  const isRepetidasSoft = enabled && effectiveFilters.softScoringRepetidasAtivo !== false;
-
-  // Demonstração determinística do comportamento do Soft-Scoring em cenário limítrofe (ex: soma baixa 158 / 5 repetidas)
-  const sampleInRangeScore = computeSoftFilterPriorityScore(
-    {
-      soma: Math.round((effectiveFilters.somaMin + effectiveFilters.somaMax) / 2),
-      repetidas: Math.round((effectiveFilters.repetidasMin + effectiveFilters.repetidasMax) / 2),
-    },
-    effectiveFilters
-  );
-  const sampleOutlierScore = computeSoftFilterPriorityScore(
-    {
-      soma: Math.max(120, effectiveFilters.somaMin - 12),
-      repetidas: Math.max(3, effectiveFilters.repetidasMin - 1),
-    },
-    effectiveFilters
-  );
+  const queueBreakdown = evaluateDashboardSoftQueuePriority(effectiveFilters);
+  const isSomaSoft = enabled && queueBreakdown.somaSoftActive;
+  const isRepetidasSoft = enabled && queueBreakdown.repetidasSoftActive;
 
   // Badges descritivas separando Soft-Scoring (prioridade na fila) vs Hard-Filter (descarte)
   const filterBadges: Array<{ label: string; active: boolean; mode: 'soft' | 'hard' }> = [
@@ -181,12 +202,12 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
     {
       label: `Primos ${effectiveFilters.primosMin}–${effectiveFilters.primosMax} (Soft)`,
       active: enabled && rigorMode === 'total',
-      mode: 'hard',
+      mode: 'soft',
     },
     {
       label: `Fibonacci ${effectiveFilters.fibonacciMin}–${effectiveFilters.fibonacciMax} (Soft)`,
       active: enabled && rigorMode === 'total',
-      mode: 'hard',
+      mode: 'soft',
     },
     {
       label: `Paridade Rep. (${effectiveFilters.repetidasParesMin ?? 2}–${effectiveFilters.repetidasParesMax ?? 6}P / ${effectiveFilters.repetidasImparesMin ?? 2}–${effectiveFilters.repetidasImparesMax ?? 6}I)`,
@@ -406,57 +427,88 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
 
       {/* Painel Soft-Scoring (Prioridade na Fila para Soma e Repetidas) */}
       {enabled && (
-        <div className="mt-4 p-3.5 rounded-xl bg-sky-950/25 border border-sky-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
-              <span className="text-xs font-black text-sky-200">
-                Fila de Prioridade Soft-Scoring (Soma &amp; Repetidas)
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-400/40">
-                Alvo: +{sampleInRangeScore.queuePriorityBonus} pts · Fora da média: +{sampleOutlierScore.queuePriorityBonus} pts (Sem Descarte)
-              </span>
+        <div className="mt-4 p-3.5 rounded-xl bg-sky-950/25 border border-sky-500/30 space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
+                <span className="text-xs font-black text-sky-200">
+                  Sistema de Pontuação Soft-Scoring (Prioridade na Fila: Soma 55% · Repetidas 45%)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Em vez de descartar combinações vencedoras por padrões rígidos, <strong className="text-white">Soma ({effectiveFilters.somaMin}–{effectiveFilters.somaMax})</strong> e{' '}
+                <strong className="text-white">Repetidas ({effectiveFilters.repetidasMin}–{effectiveFilters.repetidasMax})</strong> ordenam a fila do Set Cover Adaptativo por decaimento gaussiano suave.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Combinações dentro de <strong className="text-white">Soma {effectiveFilters.somaMin}–{effectiveFilters.somaMax}</strong> e{' '}
-              <strong className="text-white">Repetidas {effectiveFilters.repetidasMin}–{effectiveFilters.repetidasMax}</strong> ganham prioridade máxima no Set Cover Adaptativo, enquanto combinações atípicas permanecem elegíveis para capturar 13–14 pontos.
-            </p>
+
+            {onToggleSoftScoring && rigorMode !== 'agressivo' ? (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleSoftScoring('soma', !isSomaSoft);
+                    soundService.playFilterClick();
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
+                    isSomaSoft
+                      ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                      : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                  }`}
+                  title="Alternar Soma entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
+                >
+                  Soma: {isSomaSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleSoftScoring('repetidas', !isRepetidasSoft);
+                    soundService.playFilterClick();
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
+                    isRepetidasSoft
+                      ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                      : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                  }`}
+                  title="Alternar Repetidas entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
+                >
+                  Repetidas: {isRepetidasSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
+                </button>
+              </div>
+            ) : (
+              <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/50 text-sky-200 whitespace-nowrap shrink-0">
+                Soft-Scoring Sempre Ativo no Modo Agressivo
+              </span>
+            )}
           </div>
 
-          {onToggleSoftScoring && rigorMode !== 'agressivo' && (
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  onToggleSoftScoring('soma', !isSomaSoft);
-                  soundService.playFilterClick();
-                }}
-                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
-                  isSomaSoft
-                    ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
-                    : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
-                }`}
-                title="Alternar Soma entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
-              >
-                Soma: {isSomaSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onToggleSoftScoring('repetidas', !isRepetidasSoft);
-                  soundService.playFilterClick();
-                }}
-                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
-                  isRepetidasSoft
-                    ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
-                    : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
-                }`}
-                title="Alternar Repetidas entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
-              >
-                Repetidas: {isRepetidasSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
-              </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] font-mono">
+            <div className="rounded-lg bg-slate-950/65 border border-sky-500/25 px-3 py-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-sky-300 font-bold block">Faixa Alvo (Prioridade Máxima)</span>
+                <span className="text-[10px] text-slate-400">
+                  Soma {queueBreakdown.inRange.soma} · {queueBreakdown.inRange.repetidas} Rep · Score {queueBreakdown.inRange.combinedScore}/100
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold whitespace-nowrap shrink-0">
+                Fila {formatSignedBonus(queueBreakdown.inRange.queuePriorityBonus)} pts
+              </span>
             </div>
-          )}
+
+            <div className="rounded-lg bg-slate-950/65 border border-slate-700/70 px-3 py-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-amber-300 font-bold block">
+                  Vencedor Atípico ({isSomaSoft && isRepetidasSoft ? '0% Descarte' : 'Hard Parcial'})
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Soma {queueBreakdown.atypicalWinner.soma} · {queueBreakdown.atypicalWinner.repetidas} Rep · Score {queueBreakdown.atypicalWinner.combinedScore}/100
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-400/40 font-bold whitespace-nowrap shrink-0">
+                Fila {formatSignedBonus(queueBreakdown.atypicalWinner.queuePriorityBonus)} pts
+              </span>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1755,71 +1755,6 @@ function buildHistoricalMasksSet(draws) {
   }
   return set;
 }
-var MATRIZES_COBERTURA = {
-  // C(v=16, k=15, t=14) -> 4 jogos cobrindo 100% dos 16 subconjuntos
-  "16_15_14": {
-    totalDezenas: 16,
-    tamanhoJogo: 15,
-    garantia: 14,
-    totalJogos: 4,
-    linhas: [
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15]
-    ]
-  },
-  // C(v=17, k=15, t=14) -> 8 jogos cobrindo 100% dos 136 subconjuntos
-  "17_15_14": {
-    totalDezenas: 17,
-    tamanhoJogo: 15,
-    garantia: 14,
-    totalJogos: 8,
-    linhas: [
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 16],
-      [0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16],
-      [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-      [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-      [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-    ]
-  },
-  // C(v=18, k=15, t=14) -> 24 jogos provados cobrindo 100% dos 816 subconjuntos
-  "18_15_14": {
-    totalDezenas: 18,
-    tamanhoJogo: 15,
-    garantia: 14,
-    totalJogos: 24,
-    linhas: [
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17],
-      [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 1, 3, 4, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [1, 2, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14, 16, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 16, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 15, 17],
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16],
-      [0, 1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 1, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [0, 2, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [1, 2, 3, 4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
-      [1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-    ]
-  }
-};
 function buildPodaDinamicaContext(variaveisValores, variaveisBits, filtros, fixasMask) {
   const n = variaveisValores.length;
   const sufCruz = new Int8Array(n + 1);
@@ -2116,7 +2051,7 @@ function getCombinations(arr, k) {
   backtrack(0, []);
   return result;
 }
-function countMatches(arr1, arr2) {
+function countMatches2(arr1, arr2) {
   let i = 0;
   let j = 0;
   let matches = 0;
@@ -2804,10 +2739,12 @@ function validateFilters(combination, activeFilterConfig, concursoAnterior = CON
       `Zona de Ouro de Primos violada: ${analysis.primos} (esperado estrito: 5-6)`
     );
   }
-  if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
-    violations.push(
-      `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
-    );
+  if (!activeFilterConfig.softScoringSomaAtivo) {
+    if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
+      violations.push(
+        `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
+      );
+    }
   }
   if (analysis.moldura < activeFilterConfig.molduraMin || analysis.moldura > activeFilterConfig.molduraMax) {
     violations.push(
@@ -2823,10 +2760,12 @@ function validateFilters(combination, activeFilterConfig, concursoAnterior = CON
   const repCount = analysis.repetidas ?? repetidasIntersecao.length;
   const repParesCount = analysis.repetidasPares ?? repetidasIntersecao.filter((n) => n % 2 === 0).length;
   const repImparesCount = analysis.repetidasImpares ?? repetidasIntersecao.filter((n) => n % 2 !== 0).length;
-  if (repCount < activeFilterConfig.repetidasMin || repCount > activeFilterConfig.repetidasMax) {
-    violations.push(
-      `Repetidas fora da faixa: ${repCount} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
-    );
+  if (!activeFilterConfig.softScoringRepetidasAtivo) {
+    if (repCount < activeFilterConfig.repetidasMin || repCount > activeFilterConfig.repetidasMax) {
+      violations.push(
+        `Repetidas fora da faixa: ${repCount} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
+      );
+    }
   }
   if (activeFilterConfig.repetidasParidadeAtiva) {
     const rpMin = activeFilterConfig.repetidasParesMin ?? 0;
@@ -3059,6 +2998,32 @@ function validateFilters(combination, activeFilterConfig, concursoAnterior = CON
 function ticketPassesFilters(ticket, filters, concursoAnterior = CONCURSO_ATUAL.dezenas) {
   return validateFilters(ticket, filters, concursoAnterior).isValid;
 }
+function computeSoftFilterPriorityScore(metrics, filters) {
+  const somaMin = filters?.somaMin ?? 165;
+  const somaMax = filters?.somaMax ?? 225;
+  const repMin = filters?.repetidasMin ?? 6;
+  const repMax = filters?.repetidasMax ?? 11;
+  const somaInTarget = metrics.soma >= somaMin && metrics.soma <= somaMax;
+  const repInTarget = metrics.repetidas >= repMin && metrics.repetidas <= repMax;
+  let somaDist = 0;
+  if (metrics.soma < somaMin) somaDist = somaMin - metrics.soma;
+  else if (metrics.soma > somaMax) somaDist = metrics.soma - somaMax;
+  const somaScore = somaInTarget ? 100 : Math.round(100 * Math.exp(-(somaDist * somaDist) / (2 * 24 * 24)));
+  let repDist = 0;
+  if (metrics.repetidas < repMin) repDist = repMin - metrics.repetidas;
+  else if (metrics.repetidas > repMax) repDist = metrics.repetidas - repMax;
+  const repetidasScore = repInTarget ? 100 : Math.round(100 * Math.exp(-(repDist * repDist) / (2 * 2 * 2)));
+  const combinedScore = Math.round(somaScore * 0.55 + repetidasScore * 0.45);
+  const queuePriorityBonus = Number(((combinedScore - 50) / 50 * 9 + 3).toFixed(2));
+  return {
+    somaScore,
+    repetidasScore,
+    combinedScore,
+    queuePriorityBonus,
+    somaInTarget,
+    repetidasInTarget: repInTarget
+  };
+}
 function isCanonicalAnomaly(numbers, analysis, concursoAnterior = CONCURSO_ATUAL.dezenas, sumBoundsOverride) {
   const sorted = [...numbers].sort((a, b) => a - b);
   const soma = analysis?.soma ?? sorted.reduce((acc, curr) => acc + curr, 0);
@@ -3078,7 +3043,7 @@ function isCanonicalAnomaly(numbers, analysis, concursoAnterior = CONCURSO_ATUAL
   if (isHistorical15Collision(sorted)) return true;
   if (hasViciousVisualPattern(sorted).isVicious) return true;
   if (concursoAnterior && concursoAnterior.length === 15) {
-    const repetidas = analysis?.repetidas ?? countMatches(sorted, concursoAnterior);
+    const repetidas = analysis?.repetidas ?? countMatches2(sorted, concursoAnterior);
     if (repetidas < 5 || repetidas > 13) return true;
   }
   return false;
@@ -3177,9 +3142,25 @@ function generateMinimumSetCoverFechamento({
   const universeSubsets = getCombinations(sortedPool, 15);
   const universeMasks = universeSubsets.map(criarMascara);
   const totalUniverse = universeMasks.length;
+  const lastDrawMask = criarMascara(concursoAnterior);
+  const universeWeights = new Float32Array(totalUniverse);
+  for (let u = 0; u < totalUniverse; u++) {
+    const sub = universeSubsets[u];
+    let sSum = 0;
+    let sPares = 0;
+    for (let k = 0; k < sub.length; k++) {
+      sSum += sub[k];
+      if ((sub[k] & 1) === 0) sPares++;
+    }
+    const sRep = popcount(universeMasks[u] & lastDrawMask);
+    const softU = computeSoftFilterPriorityScore({ soma: sSum, repetidas: sRep }, effectiveCoreFilters);
+    const parityFactor = sPares >= 6 && sPares <= 9 ? 1 : sPares === 5 || sPares === 10 ? 0.88 : 0.72;
+    universeWeights[u] = Number((0.55 + softU.combinedScore / 100 * 0.55 * parityFactor + 0.15 * parityFactor).toFixed(4));
+  }
+  const useSoftSoma = Boolean(effectiveCoreFilters?.softScoringSomaAtivo);
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
-    somaMax: Math.max(225, centralMax)
+    somaMin: useSoftSoma ? 120 : Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
+    somaMax: useSoftSoma ? 285 : Math.max(225, centralMax)
   };
   const isCandidateValid = (nums) => {
     if (!checkFixasCompliance(nums)) return false;
@@ -3187,14 +3168,14 @@ function generateMinimumSetCoverFechamento({
       return true;
     }
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
-    const skipHardCanonical = effectiveCoreFilters?.modoRigorFiltros === "agressivo" || effectiveCoreFilters?.modoRigorFiltros === "conservador";
+    const skipHardCanonical = effectiveCoreFilters?.modoRigorFiltros === "agressivo" || effectiveCoreFilters?.modoRigorFiltros === "conservador" || useSoftSoma;
     if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
       return false;
     }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
-    if (a.soma < centralMin || a.soma > centralMax) return false;
+    if (!useSoftSoma && (a.soma < centralMin || a.soma > centralMax)) return false;
     return true;
   };
   const enableStratification = maxTickets >= 10 && n >= 16 && effectiveCoreFilters?.estratificacaoCaudaAtiva === true;
@@ -3269,8 +3250,8 @@ function generateMinimumSetCoverFechamento({
     validacaoEstritaCruz: false,
     rankingHistoricoAtivo: false
   } : {
-    somaMin: centralMin,
-    somaMax: centralMax,
+    somaMin: useSoftSoma ? 120 : centralMin,
+    somaMax: useSoftSoma ? 285 : centralMax,
     paresMin: effectiveCoreFilters?.paresMin ?? 5,
     paresMax: effectiveCoreFilters?.paresMax ?? 10,
     posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? false,
@@ -3418,88 +3399,36 @@ function generateMinimumSetCoverFechamento({
       );
     }
   }
-  const ljcrKey = `${n}_15_${targetHits}`;
-  const ljcrEntry = effectiveFixas.length === 0 ? MATRIZES_COBERTURA[ljcrKey] : void 0;
-  let ljcrSeedMasks = null;
-  if (ljcrEntry && maxTickets >= ljcrEntry.linhas.length && !enableStratification) {
-    const candidateMaskSet = new Set(candidateCombos.map(criarMascara));
-    const byScore = aiScores ? [...sortedPool].sort((a, b) => (aiScores[b - 1] ?? 50) - (aiScores[a - 1] ?? 50)) : [...sortedPool];
-    const interleaved = [];
-    for (let lo = 0, hi = sortedPool.length - 1; lo <= hi; lo++, hi--) {
-      interleaved.push(sortedPool[lo]);
-      if (lo !== hi) interleaved.push(sortedPool[hi]);
-    }
-    const evens = sortedPool.filter((x) => x % 2 === 0);
-    const odds = sortedPool.filter((x) => x % 2 !== 0);
-    const parityInterleaved = [];
-    for (let i = 0; i < Math.max(evens.length, odds.length); i++) {
-      if (i < odds.length) parityInterleaved.push(odds[i]);
-      if (i < evens.length) parityInterleaved.push(evens[i]);
-    }
-    const permutations = [
-      sortedPool,
-      interleaved,
-      parityInterleaved,
-      byScore,
-      [...sortedPool].reverse(),
-      [...interleaved.slice(3), ...interleaved.slice(0, 3)],
-      [...interleaved.slice(6), ...interleaved.slice(0, 6)],
-      [...parityInterleaved.slice(4), ...parityInterleaved.slice(0, 4)]
-    ];
-    let bestPermMatched = -1;
-    let bestPermLines = null;
-    for (const perm of permutations) {
-      const mapped = ljcrEntry.linhas.map((tpl) => tpl.map((idx) => perm[idx]).sort((a, b) => a - b));
-      let matched = 0;
-      for (const line of mapped) {
-        if (candidateMaskSet.has(criarMascara(line))) matched++;
-      }
-      if (matched > bestPermMatched) {
-        bestPermMatched = matched;
-        bestPermLines = mapped;
-      }
-      if (matched === mapped.length) break;
-    }
-    if (bestPermLines && bestPermMatched >= Math.ceil(bestPermLines.length * 0.65)) {
-      ljcrSeedMasks = /* @__PURE__ */ new Set();
-      for (const line of bestPermLines) {
-        const m = criarMascara(line);
-        if (!candidateMaskSet.has(m)) {
-          const lineSoma = line.reduce((acc, v) => acc + v, 0);
-          const linePares = line.filter((v) => v % 2 === 0).length;
-          if (lineSoma >= 150 && lineSoma <= 240 && linePares >= 4 && linePares <= 11) {
-            candidateCombos.push(line);
-            candidateMaskSet.add(m);
-          }
-        }
-        if (candidateMaskSet.has(m)) {
-          ljcrSeedMasks.add(m);
-        }
-      }
-    }
-  }
   const candMasks = candidateCombos.map(criarMascara);
   const candCount = candidateCombos.length;
-  const candCoverLists = new Array(candCount);
+  const candCover14Lists = new Array(candCount);
+  const candCover13OnlyLists = new Array(candCount);
   for (let i = 0; i < candCount; i++) {
     const cMask = candMasks[i];
-    const covered = [];
+    const cov14 = [];
+    const cov13 = [];
     for (let j = 0; j < totalUniverse; j++) {
-      if (popcount(cMask & universeMasks[j]) >= targetHits) {
-        covered.push(j);
+      const hits = popcount(cMask & universeMasks[j]);
+      if (hits >= 14) {
+        cov14.push(j);
+      } else if (hits === 13) {
+        cov13.push(j);
       }
     }
-    candCoverLists[i] = covered;
+    candCover14Lists[i] = cov14;
+    candCover13OnlyLists[i] = cov13;
   }
-  const candScores = candidateCombos.map(
-    (c) => analyzeTicket(c, concursoAnterior, aiScores).scoreIA
+  const candAnalyses = candidateCombos.map((c) => analyzeTicket(c, concursoAnterior, aiScores));
+  const candScores = candAnalyses.map((a) => a.scoreIA);
+  const candSoftBonuses = candAnalyses.map(
+    (a) => computeSoftFilterPriorityScore({ soma: a.soma, repetidas: a.repetidas }, effectiveCoreFilters).queuePriorityBonus
   );
-  const coveredCounts = new Uint16Array(totalUniverse);
-  let uncoveredRemaining = totalUniverse;
+  const covered14Counts = new Uint16Array(totalUniverse);
+  const covered13Counts = new Uint16Array(totalUniverse);
+  let uncovered14Remaining = totalUniverse;
   const chosenIndices = [];
   const chosenMasks = [];
   const chosenSet = /* @__PURE__ */ new Set();
-  const is18to21 = n >= 18 && n <= 21;
   const targetHammingDist = getTargetHammingDistance(n, maxTickets, filters);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
@@ -3514,9 +3443,15 @@ function generateMinimumSetCoverFechamento({
   let upperTailChosen = 0;
   let coreChosen = 0;
   const savedTicketsSet = getAllSavedTicketsSet();
-  const pickBestCandidate = (minHammingReq, requireUncoveredGain, enforceSoftFreqCap, enforceQuota = true) => {
+  const pickBestAdaptiveCandidate = (minHammingReq, requireUncoveredGain, enforceSoftFreqCap, enforceQuota = true) => {
     let bestCandIdx = -1;
-    let bestCombinedGain = -9999999;
+    let bestAdaptiveYield = -9999999;
+    const progress = chosenIndices.length / Math.max(1, maxTickets);
+    const focus13 = targetHits <= 13;
+    const weight14New = focus13 ? 44 + progress * 16 : 56 + progress * 26;
+    const weight13New = focus13 ? 30 * (1 - progress * 0.2) : 20 * (1 - progress * 0.35);
+    const weight13BoostWhenNo14 = focus13 ? 4.5 : 3.2;
+    const redundancyPenaltyPerOverlap14 = 7.5 + progress * 5;
     for (let i = 0; i < candCount; i++) {
       if (chosenSet.has(i)) continue;
       const cand = candidateCombos[i];
@@ -3539,14 +3474,34 @@ function generateMinimumSetCoverFechamento({
         continue;
       }
       const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
-      const covers = candCoverLists[i];
-      let newCovers = 0;
-      for (let k = 0; k < covers.length; k++) {
-        if (coveredCounts[covers[k]] === 0) {
-          newCovers++;
+      const cov14 = candCover14Lists[i];
+      let new14Weighted = 0;
+      let new14Raw = 0;
+      let redundant14Count = 0;
+      for (let k = 0; k < cov14.length; k++) {
+        const uIdx = cov14[k];
+        if (covered14Counts[uIdx] === 0) {
+          new14Weighted += universeWeights[uIdx];
+          new14Raw++;
+        } else {
+          redundant14Count++;
         }
       }
-      if (requireUncoveredGain && newCovers <= 0 && uncoveredRemaining > 0) continue;
+      const cov13 = candCover13OnlyLists[i];
+      let new13Weighted = 0;
+      let secondary13Boost = 0;
+      for (let k = 0; k < cov13.length; k++) {
+        const uIdx = cov13[k];
+        if (covered14Counts[uIdx] === 0) {
+          if (covered13Counts[uIdx] === 0) {
+            new13Weighted += universeWeights[uIdx];
+          } else if (covered13Counts[uIdx] === 1) {
+            secondary13Boost += universeWeights[uIdx];
+          }
+        }
+      }
+      if (requireUncoveredGain && new14Raw <= 0 && new13Weighted <= 0 && uncovered14Remaining > 0) continue;
+      const redundancyPenalty = redundant14Count * redundancyPenaltyPerOverlap14 + (chosenMasks.length > 0 && minDist <= 1 ? 38 : 0);
       let freqBalanceScore = 0;
       let saturatedCount = 0;
       for (let idxD = 0; idxD < cand.length; idxD++) {
@@ -3555,18 +3510,18 @@ function generateMinimumSetCoverFechamento({
           if (fixedBounds.modo === "rotativas") {
             const curF = fixedFreq[d] || 0;
             if (curF > freqBounds.fixedIdeal * 1.15) {
-              freqBalanceScore -= 14 * (curF - freqBounds.fixedIdeal + 1);
+              freqBalanceScore -= 12 * (curF - freqBounds.fixedIdeal + 1);
             } else if (curF < freqBounds.fixedIdeal * 0.85) {
-              freqBalanceScore += 8;
+              freqBalanceScore += 7;
             }
           }
         } else {
           const curVarF = numberFreq[d] || 0;
           if (curVarF >= freqBounds.freqMaxCap) {
             saturatedCount++;
-            freqBalanceScore -= 16 * (curVarF - freqBounds.freqMaxCap + 1);
+            freqBalanceScore -= 14 * (curVarF - freqBounds.freqMaxCap + 1);
           } else if (curVarF < freqBounds.freqMinTarget) {
-            freqBalanceScore += 6 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+            freqBalanceScore += 5 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
           }
         }
       }
@@ -3575,15 +3530,15 @@ function generateMinimumSetCoverFechamento({
       if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
         const subsetKey = effectiveFixas.filter((f) => cand.includes(f)).join("-");
         if (!usedFixedSubsets.has(subsetKey)) {
-          rotationBonus += 18;
+          rotationBonus += 16;
         }
       }
       const candKey = cand.join("-");
-      const savedPenalty = savedTicketsSet.has(candKey) ? 20 : 0;
-      const hammingBonus = Math.min(minDist, 5) * 4;
-      const combinedGain = newCovers * 42 + candScores[i] * 0.35 + hammingBonus + freqBalanceScore + rotationBonus - savedPenalty;
-      if (combinedGain > bestCombinedGain) {
-        bestCombinedGain = combinedGain;
+      const savedPenalty = savedTicketsSet.has(candKey) ? 18 : 0;
+      const hammingBonus = Math.min(minDist, 5) * 4.5;
+      const adaptiveYield = new14Weighted * weight14New + new13Weighted * weight13New + secondary13Boost * weight13BoostWhenNo14 - redundancyPenalty + candSoftBonuses[i] * 2.2 + candScores[i] * 0.45 + hammingBonus + freqBalanceScore + rotationBonus - savedPenalty;
+      if (adaptiveYield > bestAdaptiveYield) {
+        bestAdaptiveYield = adaptiveYield;
         bestCandIdx = i;
       }
     }
@@ -3610,84 +3565,127 @@ function generateMinimumSetCoverFechamento({
         numberFreq[d] = (numberFreq[d] || 0) + 1;
       }
     }
-    const covers = candCoverLists[candIdx];
-    for (let k = 0; k < covers.length; k++) {
-      const uIdx = covers[k];
-      if (coveredCounts[uIdx] === 0) {
-        uncoveredRemaining--;
+    const cov14 = candCover14Lists[candIdx];
+    for (let k = 0; k < cov14.length; k++) {
+      const uIdx = cov14[k];
+      if (covered14Counts[uIdx] === 0) {
+        uncovered14Remaining--;
       }
-      coveredCounts[uIdx]++;
+      covered14Counts[uIdx]++;
+      covered13Counts[uIdx]++;
+    }
+    const cov13 = candCover13OnlyLists[candIdx];
+    for (let k = 0; k < cov13.length; k++) {
+      covered13Counts[cov13[k]]++;
     }
   };
-  if (ljcrSeedMasks && ljcrSeedMasks.size > 0) {
-    for (let i = 0; i < candCount && chosenIndices.length < maxTickets; i++) {
-      if (ljcrSeedMasks.has(candMasks[i]) && !chosenSet.has(i)) {
-        commitCandidate(i);
+  const uncommitCandidateAt = (pos) => {
+    const candIdx = chosenIndices[pos];
+    chosenIndices.splice(pos, 1);
+    chosenMasks.splice(pos, 1);
+    chosenSet.delete(candIdx);
+    const cov14 = candCover14Lists[candIdx];
+    for (let k = 0; k < cov14.length; k++) {
+      const uIdx = cov14[k];
+      covered14Counts[uIdx]--;
+      covered13Counts[uIdx]--;
+      if (covered14Counts[uIdx] === 0) {
+        uncovered14Remaining++;
       }
     }
-  }
+    const cov13 = candCover13OnlyLists[candIdx];
+    for (let k = 0; k < cov13.length; k++) {
+      covered13Counts[cov13[k]]--;
+    }
+  };
   let greedyStep = 0;
   const maxGreedySteps = Math.min(maxTickets * 2, 250);
-  while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
-    let idx = pickBestCandidate(targetHammingDist, true, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false, true);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false, true);
-    if (idx === -1 && targetHammingDist > 1) idx = pickBestCandidate(1, true, false, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
-    if (idx === -1) idx = pickBestCandidate(1, false, false, false);
+  while (chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
+    let idx = pickBestAdaptiveCandidate(targetHammingDist, true, true, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, true, false, true);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestAdaptiveCandidate(2, true, false, true);
+    if (idx === -1 && targetHammingDist > 1) idx = pickBestAdaptiveCandidate(1, true, false, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, false, true, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, false, false, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(1, false, false, false);
     if (idx === -1) break;
     commitCandidate(idx);
   }
-  while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
-    let idx = pickBestCandidate(targetHammingDist, false, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
-    const allowQuotaOverflow = bypassAnomaly || coreChosen >= coreQuota;
-    if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(targetHammingDist, false, false, false);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, !allowQuotaOverflow);
-    if (idx === -1 && targetHammingDist > 1) idx = pickBestCandidate(1, false, false, false);
-    if (idx === -1) break;
-    commitCandidate(idx);
-  }
-  let improved = true;
-  let prunePass = 0;
-  const minKeepCount = enableStratification ? maxTickets : maxTickets <= 24 ? Math.min(20, maxTickets) : Math.floor(maxTickets * 0.85);
-  while (improved && prunePass++ < 30 && chosenIndices.length > minKeepCount) {
-    improved = false;
-    for (let p = chosenIndices.length - 1; p >= 0; p--) {
-      const candIdx = chosenIndices[p];
-      const isTail = candIdx >= coreCombos.length;
-      if (isTail) continue;
-      const covers = candCoverLists[candIdx];
-      let canBePruned = true;
-      for (let k = 0; k < covers.length; k++) {
-        if (coveredCounts[covers[k]] <= 1) {
-          canBePruned = false;
-          break;
+  if (!enableStratification && chosenIndices.length >= 4 && candCount > chosenIndices.length && uncovered14Remaining > 0) {
+    const maxSwapPasses = Math.min(8, chosenIndices.length);
+    for (let pass = 0; pass < maxSwapPasses && uncovered14Remaining > 0; pass++) {
+      let worstPos = -1;
+      let worstUniqueScore = Infinity;
+      for (let p = 0; p < chosenIndices.length; p++) {
+        const cIdx = chosenIndices[p];
+        let unique14 = 0;
+        let unique13 = 0;
+        const cov14 = candCover14Lists[cIdx];
+        for (let k = 0; k < cov14.length; k++) {
+          if (covered14Counts[cov14[k]] === 1) unique14 += universeWeights[cov14[k]];
+        }
+        const cov13 = candCover13OnlyLists[cIdx];
+        for (let k = 0; k < cov13.length; k++) {
+          if (covered14Counts[cov13[k]] === 0 && covered13Counts[cov13[k]] === 1) {
+            unique13 += universeWeights[cov13[k]];
+          }
+        }
+        const contrib = unique14 * 60 + unique13 * 14 + candSoftBonuses[cIdx];
+        if (contrib < worstUniqueScore) {
+          worstUniqueScore = contrib;
+          worstPos = p;
         }
       }
-      if (canBePruned && chosenIndices.length > minKeepCount) {
-        chosenIndices.splice(p, 1);
-        chosenMasks.splice(p, 1);
-        chosenSet.delete(candIdx);
-        for (let k = 0; k < covers.length; k++) {
-          coveredCounts[covers[k]]--;
+      if (worstPos === -1) break;
+      const removedIdx = chosenIndices[worstPos];
+      uncommitCandidateAt(worstPos);
+      let bestReplIdx = -1;
+      let bestReplScore = worstUniqueScore + 1e-3;
+      const swapHamming = Math.min(2, targetHammingDist);
+      for (let i = 0; i < candCount; i++) {
+        if (chosenSet.has(i) || i === removedIdx) continue;
+        if (chosenMasks.length > 0 && !passesHammingFilter18To21(candMasks[i], chosenMasks, n, swapHamming)) continue;
+        let gain14 = 0;
+        let gain13 = 0;
+        const cov14 = candCover14Lists[i];
+        for (let k = 0; k < cov14.length; k++) {
+          if (covered14Counts[cov14[k]] === 0) gain14 += universeWeights[cov14[k]];
         }
-        improved = true;
+        const cov13 = candCover13OnlyLists[i];
+        for (let k = 0; k < cov13.length; k++) {
+          if (covered14Counts[cov13[k]] === 0 && covered13Counts[cov13[k]] === 0) {
+            gain13 += universeWeights[cov13[k]];
+          }
+        }
+        const candContrib = gain14 * 60 + gain13 * 14 + candSoftBonuses[i];
+        if (candContrib > bestReplScore) {
+          bestReplScore = candContrib;
+          bestReplIdx = i;
+        }
+      }
+      if (bestReplIdx !== -1) {
+        commitCandidate(bestReplIdx);
+      } else {
+        commitCandidate(removedIdx);
         break;
       }
     }
   }
   const finalEntries = chosenIndices.map((candIdx) => {
     const faixaSoma = candIdx >= coreCombos.length + lowerTailCombos.length ? "alta" : candIdx >= coreCombos.length ? "baixa" : "ouro";
-    const analysis = analyzeTicket(candidateCombos[candIdx], concursoAnterior, aiScores);
+    const analysis = candAnalyses[candIdx];
+    const softInfo = computeSoftFilterPriorityScore(
+      { soma: analysis.soma, repetidas: analysis.repetidas },
+      effectiveCoreFilters
+    );
     return {
       nums: candidateCombos[candIdx],
       faixaSoma,
-      analysis
+      analysis,
+      priorityRank: analysis.scoreIA + softInfo.queuePriorityBonus * 0.5
     };
   });
-  finalEntries.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
+  finalEntries.sort((a, b) => b.priorityRank - a.priorityRank);
   const universeSet = new Set(sortedPool);
   const isValidUniverse = finalEntries.every((e) => e.nums.every((d) => universeSet.has(d)));
   if (!isValidUniverse) {
@@ -3784,10 +3782,10 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     somaMin: centralMin,
     somaMax: centralMax
   } : void 0;
-  if (n >= 16 && n <= 19 && targetHits === 14) {
+  if (n >= 16 && n <= 19 && (targetHits === 14 || targetHits === 13)) {
     return generateMinimumSetCoverFechamento({
       selectedNumbers: sortedPool,
-      targetHits: 14,
+      targetHits,
       maxTickets,
       filters: effectiveCoreFilters || {
         ...DEFAULT_FILTERS,
@@ -3810,22 +3808,23 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     }
     return present >= fixedBounds.minK && present <= fixedBounds.maxK;
   };
+  const useSoftSoma = Boolean(effectiveCoreFilters?.softScoringSomaAtivo);
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
-    somaMax: Math.max(225, centralMax)
+    somaMin: useSoftSoma ? 120 : Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
+    somaMax: useSoftSoma ? 285 : Math.max(225, centralMax)
   };
   const isCandidateValid = (nums) => {
     if (!checkFixasCompliance(nums)) return false;
     if (bypassAnomaly) return true;
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
-    const skipHardCanonical = effectiveCoreFilters?.modoRigorFiltros === "agressivo" || effectiveCoreFilters?.modoRigorFiltros === "conservador";
+    const skipHardCanonical = effectiveCoreFilters?.modoRigorFiltros === "agressivo" || effectiveCoreFilters?.modoRigorFiltros === "conservador" || useSoftSoma;
     if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
       return false;
     }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
-    if (a.soma < centralMin || a.soma > centralMax) return false;
+    if (!useSoftSoma && (a.soma < centralMin || a.soma > centralMax)) return false;
     return true;
   };
   if (n === 15) {
@@ -3932,8 +3931,8 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       validacaoEstritaCruz: false,
       rankingHistoricoAtivo: false
     } : {
-      somaMin: centralMin,
-      somaMax: centralMax,
+      somaMin: useSoftSoma ? 120 : centralMin,
+      somaMax: useSoftSoma ? 285 : centralMax,
       paresMin: effectiveCoreFilters?.paresMin ?? 5,
       paresMax: effectiveCoreFilters?.paresMax ?? 10,
       posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? false,
@@ -4072,8 +4071,10 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
     const nfLen = workingNonFixed.length;
     const fastEarlyExitCoreCheck = (combo) => {
       if (bypassAnomaly) return true;
-      const soma = combo.reduce((a, b) => a + b, 0);
-      if (soma < centralMin || soma > centralMax) return false;
+      if (!useSoftSoma) {
+        const soma = combo.reduce((a, b) => a + b, 0);
+        if (soma < centralMin || soma > centralMax) return false;
+      }
       const mask = criarMascara(combo);
       if (effectiveCoreFilters?.posicionalAtivo && !validarPosicionalSorted(combo).valido) return false;
       if (effectiveCoreFilters?.multiplosAtivo && !validarMultiplosMask(mask).valido) return false;
@@ -4095,6 +4096,11 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       }
       return true;
     };
+    let sampleSeed = sortedPool.reduce((acc, v, i) => acc + v * (i + 13), 8191) + maxTickets * 47 >>> 0;
+    const nextSampleRand = () => {
+      sampleSeed = sampleSeed * 1664525 + 1013904223 >>> 0;
+      return sampleSeed / 4294967296;
+    };
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       if (coreCandidates.length >= maxCorePool && (!enableStratification || lowerTailCandidates.length >= maxTailPool && upperTailCandidates.length >= maxTailPool)) {
         break;
@@ -4104,14 +4110,14 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       if (needVar > nfLen || needVar < 0) continue;
       let chosenVars;
       if (enableStratification && attempt % 7 === 0 && lowerTailCandidates.length < maxTailPool) {
-        const biased = [...workingNonFixed].sort((a, b) => a - b + (Math.random() - 0.5) * 10);
+        const biased = [...workingNonFixed].sort((a, b) => a - b + (nextSampleRand() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else if (enableStratification && attempt % 7 === 1 && upperTailCandidates.length < maxTailPool) {
-        const biased = [...workingNonFixed].sort((a, b) => b - a + (Math.random() - 0.5) * 10);
+        const biased = [...workingNonFixed].sort((a, b) => b - a + (nextSampleRand() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else {
         for (let i = 0; i < needVar; i++) {
-          const r = i + Math.floor(Math.random() * (nfLen - i));
+          const r = i + Math.floor(nextSampleRand() * (nfLen - i));
           const tmp = workingNonFixed[i];
           workingNonFixed[i] = workingNonFixed[r];
           workingNonFixed[r] = tmp;
@@ -4187,28 +4193,25 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   sortByAIScore(coreCandidates);
   sortByAIScore(lowerTailCandidates);
   sortByAIScore(upperTailCandidates);
+  const buildStratumCand = (nums, faixaSoma) => {
+    const analysis = analyzeTicket(nums, concursoAnterior, aiScores);
+    const soft = computeSoftFilterPriorityScore(
+      { soma: analysis.soma, repetidas: analysis.repetidas },
+      effectiveCoreFilters
+    );
+    return {
+      nums,
+      mask: criarMascara(nums),
+      key: nums.join("-"),
+      faixaSoma,
+      scoreIA: analysis.scoreIA,
+      softPriorityBonus: soft.queuePriorityBonus
+    };
+  };
   const unifiedCandidates = [
-    ...coreCandidates.map((nums) => ({
-      nums,
-      mask: criarMascara(nums),
-      key: nums.join("-"),
-      faixaSoma: "ouro",
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
-    })),
-    ...lowerTailCandidates.map((nums) => ({
-      nums,
-      mask: criarMascara(nums),
-      key: nums.join("-"),
-      faixaSoma: "baixa",
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
-    })),
-    ...upperTailCandidates.map((nums) => ({
-      nums,
-      mask: criarMascara(nums),
-      key: nums.join("-"),
-      faixaSoma: "alta",
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA
-    }))
+    ...coreCandidates.map((nums) => buildStratumCand(nums, "ouro")),
+    ...lowerTailCandidates.map((nums) => buildStratumCand(nums, "baixa")),
+    ...upperTailCandidates.map((nums) => buildStratumCand(nums, "alta"))
   ];
   const stratQuotas = computeTailStratificationQuotas(maxTickets, enableStratification);
   let lowerQuota = stratQuotas.lowerQuota;
@@ -4218,29 +4221,47 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
   const is18to21 = n >= 18 && n <= 21;
   const testSubsetMasks = [];
+  const testSubsetWeights = [];
+  const lastDrawMaskCov = criarMascara(concursoAnterior);
+  const registerTestScenario = (nums, mask) => {
+    let sSum = 0;
+    for (let k = 0; k < nums.length; k++) sSum += nums[k];
+    const sRep = popcount(mask & lastDrawMaskCov);
+    const softSc = computeSoftFilterPriorityScore({ soma: sSum, repetidas: sRep }, effectiveCoreFilters);
+    testSubsetMasks.push(mask);
+    testSubsetWeights.push(0.6 + softSc.combinedScore / 100 * 0.65);
+  };
   if (is18to21) {
     const targetSampleSize = 900;
     const seenTestMasks = /* @__PURE__ */ new Set();
     const sampleWork = [...sortedPool];
+    let seed = sortedPool.reduce((acc, v, i) => acc + v * (i + 7), 4219) + maxTickets * 31 >>> 0;
+    const nextRand = () => {
+      seed = seed * 1664525 + 1013904223 >>> 0;
+      return seed / 4294967296;
+    };
     for (let s = 0; s < targetSampleSize * 2 && testSubsetMasks.length < targetSampleSize; s++) {
       for (let i = 0; i < 15; i++) {
-        const r = i + Math.floor(Math.random() * (n - i));
+        const r = i + Math.floor(nextRand() * (n - i));
         const tmp = sampleWork[i];
         sampleWork[i] = sampleWork[r];
         sampleWork[r] = tmp;
       }
-      const m = criarMascara(sampleWork.slice(0, 15));
+      const slice15 = sampleWork.slice(0, 15);
+      const m = criarMascara(slice15);
       if (!seenTestMasks.has(m)) {
         seenTestMasks.add(m);
-        testSubsetMasks.push(m);
+        registerTestScenario(slice15, m);
       }
     }
   } else {
     for (let i = 0; i < Math.min(unifiedCandidates.length, 600); i++) {
-      testSubsetMasks.push(unifiedCandidates[i].mask);
+      registerTestScenario(unifiedCandidates[i].nums, unifiedCandidates[i].mask);
     }
   }
-  const uncovered = new Set(testSubsetMasks.map((_, idx) => idx));
+  const scen14Covered = new Uint16Array(testSubsetMasks.length);
+  const scen13Covered = new Uint16Array(testSubsetMasks.length);
+  let uncoveredScenariosCount = testSubsetMasks.length;
   const pairCoverageCounts = new Uint16Array(26 * 26);
   const tripleMasksForCoverage = [];
   const tripleCoveredFlags = new Uint8Array(is18to21 ? 400 : 0);
@@ -4281,7 +4302,11 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   const selectNextFromPool = (allowedFaixa, minHammingReq, requireUncoveredGain, enforceSoftFreqCap, enforceQuota = true) => {
     let bestIdx = -1;
     let bestWeight = -9999999;
-    let bestCovered = [];
+    let bestCovered14 = [];
+    let bestCovered13 = [];
+    const progress = chosen.length / Math.max(1, maxTickets);
+    const w14New = 14 + progress * 8;
+    const w13New = 5.5 * (1 - progress * 0.25);
     const searchLimit = Math.min(unifiedCandidates.length, is18to21 ? 950 : 650);
     for (let i = 0; i < unifiedCandidates.length; i++) {
       const cand = unifiedCandidates[i];
@@ -4297,17 +4322,31 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       }
       const minDist = minHammingDistanceToMatrix(cand.mask, chosenMasks);
       if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === "ouro") continue;
-      let coverCount = 0;
-      const coveredHere = [];
-      if (uncovered.size > 0) {
-        for (const subsetIdx of uncovered) {
-          if (popcount(cand.mask & testSubsetMasks[subsetIdx]) >= targetHits) {
-            coverCount++;
-            coveredHere.push(subsetIdx);
+      let new14Gain = 0;
+      let new13Gain = 0;
+      let redundant14Hits = 0;
+      const covered14Here = [];
+      const covered13Here = [];
+      const primaryThr = Math.max(13, targetHits);
+      for (let sIdx = 0; sIdx < testSubsetMasks.length; sIdx++) {
+        const hits = popcount(cand.mask & testSubsetMasks[sIdx]);
+        if (hits >= primaryThr) {
+          covered14Here.push(sIdx);
+          if (scen14Covered[sIdx] === 0) {
+            new14Gain += testSubsetWeights[sIdx];
+          } else {
+            redundant14Hits++;
+          }
+        } else if (hits === 13) {
+          covered13Here.push(sIdx);
+          if (scen14Covered[sIdx] === 0 && scen13Covered[sIdx] === 0) {
+            new13Gain += testSubsetWeights[sIdx];
           }
         }
       }
-      if (requireUncoveredGain && uncovered.size > 0 && coverCount === 0) continue;
+      if (requireUncoveredGain && uncoveredScenariosCount > 0 && new14Gain === 0 && new13Gain === 0) {
+        continue;
+      }
       let tripleNoveltyBonus = 0;
       if (is18to21 && tripleMasksForCoverage.length > 0) {
         let newTriples = 0;
@@ -4337,18 +4376,18 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
           if (fixedBounds.modo === "rotativas") {
             const curF = fixedFreq[d] || 0;
             if (curF > freqBounds.fixedIdeal * 1.1) {
-              freqScore -= 45 * (curF - freqBounds.fixedIdeal + 1);
+              freqScore -= 40 * (curF - freqBounds.fixedIdeal + 1);
             } else if (curF < freqBounds.fixedIdeal * 0.9) {
-              freqScore += 20;
+              freqScore += 18;
             }
           }
         } else {
           const curVarF = numberFreq[d] || 0;
           if (curVarF >= freqBounds.freqMaxCap) {
             saturatedCount++;
-            freqScore -= 85 * (curVarF - freqBounds.freqMaxCap + 1);
+            freqScore -= 70 * (curVarF - freqBounds.freqMaxCap + 1);
           } else if (curVarF < freqBounds.freqMinTarget) {
-            freqScore += 18 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+            freqScore += 15 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
           }
         }
       }
@@ -4356,22 +4395,23 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
       let rotationBonus = 0;
       if (fixedBounds.modo === "rotativas" && effectiveFixas.length >= 3) {
         const subsetKey = effectiveFixas.filter((f) => cand.nums.includes(f)).join("-");
-        if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 28;
+        if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 24;
       }
-      const savedPenalty = savedTicketsSet.has(cand.key) ? 20 : 0;
+      const savedPenalty = savedTicketsSet.has(cand.key) ? 18 : 0;
       const hammingBonus = Math.min(minDist, 6) * 5;
-      const jitter = Math.random() * 0.15;
-      const weight = coverCount * 4.5 + tripleNoveltyBonus + cand.scoreIA / 100 * 1.4 + hammingBonus + freqScore * 0.35 + rotationBonus + jitter - savedPenalty;
+      const redundancyPenalty = redundant14Hits * 2.2;
+      const weight = new14Gain * w14New + new13Gain * w13New - redundancyPenalty + tripleNoveltyBonus + cand.softPriorityBonus * 1.8 + cand.scoreIA / 100 * 3.5 + hammingBonus + freqScore * 0.35 + rotationBonus - savedPenalty;
       if (weight > bestWeight) {
         bestWeight = weight;
         bestIdx = i;
-        bestCovered = coveredHere;
+        bestCovered14 = covered14Here;
+        bestCovered13 = covered13Here;
       }
     }
     if (bestIdx === -1) return null;
-    return { idx: bestIdx, coveredHere: bestCovered };
+    return { idx: bestIdx, covered14: bestCovered14, covered13: bestCovered13 };
   };
-  const commitChosen = (cand, coveredHere) => {
+  const commitChosen = (cand, covered14, covered13) => {
     chosen.push(cand);
     chosenMasks.push(cand.mask);
     chosenKeySet.add(cand.key);
@@ -4399,20 +4439,25 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
         }
       }
     }
-    for (const coveredIdx of coveredHere) {
-      uncovered.delete(coveredIdx);
+    for (const sIdx of covered14) {
+      if (scen14Covered[sIdx] === 0) uncoveredScenariosCount--;
+      scen14Covered[sIdx]++;
+      scen13Covered[sIdx]++;
+    }
+    for (const sIdx of covered13) {
+      scen13Covered[sIdx]++;
     }
   };
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
       const hit = selectNextFromPool("baixa", targetHammingDist, false, true) || selectNextFromPool("baixa", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("baixa", 3, false, false) : null) || (!is18to21 && targetHammingDist > 2 ? selectNextFromPool("baixa", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("baixa", 1, false, false) : null);
       if (!hit) break;
-      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+      commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
     }
     while (upperChosen < upperQuota && chosen.length < maxTickets) {
       const hit = selectNextFromPool("alta", targetHammingDist, false, true) || selectNextFromPool("alta", targetHammingDist, false, false) || (targetHammingDist > 3 ? selectNextFromPool("alta", 3, false, false) : null) || (!is18to21 && targetHammingDist > 2 ? selectNextFromPool("alta", 2, false, false) : null) || (!is18to21 ? selectNextFromPool("alta", 1, false, false) : null);
       if (!hit) break;
-      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+      commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
     }
   }
   let greedyLoop = 0;
@@ -4420,14 +4465,115 @@ function generateFechamentoCovering(selectedNumbers, targetHits = 14, maxTickets
   while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
     const hit = selectNextFromPool("ouro", targetHammingDist, true, true) || selectNextFromPool("ouro", targetHammingDist, true, false) || (targetHammingDist > 2 ? selectNextFromPool("ouro", 2, true, false) : null) || selectNextFromPool("ouro", targetHammingDist, false, true) || selectNextFromPool("ouro", targetHammingDist, false, false) || (targetHammingDist > 2 ? selectNextFromPool("ouro", 2, false, false) : null) || selectNextFromPool("ouro", 1, false, false);
     if (!hit) break;
-    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
   }
   while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
     const hit = selectNextFromPool("any", targetHammingDist, false, false, true) || selectNextFromPool("any", targetHammingDist, false, false, false) || (targetHammingDist > 2 ? selectNextFromPool("any", 2, false, false, false) : null) || selectNextFromPool("any", 1, false, false, false);
     if (!hit) break;
-    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
   }
-  chosen.sort((a, b) => b.scoreIA - a.scoreIA);
+  if (!enableStratification && chosen.length >= 4 && unifiedCandidates.length > chosen.length && testSubsetMasks.length > 0) {
+    const swapPasses = Math.min(6, chosen.length);
+    const swapScanCap = Math.min(unifiedCandidates.length, 450);
+    const swapMinHamming = Math.min(2, targetHammingDist);
+    for (let pass = 0; pass < swapPasses; pass++) {
+      let worstPos = -1;
+      let worstContrib = Infinity;
+      let worstCov14 = [];
+      let worstCov13 = [];
+      for (let p = 0; p < chosen.length; p++) {
+        const cMask = chosen[p].mask;
+        let unique14 = 0;
+        let unique13 = 0;
+        const c14 = [];
+        const c13 = [];
+        for (let s = 0; s < testSubsetMasks.length; s++) {
+          const hits = popcount(cMask & testSubsetMasks[s]);
+          if (hits >= 14) {
+            c14.push(s);
+            if (scen14Covered[s] === 1) unique14 += testSubsetWeights[s];
+          } else if (hits === 13) {
+            c13.push(s);
+            if (scen14Covered[s] === 0 && scen13Covered[s] === 1) unique13 += testSubsetWeights[s];
+          }
+        }
+        const contrib = unique14 * 22 + unique13 * 6.5 + chosen[p].softPriorityBonus * 0.5;
+        if (contrib < worstContrib) {
+          worstContrib = contrib;
+          worstPos = p;
+          worstCov14 = c14;
+          worstCov13 = c13;
+        }
+      }
+      if (worstPos === -1) break;
+      const removed = chosen[worstPos];
+      chosen.splice(worstPos, 1);
+      chosenMasks.splice(worstPos, 1);
+      chosenKeySet.delete(removed.key);
+      for (const s of worstCov14) {
+        scen14Covered[s]--;
+        scen13Covered[s]--;
+      }
+      for (const s of worstCov13) {
+        scen13Covered[s]--;
+      }
+      let bestRepl = null;
+      let bestReplScore = worstContrib + 1e-3;
+      let bestRepl14 = [];
+      let bestRepl13 = [];
+      for (let i = 0; i < swapScanCap; i++) {
+        const cand = unifiedCandidates[i];
+        if (chosenKeySet.has(cand.key) || cand.key === removed.key) continue;
+        if (chosenMasks.length > 0 && !passesHammingFilter18To21(cand.mask, chosenMasks, n, swapMinHamming)) continue;
+        let g14 = 0;
+        let g13 = 0;
+        const r14 = [];
+        const r13 = [];
+        for (let s = 0; s < testSubsetMasks.length; s++) {
+          const hits = popcount(cand.mask & testSubsetMasks[s]);
+          if (hits >= 14) {
+            r14.push(s);
+            if (scen14Covered[s] === 0) g14 += testSubsetWeights[s];
+          } else if (hits === 13) {
+            r13.push(s);
+            if (scen14Covered[s] === 0 && scen13Covered[s] === 0) g13 += testSubsetWeights[s];
+          }
+        }
+        const score = g14 * 22 + g13 * 6.5 + cand.softPriorityBonus * 0.5;
+        if (score > bestReplScore) {
+          bestReplScore = score;
+          bestRepl = cand;
+          bestRepl14 = r14;
+          bestRepl13 = r13;
+        }
+      }
+      if (bestRepl) {
+        chosen.push(bestRepl);
+        chosenMasks.push(bestRepl.mask);
+        chosenKeySet.add(bestRepl.key);
+        for (const s of bestRepl14) {
+          scen14Covered[s]++;
+          scen13Covered[s]++;
+        }
+        for (const s of bestRepl13) {
+          scen13Covered[s]++;
+        }
+      } else {
+        chosen.push(removed);
+        chosenMasks.push(removed.mask);
+        chosenKeySet.add(removed.key);
+        for (const s of worstCov14) {
+          scen14Covered[s]++;
+          scen13Covered[s]++;
+        }
+        for (const s of worstCov13) {
+          scen13Covered[s]++;
+        }
+        break;
+      }
+    }
+  }
+  chosen.sort((a, b) => b.scoreIA + b.softPriorityBonus * 0.5 - (a.scoreIA + a.softPriorityBonus * 0.5));
   const universeSet = new Set(sortedPool);
   const isValidUniverse = chosen.every((c) => c.nums.every((d) => universeSet.has(d)));
   if (!isValidUniverse) {
@@ -4625,17 +4771,18 @@ function generateCoreSatellites25Matrix(options) {
       else if (minDist === 6) score += 8;
       else if (minDist >= 7) score -= (minDist - 6) * 10;
       else if (minDist === 2) score -= 4;
-      if (analysis.soma >= somaMin && analysis.soma <= somaMax) score += 16;
-      else if (analysis.soma >= 165 && analysis.soma <= 225) score += 6;
-      else score -= 18;
+      const softCore = computeSoftFilterPriorityScore(
+        { soma: analysis.soma, repetidas: analysis.repetidas },
+        filters
+      );
+      score += softCore.queuePriorityBonus * 1.8;
       if (analysis.pares >= 6 && analysis.pares <= 8) score += 10;
       else if (analysis.pares === 9 || analysis.pares === 5) score += 2;
       else score -= 10;
-      if (analysis.primos >= 4 && analysis.primos <= 7) score += 8;
+      if (analysis.primos >= 4 && analysis.primos <= 7) score += 6;
       if (analysis.moldura >= 8 && analysis.moldura <= 11) score += 8;
-      if (analysis.fibonacci >= 3 && analysis.fibonacci <= 6) score += 6;
-      if (analysis.repetidas >= 7 && analysis.repetidas <= 10) score += 10;
-      if (analysis.maxConsecutivas <= 5) score += 6;
+      if (analysis.fibonacci >= 3 && analysis.fibonacci <= 6) score += 5;
+      if (analysis.maxConsecutivas <= 6) score += 5;
       if (isHistorical15Collision(combo)) score -= 120;
       if (hasViciousVisualPattern(combo).isVicious) score -= 40;
       if (pivotConstraint && pivotSet) {

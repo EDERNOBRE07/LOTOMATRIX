@@ -765,6 +765,47 @@ export default function App() {
         }
       }
 
+      // Alerta quando qualquer dezena monitorada sair no concurso mais recente (notifyWhenDrawn !== false)
+      const drawnMonitoredNums =
+        delayRule.enabled && delayConfig.notifyWhenDrawn !== false
+          ? combinedNumbers.filter((num) => draw.dezenas.includes(num))
+          : [];
+
+      if (drawnMonitoredNums.length > 0) {
+        const drawnStr = drawnMonitoredNums
+          .map((n) => n.toString().padStart(2, '0'))
+          .join(', ');
+        const drawnAlertId = `monitored_drawn_${draw.concurso}`;
+        const currentHistory = getAlertsHistory();
+        const alreadyRecorded = currentHistory.some((a) => a.id === drawnAlertId);
+
+        if (!alreadyRecorded) {
+          const drawnAlert: IntelligentAlert = {
+            id: drawnAlertId,
+            timestamp: Date.now(),
+            dateStr: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            type: 'critical_delay',
+            title: `Dezena Monitorada Sorteada • #${draw.concurso}`,
+            body: `${drawnMonitoredNums.length} dezena(s) monitorada(s) saiu/saíram no concurso #${draw.concurso}: ${drawnStr}.`,
+            concurso: draw.concurso,
+            read: false,
+            dezenasGatilho: drawnMonitoredNums,
+          };
+          saveAlertsHistory([drawnAlert, ...currentHistory]);
+
+          if (!shouldMuteBackgroundAudio() && delayRule.soundEnabled) {
+            soundService.playOpportunityAlert();
+          }
+          if (delayRule.nativePushEnabled && !shouldMuteBackgroundPush()) {
+            void fireBrowserPushNotification(
+              `LotoSniper • Dezena Monitorada Sorteada (#${draw.concurso})`,
+              `${drawnMonitoredNums.length} dezena(s) monitorada(s) saiu/saíram no #${draw.concurso}: ${drawnStr}.`,
+              `lotosniper-drawn-${draw.concurso}`
+            );
+          }
+        }
+      }
+
       if (cycleTriggered) {
         if (!shouldMuteBackgroundAudio() && cycleRule.soundEnabled) {
           soundService.playCycleAlertSound();

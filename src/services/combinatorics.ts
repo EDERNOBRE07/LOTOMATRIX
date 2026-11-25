@@ -2699,17 +2699,16 @@ export function generateMinimumSetCoverFechamento({
   const candMasks = candidateCombos.map(_criarMascara);
   const candCount = candidateCombos.length;
 
-  // 5. Pré-computação das listas de cobertura multi-faixa (14 pts e 13 pts reais)
+  // 5. Pré-computação das listas de cobertura multi-faixa reais (14 pts = prêmio alto, 13 pts = prêmio frequente)
   const candCover14Lists: number[][] = new Array(candCount);
   const candCover13OnlyLists: number[][] = new Array(candCount);
-  const primaryHitThreshold = Math.max(13, targetHits);
   for (let i = 0; i < candCount; i++) {
     const cMask = candMasks[i];
     const cov14: number[] = [];
     const cov13: number[] = [];
     for (let j = 0; j < totalUniverse; j++) {
       const hits = _popcount(cMask & universeMasks[j]);
-      if (hits >= primaryHitThreshold) {
+      if (hits >= 14) {
         cov14.push(j);
       } else if (hits === 13) {
         cov13.push(j);
@@ -2760,12 +2759,14 @@ export function generateMinimumSetCoverFechamento({
     let bestCandIdx = -1;
     let bestAdaptiveYield = -9999999;
 
-    // Fase adaptativa: no início prioriza amplitude 13–14 pts sem redundância; no fim fecha lacunas de 14 pts de alta probabilidade
+    // Fase adaptativa orientada ao índice real de premiação (13–14 pts):
+    // ajusta dinamicamente o peso entre 14 pts e 13 pts conforme o progresso e o alvo da matriz
     const progress = chosenIndices.length / Math.max(1, maxTickets);
-    const weight14New = 52 + progress * 24; // 52..76 por cenário 14-pt inédito ponderado
-    const weight13New = 18 * (1 - progress * 0.35); // 18..11.7 por cenário 13-pt inédito ponderado
-    const weight13BoostWhenNo14 = 3.2; // leve reforço em cenários ainda sem cobertura de 14 pts
-    const redundancyPenaltyPerOverlap14 = 6.5 + progress * 4.5; // penaliza redundância excessiva de 14 pts já cobertos
+    const focus13 = targetHits <= 13;
+    const weight14New = focus13 ? 44 + progress * 16 : 56 + progress * 26;
+    const weight13New = focus13 ? 30 * (1 - progress * 0.2) : 20 * (1 - progress * 0.35);
+    const weight13BoostWhenNo14 = focus13 ? 4.5 : 3.2;
+    const redundancyPenaltyPerOverlap14 = 7.5 + progress * 5.0; // combate ativo à redundância entre cartões
 
     for (let i = 0; i < candCount; i++) {
       if (chosenSet.has(i)) continue;
@@ -3195,11 +3196,11 @@ export function generateFechamentoCovering(
       }
     : undefined;
 
-  // Redução por Cobertura Mínima Exata + LJCR para matrizes de alta densidade (16, 17, 18 e 19 dezenas)
-  if (n >= 16 && n <= 19 && targetHits === 14) {
+  // Set Cover Greedy Adaptativo exato (sem fechamento estático) para universos de alta densidade (16–19 dezenas, 13 ou 14 pts)
+  if (n >= 16 && n <= 19 && (targetHits === 14 || targetHits === 13)) {
     return generateMinimumSetCoverFechamento({
       selectedNumbers: sortedPool,
-      targetHits: 14,
+      targetHits,
       maxTickets,
       filters: effectiveCoreFilters || {
         ...DEFAULT_FILTERS,
@@ -3547,6 +3548,13 @@ export function generateFechamentoCovering(
       return true;
     };
 
+    // PRNG determinístico para amostragem reprodutível em pools grandes (n >= 19)
+    let sampleSeed = (sortedPool.reduce((acc, v, i) => acc + v * (i + 13), 8191) + maxTickets * 47) >>> 0;
+    const nextSampleRand = () => {
+      sampleSeed = (sampleSeed * 1664525 + 1013904223) >>> 0;
+      return sampleSeed / 4294967296;
+    };
+
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       if (
         coreCandidates.length >= maxCorePool &&
@@ -3561,14 +3569,14 @@ export function generateFechamentoCovering(
 
       let chosenVars: number[];
       if (enableStratification && attempt % 7 === 0 && lowerTailCandidates.length < maxTailPool) {
-        const biased = [...workingNonFixed].sort((a, b) => a - b + (Math.random() - 0.5) * 10);
+        const biased = [...workingNonFixed].sort((a, b) => a - b + (nextSampleRand() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else if (enableStratification && attempt % 7 === 1 && upperTailCandidates.length < maxTailPool) {
-        const biased = [...workingNonFixed].sort((a, b) => b - a + (Math.random() - 0.5) * 10);
+        const biased = [...workingNonFixed].sort((a, b) => b - a + (nextSampleRand() - 0.5) * 10);
         chosenVars = biased.slice(0, needVar);
       } else {
         for (let i = 0; i < needVar; i++) {
-          const r = i + Math.floor(Math.random() * (nfLen - i));
+          const r = i + Math.floor(nextSampleRand() * (nfLen - i));
           const tmp = workingNonFixed[i];
           workingNonFixed[i] = workingNonFixed[r];
           workingNonFixed[r] = tmp;
@@ -4023,6 +4031,114 @@ export function generateFechamentoCovering(
     commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
   }
 
+  // Fase 4: Refinamento Local 1-Swap Adaptativo para eliminar redundância e elevar o índice real de 13–14 pts
+  if (!enableStratification && chosen.length >= 4 && unifiedCandidates.length > chosen.length && testSubsetMasks.length > 0) {
+    const swapPasses = Math.min(6, chosen.length);
+    const swapScanCap = Math.min(unifiedCandidates.length, 450);
+    const swapMinHamming = Math.min(2, targetHammingDist);
+    for (let pass = 0; pass < swapPasses; pass++) {
+      let worstPos = -1;
+      let worstContrib = Infinity;
+      let worstCov14: number[] = [];
+      let worstCov13: number[] = [];
+
+      for (let p = 0; p < chosen.length; p++) {
+        const cMask = chosen[p].mask;
+        let unique14 = 0;
+        let unique13 = 0;
+        const c14: number[] = [];
+        const c13: number[] = [];
+        for (let s = 0; s < testSubsetMasks.length; s++) {
+          const hits = _popcount(cMask & testSubsetMasks[s]);
+          if (hits >= 14) {
+            c14.push(s);
+            if (scen14Covered[s] === 1) unique14 += testSubsetWeights[s];
+          } else if (hits === 13) {
+            c13.push(s);
+            if (scen14Covered[s] === 0 && scen13Covered[s] === 1) unique13 += testSubsetWeights[s];
+          }
+        }
+        const contrib = unique14 * 22 + unique13 * 6.5 + chosen[p].softPriorityBonus * 0.5;
+        if (contrib < worstContrib) {
+          worstContrib = contrib;
+          worstPos = p;
+          worstCov14 = c14;
+          worstCov13 = c13;
+        }
+      }
+      if (worstPos === -1) break;
+
+      const removed = chosen[worstPos];
+      chosen.splice(worstPos, 1);
+      chosenMasks.splice(worstPos, 1);
+      chosenKeySet.delete(removed.key);
+      for (const s of worstCov14) {
+        scen14Covered[s]--;
+        scen13Covered[s]--;
+      }
+      for (const s of worstCov13) {
+        scen13Covered[s]--;
+      }
+
+      let bestRepl: StratumCand | null = null;
+      let bestReplScore = worstContrib + 1e-3;
+      let bestRepl14: number[] = [];
+      let bestRepl13: number[] = [];
+
+      for (let i = 0; i < swapScanCap; i++) {
+        const cand = unifiedCandidates[i];
+        if (chosenKeySet.has(cand.key) || cand.key === removed.key) continue;
+        if (chosenMasks.length > 0 && !passesHammingFilter18To21(cand.mask, chosenMasks, n, swapMinHamming)) continue;
+        let g14 = 0;
+        let g13 = 0;
+        const r14: number[] = [];
+        const r13: number[] = [];
+        for (let s = 0; s < testSubsetMasks.length; s++) {
+          const hits = _popcount(cand.mask & testSubsetMasks[s]);
+          if (hits >= 14) {
+            r14.push(s);
+            if (scen14Covered[s] === 0) g14 += testSubsetWeights[s];
+          } else if (hits === 13) {
+            r13.push(s);
+            if (scen14Covered[s] === 0 && scen13Covered[s] === 0) g13 += testSubsetWeights[s];
+          }
+        }
+        const score = g14 * 22 + g13 * 6.5 + cand.softPriorityBonus * 0.5;
+        if (score > bestReplScore) {
+          bestReplScore = score;
+          bestRepl = cand;
+          bestRepl14 = r14;
+          bestRepl13 = r13;
+        }
+      }
+
+      if (bestRepl) {
+        chosen.push(bestRepl);
+        chosenMasks.push(bestRepl.mask);
+        chosenKeySet.add(bestRepl.key);
+        for (const s of bestRepl14) {
+          scen14Covered[s]++;
+          scen13Covered[s]++;
+        }
+        for (const s of bestRepl13) {
+          scen13Covered[s]++;
+        }
+      } else {
+        chosen.push(removed);
+        chosenMasks.push(removed.mask);
+        chosenKeySet.add(removed.key);
+        for (const s of worstCov14) {
+          scen14Covered[s]++;
+          scen13Covered[s]++;
+        }
+        for (const s of worstCov13) {
+          scen13Covered[s]++;
+        }
+        break;
+      }
+    }
+  }
+
   // Ordenação final pela fila de prioridade (scoreIA + Soft-Scoring de Soma e Repetidas)
   chosen.sort((a, b) => (b.scoreIA + b.softPriorityBonus * 0.5) - (a.scoreIA + a.softPriorityBonus * 0.5));
 
@@ -4232,14 +4348,22 @@ export function gerarMatrizEstratificada(
   const candidatosOuro: number[][] = [];
   const candidatosCaudaBaixa: number[][] = [];
   const candidatosCaudaAlta: number[][] = [];
-  const lowerTailMax = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(CAUDA_BAIXA_SOMA_MAX, centralMin - 1));
-  const upperTailMin = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(CAUDA_ALTA_SOMA_MIN, centralMax + 1));
+  const stratCoreMin =
+    centralMin <= ZONA_CENTRAL_SOMA_MIN && centralMax >= ZONA_CENTRAL_SOMA_MAX
+      ? ZONA_CENTRAL_SOMA_MIN
+      : centralMin;
+  const stratCoreMax =
+    centralMin <= ZONA_CENTRAL_SOMA_MIN && centralMax >= ZONA_CENTRAL_SOMA_MAX
+      ? ZONA_CENTRAL_SOMA_MAX
+      : centralMax;
+  const lowerTailMax = Math.max(CAUDA_BAIXA_SOMA_MIN, Math.min(CAUDA_BAIXA_SOMA_MAX, stratCoreMin - 1));
+  const upperTailMin = Math.min(CAUDA_ALTA_SOMA_MAX, Math.max(CAUDA_ALTA_SOMA_MIN, stratCoreMax + 1));
 
   for (const combo of rawCombos) {
     const soma = combo.reduce((a, b) => a + b, 0);
     if (isHistorical15Collision(combo)) continue;
 
-    if (soma >= centralMin && soma <= centralMax) {
+    if (soma >= stratCoreMin && soma <= stratCoreMax) {
       candidatosOuro.push(combo);
     } else if (soma >= CAUDA_BAIXA_SOMA_MIN && soma <= lowerTailMax) {
       const maxSeq = getMaxConsecutiveSequence(combo);
@@ -4262,7 +4386,7 @@ export function gerarMatrizEstratificada(
   sortByScore(candidatosCaudaBaixa);
   sortByScore(candidatosCaudaAlta);
 
-  // 5. Seleção com Espalhamento Hamming Bitwise (dinâmico quando ativado ou >= 3 em 18-21) + Frequency Cap [0.85x..1.15x]
+  // 5. Set Cover Greedy Adaptativo (13–14 pts reais + Soft-Scoring Soma/Repetidas + Hamming + Frequency Cap)
   const is18to21 = n >= 18 && n <= 21;
   const targetHammingDist = getTargetHammingDistance(n, totalJogos, options.filters);
   const freqBounds = calculateVariableFrequencyBounds(
@@ -4271,6 +4395,37 @@ export function gerarMatrizEstratificada(
     effectiveFixas.length,
     fixedBounds.modo
   );
+
+  // Cenários alvo para otimização real de 13–14 pontos (evita redundância excessiva entre estratos)
+  const stratScenarioMasks: number[] = [];
+  if (n <= 18) {
+    const allScen = getCombinations(sortedPool, 15);
+    const step = Math.max(1, Math.floor(allScen.length / 816));
+    for (let i = 0; i < allScen.length && stratScenarioMasks.length < 816; i += step) {
+      stratScenarioMasks.push(_criarMascara(allScen[i]));
+    }
+  } else {
+    let sSeed = (sortedPool.reduce((acc, v, i) => acc + v * (i + 11), 5381) + totalJogos * 29) >>> 0;
+    const sRand = () => {
+      sSeed = (sSeed * 1664525 + 1013904223) >>> 0;
+      return sSeed / 4294967296;
+    };
+    const seenS = new Set<number>();
+    const wPool = [...sortedPool];
+    for (let s = 0; s < 1000 && stratScenarioMasks.length < 500; s++) {
+      for (let i = 0; i < 15; i++) {
+        const r = i + Math.floor(sRand() * (n - i));
+        [wPool[i], wPool[r]] = [wPool[r], wPool[i]];
+      }
+      const m = _criarMascara(wPool.slice(0, 15));
+      if (!seenS.has(m)) {
+        seenS.add(m);
+        stratScenarioMasks.push(m);
+      }
+    }
+  }
+  const stratCovered14 = new Uint16Array(stratScenarioMasks.length);
+  const stratCovered13 = new Uint16Array(stratScenarioMasks.length);
 
   const numberFreq: Record<number, number> = {};
   const fixedFreq: Record<number, number> = {};
@@ -4281,12 +4436,23 @@ export function gerarMatrizEstratificada(
 
   const pickFromPool = (pool: number[][], quota: number, faixaSoma: 'ouro' | 'baixa' | 'alta') => {
     let picked = 0;
-    const poolWithMasks = pool.map((nums) => ({ nums, mask: _criarMascara(nums), key: nums.join('-') }));
+    const poolWithMasks = pool.map((nums) => {
+      const a = analyzeTicket(nums, concursoAnterior, aiScores);
+      const soft = computeSoftFilterPriorityScore({ soma: a.soma, repetidas: a.repetidas }, options.filters);
+      return {
+        nums,
+        mask: _criarMascara(nums),
+        key: nums.join('-'),
+        softBonus: soft.queuePriorityBonus,
+      };
+    });
 
-    const runPass = (minHammingReq: number, enforceFreqCap: boolean, maxScan: number = 600) => {
+    const runPass = (minHammingReq: number, enforceFreqCap: boolean, maxScan: number = 450) => {
       while (picked < quota && selectedEntries.length < totalJogos) {
         let bestIdx = -1;
-        let bestPenaltyScore = -Infinity;
+        let bestYieldScore = -Infinity;
+        let bestCov14: number[] = [];
+        let bestCov13: number[] = [];
 
         const scanLimit = Math.min(poolWithMasks.length, maxScan);
         for (let i = 0; i < scanLimit; i++) {
@@ -4319,16 +4485,44 @@ export function gerarMatrizEstratificada(
           }
           if (enforceFreqCap && saturated) continue;
 
+          let new14 = 0;
+          let new13 = 0;
+          let redundant14 = 0;
+          const c14: number[] = [];
+          const c13: number[] = [];
+          for (let s = 0; s < stratScenarioMasks.length; s++) {
+            const hits = _popcount(cand.mask & stratScenarioMasks[s]);
+            if (hits >= 14) {
+              c14.push(s);
+              if (stratCovered14[s] === 0) new14++;
+              else redundant14++;
+            } else if (hits === 13) {
+              c13.push(s);
+              if (stratCovered14[s] === 0 && stratCovered13[s] === 0) new13++;
+            }
+          }
+
           let rotBonus = 0;
           if (fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3) {
             const subKey = effectiveFixas.filter((f) => cand.nums.includes(f)).join('-');
             if (!usedFixedSubsets.has(subKey)) rotBonus += 25;
           }
 
-          const rankScore = (scanLimit - i) * 0.1 + Math.min(minDist, 6) * (is18to21 ? 9 : 6) + freqBalance + rotBonus;
-          if (rankScore > bestPenaltyScore) {
-            bestPenaltyScore = rankScore;
+          const adaptiveScore =
+            new14 * 16 +
+            new13 * 4.5 -
+            redundant14 * 2.5 +
+            cand.softBonus * 1.6 +
+            (scanLimit - i) * 0.04 +
+            Math.min(minDist, 6) * (is18to21 ? 6 : 4) +
+            freqBalance * 0.5 +
+            rotBonus;
+
+          if (adaptiveScore > bestYieldScore) {
+            bestYieldScore = adaptiveScore;
             bestIdx = i;
+            bestCov14 = c14;
+            bestCov13 = c13;
           }
         }
 
@@ -4338,6 +4532,14 @@ export function gerarMatrizEstratificada(
         selectedMasks.push(chosen.mask);
         selectedKeys.add(chosen.key);
         picked++;
+
+        for (const s of bestCov14) {
+          stratCovered14[s]++;
+          stratCovered13[s]++;
+        }
+        for (const s of bestCov13) {
+          stratCovered13[s]++;
+        }
 
         if (fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3) {
           const subKey = effectiveFixas.filter((f) => chosen.nums.includes(f)).join('-');
@@ -4350,18 +4552,18 @@ export function gerarMatrizEstratificada(
       }
     };
 
-    runPass(targetHammingDist, true, 600);
-    if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false, 600);
-    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 600) {
+    runPass(targetHammingDist, true, 450);
+    if (picked < quota && selectedEntries.length < totalJogos) runPass(targetHammingDist, false, 450);
+    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 450) {
       runPass(targetHammingDist, true, poolWithMasks.length);
     }
-    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 600) {
+    if (picked < quota && selectedEntries.length < totalJogos && poolWithMasks.length > 450) {
       runPass(targetHammingDist, false, poolWithMasks.length);
     }
     if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 3) {
       runPass(3, false, poolWithMasks.length);
     }
-    if (picked < quota && selectedEntries.length < totalJogos && !is18to21 && targetHammingDist > 2) {
+    if (picked < quota && selectedEntries.length < totalJogos && targetHammingDist > 2) {
       runPass(2, false, poolWithMasks.length);
     }
     if (picked < quota && selectedEntries.length < totalJogos && !is18to21) {
@@ -4797,20 +4999,21 @@ export function generateCoreSatellites25Matrix(options: {
       else if (minDist >= 7) score -= (minDist - 6) * 10;
       else if (minDist === 2) score -= 4;
 
-      // Calibração Zona Central (180–215) com proteção de caudas
-      if (analysis.soma >= somaMin && analysis.soma <= somaMax) score += 16;
-      else if (analysis.soma >= 165 && analysis.soma <= 225) score += 6;
-      else score -= 18;
+      // Soft-Scoring gaussiano unificado para Soma e Repetidas (prioridade suave sem corte abrupto)
+      const softCore = computeSoftFilterPriorityScore(
+        { soma: analysis.soma, repetidas: analysis.repetidas },
+        filters
+      );
+      score += softCore.queuePriorityBonus * 1.8;
 
       if (analysis.pares >= 6 && analysis.pares <= 8) score += 10;
       else if (analysis.pares === 9 || analysis.pares === 5) score += 2;
       else score -= 10;
 
-      if (analysis.primos >= 4 && analysis.primos <= 7) score += 8;
+      if (analysis.primos >= 4 && analysis.primos <= 7) score += 6;
       if (analysis.moldura >= 8 && analysis.moldura <= 11) score += 8;
-      if (analysis.fibonacci >= 3 && analysis.fibonacci <= 6) score += 6;
-      if (analysis.repetidas >= 7 && analysis.repetidas <= 10) score += 10;
-      if (analysis.maxConsecutivas <= 5) score += 6;
+      if (analysis.fibonacci >= 3 && analysis.fibonacci <= 6) score += 5;
+      if (analysis.maxConsecutivas <= 6) score += 5;
       if (isHistorical15Collision(combo)) score -= 120;
       if (hasViciousVisualPattern(combo).isVicious) score -= 40;
 
@@ -5576,17 +5779,21 @@ export function resolveEffectiveFiltersForStudio(
     };
   }
 
-  // Modo Agressivo: ultra-aberto com Soma e Repetidas em Soft-Scoring (prioridade na fila)
+  // Modo Agressivo: ultra-aberto com Soma e Repetidas em Soft-Scoring (preserva faixas-alvo para ordenação na fila sem descarte)
+  const agSomaMin = Math.min(Math.max(baseFilters.somaMin ?? 165, 155), 175);
+  const agSomaMax = Math.max(Math.min(baseFilters.somaMax ?? 225, 235), 218);
+  const agRepMin = Math.min(baseFilters.repetidasMin ?? 6, 6);
+  const agRepMax = Math.max(baseFilters.repetidasMax ?? 11, 11);
   return {
     ...baseFilters,
     filtrosDesativadosNoFechamento: false,
     modoRigorFiltros: 'agressivo',
     softScoringSomaAtivo: true,
     softScoringRepetidasAtivo: true,
-    somaMin: 155,
-    somaMax: 235,
-    minSoma: 155,
-    maxSoma: 235,
+    somaMin: agSomaMin,
+    somaMax: agSomaMax,
+    minSoma: agSomaMin,
+    maxSoma: agSomaMax,
     paresMin: 5,
     paresMax: 10,
     minPares: 5,
@@ -5605,8 +5812,8 @@ export function resolveEffectiveFiltersForStudio(
     maxMoldura: 16,
     fibonacciMin: 0,
     fibonacciMax: 7,
-    repetidasMin: 0,
-    repetidasMax: 15,
+    repetidasMin: agRepMin,
+    repetidasMax: agRepMax,
     repetidasParidadeAtiva: false,
     cruzAtiva: false,
     validacaoEstritaCruz: false,

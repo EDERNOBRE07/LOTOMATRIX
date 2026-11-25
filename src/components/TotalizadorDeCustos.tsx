@@ -5,12 +5,12 @@ import {
   Users,
   Repeat,
   ShieldCheck,
-  Zap,
-  Info,
   Download,
   ArrowRight,
+  FileJson,
+  Check,
 } from 'lucide-react';
-import { FechamentoPreset, FechamentoMode } from '../types/lotofacil';
+import { FechamentoPreset, FechamentoMode, GameTicket, FilterCriteria } from '../types/lotofacil';
 import { VALOR_APOSTA_LOTOFACIL } from '../services/combinatorics';
 
 export interface TotalizadorDeCustosProps {
@@ -23,6 +23,10 @@ export interface TotalizadorDeCustosProps {
   subtitle?: string;
   shortcutButtonLabel?: string;
   onGoToGamesManager?: () => void;
+  tickets?: GameTicket[];
+  activeFilters?: FilterCriteria;
+  filterConfigId?: string;
+  concursoBase?: number;
 }
 
 export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
@@ -35,10 +39,15 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
   subtitle,
   shortcutButtonLabel,
   onGoToGamesManager,
+  tickets,
+  activeFilters,
+  filterConfigId,
+  concursoBase,
 }) => {
   const [teimosinhaConcursos, setTeimosinhaConcursos] = useState<number>(1);
   const [numCotistas, setNumCotistas] = useState<number>(5);
   const [showBolaoCalc, setShowBolaoCalc] = useState<boolean>(false);
+  const [jsonExported, setJsonExported] = useState<boolean>(false);
 
   const buttonLabel = shortcutButtonLabel || 'Gerenciar & Conferir';
 
@@ -54,6 +63,50 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
   const valorUnitario = VALOR_APOSTA_LOTOFACIL; // 3.50
   const custoPorConcurso = totalJogos * valorUnitario;
   const custoTotalTeimosinha = custoPorConcurso * teimosinhaConcursos;
+
+  const hasExportableTickets = Array.isArray(tickets) && tickets.length > 0;
+
+  const handleExportJson = () => {
+    if (!tickets || tickets.length === 0) return;
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      concursoBase: concursoBase ?? null,
+      estrategia: {
+        mode: mode ?? null,
+        nome: preset?.nome ?? title,
+        targetCount,
+        totalJogos: tickets.length,
+        custoTotal: Number((tickets.length * valorUnitario).toFixed(2)),
+      },
+      filterConfigId: filterConfigId ?? 'padrao',
+      filtrosAtivos: activeFilters ?? null,
+      bilhetes: tickets.map((t) => ({
+        index: t.index,
+        dezenas: t.dezenas,
+        soma: t.soma,
+        pares: t.pares,
+        impares: t.impares,
+        repetidas: t.repetidas,
+        moldura: t.moldura,
+        primos: t.primos,
+        fibonacci: t.fibonacci,
+        scoreIA: t.scoreIA,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lotosniper-fechamento-${mode || 'matriz'}-c${concursoBase || 'atual'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setJsonExported(true);
+    setTimeout(() => setJsonExported(false), 2500);
+  };
 
   // Custo de aposta múltipla oficial na Caixa Econômica Federal: C(n, 15)
   const rawPermutations =
@@ -148,17 +201,40 @@ export const TotalizadorDeCustos: React.FC<TotalizadorDeCustosProps> = ({
             </span>
           </div>
 
-          {/* Botão de Atalho para o Gerenciador de Jogos, Exportador & Conferidor */}
-          <button
-            type="button"
-            onClick={handleGoToGamesManager}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
-            title={`Acessar ${buttonLabel}`}
-          >
-            <Download className="w-4 h-4 text-slate-950 shrink-0" />
-            <span>{buttonLabel}</span>
-            <ArrowRight className="w-4 h-4 text-slate-950 shrink-0" />
-          </button>
+          {/* Botões de Ação: Exportar JSON com Metadados + Atalho Gerenciador */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+            {hasExportableTickets && (
+              <button
+                type="button"
+                onClick={handleExportJson}
+                className="flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
+                title="Baixar arquivo JSON completo com bilhetes, filtros ativos e metadados da estratégia"
+              >
+                {jsonExported ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>JSON Baixado!</span>
+                  </>
+                ) : (
+                  <>
+                    <FileJson className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Exportar JSON</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleGoToGamesManager}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer whitespace-nowrap"
+              title={`Acessar ${buttonLabel}`}
+            >
+              <Download className="w-4 h-4 text-slate-950 shrink-0" />
+              <span>{buttonLabel}</span>
+              <ArrowRight className="w-4 h-4 text-slate-950 shrink-0" />
+            </button>
+          </div>
         </div>
       </div>
 

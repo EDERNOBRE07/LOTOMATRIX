@@ -63,6 +63,13 @@ export const CriticalDelayNumbersConfigPanel: React.FC<CriticalDelayNumbersConfi
     [statsList, combinedNumbers, config.threshold]
   );
 
+  const drawnNow = useMemo(
+    () => combinedNumbers.filter((num) => latestDraw.dezenas.includes(num)),
+    [combinedNumbers, latestDraw.dezenas]
+  );
+
+  const notifyWhenDrawnEnabled = config.notifyWhenDrawn !== false;
+
   const handleToggleExtraNumber = (num: number) => {
     const exists = config.extraSelectedNumbers.includes(num);
     const updated = exists
@@ -83,15 +90,23 @@ export const CriticalDelayNumbersConfigPanel: React.FC<CriticalDelayNumbersConfi
       triggeredNow.length > 0
         ? triggeredNow.map((d) => `${String(d.numero).padStart(2, '0')} (${d.atrasoAtual}x)`).join(', ')
         : combinedNumbers.slice(0, 5).map((n) => String(n).padStart(2, '0')).join(', ');
+    const drawnPreview =
+      notifyWhenDrawnEnabled && drawnNow.length > 0
+        ? ` | Sorteadas no #${latestDraw.concurso}: ${drawnNow
+            .map((n) => String(n).padStart(2, '0'))
+            .join(', ')}`
+        : '';
 
     await fireBrowserPushNotification(
-      `LotoSniper • Teste de Atraso Crítico (#${latestDraw.concurso})`,
-      `Monitorando ${combinedNumbers.length} dezenas (ciclo + extras) com hiato ≥ ${config.threshold} conc.: ${listPreview}.`,
+      `LotoSniper • Monitoramento de Dezenas (#${latestDraw.concurso})`,
+      `Monitorando ${combinedNumbers.length} dezenas (hiato ≥ ${config.threshold} conc.): ${listPreview}${drawnPreview}.`,
       `lotosniper-test-delay-${latestDraw.concurso}`
     );
 
     setFeedback(
-      `Monitoramento validado: ${combinedNumbers.length} dezenas ativas (${cycleNumbers.length} do ciclo + ${extraNumbers.length} extras).`
+      `Monitoramento validado: ${combinedNumbers.length} dezenas ativas (${cycleNumbers.length} do ciclo + ${extraNumbers.length} extras)${
+        notifyWhenDrawnEnabled ? ` · Push ao sair ativo (${drawnNow.length} no #${latestDraw.concurso})` : ''
+      }.`
     );
     setTimeout(() => setFeedback(null), 4000);
   };
@@ -152,8 +167,8 @@ export const CriticalDelayNumbersConfigPanel: React.FC<CriticalDelayNumbersConfi
         </div>
       )}
 
-      {/* Controles de Inclusão do Ciclo e Limiar de Atraso */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      {/* Controles de Inclusão do Ciclo, Push ao Sair e Limiar de Atraso */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
         <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-3">
           <div className="space-y-0.5">
             <span className="text-xs font-bold text-white block">
@@ -181,6 +196,41 @@ export const CriticalDelayNumbersConfigPanel: React.FC<CriticalDelayNumbersConfi
             }
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
               config.includeCycleNumbersAutomatically
+                ? 'bg-emerald-500 justify-end'
+                : 'bg-slate-700 justify-start'
+            }`}
+          >
+            <span className="inline-block h-5 w-5 rounded-full bg-white shadow-md" />
+          </button>
+        </div>
+
+        <div className="bg-slate-950/75 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <span className="text-xs font-bold text-white block">
+              Push quando Dezena Monitorada Sair
+            </span>
+            <p className="text-[11px] text-slate-400">
+              Dispara alerta push nativo também quando qualquer dezena monitorada for sorteada no concurso mais recente.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={notifyWhenDrawnEnabled}
+            aria-label="Alertar por push quando dezena monitorada for sorteada no concurso mais recente"
+            onClick={() =>
+              commit(
+                {
+                  ...config,
+                  notifyWhenDrawn: !notifyWhenDrawnEnabled,
+                },
+                !notifyWhenDrawnEnabled
+                  ? 'Alerta push para dezenas monitoradas sorteadas ativado.'
+                  : 'Alerta push para dezenas monitoradas sorteadas desativado.'
+              )
+            }
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+              notifyWhenDrawnEnabled
                 ? 'bg-emerald-500 justify-end'
                 : 'bg-slate-700 justify-start'
             }`}
@@ -317,14 +367,26 @@ export const CriticalDelayNumbersConfigPanel: React.FC<CriticalDelayNumbersConfi
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono text-slate-400 tabular-nums">
-          <span>
-            Disparando agora (hiato ≥ {config.threshold}):{' '}
-            <strong className={triggeredNow.length > 0 ? 'text-rose-400' : 'text-slate-300'}>
-              {triggeredNow.length > 0
-                ? triggeredNow.map((d) => String(d.numero).padStart(2, '0')).join(', ')
-                : 'Nenhuma dezena no limite'}
-            </strong>
-          </span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>
+              Em atraso (≥ {config.threshold}):{' '}
+              <strong className={triggeredNow.length > 0 ? 'text-rose-400' : 'text-slate-300'}>
+                {triggeredNow.length > 0
+                  ? triggeredNow.map((d) => String(d.numero).padStart(2, '0')).join(', ')
+                  : 'Nenhuma no limite'}
+              </strong>
+            </span>
+            {notifyWhenDrawnEnabled && (
+              <span>
+                Sorteadas no #{latestDraw.concurso}:{' '}
+                <strong className={drawnNow.length > 0 ? 'text-emerald-400' : 'text-slate-300'}>
+                  {drawnNow.length > 0
+                    ? drawnNow.map((n) => String(n).padStart(2, '0')).join(', ')
+                    : 'Nenhuma'}
+                </strong>
+              </span>
+            )}
+          </div>
           <span>Persistência: localStorage</span>
         </div>
       </div>

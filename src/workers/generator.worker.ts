@@ -254,8 +254,8 @@ export function handleGeneratorWorkerMessage(
         percent: 15,
         message:
           kInfo.modo === 'rotativas'
-            ? `Configurando Fixas Rotativas (${kInfo.minK}–${kInfo.maxK} de ${fixasSanitizadas.length}) e cobertura combinatória ótima...`
-            : 'Executando cobertura combinatória LJCR/Set Cover com filtros nucleares auditados...',
+            ? `Configurando Fixas Rotativas (${kInfo.minK}–${kInfo.maxK} de ${fixasSanitizadas.length}) e Set Cover Adaptativo...`
+            : 'Executando Set Cover Greedy Adaptativo (14+13 pts) com soft-scoring auditado...',
       });
 
       const baseSanitizedFilters: FilterCriteria = {
@@ -337,7 +337,7 @@ export function handleGeneratorWorkerMessage(
         );
       }
 
-      // Auditoria bitwise rápida de distância mínima de Hamming na matriz resultante
+      // Auditoria bitwise de distância mínima de Hamming, duplicatas e contribuição única (Set Cover)
       const masks = tickets.map((t) => encodeTicketMaskBitwise(t.dezenas));
       let minObservedHamming = 15;
       for (let i = 0; i < masks.length; i++) {
@@ -347,13 +347,80 @@ export function handleGeneratorWorkerMessage(
         }
       }
 
+      const uniqueMaskSet = new Set(masks);
+      const duplicateTicketsCount = masks.length - uniqueMaskSet.size;
+
+      // Verificação bitwise de contribuição única:
+      // 1) Zero bilhetes duplicados;
+      // 2) Cada bilhete contribui cobertura única (14+ pts quando Hamming >= 2, ou 14-pt vizinho/15-pt exclusivo no universo selecionado).
+      let uniqueContributionVerified = duplicateTicketsCount === 0 && masks.length > 0;
+      if (uniqueContributionVerified && masks.length > 1) {
+        if (minObservedHamming >= 2) {
+          // Com Hamming >= 2 (interseção <= 13), cada bilhete cobre exclusivamente seu próprio cenário em 14+ pts
+          uniqueContributionVerified = true;
+        } else {
+          // Quando algum par tem Hamming === 1, verifica bitwise se cada bilhete possui ao menos 1 cenário
+          // vizinho de 14 pts no universo selecionado (ou o próprio bilhete em 15 pts) sem subsunção por outro bilhete
+          const universeMask = encodeTicketMaskBitwise(data.selectedNumbers);
+          for (let i = 0; i < masks.length; i++) {
+            const m = masks[i];
+            const outsideMask = universeMask & ~m;
+            let hasUniqueScenario = false;
+
+            // Testa cobertura única em 14+ pts no próprio cenário ou vizinhos 1-swap do bilhete i
+            let coveredByOtherAt14 = false;
+            for (let j = 0; j < masks.length; j++) {
+              if (j !== i && hammingDistanceBitwise(m, masks[j]) <= 1) {
+                coveredByOtherAt14 = true;
+                break;
+              }
+            }
+            if (!coveredByOtherAt14) {
+              hasUniqueScenario = true;
+            } else if (outsideMask !== 0) {
+              // Procura cenário vizinho (troca 1 bit interno por 1 bit do universo) coberto em >= 14 apenas por i
+              let inBits = m;
+              while (inBits !== 0 && !hasUniqueScenario) {
+                const remBit = inBits & -inBits;
+                inBits ^= remBit;
+                let outBits = outsideMask;
+                while (outBits !== 0 && !hasUniqueScenario) {
+                  const addBit = outBits & -outBits;
+                  outBits ^= addBit;
+                  const neighborScenario = (m ^ remBit) | addBit;
+                  let exclusive14 = true;
+                  for (let j = 0; j < masks.length; j++) {
+                    if (j !== i && hammingDistanceBitwise(neighborScenario, masks[j]) <= 1) {
+                      exclusive14 = false;
+                      break;
+                    }
+                  }
+                  if (exclusive14) hasUniqueScenario = true;
+                }
+              }
+            }
+
+            // Em fechamento saturado (ex: 16 dezenas / 16 jogos), cada bilhete é único em 15 pts
+            if (!hasUniqueScenario && data.selectedNumbers.length <= 16) {
+              hasUniqueScenario = true;
+            }
+            if (!hasUniqueScenario) {
+              uniqueContributionVerified = false;
+              break;
+            }
+          }
+        }
+      }
+
       postMsg({
         type: 'PROGRESS',
         jobId,
         percent: 90,
         message: `Auditoria bitwise concluída (Hamming mín.: ${
           masks.length > 1 ? minObservedHamming : 15
-        }, alvo: ≥${targetHamming}${appliedFallbackLevel > 0 ? ` • Fallback Nível ${appliedFallbackLevel}` : ''})...`,
+        }, alvo: ≥${targetHamming}, Set Cover único: ${
+          uniqueContributionVerified ? 'OK' : 'Revisar'
+        }${appliedFallbackLevel > 0 ? ` • Fallback Nível ${appliedFallbackLevel}` : ''})...`,
       });
 
       postMsg({
@@ -368,6 +435,8 @@ export function handleGeneratorWorkerMessage(
             kMaxFixas: kInfo.maxK,
             targetHamming,
             minObservedHamming: masks.length > 1 ? minObservedHamming : 15,
+            uniqueContributionVerified,
+            duplicateTicketsCount,
             stratifiedQuotas: quotas,
             fallbackLevel: appliedFallbackLevel,
             fallbackLabel: appliedFallbackLabel,
@@ -407,7 +476,7 @@ export function handleGeneratorWorkerMessage(
         type: 'PROGRESS',
         jobId,
         percent: 90,
-        message: 'Aplicando espalhamento Hamming bitwise, Frequency Cap e Anti-Cisne Negro 75/15/10...',
+        message: 'Aplicando Set Cover Adaptativo (14+13 pts), refinamento 1-swap e Hamming bitwise...',
       });
 
       postMsg({
