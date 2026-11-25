@@ -3360,6 +3360,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           latestDraw={latestDraw}
           onOpenFiltros={onOpenFiltros}
           justAppliedFromFiltros={showFiltersAppliedToast}
+          onToggleSoftScoring={(field, nextSoft) => {
+            syncFilters((prev) => ({
+              ...prev,
+              ...(field === 'soma'
+                ? { softScoringSomaAtivo: nextSoft }
+                : { softScoringRepetidasAtivo: nextSoft }),
+            }));
+          }}
         />
 
         {/* Drawer Colapsável: Ajuste Fino, Fixas Rotativas & Distância de Hamming */}

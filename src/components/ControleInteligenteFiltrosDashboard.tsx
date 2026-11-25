@@ -10,8 +10,10 @@ import {
   ArrowRight,
   Layers,
   Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
+import { computeSoftFilterPriorityScore } from '../services/combinatorics';
 
 interface ControleInteligenteFiltrosDashboardProps {
   enabled: boolean;
@@ -23,6 +25,7 @@ interface ControleInteligenteFiltrosDashboardProps {
   latestDraw: LotofacilDraw;
   onOpenFiltros?: () => void;
   justAppliedFromFiltros?: boolean;
+  onToggleSoftScoring?: (field: 'soma' | 'repetidas', nextSoft: boolean) => void;
 }
 
 interface RigorModeDefinition {
@@ -44,15 +47,15 @@ const RIGOR_MODES: RigorModeDefinition[] = [
     id: 'conservador',
     stepLabel: 'MODO 1 • PADRÃO',
     title: 'Conservador',
-    subtitle: 'Núcleo Comprovado (Alta Performance)',
+    subtitle: 'Soft-Scoring na Fila (Alta Performance)',
     description:
-      'Prioriza apenas os 4 filtros de alta comprovação estatística (Soma Ampla 165–225, Paridade 5–9, Moldura 8–12 e Repetidas 6–11) + Consecutivas ≤ 7. Regras secundárias atuam só como Soft Scoring no scoreIA, sem podar bilhetes premiados.',
+      'Soma e Repetidas atuam como Soft-Scoring (elevando prioridade na fila sem descartar combinações vencedoras fora da média). Apenas Paridade, Moldura e Consecutivas ≤ 7 atuam como proteção estrutural leve.',
     highlights: [
-      'Soma Ampla (165–225)',
+      'Soma: Soft-Scoring',
+      'Repetidas: Soft-Scoring',
       'Paridade (5–9)',
       'Moldura (8–12)',
-      'Repetidas (6–11)',
-      'Soft Scoring IA',
+      'Zero Descarte Rígido',
     ],
     accentBorder: 'border-emerald-400',
     accentBg: 'bg-gradient-to-b from-emerald-500/15 via-slate-900 to-slate-950',
@@ -64,13 +67,14 @@ const RIGOR_MODES: RigorModeDefinition[] = [
     id: 'agressivo',
     stepLabel: 'MODO 2',
     title: 'Agressivo',
-    subtitle: 'Ultra-Aberto • Cobertura Pura 14/15',
+    subtitle: 'Ultra-Aberto • Set Cover Adaptativo 13/14',
     description:
-      'Aplica exclusivamente os filtros indispensáveis (Soma ampla 160–230, equilíbrio básico Par/Ímpar 5–10 e controle de Consecutivas ≤ 7) para máxima velocidade e cobertura combinatória.',
+      'Soma e Repetidas operam puramente em Soft-Scoring na fila de prioridade, com guarda mínima de Paridade (5–10) e Consecutivas (≤ 8) para maximizar o índice real de premiação de 13–14 pontos.',
     highlights: [
-      'Soma Ampla (160–230)',
+      'Soma: Soft-Scoring',
+      'Repetidas: Soft-Scoring',
       'Par/Ímpar (5–10)',
-      'Consecutivas (≤ 7)',
+      'Consecutivas (≤ 8)',
     ],
     accentBorder: 'border-cyan-400',
     accentBg: 'bg-gradient-to-b from-cyan-500/15 via-slate-900 to-slate-950',
@@ -82,11 +86,11 @@ const RIGOR_MODES: RigorModeDefinition[] = [
     id: 'total',
     stepLabel: 'MODO 3 • AVANÇADO',
     title: 'Total',
-    subtitle: 'Manual • Risco de Over-filtering',
+    subtitle: 'Manual • Regras Extras + Soft-Scoring',
     description:
-      'Aplica todos os critérios configurados manualmente em Filtros Inteligentes (Primos, Fibonacci e filtros opcionais de apostilas). Use com cautela: excesso de travas rígidas simultâneas reduz a taxa de premiação.',
+      'Aplica os critérios extras ligados manualmente em Filtros Inteligentes (Primos, Fibonacci e regras opcionais), mantendo Soma e Repetidas em Soft-Scoring por padrão para não podar bilhetes premiados.',
     highlights: [
-      'Núcleo 4 + Avançados',
+      'Soma/Rep: Soft-Scoring',
       'Primos + Fibonacci',
       'Regras Opcionais Ativas',
     ],
@@ -110,6 +114,7 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
   latestDraw,
   onOpenFiltros,
   justAppliedFromFiltros = false,
+  onToggleSoftScoring,
 }) => {
   const handleSelectMode = (mode: FilterRigorMode) => {
     if (!enabled) {
@@ -127,35 +132,61 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
 
   const activeModeMeta = RIGOR_MODES.find((m) => m.id === rigorMode) || RIGOR_MODES[0];
 
-  // Badges descritivas dos filtros efetivamente ativos neste momento
-  const filterBadges = [
+  const isSomaSoft = enabled && effectiveFilters.softScoringSomaAtivo !== false;
+  const isRepetidasSoft = enabled && effectiveFilters.softScoringRepetidasAtivo !== false;
+
+  // Demonstração determinística do comportamento do Soft-Scoring em cenário limítrofe (ex: soma baixa 158 / 5 repetidas)
+  const sampleInRangeScore = computeSoftFilterPriorityScore(
     {
-      label: `Soma ${effectiveFilters.somaMin}–${effectiveFilters.somaMax}`,
+      soma: Math.round((effectiveFilters.somaMin + effectiveFilters.somaMax) / 2),
+      repetidas: Math.round((effectiveFilters.repetidasMin + effectiveFilters.repetidasMax) / 2),
+    },
+    effectiveFilters
+  );
+  const sampleOutlierScore = computeSoftFilterPriorityScore(
+    {
+      soma: Math.max(120, effectiveFilters.somaMin - 12),
+      repetidas: Math.max(3, effectiveFilters.repetidasMin - 1),
+    },
+    effectiveFilters
+  );
+
+  // Badges descritivas separando Soft-Scoring (prioridade na fila) vs Hard-Filter (descarte)
+  const filterBadges: Array<{ label: string; active: boolean; mode: 'soft' | 'hard' }> = [
+    {
+      label: `Soma ${effectiveFilters.somaMin}–${effectiveFilters.somaMax}${isSomaSoft ? ' · Soft-Scoring' : ''}`,
       active: enabled,
+      mode: isSomaSoft ? 'soft' : 'hard',
+    },
+    {
+      label: `Rep. #${latestDraw.concurso}: ${effectiveFilters.repetidasMin}–${effectiveFilters.repetidasMax}${isRepetidasSoft ? ' · Soft-Scoring' : ''}`,
+      active: enabled,
+      mode: isRepetidasSoft ? 'soft' : 'hard',
     },
     {
       label: `Pares ${effectiveFilters.paresMin}–${effectiveFilters.paresMax}`,
       active: enabled,
+      mode: 'hard',
     },
     {
       label: `Moldura ${effectiveFilters.molduraMin}–${effectiveFilters.molduraMax}`,
       active: enabled && rigorMode !== 'agressivo',
-    },
-    {
-      label: `Rep. #${latestDraw.concurso}: ${effectiveFilters.repetidasMin}–${effectiveFilters.repetidasMax}`,
-      active: enabled && rigorMode !== 'agressivo',
+      mode: 'hard',
     },
     {
       label: `Consecutivas ≤ ${effectiveFilters.maxConsecutivas}`,
       active: enabled,
+      mode: 'hard',
     },
     {
       label: `Primos ${effectiveFilters.primosMin}–${effectiveFilters.primosMax} (Soft)`,
       active: enabled && rigorMode === 'total',
+      mode: 'hard',
     },
     {
       label: `Fibonacci ${effectiveFilters.fibonacciMin}–${effectiveFilters.fibonacciMax} (Soft)`,
       active: enabled && rigorMode === 'total',
+      mode: 'hard',
     },
     {
       label: `Paridade Rep. (${effectiveFilters.repetidasParesMin ?? 2}–${effectiveFilters.repetidasParesMax ?? 6}P / ${effectiveFilters.repetidasImparesMin ?? 2}–${effectiveFilters.repetidasImparesMax ?? 6}I)`,
@@ -163,10 +194,12 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
         enabled &&
         rigorMode === 'total' &&
         effectiveFilters.repetidasParidadeAtiva === true,
+      mode: 'hard',
     },
     {
       label: `Cruz ${effectiveFilters.validacaoEstritaCruz ? '5–6 ★' : `${effectiveFilters.cruzMin ?? 4}–${effectiveFilters.cruzMax ?? 7}`}`,
       active: enabled && rigorMode === 'total' && effectiveFilters.cruzAtiva === true,
+      mode: 'hard',
     },
     {
       label: `Lin/Col ${effectiveFilters.linhasMin ?? 1}–${effectiveFilters.linhasMax ?? 5}`,
@@ -174,6 +207,7 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
         enabled &&
         rigorMode === 'total' &&
         effectiveFilters.linhasColunasAtivo === true,
+      mode: 'hard',
     },
     {
       label: `Extremidades B1/B15`,
@@ -181,10 +215,12 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
         enabled &&
         rigorMode === 'total' &&
         effectiveFilters.extremidadesAtiva === true,
+      mode: 'hard',
     },
   ];
 
-  const activeCount = filterBadges.filter((b) => b.active).length;
+  const activeSoftCount = filterBadges.filter((b) => b.active && b.mode === 'soft').length;
+  const activeHardCount = filterBadges.filter((b) => b.active && b.mode === 'hard').length;
   const totalConfiguredCustomRules =
     (baseFilters.repetidasParidadeAtiva === true ? 1 : 0) +
     (baseFilters.cruzAtiva === true ? 1 : 0) +
@@ -226,7 +262,7 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
                 <>
                   <Check className="w-3 h-3 text-emerald-400" />
                   <span>
-                    Ativo · Modo {activeModeMeta.title} ({activeCount} filtros)
+                    Ativo · Modo {activeModeMeta.title} ({activeSoftCount} soft / {activeHardCount} hard)
                   </span>
                 </>
               ) : (
@@ -241,7 +277,8 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
             )}
           </div>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Ligue ou desligue a filtragem estatística instantaneamente e escolha o nível de rigor aplicado aos motores de fechamento abaixo.
+            <strong className="text-sky-300">Soma</strong> e <strong className="text-sky-300">Repetidas</strong> atuam como{' '}
+            <strong className="text-white">Soft-Scoring (prioridade na fila)</strong> em vez de corte rígido — evitando descartar bilhetes premiados fora da média.
           </p>
         </div>
 
@@ -367,14 +404,70 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
         })}
       </div>
 
-      {/* Live Active Filters Telemetry Strip */}
+      {/* Painel Soft-Scoring (Prioridade na Fila para Soma e Repetidas) */}
+      {enabled && (
+        <div className="mt-4 p-3.5 rounded-xl bg-sky-950/25 border border-sky-500/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <TrendingUp className="w-4 h-4 text-sky-400 shrink-0" />
+              <span className="text-xs font-black text-sky-200">
+                Fila de Prioridade Soft-Scoring (Soma &amp; Repetidas)
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-400/40">
+                Alvo: +{sampleInRangeScore.queuePriorityBonus} pts · Fora da média: +{sampleOutlierScore.queuePriorityBonus} pts (Sem Descarte)
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Combinações dentro de <strong className="text-white">Soma {effectiveFilters.somaMin}–{effectiveFilters.somaMax}</strong> e{' '}
+              <strong className="text-white">Repetidas {effectiveFilters.repetidasMin}–{effectiveFilters.repetidasMax}</strong> ganham prioridade máxima no Set Cover Adaptativo, enquanto combinações atípicas permanecem elegíveis para capturar 13–14 pontos.
+            </p>
+          </div>
+
+          {onToggleSoftScoring && rigorMode !== 'agressivo' && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleSoftScoring('soma', !isSomaSoft);
+                  soundService.playFilterClick();
+                }}
+                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
+                  isSomaSoft
+                    ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                    : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                }`}
+                title="Alternar Soma entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
+              >
+                Soma: {isSomaSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleSoftScoring('repetidas', !isRepetidasSoft);
+                  soundService.playFilterClick();
+                }}
+                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition cursor-pointer ${
+                  isRepetidasSoft
+                    ? 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                    : 'bg-amber-500/15 border-amber-400/50 text-amber-200'
+                }`}
+                title="Alternar Repetidas entre Soft-Scoring (prioridade na fila) e Hard-Filter (descarte rígido)"
+              >
+                Repetidas: {isRepetidasSoft ? 'Soft-Scoring ✓' : 'Hard-Filter'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Live Active Filters Strip */}
       <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-amber-400" />
             <span>
               {enabled
-                ? `Filtros aplicados neste modo (${activeCount} ativos):`
+                ? `Regras ativas neste modo (${activeSoftCount} Soft-Scoring na fila · ${activeHardCount} Hard-Filters estruturais):`
                 : 'Todos os filtros estatísticos estão desativados — apenas dezenas Fixas e Excluídas do volante serão respeitadas.'}
             </span>
           </span>
@@ -390,13 +483,19 @@ export const ControleInteligenteFiltrosDashboard: React.FC<
             <span
               key={badge.label}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums border transition-colors ${
-                badge.active
+                badge.active && badge.mode === 'soft'
+                  ? 'bg-sky-500/15 text-sky-200 border-sky-400/45 font-semibold'
+                  : badge.active
                   ? 'bg-emerald-500/12 text-emerald-200 border-emerald-500/35 font-semibold'
                   : 'bg-slate-950/60 text-slate-500 border-slate-800/90 line-through'
               }`}
             >
               {badge.active ? (
-                <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                badge.mode === 'soft' ? (
+                  <TrendingUp className="w-2.5 h-2.5 text-sky-400 shrink-0" />
+                ) : (
+                  <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                )
               ) : null}
               <span>{badge.label}</span>
             </span>

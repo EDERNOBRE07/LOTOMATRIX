@@ -1,1 +1,170 @@
-[]
+[
+  {
+    "id": "fechamento-amplo-21-turbo",
+    "timestamp": 1795627693026,
+    "dataCriacao": "25/11/2026, 14:28:13",
+    "concurso": 3815,
+    "concursoAlvo": 3816,
+    "dataConcurso": "24/10/2026",
+    "nomeFechamento": "Concurso Alvo #3816 (Base #3815) • Gerador Turbo (Força Bruta 14 Pts • 21 Dezenas (3 Jogos • Garantia 14 se 15) [Filtros: Soma 175-220 | Pares 6-8 | Moldura 8-11 | Primos 4-7 | Fib 3-6 | Rep 7-10 | Fixas: [1,2]]",
+    "tipoFechamento": "Gerador Turbo (Força Bruta 14 Pts",
+    "modalidadeMatriz": "21 Dezenas Amplo (18 Jogos • Garantia 14 se 15)",
+    "universoDezenas": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      19,
+      20,
+      22,
+      23,
+      24,
+      25
+    ],
+    "dezenasFixas": [
+      1,
+      2
+    ],
+    "dezenasExcluidas": [],
+    "faixaSoma": {
+      "min": 175,
+      "max": 220,
+      "zonaOuro": "180 a 215"
+    },
+    "paridade": {
+      "minPares": 6,
+      "maxPares": 8,
+      "canonico": "6 a 8 Pares (Pico 6–7)"
+    },
+    "maxConsecutivas": 5,
+    "auditoriaAnomalias": "Todos os bilhetes foram auditados com 0 anomalias estatísticas",
+    "repetidas": {
+      "min": 7,
+      "max": 10,
+      "concursoRef": 3815
+    },
+    "moldura": {
+      "min": 8,
+      "max": 11
+    },
+    "primos": {
+      "min": 4,
+      "max": 7
+    },
+    "fibonacci": {
+      "min": 3,
+      "max": 6
+    },
+    "tickets": [
+      {
+        "id": "sample-01",
+        "index": 1,
+        "dezenas": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ],
+        "soma": 198,
+        "pares": 7,
+        "impares": 8,
+        "primos": 6,
+        "moldura": 10,
+        "fibonacci": 4,
+        "miolo": 5,
+        "repetidas": 9,
+        "maxConsecutivas": 4,
+        "scoreIA": 96,
+        "auditoriaAnomalias": "Conforme filtros"
+      },
+      {
+        "id": "sample-02",
+        "index": 2,
+        "dezenas": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          19,
+          20,
+          22,
+          23
+        ],
+        "soma": 204,
+        "pares": 8,
+        "impares": 7,
+        "primos": 5,
+        "moldura": 9,
+        "fibonacci": 4,
+        "miolo": 6,
+        "repetidas": 9,
+        "maxConsecutivas": 3,
+        "scoreIA": 97,
+        "auditoriaAnomalias": "Conforme filtros"
+      },
+      {
+        "id": "sample-03",
+        "index": 3,
+        "dezenas": [
+          1,
+          2,
+          4,
+          5,
+          6,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          17,
+          20,
+          22,
+          24
+        ],
+        "soma": 206,
+        "pares": 8,
+        "impares": 7,
+        "primos": 5,
+        "moldura": 10,
+        "fibonacci": 3,
+        "miolo": 5,
+        "repetidas": 8,
+        "maxConsecutivas": 3,
+        "scoreIA": 95,
+        "auditoriaAnomalias": "Conforme filtros"
+      }
+    ],
+    "totalJogos": 3,
+    "custoTotal": 63
+  }
+]

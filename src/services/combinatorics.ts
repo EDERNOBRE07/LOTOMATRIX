@@ -41,7 +41,6 @@ import {
   combinarComPodaDinamica as _combinarComPodaDinamica,
   PodaDinamicaFiltros,
   MASK_CRUZ as _MASK_CRUZ,
-  MATRIZES_COBERTURA as _MATRIZES_COBERTURA,
 } from './tabelasCoberturaLJCR';
 import {
   calculateIndicePerformance,
@@ -1797,11 +1796,13 @@ export function validateFilters(
     );
   }
 
-  // 3. Soma das Dezenas
-  if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
-    violations.push(
-      `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
-    );
+  // 3. Soma das Dezenas (Hard-Filter somente se softScoringSomaAtivo !== true)
+  if (!activeFilterConfig.softScoringSomaAtivo) {
+    if (analysis.soma < activeFilterConfig.somaMin || analysis.soma > activeFilterConfig.somaMax) {
+      violations.push(
+        `Soma fora da faixa: ${analysis.soma} (esperado: ${activeFilterConfig.somaMin}-${activeFilterConfig.somaMax})`
+      );
+    }
   }
 
   // 4. Dezenas na Moldura
@@ -1821,7 +1822,7 @@ export function validateFilters(
     );
   }
 
-  // 6. Repetidas do Concurso Anterior (+ Subfiltro de Paridade das Repetidas: dezenas ∩ concursoAnterior)
+  // 6. Repetidas do Concurso Anterior (Hard-Filter somente se softScoringRepetidasAtivo !== true)
   const repetidasIntersecao = dezenas.filter((n) => concursoAnterior.includes(n));
   const repCount = analysis.repetidas ?? repetidasIntersecao.length;
   const repParesCount =
@@ -1829,13 +1830,15 @@ export function validateFilters(
   const repImparesCount =
     analysis.repetidasImpares ?? repetidasIntersecao.filter((n) => n % 2 !== 0).length;
 
-  if (
-    repCount < activeFilterConfig.repetidasMin ||
-    repCount > activeFilterConfig.repetidasMax
-  ) {
-    violations.push(
-      `Repetidas fora da faixa: ${repCount} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
-    );
+  if (!activeFilterConfig.softScoringRepetidasAtivo) {
+    if (
+      repCount < activeFilterConfig.repetidasMin ||
+      repCount > activeFilterConfig.repetidasMax
+    ) {
+      violations.push(
+        `Repetidas fora da faixa: ${repCount} (esperado: ${activeFilterConfig.repetidasMin}-${activeFilterConfig.repetidasMax})`
+      );
+    }
   }
 
   if (activeFilterConfig.repetidasParidadeAtiva) {
@@ -2122,6 +2125,58 @@ export function ticketPassesFilters(
   return validateFilters(ticket, filters, concursoAnterior).isValid;
 }
 
+export interface SoftFilterPriorityResult {
+  somaScore: number; // 0..100
+  repetidasScore: number; // 0..100
+  combinedScore: number; // 0..100
+  queuePriorityBonus: number; // impacto suave na fila de prioridade
+  somaInTarget: boolean;
+  repetidasInTarget: boolean;
+}
+
+/**
+ * Pontuação Soft-Scoring para 'Soma' e 'Repetidas':
+ * Em vez de descartar (hard-filter) combinações vencedoras que estejam levemente fora da faixa típica,
+ * aplica decaimento gaussiano suave que ordena a prioridade na fila do Set Cover adaptativo.
+ */
+export function computeSoftFilterPriorityScore(
+  metrics: { soma: number; repetidas: number },
+  filters?: FilterCriteria
+): SoftFilterPriorityResult {
+  const somaMin = filters?.somaMin ?? 165;
+  const somaMax = filters?.somaMax ?? 225;
+  const repMin = filters?.repetidasMin ?? 6;
+  const repMax = filters?.repetidasMax ?? 11;
+
+  const somaInTarget = metrics.soma >= somaMin && metrics.soma <= somaMax;
+  const repInTarget = metrics.repetidas >= repMin && metrics.repetidas <= repMax;
+
+  let somaDist = 0;
+  if (metrics.soma < somaMin) somaDist = somaMin - metrics.soma;
+  else if (metrics.soma > somaMax) somaDist = metrics.soma - somaMax;
+  // Decaimento gaussiano suave (sigma = 24): combinações limítrofes mantêm alta prioridade sem descarte
+  const somaScore = somaInTarget ? 100 : Math.round(100 * Math.exp(-(somaDist * somaDist) / (2 * 24 * 24)));
+
+  let repDist = 0;
+  if (metrics.repetidas < repMin) repDist = repMin - metrics.repetidas;
+  else if (metrics.repetidas > repMax) repDist = metrics.repetidas - repMax;
+  // Decaimento gaussiano suave (sigma = 2.0) para repetidas
+  const repetidasScore = repInTarget ? 100 : Math.round(100 * Math.exp(-(repDist * repDist) / (2 * 2.0 * 2.0)));
+
+  const combinedScore = Math.round(somaScore * 0.55 + repetidasScore * 0.45);
+  // Bônus normalizado [-6 .. +12] para influenciar prioridade na fila sem sobrepor cobertura de 13–14 pts
+  const queuePriorityBonus = Number((((combinedScore - 50) / 50) * 9 + 3).toFixed(2));
+
+  return {
+    somaScore,
+    repetidasScore,
+    combinedScore,
+    queuePriorityBonus,
+    somaInTarget,
+    repetidasInTarget: repInTarget,
+  };
+}
+
 /**
  * Check if a ticket has any statistical anomaly matching the Monitoring System
  * (Soma 180-225, Pares 5-10, Primos 3-8, Moldura 7-12, Repetidas 6-12, Sequência <= 6, Cruz 3-8, Bola1 <= 4, Bola15 >= 22)
@@ -2342,15 +2397,34 @@ export function generateMinimumSetCoverFechamento({
     return present >= fixedBounds.minK && present <= fixedBounds.maxK;
   };
 
-  // 2. Universo de Subconjuntos Alvo U: todas as combinações C(n, 15)
+  // 2. Universo de Subconjuntos Alvo U: todas as combinações C(n, 15) + Peso de Verossimilhança Real
   const universeSubsets = getCombinations(sortedPool, 15);
   const universeMasks = universeSubsets.map(_criarMascara);
   const totalUniverse = universeMasks.length;
 
-  // 3. Validador de filtros canônicos estritos (respeitando o nível de Fallback Progressivo)
+  // Pondera cada cenário u ∈ U pela verossimilhança estatística real da Lotofácil (evita perseguir outliers improváveis)
+  const lastDrawMask = _criarMascara(concursoAnterior);
+  const universeWeights = new Float32Array(totalUniverse);
+  for (let u = 0; u < totalUniverse; u++) {
+    const sub = universeSubsets[u];
+    let sSum = 0;
+    let sPares = 0;
+    for (let k = 0; k < sub.length; k++) {
+      sSum += sub[k];
+      if ((sub[k] & 1) === 0) sPares++;
+    }
+    const sRep = _popcount(universeMasks[u] & lastDrawMask);
+    const softU = computeSoftFilterPriorityScore({ soma: sSum, repetidas: sRep }, effectiveCoreFilters);
+    const parityFactor = sPares >= 6 && sPares <= 9 ? 1.0 : sPares === 5 || sPares === 10 ? 0.88 : 0.72;
+    // Peso real entre 0.55 e 1.25: nenhum cenário vencedor é zerado, mas cenários prováveis de 13–14 pts valem mais
+    universeWeights[u] = Number((0.55 + (softU.combinedScore / 100) * 0.55 * parityFactor + 0.15 * parityFactor).toFixed(4));
+  }
+
+  // 3. Validador de filtros estruturais (Soma e Repetidas respeitam Soft-Scoring quando ativo)
+  const useSoftSoma = Boolean(effectiveCoreFilters?.softScoringSomaAtivo);
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
-    somaMax: Math.max(225, centralMax),
+    somaMin: useSoftSoma ? 120 : Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
+    somaMax: useSoftSoma ? 285 : Math.max(225, centralMax),
   };
 
   const isCandidateValid = (nums: number[]): boolean => {
@@ -2362,14 +2436,15 @@ export function generateMinimumSetCoverFechamento({
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     const skipHardCanonical =
       effectiveCoreFilters?.modoRigorFiltros === 'agressivo' ||
-      effectiveCoreFilters?.modoRigorFiltros === 'conservador';
+      effectiveCoreFilters?.modoRigorFiltros === 'conservador' ||
+      useSoftSoma;
     if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
       return false;
     }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
-    if (a.soma < centralMin || a.soma > centralMax) return false;
+    if (!useSoftSoma && (a.soma < centralMin || a.soma > centralMax)) return false;
     return true;
   };
 
@@ -2456,8 +2531,8 @@ export function generateMinimumSetCoverFechamento({
         rankingHistoricoAtivo: false,
       }
     : {
-        somaMin: centralMin,
-        somaMax: centralMax,
+        somaMin: useSoftSoma ? 120 : centralMin,
+        somaMax: useSoftSoma ? 285 : centralMax,
         paresMin: effectiveCoreFilters?.paresMin ?? 5,
         paresMax: effectiveCoreFilters?.paresMax ?? 10,
         posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? false,
@@ -2618,108 +2693,48 @@ export function generateMinimumSetCoverFechamento({
     }
   }
 
-  // INTEGRAÇÃO DIRETA DE MATRIZES LJCR (100% COBERTURA REAL DE 14 PTS) PARA UNIVERSOS ENXUTOS 16, 17 E 18 DEZENAS
-  // Quando n ∈ {16, 17, 18}, targetHits === 14 e 0 fixas, testa permutações balanceadas do universo na matriz
-  // canônica LJCR para garantir 100% de cobertura matemática real sem redundâncias.
-  const ljcrKey = `${n}_15_${targetHits}`;
-  const ljcrEntry = effectiveFixas.length === 0 ? _MATRIZES_COBERTURA[ljcrKey] : undefined;
-  let ljcrSeedMasks: Set<number> | null = null;
-  if (ljcrEntry && maxTickets >= ljcrEntry.linhas.length && !enableStratification) {
-    const candidateMaskSet = new Set<number>(candidateCombos.map(_criarMascara));
-    const byScore = aiScores
-      ? [...sortedPool].sort((a, b) => (aiScores[b - 1] ?? 50) - (aiScores[a - 1] ?? 50))
-      : [...sortedPool];
-    const interleaved: number[] = [];
-    for (let lo = 0, hi = sortedPool.length - 1; lo <= hi; lo++, hi--) {
-      interleaved.push(sortedPool[lo]);
-      if (lo !== hi) interleaved.push(sortedPool[hi]);
-    }
-    const evens = sortedPool.filter((x) => x % 2 === 0);
-    const odds = sortedPool.filter((x) => x % 2 !== 0);
-    const parityInterleaved: number[] = [];
-    for (let i = 0; i < Math.max(evens.length, odds.length); i++) {
-      if (i < odds.length) parityInterleaved.push(odds[i]);
-      if (i < evens.length) parityInterleaved.push(evens[i]);
-    }
-    const permutations: number[][] = [
-      sortedPool,
-      interleaved,
-      parityInterleaved,
-      byScore,
-      [...sortedPool].reverse(),
-      [...interleaved.slice(3), ...interleaved.slice(0, 3)],
-      [...interleaved.slice(6), ...interleaved.slice(0, 6)],
-      [...parityInterleaved.slice(4), ...parityInterleaved.slice(0, 4)],
-    ];
-    let bestPermMatched = -1;
-    let bestPermLines: number[][] | null = null;
-
-    for (const perm of permutations) {
-      const mapped = ljcrEntry.linhas.map((tpl) => tpl.map((idx) => perm[idx]).sort((a, b) => a - b));
-      let matched = 0;
-      for (const line of mapped) {
-        if (candidateMaskSet.has(_criarMascara(line))) matched++;
-      }
-      if (matched > bestPermMatched) {
-        bestPermMatched = matched;
-        bestPermLines = mapped;
-      }
-      if (matched === mapped.length) break;
-    }
-
-    // Preserva a cobertura integral 100% LJCR quando >= 65% das linhas já passam nos filtros:
-    // injeta as poucas linhas limítrofes necessárias (desde que não sejam anomalias extremas) para nunca furar a garantia de 14 pts.
-    if (bestPermLines && bestPermMatched >= Math.ceil(bestPermLines.length * 0.65)) {
-      ljcrSeedMasks = new Set<number>();
-      for (const line of bestPermLines) {
-        const m = _criarMascara(line);
-        if (!candidateMaskSet.has(m)) {
-          const lineSoma = line.reduce((acc, v) => acc + v, 0);
-          const linePares = line.filter((v) => v % 2 === 0).length;
-          if (lineSoma >= 150 && lineSoma <= 240 && linePares >= 4 && linePares <= 11) {
-            candidateCombos.push(line);
-            candidateMaskSet.add(m);
-          }
-        }
-        if (candidateMaskSet.has(m)) {
-          ljcrSeedMasks.add(m);
-        }
-      }
-    }
-  }
-
+  // SET COVER GREEDY ADAPTATIVO ORIENTADO AO ÍNDICE REAL DE PREMIAÇÃO (13–14 PONTOS)
+  // Remove qualquer semeadura estática rígida que gere redundância excessiva; cada cartão é eleito
+  // pelo ganho marginal ponderado de prêmios reais de 14 pts (R$ 1.500) + 13 pts (R$ 35) + prioridade Soft-Scoring.
   const candMasks = candidateCombos.map(_criarMascara);
   const candCount = candidateCombos.length;
 
-  // 5. Pré-computação das listas de cobertura
-  const candCoverLists: number[][] = new Array(candCount);
+  // 5. Pré-computação das listas de cobertura multi-faixa (14 pts e 13 pts reais)
+  const candCover14Lists: number[][] = new Array(candCount);
+  const candCover13OnlyLists: number[][] = new Array(candCount);
+  const primaryHitThreshold = Math.max(13, targetHits);
   for (let i = 0; i < candCount; i++) {
     const cMask = candMasks[i];
-    const covered: number[] = [];
+    const cov14: number[] = [];
+    const cov13: number[] = [];
     for (let j = 0; j < totalUniverse; j++) {
-      if (_popcount(cMask & universeMasks[j]) >= targetHits) {
-        covered.push(j);
+      const hits = _popcount(cMask & universeMasks[j]);
+      if (hits >= primaryHitThreshold) {
+        cov14.push(j);
+      } else if (hits === 13) {
+        cov13.push(j);
       }
     }
-    candCoverLists[i] = covered;
+    candCover14Lists[i] = cov14;
+    candCover13OnlyLists[i] = cov13;
   }
 
-  const candScores = candidateCombos.map(
-    (c) => analyzeTicket(c, concursoAnterior, aiScores).scoreIA
+  // Avaliação de scoreIA + Soft-Scoring de Soma e Repetidas para prioridade na fila
+  const candAnalyses = candidateCombos.map((c) => analyzeTicket(c, concursoAnterior, aiScores));
+  const candScores = candAnalyses.map((a) => a.scoreIA);
+  const candSoftBonuses = candAnalyses.map((a) =>
+    computeSoftFilterPriorityScore({ soma: a.soma, repetidas: a.repetidas }, effectiveCoreFilters).queuePriorityBonus
   );
 
-  // 6. Algoritmo Guloso com Prioridade Estrita de Hamming >= 3 (18-21 dez) + Frequency Cap [0.85..1.15]
-  const coveredCounts = new Uint16Array(totalUniverse);
-  let uncoveredRemaining = totalUniverse;
+  // 6. Set Cover Greedy Adaptativo (Multi-Faixa 14+13 pts + Penalidade Ativa de Redundância)
+  const covered14Counts = new Uint16Array(totalUniverse);
+  const covered13Counts = new Uint16Array(totalUniverse);
+  let uncovered14Remaining = totalUniverse;
   const chosenIndices: number[] = [];
   const chosenMasks: number[] = [];
   const chosenSet = new Set<number>();
 
-  // Distância de Hamming matematicamente viável (n=16 -> 1, n=17 -> 1..2, n=18 >6J -> 2, n=18 <=6J -> 3)
-  const is18to21 = n >= 18 && n <= 21;
   const targetHammingDist = getTargetHammingDistance(n, maxTickets, filters);
-
-  // Frequência ideal equilibrada por dezena variável e por fixa rotativa
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
     n,
@@ -2736,14 +2751,21 @@ export function generateMinimumSetCoverFechamento({
 
   const savedTicketsSet = getAllSavedTicketsSet();
 
-  const pickBestCandidate = (
+  const pickBestAdaptiveCandidate = (
     minHammingReq: number,
     requireUncoveredGain: boolean,
     enforceSoftFreqCap: boolean,
     enforceQuota: boolean = true
   ): number => {
     let bestCandIdx = -1;
-    let bestCombinedGain = -9999999;
+    let bestAdaptiveYield = -9999999;
+
+    // Fase adaptativa: no início prioriza amplitude 13–14 pts sem redundância; no fim fecha lacunas de 14 pts de alta probabilidade
+    const progress = chosenIndices.length / Math.max(1, maxTickets);
+    const weight14New = 52 + progress * 24; // 52..76 por cenário 14-pt inédito ponderado
+    const weight13New = 18 * (1 - progress * 0.35); // 18..11.7 por cenário 13-pt inédito ponderado
+    const weight13BoostWhenNo14 = 3.2; // leve reforço em cenários ainda sem cobertura de 14 pts
+    const redundancyPenaltyPerOverlap14 = 6.5 + progress * 4.5; // penaliza redundância excessiva de 14 pts já cobertos
 
     for (let i = 0; i < candCount; i++) {
       if (chosenSet.has(i)) continue;
@@ -2753,7 +2775,6 @@ export function generateMinimumSetCoverFechamento({
       const isLower = i >= coreCombos.length && i < coreCombos.length + lowerTailCombos.length;
       const isUpper = i >= coreCombos.length + lowerTailCombos.length;
 
-      // Respeita quotas de estratificação
       if (enforceQuota) {
         if (isLower && lowerTailChosen >= lowerTailQuota) continue;
         if (isUpper && upperTailChosen >= upperTailQuota) continue;
@@ -2767,22 +2788,48 @@ export function generateMinimumSetCoverFechamento({
         }
       }
 
-      // Filtro Hamming bitwise respeitando viabilidade matemática
       if (chosenMasks.length > 0 && !passesHammingFilter18To21(cMask, chosenMasks, n, minHammingReq)) {
         continue;
       }
       const minDist = minHammingDistanceToMatrix(cMask, chosenMasks);
 
-      const covers = candCoverLists[i];
-      let newCovers = 0;
-      for (let k = 0; k < covers.length; k++) {
-        if (coveredCounts[covers[k]] === 0) {
-          newCovers++;
+      // Cálculo do Ganho Marginal Real de Premiação (14 pts + 13 pts) e Redundância
+      const cov14 = candCover14Lists[i];
+      let new14Weighted = 0;
+      let new14Raw = 0;
+      let redundant14Count = 0;
+      for (let k = 0; k < cov14.length; k++) {
+        const uIdx = cov14[k];
+        if (covered14Counts[uIdx] === 0) {
+          new14Weighted += universeWeights[uIdx];
+          new14Raw++;
+        } else {
+          redundant14Count++;
         }
       }
-      if (requireUncoveredGain && newCovers <= 0 && uncoveredRemaining > 0) continue;
 
-      // Controle suave de frequência (não pode sobrepor a cobertura real de subconjuntos descobertos)
+      const cov13 = candCover13OnlyLists[i];
+      let new13Weighted = 0;
+      let secondary13Boost = 0;
+      for (let k = 0; k < cov13.length; k++) {
+        const uIdx = cov13[k];
+        if (covered14Counts[uIdx] === 0) {
+          if (covered13Counts[uIdx] === 0) {
+            new13Weighted += universeWeights[uIdx];
+          } else if (covered13Counts[uIdx] === 1) {
+            secondary13Boost += universeWeights[uIdx];
+          }
+        }
+      }
+
+      if (requireUncoveredGain && new14Raw <= 0 && new13Weighted <= 0 && uncovered14Remaining > 0) continue;
+
+      // Penalidade de redundância direta contra cartões já escolhidos (evita sobreposição excessiva)
+      const redundancyPenalty =
+        redundant14Count * redundancyPenaltyPerOverlap14 +
+        (chosenMasks.length > 0 && minDist <= 1 ? 38 : 0);
+
+      // Controle suave de frequência equilibrada
       let freqBalanceScore = 0;
       let saturatedCount = 0;
       for (let idxD = 0; idxD < cand.length; idxD++) {
@@ -2791,18 +2838,18 @@ export function generateMinimumSetCoverFechamento({
           if (fixedBounds.modo === 'rotativas') {
             const curF = fixedFreq[d] || 0;
             if (curF > freqBounds.fixedIdeal * 1.15) {
-              freqBalanceScore -= 14 * (curF - freqBounds.fixedIdeal + 1);
+              freqBalanceScore -= 12 * (curF - freqBounds.fixedIdeal + 1);
             } else if (curF < freqBounds.fixedIdeal * 0.85) {
-              freqBalanceScore += 8;
+              freqBalanceScore += 7;
             }
           }
         } else {
           const curVarF = numberFreq[d] || 0;
           if (curVarF >= freqBounds.freqMaxCap) {
             saturatedCount++;
-            freqBalanceScore -= 16 * (curVarF - freqBounds.freqMaxCap + 1);
+            freqBalanceScore -= 14 * (curVarF - freqBounds.freqMaxCap + 1);
           } else if (curVarF < freqBounds.freqMinTarget) {
-            freqBalanceScore += 6 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+            freqBalanceScore += 5 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
           }
         }
       }
@@ -2812,26 +2859,29 @@ export function generateMinimumSetCoverFechamento({
       if (fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3) {
         const subsetKey = effectiveFixas.filter((f) => cand.includes(f)).join('-');
         if (!usedFixedSubsets.has(subsetKey)) {
-          rotationBonus += 18;
+          rotationBonus += 16;
         }
       }
 
       const candKey = cand.join('-');
-      const savedPenalty = savedTicketsSet.has(candKey) ? 20 : 0;
-      const hammingBonus = Math.min(minDist, 5) * 4;
+      const savedPenalty = savedTicketsSet.has(candKey) ? 18 : 0;
+      const hammingBonus = Math.min(minDist, 5) * 4.5;
 
-      // Cobertura combinatória real (newCovers * 42) domina estritamente enquanto houver subconjuntos descobertos;
-      // scoreIA atua como critério de qualidade / desempate sem overfitting de concurso único (#3822 removido).
-      const combinedGain =
-        (newCovers * 42) +
-        (candScores[i] * 0.35) +
+      // Índice Adaptativo de Premiação Real (14 pts + 13 pts - Redundância + Prioridade Soft-Scoring Soma/Repetidas + scoreIA)
+      const adaptiveYield =
+        new14Weighted * weight14New +
+        new13Weighted * weight13New +
+        secondary13Boost * weight13BoostWhenNo14 -
+        redundancyPenalty +
+        candSoftBonuses[i] * 2.2 +
+        candScores[i] * 0.45 +
         hammingBonus +
         freqBalanceScore +
         rotationBonus -
         savedPenalty;
 
-      if (combinedGain > bestCombinedGain) {
-        bestCombinedGain = combinedGain;
+      if (adaptiveYield > bestAdaptiveYield) {
+        bestAdaptiveYield = adaptiveYield;
         bestCandIdx = i;
       }
     }
@@ -2864,85 +2914,124 @@ export function generateMinimumSetCoverFechamento({
       }
     }
 
-    const covers = candCoverLists[candIdx];
-    for (let k = 0; k < covers.length; k++) {
-      const uIdx = covers[k];
-      if (coveredCounts[uIdx] === 0) {
-        uncoveredRemaining--;
+    const cov14 = candCover14Lists[candIdx];
+    for (let k = 0; k < cov14.length; k++) {
+      const uIdx = cov14[k];
+      if (covered14Counts[uIdx] === 0) {
+        uncovered14Remaining--;
       }
-      coveredCounts[uIdx]++;
+      covered14Counts[uIdx]++;
+      covered13Counts[uIdx]++;
+    }
+    const cov13 = candCover13OnlyLists[candIdx];
+    for (let k = 0; k < cov13.length; k++) {
+      covered13Counts[cov13[k]]++;
     }
   };
 
-  // Semeadura da Matriz Canônica LJCR (100% cobertura comprovada) quando disponível para 16, 17 ou 18 dezenas
-  if (ljcrSeedMasks && ljcrSeedMasks.size > 0) {
-    for (let i = 0; i < candCount && chosenIndices.length < maxTickets; i++) {
-      if (ljcrSeedMasks.has(candMasks[i]) && !chosenSet.has(i)) {
-        commitCandidate(i);
+  const uncommitCandidateAt = (pos: number) => {
+    const candIdx = chosenIndices[pos];
+    chosenIndices.splice(pos, 1);
+    chosenMasks.splice(pos, 1);
+    chosenSet.delete(candIdx);
+
+    const cov14 = candCover14Lists[candIdx];
+    for (let k = 0; k < cov14.length; k++) {
+      const uIdx = cov14[k];
+      covered14Counts[uIdx]--;
+      covered13Counts[uIdx]--;
+      if (covered14Counts[uIdx] === 0) {
+        uncovered14Remaining++;
       }
     }
-  }
+    const cov13 = candCover13OnlyLists[candIdx];
+    for (let k = 0; k < cov13.length; k++) {
+      covered13Counts[cov13[k]]--;
+    }
+  };
 
   let greedyStep = 0;
   const maxGreedySteps = Math.min(maxTickets * 2, 250);
-  while (uncoveredRemaining > 0 && chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
-    let idx = pickBestCandidate(targetHammingDist, true, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, true, false, true);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, true, false, true);
-    if (idx === -1 && targetHammingDist > 1) idx = pickBestCandidate(1, true, false, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
-    if (idx === -1) idx = pickBestCandidate(1, false, false, false);
+  while (chosenIndices.length < maxTickets && greedyStep++ < maxGreedySteps) {
+    let idx = pickBestAdaptiveCandidate(targetHammingDist, true, true, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, true, false, true);
+    if (idx === -1 && targetHammingDist > 2) idx = pickBestAdaptiveCandidate(2, true, false, true);
+    if (idx === -1 && targetHammingDist > 1) idx = pickBestAdaptiveCandidate(1, true, false, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, false, true, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(targetHammingDist, false, false, true);
+    if (idx === -1) idx = pickBestAdaptiveCandidate(1, false, false, false);
     if (idx === -1) break;
     commitCandidate(idx);
   }
 
-  // Preenchimento complementar até maxTickets maximizando distância Hamming viável e scoreIA
-  while (chosenIndices.length < maxTickets && chosenIndices.length < candCount) {
-    let idx = pickBestCandidate(targetHammingDist, false, true, true);
-    if (idx === -1) idx = pickBestCandidate(targetHammingDist, false, false, true);
-    const allowQuotaOverflow = bypassAnomaly || coreChosen >= coreQuota;
-    if (idx === -1 && allowQuotaOverflow) idx = pickBestCandidate(targetHammingDist, false, false, false);
-    if (idx === -1 && targetHammingDist > 2) idx = pickBestCandidate(2, false, false, !allowQuotaOverflow);
-    if (idx === -1 && targetHammingDist > 1) idx = pickBestCandidate(1, false, false, false);
-    if (idx === -1) break;
-    commitCandidate(idx);
-  }
+  // 7. Refinamento Local 1-Swap Adaptativo: substitui qualquer cartão redundante por um candidato que eleve o índice real de 13–14 pts
+  if (!enableStratification && chosenIndices.length >= 4 && candCount > chosenIndices.length && uncovered14Remaining > 0) {
+    const maxSwapPasses = Math.min(8, chosenIndices.length);
+    for (let pass = 0; pass < maxSwapPasses && uncovered14Remaining > 0; pass++) {
+      // Identifica o bilhete escolhido com menor contribuição única de 14+13 pts (mais redundante)
+      let worstPos = -1;
+      let worstUniqueScore = Infinity;
+      for (let p = 0; p < chosenIndices.length; p++) {
+        const cIdx = chosenIndices[p];
+        let unique14 = 0;
+        let unique13 = 0;
+        const cov14 = candCover14Lists[cIdx];
+        for (let k = 0; k < cov14.length; k++) {
+          if (covered14Counts[cov14[k]] === 1) unique14 += universeWeights[cov14[k]];
+        }
+        const cov13 = candCover13OnlyLists[cIdx];
+        for (let k = 0; k < cov13.length; k++) {
+          if (covered14Counts[cov13[k]] === 0 && covered13Counts[cov13[k]] === 1) {
+            unique13 += universeWeights[cov13[k]];
+          }
+        }
+        const contrib = unique14 * 60 + unique13 * 14 + candSoftBonuses[cIdx];
+        if (contrib < worstUniqueScore) {
+          worstUniqueScore = contrib;
+          worstPos = p;
+        }
+      }
+      if (worstPos === -1) break;
 
-  // 7. Varredura 2-opt de Eliminação de Redundâncias (preservando estratos Anti-Cisne Negro e target maxTickets)
-  let improved = true;
-  let prunePass = 0;
-  const minKeepCount = enableStratification ? maxTickets : (maxTickets <= 24 ? Math.min(20, maxTickets) : Math.floor(maxTickets * 0.85));
-  while (improved && prunePass++ < 30 && chosenIndices.length > minKeepCount) {
-    improved = false;
-    for (let p = chosenIndices.length - 1; p >= 0; p--) {
-      const candIdx = chosenIndices[p];
-      const isTail = candIdx >= coreCombos.length;
-      if (isTail) continue;
-      const covers = candCoverLists[candIdx];
+      const removedIdx = chosenIndices[worstPos];
+      uncommitCandidateAt(worstPos);
 
-      let canBePruned = true;
-      for (let k = 0; k < covers.length; k++) {
-        if (coveredCounts[covers[k]] <= 1) {
-          canBePruned = false;
-          break;
+      // Busca substituto que estritamente supere a contribuição real de 13–14 pts sem violar Hamming viável
+      let bestReplIdx = -1;
+      let bestReplScore = worstUniqueScore + 1e-3;
+      const swapHamming = Math.min(2, targetHammingDist);
+      for (let i = 0; i < candCount; i++) {
+        if (chosenSet.has(i) || i === removedIdx) continue;
+        if (chosenMasks.length > 0 && !passesHammingFilter18To21(candMasks[i], chosenMasks, n, swapHamming)) continue;
+        let gain14 = 0;
+        let gain13 = 0;
+        const cov14 = candCover14Lists[i];
+        for (let k = 0; k < cov14.length; k++) {
+          if (covered14Counts[cov14[k]] === 0) gain14 += universeWeights[cov14[k]];
+        }
+        const cov13 = candCover13OnlyLists[i];
+        for (let k = 0; k < cov13.length; k++) {
+          if (covered14Counts[cov13[k]] === 0 && covered13Counts[cov13[k]] === 0) {
+            gain13 += universeWeights[cov13[k]];
+          }
+        }
+        const candContrib = gain14 * 60 + gain13 * 14 + candSoftBonuses[i];
+        if (candContrib > bestReplScore) {
+          bestReplScore = candContrib;
+          bestReplIdx = i;
         }
       }
 
-      if (canBePruned && chosenIndices.length > minKeepCount) {
-        chosenIndices.splice(p, 1);
-        chosenMasks.splice(p, 1);
-        chosenSet.delete(candIdx);
-        for (let k = 0; k < covers.length; k++) {
-          coveredCounts[covers[k]]--;
-        }
-        improved = true;
+      if (bestReplIdx !== -1) {
+        commitCandidate(bestReplIdx);
+      } else {
+        commitCandidate(removedIdx);
         break;
       }
     }
   }
 
-  // 8. Construção e ordenação dos bilhetes finais preservando faixaSoma
+  // 8. Construção e ordenação dos bilhetes finais pela fila de prioridade (scoreIA + Soft-Scoring Soma/Repetidas)
   const finalEntries = chosenIndices.map((candIdx) => {
     const faixaSoma: 'ouro' | 'baixa' | 'alta' =
       candIdx >= coreCombos.length + lowerTailCombos.length
@@ -2950,15 +3039,20 @@ export function generateMinimumSetCoverFechamento({
         : candIdx >= coreCombos.length
         ? 'baixa'
         : 'ouro';
-    const analysis = analyzeTicket(candidateCombos[candIdx], concursoAnterior, aiScores);
+    const analysis = candAnalyses[candIdx];
+    const softInfo = computeSoftFilterPriorityScore(
+      { soma: analysis.soma, repetidas: analysis.repetidas },
+      effectiveCoreFilters
+    );
     return {
       nums: candidateCombos[candIdx],
       faixaSoma,
       analysis,
+      priorityRank: analysis.scoreIA + softInfo.queuePriorityBonus * 0.5,
     };
   });
 
-  finalEntries.sort((a, b) => b.analysis.scoreIA - a.analysis.scoreIA);
+  finalEntries.sort((a, b) => b.priorityRank - a.priorityRank);
 
   const universeSet = new Set(sortedPool);
   const isValidUniverse = finalEntries.every((e) => e.nums.every((d) => universeSet.has(d)));
@@ -3130,9 +3224,10 @@ export function generateFechamentoCovering(
     return present >= fixedBounds.minK && present <= fixedBounds.maxK;
   };
 
+  const useSoftSoma = Boolean(effectiveCoreFilters?.softScoringSomaAtivo);
   const canonicalSumOverride = {
-    somaMin: Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
-    somaMax: Math.max(225, centralMax),
+    somaMin: useSoftSoma ? 120 : Math.min(fallbackLevel >= 2 ? 165 : 175, centralMin),
+    somaMax: useSoftSoma ? 285 : Math.max(225, centralMax),
   };
 
   const isCandidateValid = (nums: number[]): boolean => {
@@ -3141,14 +3236,15 @@ export function generateFechamentoCovering(
     const a = analyzeTicket(nums, concursoAnterior, aiScores);
     const skipHardCanonical =
       effectiveCoreFilters?.modoRigorFiltros === 'agressivo' ||
-      effectiveCoreFilters?.modoRigorFiltros === 'conservador';
+      effectiveCoreFilters?.modoRigorFiltros === 'conservador' ||
+      useSoftSoma;
     if (!skipHardCanonical && isCanonicalAnomaly(nums, a, concursoAnterior, canonicalSumOverride)) {
       return false;
     }
     if (effectiveCoreFilters && !ticketPassesFilters(a, effectiveCoreFilters, concursoAnterior)) {
       return false;
     }
-    if (a.soma < centralMin || a.soma > centralMax) return false;
+    if (!useSoftSoma && (a.soma < centralMin || a.soma > centralMax)) return false;
     return true;
   };
 
@@ -3276,8 +3372,8 @@ export function generateFechamentoCovering(
           rankingHistoricoAtivo: false,
         }
       : {
-          somaMin: centralMin,
-          somaMax: centralMax,
+          somaMin: useSoftSoma ? 120 : centralMin,
+          somaMax: useSoftSoma ? 285 : centralMax,
           paresMin: effectiveCoreFilters?.paresMin ?? 5,
           paresMax: effectiveCoreFilters?.paresMax ?? 10,
           posicionalAtivo: effectiveCoreFilters?.posicionalAtivo ?? false,
@@ -3425,8 +3521,10 @@ export function generateFechamentoCovering(
 
     const fastEarlyExitCoreCheck = (combo: number[]): boolean => {
       if (bypassAnomaly) return true;
-      const soma = combo.reduce((a, b) => a + b, 0);
-      if (soma < centralMin || soma > centralMax) return false;
+      if (!useSoftSoma) {
+        const soma = combo.reduce((a, b) => a + b, 0);
+        if (soma < centralMin || soma > centralMax) return false;
+      }
       const mask = _criarMascara(combo);
       if (effectiveCoreFilters?.posicionalAtivo && !validarPosicionalSorted(combo).valido) return false;
       if (effectiveCoreFilters?.multiplosAtivo && !validarMultiplosMask(mask).valido) return false;
@@ -3554,40 +3652,39 @@ export function generateFechamentoCovering(
   sortByAIScore(lowerTailCandidates);
   sortByAIScore(upperTailCandidates);
 
-  // Estrutura unificada de candidatos com estrato + bitmask
+  // Estrutura unificada de candidatos com estrato + bitmask + prioridade Soft-Scoring (Soma e Repetidas)
   interface StratumCand {
     nums: number[];
     mask: number;
     key: string;
     faixaSoma: 'ouro' | 'baixa' | 'alta';
     scoreIA: number;
+    softPriorityBonus: number;
   }
 
+  const buildStratumCand = (nums: number[], faixaSoma: 'ouro' | 'baixa' | 'alta'): StratumCand => {
+    const analysis = analyzeTicket(nums, concursoAnterior, aiScores);
+    const soft = computeSoftFilterPriorityScore(
+      { soma: analysis.soma, repetidas: analysis.repetidas },
+      effectiveCoreFilters
+    );
+    return {
+      nums,
+      mask: _criarMascara(nums),
+      key: nums.join('-'),
+      faixaSoma,
+      scoreIA: analysis.scoreIA,
+      softPriorityBonus: soft.queuePriorityBonus,
+    };
+  };
+
   const unifiedCandidates: StratumCand[] = [
-    ...coreCandidates.map((nums) => ({
-      nums,
-      mask: _criarMascara(nums),
-      key: nums.join('-'),
-      faixaSoma: 'ouro' as const,
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA,
-    })),
-    ...lowerTailCandidates.map((nums) => ({
-      nums,
-      mask: _criarMascara(nums),
-      key: nums.join('-'),
-      faixaSoma: 'baixa' as const,
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA,
-    })),
-    ...upperTailCandidates.map((nums) => ({
-      nums,
-      mask: _criarMascara(nums),
-      key: nums.join('-'),
-      faixaSoma: 'alta' as const,
-      scoreIA: analyzeTicket(nums, concursoAnterior, aiScores).scoreIA,
-    })),
+    ...coreCandidates.map((nums) => buildStratumCand(nums, 'ouro')),
+    ...lowerTailCandidates.map((nums) => buildStratumCand(nums, 'baixa')),
+    ...upperTailCandidates.map((nums) => buildStratumCand(nums, 'alta')),
   ];
 
-  // Quotas de Estratificação de Cauda: 75% Zona Central (180–215) / 15% Cauda Alta (216–230) / 10% Cauda Baixa (155–179)
+  // Quotas de Estratificação de Cauda (opt-in)
   const stratQuotas = computeTailStratificationQuotas(maxTickets, enableStratification);
   let lowerQuota = stratQuotas.lowerQuota;
   let upperQuota = stratQuotas.upperQuota;
@@ -3595,40 +3692,60 @@ export function generateFechamentoCovering(
   if (upperTailCandidates.length === 0) upperQuota = 0;
   const coreQuota = Math.max(1, maxTickets - lowerQuota - upperQuota);
 
-  // Subconjuntos alvo de cobertura: em 18–21 dezenas gera amostra estratificada uniforme do universo C(n, 15)
-  // para evitar redundância e maximizar cobertura de triplas/quadras (captura de 13/14 pts em 21 dezenas)
+  // Cenários alvo ponderados por verossimilhança para o Set Cover Greedy Adaptativo (13–14 pts reais)
   const is18to21 = n >= 18 && n <= 21;
   const testSubsetMasks: number[] = [];
+  const testSubsetWeights: number[] = [];
+  const lastDrawMaskCov = _criarMascara(concursoAnterior);
+
+  const registerTestScenario = (nums: number[], mask: number) => {
+    let sSum = 0;
+    for (let k = 0; k < nums.length; k++) sSum += nums[k];
+    const sRep = _popcount(mask & lastDrawMaskCov);
+    const softSc = computeSoftFilterPriorityScore({ soma: sSum, repetidas: sRep }, effectiveCoreFilters);
+    testSubsetMasks.push(mask);
+    testSubsetWeights.push(0.6 + (softSc.combinedScore / 100) * 0.65);
+  };
+
   if (is18to21) {
     const targetSampleSize = 900;
     const seenTestMasks = new Set<number>();
     const sampleWork = [...sortedPool];
+    // PRNG determinístico para evitar ruído aleatório entre gerações
+    let seed = (sortedPool.reduce((acc, v, i) => acc + v * (i + 7), 4219) + maxTickets * 31) >>> 0;
+    const nextRand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
     for (let s = 0; s < targetSampleSize * 2 && testSubsetMasks.length < targetSampleSize; s++) {
       for (let i = 0; i < 15; i++) {
-        const r = i + Math.floor(Math.random() * (n - i));
+        const r = i + Math.floor(nextRand() * (n - i));
         const tmp = sampleWork[i];
         sampleWork[i] = sampleWork[r];
         sampleWork[r] = tmp;
       }
-      const m = _criarMascara(sampleWork.slice(0, 15));
+      const slice15 = sampleWork.slice(0, 15);
+      const m = _criarMascara(slice15);
       if (!seenTestMasks.has(m)) {
         seenTestMasks.add(m);
-        testSubsetMasks.push(m);
+        registerTestScenario(slice15, m);
       }
     }
   } else {
     for (let i = 0; i < Math.min(unifiedCandidates.length, 600); i++) {
-      testSubsetMasks.push(unifiedCandidates[i].mask);
+      registerTestScenario(unifiedCandidates[i].nums, unifiedCandidates[i].mask);
     }
   }
-  const uncovered = new Set<number>(testSubsetMasks.map((_, idx) => idx));
 
-  // Cobertura de pares/triplas das dezenas variáveis para otimizar 18–21 dezenas (captura de 13 pts com 14 no universo)
+  const scen14Covered = new Uint16Array(testSubsetMasks.length);
+  const scen13Covered = new Uint16Array(testSubsetMasks.length);
+  let uncoveredScenariosCount = testSubsetMasks.length;
+
+  // Cobertura de pares/triplas das dezenas variáveis para otimizar 18–21 dezenas (captura de 13/14 pts)
   const pairCoverageCounts = new Uint16Array(26 * 26);
   const tripleMasksForCoverage: number[] = [];
   const tripleCoveredFlags: Uint8Array = new Uint8Array(is18to21 ? 400 : 0);
   if (is18to21 && nonFixedPool.length >= 3) {
-    // Amostra determinística de até 400 triplas do pool variável para maximizar cobertura de triplas/quadras
     const nfLen = nonFixedPool.length;
     const allTriplesCount = (nfLen * (nfLen - 1) * (nfLen - 2)) / 6;
     const step = Math.max(1, Math.floor(allTriplesCount / 400));
@@ -3652,7 +3769,6 @@ export function generateFechamentoCovering(
   const chosenMasks: number[] = [];
   const chosenKeySet = new Set<string>();
 
-  // Prioriza distância de Hamming alvo (dinâmica quando ativada ou >= 3 em 18-21)
   const targetHammingDist = getTargetHammingDistance(n, maxTickets, filters);
   const freqBounds = calculateVariableFrequencyBounds(
     maxTickets,
@@ -3675,12 +3791,17 @@ export function generateFechamentoCovering(
     requireUncoveredGain: boolean,
     enforceSoftFreqCap: boolean,
     enforceQuota: boolean = true
-  ): { idx: number; coveredHere: number[] } | null => {
+  ): { idx: number; covered14: number[]; covered13: number[] } | null => {
     let bestIdx = -1;
     let bestWeight = -9999999;
-    let bestCovered: number[] = [];
+    let bestCovered14: number[] = [];
+    let bestCovered13: number[] = [];
 
+    const progress = chosen.length / Math.max(1, maxTickets);
+    const w14New = 14 + progress * 8;
+    const w13New = 5.5 * (1 - progress * 0.25);
     const searchLimit = Math.min(unifiedCandidates.length, is18to21 ? 950 : 650);
+
     for (let i = 0; i < unifiedCandidates.length; i++) {
       const cand = unifiedCandidates[i];
       if (chosenKeySet.has(cand.key)) continue;
@@ -3698,19 +3819,34 @@ export function generateFechamentoCovering(
 
       if (requireUncoveredGain && i > searchLimit && cand.faixaSoma === 'ouro') continue;
 
-      let coverCount = 0;
-      const coveredHere: number[] = [];
-      if (uncovered.size > 0) {
-        for (const subsetIdx of uncovered) {
-          if (_popcount(cand.mask & testSubsetMasks[subsetIdx]) >= targetHits) {
-            coverCount++;
-            coveredHere.push(subsetIdx);
+      let new14Gain = 0;
+      let new13Gain = 0;
+      let redundant14Hits = 0;
+      const covered14Here: number[] = [];
+      const covered13Here: number[] = [];
+      const primaryThr = Math.max(13, targetHits);
+
+      for (let sIdx = 0; sIdx < testSubsetMasks.length; sIdx++) {
+        const hits = _popcount(cand.mask & testSubsetMasks[sIdx]);
+        if (hits >= primaryThr) {
+          covered14Here.push(sIdx);
+          if (scen14Covered[sIdx] === 0) {
+            new14Gain += testSubsetWeights[sIdx];
+          } else {
+            redundant14Hits++;
+          }
+        } else if (hits === 13) {
+          covered13Here.push(sIdx);
+          if (scen14Covered[sIdx] === 0 && scen13Covered[sIdx] === 0) {
+            new13Gain += testSubsetWeights[sIdx];
           }
         }
       }
-      if (requireUncoveredGain && uncovered.size > 0 && coverCount === 0) continue;
 
-      // Bônus de cobertura de novas triplas e pares raros (crítico em 18–21 dezenas)
+      if (requireUncoveredGain && uncoveredScenariosCount > 0 && new14Gain === 0 && new13Gain === 0) {
+        continue;
+      }
+
       let tripleNoveltyBonus = 0;
       if (is18to21 && tripleMasksForCoverage.length > 0) {
         let newTriples = 0;
@@ -3721,7 +3857,6 @@ export function generateFechamentoCovering(
         }
         tripleNoveltyBonus += newTriples * 1.1;
 
-        // Penalidade leve para pares já excessivamente repetidos
         let pairNovelty = 0;
         for (let p1 = 0; p1 < cand.nums.length; p1++) {
           const d1 = cand.nums[p1];
@@ -3735,7 +3870,6 @@ export function generateFechamentoCovering(
         tripleNoveltyBonus += pairNovelty;
       }
 
-      // Controle de Frequência Equilibrada [0.85x..1.15x] e rotação de fixas
       let freqScore = 0;
       let saturatedCount = 0;
       for (let idxD = 0; idxD < cand.nums.length; idxD++) {
@@ -3744,18 +3878,18 @@ export function generateFechamentoCovering(
           if (fixedBounds.modo === 'rotativas') {
             const curF = fixedFreq[d] || 0;
             if (curF > freqBounds.fixedIdeal * 1.1) {
-              freqScore -= 45 * (curF - freqBounds.fixedIdeal + 1);
+              freqScore -= 40 * (curF - freqBounds.fixedIdeal + 1);
             } else if (curF < freqBounds.fixedIdeal * 0.9) {
-              freqScore += 20;
+              freqScore += 18;
             }
           }
         } else {
           const curVarF = numberFreq[d] || 0;
           if (curVarF >= freqBounds.freqMaxCap) {
             saturatedCount++;
-            freqScore -= 85 * (curVarF - freqBounds.freqMaxCap + 1);
+            freqScore -= 70 * (curVarF - freqBounds.freqMaxCap + 1);
           } else if (curVarF < freqBounds.freqMinTarget) {
-            freqScore += 18 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
+            freqScore += 15 * ((freqBounds.freqMinTarget - curVarF) / Math.max(1, freqBounds.freqIdeal));
           }
         }
       }
@@ -3764,35 +3898,38 @@ export function generateFechamentoCovering(
       let rotationBonus = 0;
       if (fixedBounds.modo === 'rotativas' && effectiveFixas.length >= 3) {
         const subsetKey = effectiveFixas.filter((f) => cand.nums.includes(f)).join('-');
-        if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 28;
+        if (!usedFixedSubsets.has(subsetKey)) rotationBonus += 24;
       }
 
-      const savedPenalty = savedTicketsSet.has(cand.key) ? 20 : 0;
+      const savedPenalty = savedTicketsSet.has(cand.key) ? 18 : 0;
       const hammingBonus = Math.min(minDist, 6) * 5;
-      const jitter = Math.random() * 0.15;
+      const redundancyPenalty = redundant14Hits * 2.2;
 
       const weight =
-        (coverCount * 4.5) +
+        new14Gain * w14New +
+        new13Gain * w13New -
+        redundancyPenalty +
         tripleNoveltyBonus +
-        (cand.scoreIA / 100) * 1.4 +
+        cand.softPriorityBonus * 1.8 +
+        (cand.scoreIA / 100) * 3.5 +
         hammingBonus +
         freqScore * 0.35 +
-        rotationBonus +
-        jitter -
+        rotationBonus -
         savedPenalty;
 
       if (weight > bestWeight) {
         bestWeight = weight;
         bestIdx = i;
-        bestCovered = coveredHere;
+        bestCovered14 = covered14Here;
+        bestCovered13 = covered13Here;
       }
     }
 
     if (bestIdx === -1) return null;
-    return { idx: bestIdx, coveredHere: bestCovered };
+    return { idx: bestIdx, covered14: bestCovered14, covered13: bestCovered13 };
   };
 
-  const commitChosen = (cand: StratumCand, coveredHere: number[]) => {
+  const commitChosen = (cand: StratumCand, covered14: number[], covered13: number[]) => {
     chosen.push(cand);
     chosenMasks.push(cand.mask);
     chosenKeySet.add(cand.key);
@@ -3825,12 +3962,17 @@ export function generateFechamentoCovering(
       }
     }
 
-    for (const coveredIdx of coveredHere) {
-      uncovered.delete(coveredIdx);
+    for (const sIdx of covered14) {
+      if (scen14Covered[sIdx] === 0) uncoveredScenariosCount--;
+      scen14Covered[sIdx]++;
+      scen13Covered[sIdx]++;
+    }
+    for (const sIdx of covered13) {
+      scen13Covered[sIdx]++;
     }
   };
 
-  // Fase 1: Preencher estratos protegidos (15% Cauda Alta 216–230, 10% Cauda Baixa 155–179) aplicando filtro estrito Hamming >= 3 em 18–21
+  // Fase 1: Preencher estratos protegidos quando Estratificação de Cauda estiver explicitamente ligada
   if (enableStratification) {
     while (lowerChosen < lowerQuota && chosen.length < maxTickets) {
       const hit =
@@ -3840,7 +3982,7 @@ export function generateFechamentoCovering(
         (!is18to21 && targetHammingDist > 2 ? selectNextFromPool('baixa', 2, false, false) : null) ||
         (!is18to21 ? selectNextFromPool('baixa', 1, false, false) : null);
       if (!hit) break;
-      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+      commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
     }
     while (upperChosen < upperQuota && chosen.length < maxTickets) {
       const hit =
@@ -3850,11 +3992,11 @@ export function generateFechamentoCovering(
         (!is18to21 && targetHammingDist > 2 ? selectNextFromPool('alta', 2, false, false) : null) ||
         (!is18to21 ? selectNextFromPool('alta', 1, false, false) : null);
       if (!hit) break;
-      commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+      commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
     }
   }
 
-  // Fase 2: Seleção gulosa de cobertura combinatória na Zona Central com Hamming viável
+  // Fase 2: Set Cover Greedy Adaptativo maximizando índice real de premiação (13–14 pts) sem redundância
   let greedyLoop = 0;
   const maxGreedyLoops = Math.min(maxTickets * 2, 220);
   while (chosen.length < maxTickets && greedyLoop++ < maxGreedyLoops) {
@@ -3867,10 +4009,10 @@ export function generateFechamentoCovering(
       (targetHammingDist > 2 ? selectNextFromPool('ouro', 2, false, false) : null) ||
       selectNextFromPool('ouro', 1, false, false);
     if (!hit) break;
-    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
   }
 
-  // Fase 3: Complemento até maxTickets com Hamming viável (sem travar em limiares impossíveis)
+  // Fase 3: Complemento até maxTickets com Hamming viável
   while (chosen.length < maxTickets && chosen.length < unifiedCandidates.length) {
     const hit =
       selectNextFromPool('any', targetHammingDist, false, false, true) ||
@@ -3878,11 +4020,11 @@ export function generateFechamentoCovering(
       (targetHammingDist > 2 ? selectNextFromPool('any', 2, false, false, false) : null) ||
       selectNextFromPool('any', 1, false, false, false);
     if (!hit) break;
-    commitChosen(unifiedCandidates[hit.idx], hit.coveredHere);
+    commitChosen(unifiedCandidates[hit.idx], hit.covered14, hit.covered13);
   }
 
-  // Ordenação final por Score IA mantendo todos os bilhetes
-  chosen.sort((a, b) => b.scoreIA - a.scoreIA);
+  // Ordenação final pela fila de prioridade (scoreIA + Soft-Scoring de Soma e Repetidas)
+  chosen.sort((a, b) => (b.scoreIA + b.softPriorityBonus * 0.5) - (a.scoreIA + a.softPriorityBonus * 0.5));
 
   const universeSet = new Set(sortedPool);
   const isValidUniverse = chosen.every((c) => c.nums.every((d) => universeSet.has(d)));
@@ -5367,6 +5509,9 @@ export function resolveEffectiveFiltersForStudio(
       ...baseFilters,
       filtrosDesativadosNoFechamento: false,
       modoRigorFiltros: 'total',
+      // Soma e Repetidas atuam como Soft-Scoring (prioridade na fila) por padrão salvo se o usuário travar manualmente como Hard-Filter
+      softScoringSomaAtivo: baseFilters.softScoringSomaAtivo !== false,
+      softScoringRepetidasAtivo: baseFilters.softScoringRepetidasAtivo !== false,
     };
   }
 
@@ -5383,7 +5528,9 @@ export function resolveEffectiveFiltersForStudio(
       ...baseFilters,
       filtrosDesativadosNoFechamento: false,
       modoRigorFiltros: 'conservador',
-      // Núcleo de 4 filtros de alta comprovação estatística: Soma ampla, Paridade, Moldura e Repetidas calibradas
+      // Soma e Repetidas atuam como Soft-Scoring (influenciam prioridade na fila sem descartar combinações vencedoras)
+      softScoringSomaAtivo: baseFilters.softScoringSomaAtivo !== false,
+      softScoringRepetidasAtivo: baseFilters.softScoringRepetidasAtivo !== false,
       somaMin,
       somaMax,
       minSoma: somaMin,
@@ -5429,11 +5576,13 @@ export function resolveEffectiveFiltersForStudio(
     };
   }
 
-  // Modo Agressivo: ultra-aberto (Soma ampla 155–235, Par/Ímpar 5–10, Consecutivas <= 8)
+  // Modo Agressivo: ultra-aberto com Soma e Repetidas em Soft-Scoring (prioridade na fila)
   return {
     ...baseFilters,
     filtrosDesativadosNoFechamento: false,
     modoRigorFiltros: 'agressivo',
+    softScoringSomaAtivo: true,
+    softScoringRepetidasAtivo: true,
     somaMin: 155,
     somaMax: 235,
     minSoma: 155,

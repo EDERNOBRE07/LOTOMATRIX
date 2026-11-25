@@ -128,9 +128,11 @@ export interface FilterCriteria {
   maxPrimos?: number;
   minMoldura?: number;
   maxMoldura?: number;
-  // Controle Inteligente de Filtros no Estúdio de Fechamento (Chave Geral + 3 Modos)
+  // Controle Inteligente de Filtros no Estúdio de Fechamento (Chave Geral + 3 Modos + Soft-Scoring)
   filtrosDesativadosNoFechamento?: boolean;
   modoRigorFiltros?: FilterRigorMode;
+  softScoringSomaAtivo?: boolean; // Quando true, Soma atua como prioridade na fila (soft-scoring) sem descartar combinações
+  softScoringRepetidasAtivo?: boolean; // Quando true, Repetidas atua como prioridade na fila (soft-scoring) sem descartar combinações
 }
 
 export type FilterRigorMode = 'total' | 'conservador' | 'agressivo';
