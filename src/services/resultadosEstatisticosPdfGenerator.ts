@@ -1,7 +1,11 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LotofacilDraw } from '../types/lotofacil';
-import { ConcursoParametrosEstatisticos } from '../utils/concursoParametros';
+import {
+  ConcursoParametrosEstatisticos,
+  ParametroStatus,
+  ParametroStatusLabel,
+} from '../utils/concursoParametros';
 
 export interface ConferenceSummaryForPdf {
   totalJogos: number;
@@ -39,13 +43,15 @@ export interface StatisticalParameterTableRow {
   parametro: string;
   valor: string;
   referencia: string;
-  status: 'Equilibrado' | 'Atenção' | 'Informativo';
+  status: ParametroStatus;
+  statusLabel: ParametroStatusLabel;
 }
 
 export function buildResultadosEstatisticosRows(
   concurso: number,
   p: ConcursoParametrosEstatisticos
 ): StatisticalParameterTableRow[] {
+  const m = p.metricas;
   const blocosTexto =
     p.blocosConsecutivos.length > 0
       ? p.blocosConsecutivos
@@ -57,68 +63,70 @@ export function buildResultadosEstatisticosRows(
   const quadrantesTexto = `Q1:${q.q1} · Q2:${q.q2} · Q3:${q.q3} · Q4:${q.q4}${
     q.centro13 ? ' (+13 centro)' : ''
   }`;
-  const minQ = Math.min(q.q1, q.q2, q.q3, q.q4);
-  const maxQ = Math.max(q.q1, q.q2, q.q3, q.q4);
 
   return [
     {
       parametro: 'Pares e Ímpares',
       valor: `${p.pares} Pares / ${p.impares} Ímpares`,
-      referencia: '6–8 Pares / 7–9 Ímpares',
-      status: p.pares >= 6 && p.pares <= 8 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.paresImpares.faixaIdealTexto}`,
+      status: m.paresImpares.status,
+      statusLabel: m.paresImpares.statusLabel,
     },
     {
       parametro: `Repetidas do Concurso #${concurso - 1}`,
       valor: p.repetidasAnterior !== null ? `${p.repetidasAnterior} dezenas` : 'N/A',
-      referencia: '8–10 dezenas',
-      status:
-        p.repetidasAnterior === null
-          ? 'Informativo'
-          : p.repetidasAnterior >= 7 && p.repetidasAnterior <= 10
-          ? 'Equilibrado'
-          : 'Atenção',
+      referencia: `Ideal: ${m.repetidasAnterior.faixaIdealTexto}`,
+      status: m.repetidasAnterior.status,
+      statusLabel: m.repetidasAnterior.statusLabel,
     },
     {
       parametro: 'Soma Total das Dezenas',
       valor: `${p.somaTotal}`,
-      referencia: '175 – 220',
-      status: p.somaTotal >= 175 && p.somaTotal <= 220 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.somaTotal.faixaIdealTexto}`,
+      status: m.somaTotal.status,
+      statusLabel: m.somaTotal.statusLabel,
     },
     {
       parametro: 'Números Primos',
       valor: `${p.primos} dezenas`,
-      referencia: '4 – 7 dezenas',
-      status: p.primos >= 4 && p.primos <= 7 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.primos.faixaIdealTexto}`,
+      status: m.primos.status,
+      statusLabel: m.primos.statusLabel,
     },
     {
       parametro: 'Moldura e Miolo (Volante 5×5)',
       valor: `${p.moldura} Moldura / ${p.miolo} Miolo`,
-      referencia: '8–11 Moldura / 4–7 Miolo',
-      status: p.moldura >= 8 && p.moldura <= 11 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.molduraMiolo.faixaIdealTexto} na moldura`,
+      status: m.molduraMiolo.status,
+      statusLabel: m.molduraMiolo.statusLabel,
     },
     {
       parametro: 'Sequência de Fibonacci',
       valor: `${p.fibonacci} dezenas`,
-      referencia: '3 – 6 dezenas',
-      status: p.fibonacci >= 3 && p.fibonacci <= 6 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.fibonacci.faixaIdealTexto}`,
+      status: m.fibonacci.status,
+      statusLabel: m.fibonacci.statusLabel,
     },
     {
       parametro: 'Números em Sequência',
-      valor: `Máx. ${p.maiorSequencia} (${blocosTexto})`,
-      referencia: 'Maior seq. ≤ 6',
-      status: p.maiorSequencia <= 6 ? 'Equilibrado' : 'Atenção',
+      valor: `Maior seq: ${p.maiorSequencia} (${blocosTexto})`,
+      referencia: `Ideal: ${m.sequencia.faixaIdealTexto}`,
+      status: m.sequencia.status,
+      statusLabel: m.sequencia.statusLabel,
     },
     {
       parametro: 'Cruz Central da Lotofácil',
       valor: `${p.cruz} dezenas`,
-      referencia: '4 – 6 dezenas',
-      status: p.cruz >= 4 && p.cruz <= 6 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.cruz.faixaIdealTexto}`,
+      status: m.cruz.status,
+      statusLabel: m.cruz.statusLabel,
     },
     {
       parametro: 'Distribuição por Quadrantes',
       valor: quadrantesTexto,
-      referencia: '2 – 5 por quadrante',
-      status: minQ >= 2 && maxQ <= 5 ? 'Equilibrado' : 'Atenção',
+      referencia: `Ideal: ${m.quadrantes.faixaIdealTexto}`,
+      status: m.quadrantes.status,
+      statusLabel: m.quadrantes.statusLabel,
     },
   ];
 }
@@ -149,7 +157,7 @@ export function generateResultadosEstatisticosPDF({
   });
 
   // Cabeçalho institucional limpo para impressão
-  doc.setFillColor(15, 23, 42); // Slate 900
+  doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, pageWidth, 30, 'F');
 
   doc.setTextColor(255, 255, 255);
@@ -158,10 +166,10 @@ export function generateResultadosEstatisticosPDF({
   doc.text('LotoSniper AI Pro — Relatório de Resultados Estatísticos', margin, 13);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
+  doc.setFontSize(9.2);
   doc.setTextColor(203, 213, 225);
   doc.text(
-    `Concurso #${targetDraw.concurso} (${targetDraw.data})  |  Gerado em ${nowLabel}`,
+    `Concurso #${targetDraw.concurso} (${targetDraw.data})  |  Aderência: ${parametros.resumo.scorePercentual}% (${parametros.resumo.classificacao})  |  ${nowLabel}`,
     margin,
     21
   );
@@ -197,7 +205,7 @@ export function generateResultadosEstatisticosPDF({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(15, 23, 42);
-  doc.text('Tabela de Resultados Estatísticos Calculados', margin, cursorY);
+  doc.text('Tabela Consolidada de Parâmetros Estatísticos', margin, cursorY);
   cursorY += 3;
 
   const rows = buildResultadosEstatisticosRows(targetDraw.concurso, parametros);
@@ -205,8 +213,8 @@ export function generateResultadosEstatisticosPDF({
   autoTable(doc, {
     startY: cursorY,
     margin: { left: margin, right: margin },
-    head: [['Parâmetro Estatístico', 'Valor Calculado', 'Referência Histórica', 'Avaliação']],
-    body: rows.map((r) => [r.parametro, r.valor, r.referencia, r.status]),
+    head: [['Parâmetro Estatístico', 'Valor Calculado', 'Faixa Histórica Ideal', 'Status']],
+    body: rows.map((r) => [r.parametro, r.valor, r.referencia, r.statusLabel]),
     theme: 'grid',
     headStyles: {
       fillColor: [15, 23, 42],
@@ -232,11 +240,14 @@ export function generateResultadosEstatisticosPDF({
     didParseCell: (hookData) => {
       if (hookData.section === 'body' && hookData.column.index === 3) {
         const text = String(hookData.cell.raw || '');
-        if (text === 'Equilibrado') {
-          hookData.cell.styles.textColor = [22, 163, 74];
+        if (text === 'Ideal') {
+          hookData.cell.styles.textColor = [5, 150, 105];
           hookData.cell.styles.fontStyle = 'bold';
-        } else if (text === 'Atenção') {
+        } else if (text === 'Alerta') {
           hookData.cell.styles.textColor = [217, 119, 6];
+          hookData.cell.styles.fontStyle = 'bold';
+        } else if (text === 'Crítico') {
+          hookData.cell.styles.textColor = [225, 29, 72];
           hookData.cell.styles.fontStyle = 'bold';
         } else {
           hookData.cell.styles.textColor = [100, 116, 139];
@@ -245,7 +256,9 @@ export function generateResultadosEstatisticosPDF({
     },
   });
 
-  cursorY = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? cursorY + 70) + 9;
+  cursorY =
+    ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+      cursorY + 70) + 9;
 
   // Tabela Secundária: Tendência dos Últimos 5 Concursos
   if (recent5Trend && recent5Trend.length > 0) {
@@ -283,7 +296,9 @@ export function generateResultadosEstatisticosPDF({
       },
     });
 
-    cursorY = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? cursorY + 40) + 9;
+    cursorY =
+      ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+        cursorY + 40) + 9;
   }
 
   // Resumo da Conferência (quando houver jogos analisados)

@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Check,
   BookOpen,
+  Download,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { LotofacilDraw } from '../types/lotofacil';
@@ -36,7 +37,35 @@ import {
 import {
   calcularParametrosConcurso,
   resolvePreviousDrawDezenas,
+  ParametroStatus,
 } from '../utils/concursoParametros';
+import { downloadResultadosEstatisticosPDF } from '../services/resultadosEstatisticosPdfGenerator';
+
+const STATUS_CARD_THEME: Record<
+  ParametroStatus,
+  { card: string; badge: string; value: string }
+> = {
+  ideal: {
+    card: 'bg-emerald-500/[0.06] border-emerald-500/35 hover:border-emerald-400/60',
+    badge: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35',
+    value: 'text-emerald-300',
+  },
+  alerta: {
+    card: 'bg-amber-500/[0.07] border-amber-500/40 hover:border-amber-400/65',
+    badge: 'bg-amber-500/15 text-amber-300 border border-amber-500/35',
+    value: 'text-amber-200',
+  },
+  critico: {
+    card: 'bg-rose-500/[0.08] border-rose-500/45 hover:border-rose-400/70',
+    badge: 'bg-rose-500/15 text-rose-300 border border-rose-500/40',
+    value: 'text-rose-300',
+  },
+  neutro: {
+    card: 'bg-slate-900/90 border-slate-700/80 hover:border-slate-600',
+    badge: 'bg-slate-800 text-slate-300 border border-slate-700',
+    value: 'text-slate-300',
+  },
+};
 
 export type HeaderAppTheme = 'gold' | 'high_contrast' | 'slate';
 
@@ -114,6 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [viewedDrawOffset, setViewedDrawOffset] = useState<number>(0);
   const [showDrawParams, setShowDrawParams] = useState<boolean>(true);
   const [trendMetric, setTrendMetric] = useState<'somaTotal' | 'primos'>('somaTotal');
+  const [pdfExported, setPdfExported] = useState<boolean>(false);
   const themeMenuRef = useRef<HTMLDivElement>(null);
 
   // Histórico unificado ordenado do concurso mais recente para o mais antigo
@@ -167,6 +197,10 @@ export const Header: React.FC<HeaderProps> = ({
         data: d.data,
         somaTotal: stats.somaTotal,
         primos: stats.primos,
+        pares: stats.pares,
+        impares: stats.impares,
+        moldura: stats.moldura,
+        fibonacci: stats.fibonacci,
         isCurrent: d.concurso === displayedDraw.concurso,
       };
     });
@@ -182,6 +216,25 @@ export const Header: React.FC<HeaderProps> = ({
 
     return { points, avgSoma, avgPrimos };
   }, [drawsHistory, safeOffset, displayedDraw.concurso]);
+
+  const handleExportCurrentDrawPDF = () => {
+    downloadResultadosEstatisticosPDF({
+      targetDraw: displayedDraw,
+      parametros: parametrosConcurso,
+      recent5Trend: trendLast5.points.map((pt) => ({
+        concurso: pt.concurso,
+        data: pt.data,
+        somaTotal: pt.somaTotal,
+        primos: pt.primos,
+        pares: pt.pares,
+        impares: pt.impares,
+        moldura: pt.moldura,
+        fibonacci: pt.fibonacci,
+      })),
+    });
+    setPdfExported(true);
+    window.setTimeout(() => setPdfExported(false), 3000);
+  };
 
   const [currentTheme, setCurrentTheme] = useState<HeaderAppTheme>(() => {
     try {
@@ -696,9 +749,28 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 type="button"
+                onClick={handleExportCurrentDrawPDF}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap shrink-0"
+                title={`Exportar relatório em PDF com os parâmetros estatísticos do Concurso #${displayedDraw.concurso}`}
+              >
+                {pdfExported ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    <span>PDF Baixado</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3 h-3" />
+                    <span>Exportar Relatório PDF</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowDrawParams((prev) => !prev)}
                 aria-expanded={showDrawParams}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap shrink-0"
                 title="Exibir ou recolher parâmetros estatísticos do concurso"
               >
                 <span>Parâmetros</span>
@@ -709,110 +781,112 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* PAINEL AUTOMÁTICO DE PARÂMETROS ESTATÍSTICOS COMPLETOS DO CONCURSO */}
+          {/* PAINEL AUTOMÁTICO DE PARÂMETROS ESTATÍSTICOS COMPLETOS COM SEMÁFORO DE STATUS */}
           {showDrawParams && (
             <div
               aria-label={`Parâmetros estatísticos do Concurso ${displayedDraw.concurso}`}
               className="pt-2 border-t border-slate-800/80 space-y-2.5"
             >
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
-                {/* 1. Pares e Ímpares */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Pares / Ímpares</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-white tabular-nums">
-                    {parametrosConcurso.pares}P / {parametrosConcurso.impares}I
-                  </div>
-                </div>
-
-                {/* 2. Repetidas do Concurso Anterior */}
-                <div
-                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
-                  title={
-                    parametrosConcurso.repetidasAnterior !== null
-                      ? `Dezenas repetidas em relação ao concurso #${displayedDraw.concurso - 1}`
-                      : 'Concurso imediatamente anterior indisponível no histórico local'
-                  }
-                >
-                  <div className="text-[10px] text-slate-400 leading-tight">Repetidas (#{displayedDraw.concurso - 1})</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums">
-                    {parametrosConcurso.repetidasAnterior !== null
-                      ? `${parametrosConcurso.repetidasAnterior} dez.`
-                      : 'N/A'}
-                  </div>
-                </div>
-
-                {/* 3. Soma Total */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Soma Total</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-amber-300 tabular-nums">
-                    {parametrosConcurso.somaTotal}
-                  </div>
-                </div>
-
-                {/* 4. Números Primos */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Primos</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-sky-300 tabular-nums">
-                    {parametrosConcurso.primos} dez.
-                  </div>
-                </div>
-
-                {/* 5. Moldura e Miolo */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Moldura / Miolo</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums">
-                    {parametrosConcurso.moldura}M / {parametrosConcurso.miolo}C
-                  </div>
-                </div>
-
-                {/* 6. Sequência de Fibonacci */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Fibonacci</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-amber-200 tabular-nums">
-                    {parametrosConcurso.fibonacci} dez.
-                  </div>
-                </div>
-
-                {/* 7. Números em Sequência */}
-                <div
-                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
-                  title={`Blocos consecutivos encontrados: ${sequenciaResumo}`}
-                >
-                  <div className="text-[10px] text-slate-400 leading-tight">Sequência</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums truncate">
-                    Máx {parametrosConcurso.maiorSequencia}{' '}
-                    <span className="text-[10px] font-normal text-slate-400">
-                      ({sequenciaResumo})
+              {/* Resumo do Score Geral de Aderência e Semáforo */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums">
+                  <span className="font-sans font-semibold text-slate-200">
+                    Aderência (#{displayedDraw.concurso}):{' '}
+                    <span
+                      className={
+                        parametrosConcurso.resumo.classificacao === 'Padrão Ouro'
+                          ? 'text-emerald-400'
+                          : parametrosConcurso.resumo.foraDoPadrao
+                          ? 'text-rose-400'
+                          : parametrosConcurso.resumo.classificacao === 'Atípico'
+                          ? 'text-amber-400'
+                          : 'text-sky-300'
+                      }
+                    >
+                      {parametrosConcurso.resumo.scorePercentual}% ·{' '}
+                      {parametrosConcurso.resumo.classificacao}
                     </span>
-                  </div>
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-emerald-400">
+                    {parametrosConcurso.resumo.ideais} Ideal
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-amber-400">
+                    {parametrosConcurso.resumo.alertas} Alerta
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-rose-400">
+                    {parametrosConcurso.resumo.criticos} Crítico
+                  </span>
+                  {parametrosConcurso.resumo.neutros > 0 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-slate-400">
+                        {parametrosConcurso.resumo.neutros} Neutro
+                      </span>
+                    </>
+                  )}
                 </div>
+                <span className="text-[10px] text-slate-500">
+                  Passe o cursor nos cards para ver a faixa ideal configurada
+                </span>
+              </div>
 
-                {/* 8. Cruz da Lotofácil */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                  <div className="text-[10px] text-slate-400 leading-tight">Cruz Central</div>
-                  <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-300 tabular-nums">
-                    {parametrosConcurso.cruz} dez.
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
+                {parametrosConcurso.metricasLista.map((metrica) => {
+                  const theme = STATUS_CARD_THEME[metrica.status];
+                  const isQuadrantes = metrica.id === 'quadrantes';
+                  const displayLabel =
+                    metrica.id === 'repetidas'
+                      ? `Repetidas (#${displayedDraw.concurso - 1})`
+                      : metrica.label;
+                  const tooltipFull = `${displayLabel}: ${metrica.valorExibicao} — ${metrica.tooltipTexto}`;
 
-                {/* 9. Quadrantes (Q1, Q2, Q3, Q4) */}
-                <div
-                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 col-span-2 sm:col-span-1"
-                  title={
-                    parametrosConcurso.quadrantes.centro13
-                      ? 'Distribuição pelos 4 quadrantes (dezena central 13 também sorteada)'
-                      : 'Distribuição pelos 4 quadrantes do volante 5×5'
-                  }
-                >
-                  <div className="text-[10px] text-slate-400 leading-tight">
-                    Quadrantes (Q1–Q4)
-                  </div>
-                  <div className="mt-0.5 text-[11px] font-mono font-semibold text-cyan-300 tabular-nums">
-                    {parametrosConcurso.quadrantes.q1}·{parametrosConcurso.quadrantes.q2}·
-                    {parametrosConcurso.quadrantes.q3}·{parametrosConcurso.quadrantes.q4}
-                    {parametrosConcurso.quadrantes.centro13 ? ' (+13)' : ''}
-                  </div>
-                </div>
+                  return (
+                    <div
+                      key={metrica.id}
+                      tabIndex={0}
+                      title={tooltipFull}
+                      aria-label={tooltipFull}
+                      className={`group relative rounded-lg border px-2.5 py-2 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 ${
+                        theme.card
+                      } ${isQuadrantes ? 'col-span-2 sm:col-span-1' : ''}`}
+                    >
+                      <div className="text-[10px] text-slate-400 leading-tight truncate">
+                        {displayLabel}
+                      </div>
+
+                      <div className="mt-1 flex items-center justify-between gap-1.5">
+                        <span
+                          className={`text-xs font-mono font-semibold tabular-nums truncate ${theme.value}`}
+                        >
+                          {metrica.valorExibicao}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-semibold leading-none shrink-0 ${theme.badge}`}
+                        >
+                          {metrica.statusLabel}
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-[9.5px] text-slate-500 font-mono tabular-nums truncate">
+                        Ideal: {metrica.faixaIdealTexto}
+                      </div>
+
+                      {/* Tooltip visual interativo com faixa ideal configurada */}
+                      <div
+                        role="tooltip"
+                        className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-40 w-52 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-[10px] text-slate-200 shadow-xl"
+                      >
+                        <div className="font-semibold text-white">{displayLabel}</div>
+                        <div className="mt-0.5 text-slate-300 leading-snug">
+                          {metrica.tooltipTexto}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Mini Gráfico de Linha: Tendência dos Últimos 5 Concursos (Soma Total ou Primos) */}
@@ -858,7 +932,7 @@ export const Header: React.FC<HeaderProps> = ({
                           : `${trendLast5.avgPrimos} dez.`}
                       </span>
                       {' · '}
-                      Ideal: {trendMetric === 'somaTotal' ? '175–220' : '4–7'}
+                      Ideal: {trendMetric === 'somaTotal' ? '180–215' : '5–6'}
                     </div>
                   </div>
 

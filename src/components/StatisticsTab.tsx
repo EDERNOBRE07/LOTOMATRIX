@@ -17,6 +17,7 @@ import { HistoricoAcertosAcumuladosChart } from './HistoricoAcertosAcumuladosCha
 import { ResumoPerformanceMensal } from './ResumoPerformanceMensal';
 import { CorrelacaoCustoRetornoScatterRecharts } from './CorrelacaoCustoRetornoScatterRecharts';
 import { MapaCalorDezenas100Card } from './MapaCalorDezenas100Card';
+import { EvolucaoSoma10ConcursosChart } from './EvolucaoSoma10ConcursosChart';
 import { motion } from 'framer-motion';
 import { getHistoricalNDraws } from '../services/historical100Draws';
 import {
@@ -494,6 +495,9 @@ export const StatisticsTab: React.FC<StatisticsTabProps> = ({
           </motion.div>
         )}
       </section>
+
+      {/* Evolução da Soma Total nos últimos 10 concursos (Recharts) */}
+      <EvolucaoSoma10ConcursosChart latestDraw={latestDraw} draws={RECENT_DRAWS} />
 
       {/* Dashboard de Eficiência Preditiva no topo da aba Estatísticas */}
       <DashboardEficienciaPreditiva

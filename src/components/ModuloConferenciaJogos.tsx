@@ -790,6 +790,26 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
               <span>Concurso #{targetDraw.concurso}</span>
               <span aria-hidden="true">·</span>
               <span>{targetDraw.data}</span>
+              <span aria-hidden="true">·</span>
+              <span
+                className={
+                  targetDrawParametros.resumo.classificacao === 'Padrão Ouro'
+                    ? 'text-emerald-400 font-semibold'
+                    : targetDrawParametros.resumo.foraDoPadrao
+                    ? 'text-rose-400 font-semibold'
+                    : targetDrawParametros.resumo.classificacao === 'Atípico'
+                    ? 'text-amber-400 font-semibold'
+                    : 'text-sky-300 font-semibold'
+                }
+              >
+                {targetDrawParametros.resumo.scorePercentual}% ({targetDrawParametros.resumo.classificacao})
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="text-emerald-400">{targetDrawParametros.resumo.ideais} Ideal</span>
+              <span aria-hidden="true">/</span>
+              <span className="text-amber-400">{targetDrawParametros.resumo.alertas} Alerta</span>
+              <span aria-hidden="true">/</span>
+              <span className="text-rose-400">{targetDrawParametros.resumo.criticos} Crítico</span>
             </div>
             <h3 className="text-sm sm:text-base font-semibold text-white tracking-tight">
               Parâmetros Calculados do Concurso Selecionado
@@ -854,14 +874,16 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
                   <td className="py-2.5 px-3 text-right font-medium">
                     <span
                       className={
-                        row.status === 'Equilibrado'
+                        row.status === 'ideal'
                           ? 'text-emerald-400'
-                          : row.status === 'Atenção'
-                          ? 'text-amber-300'
+                          : row.status === 'alerta'
+                          ? 'text-amber-400'
+                          : row.status === 'critico'
+                          ? 'text-rose-400'
                           : 'text-slate-400'
                       }
                     >
-                      {row.status}
+                      {row.statusLabel}
                     </span>
                   </td>
                 </tr>
