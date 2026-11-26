@@ -1024,6 +1024,7 @@ export default function App() {
       {/* Header with live synchronization controls */}
       <Header
         latestDraw={latestDraw}
+        recentDraws={RECENT_DRAWS}
         isSyncing={isSyncing}
         onSyncNow={handleManualSync}
         syncSource={syncSource}

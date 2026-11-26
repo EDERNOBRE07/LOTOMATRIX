@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { AIPredictionResponse, LotofacilDraw, DezenaStats, FilterCriteria } from '../types/lotofacil';
-import { CONCURSO_ATUAL, DEZENAS_STATS, RECENT_DRAWS } from '../data/lotofacilData';
+import { CONCURSO_ATUAL, DEZENAS_STATS, RECENT_DRAWS, MOLDURA, MIOLO } from '../data/lotofacilData';
 import { buildOptimal18Pool } from '../services/combinatorics';
+import {
+  CRUZ_CENTRAL_CONJUNTO,
+  PRIMOS_CONJUNTO,
+  FIBONACCI_CONJUNTO,
+} from '../utils/concursoParametros';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -12,6 +17,12 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Legend,
 } from 'recharts';
 import { DailyInsightsWidget } from './DailyInsightsWidget';
 import { HistoricalProbability500Module } from './HistoricalProbability500Module';
@@ -402,6 +413,352 @@ const Top5QuentesEFriasAIPanel: React.FC<Top5QuentesEFriasAIPanelProps> = ({
   );
 };
 
+interface EquilibrioPadroesRadarPanelProps {
+  recomendadas18: number[];
+  goldenBets: number[][];
+  latestDraw: LotofacilDraw;
+  onApplySelection?: (numbers: number[]) => void;
+}
+
+type RadarTargetKey = 'base18' | 'ouro1' | 'ouro2' | 'ouro3';
+
+const MOLDURA_SET = new Set<number>(MOLDURA);
+const MIOLO_SET = new Set<number>(MIOLO);
+const CRUZ_SET = new Set<number>(CRUZ_CENTRAL_CONJUNTO);
+const PRIMOS_SET = new Set<number>(PRIMOS_CONJUNTO);
+const FIBO_SET = new Set<number>(FIBONACCI_CONJUNTO);
+
+/**
+ * Gráfico de Radar (Spider Chart) que valida visualmente o equilíbrio das dezenas
+ * recomendadas pela IA entre Moldura, Centro (Miolo), Cruz Central e parâmetros
+ * complementares (Pares, Primos, Fibonacci) frente à referência histórica ideal.
+ */
+const EquilibrioPadroesRadarPanel: React.FC<EquilibrioPadroesRadarPanelProps> = ({
+  recomendadas18,
+  goldenBets,
+  latestDraw,
+  onApplySelection,
+}) => {
+  const [selectedTarget, setSelectedTarget] = useState<RadarTargetKey>('base18');
+
+  const activeSelection = React.useMemo(() => {
+    if (selectedTarget === 'ouro1' && goldenBets[0]?.length) {
+      return { label: 'Jogo Ouro #1 (15 Dez.)', numbers: goldenBets[0] };
+    }
+    if (selectedTarget === 'ouro2' && goldenBets[1]?.length) {
+      return { label: 'Jogo Ouro #2 (15 Dez.)', numbers: goldenBets[1] };
+    }
+    if (selectedTarget === 'ouro3' && goldenBets[2]?.length) {
+      return { label: 'Jogo Ouro #3 (15 Dez.)', numbers: goldenBets[2] };
+    }
+    return { label: 'Base IA (18 Dez.)', numbers: recomendadas18 };
+  }, [selectedTarget, recomendadas18, goldenBets]);
+
+  const analysis = React.useMemo(() => {
+    const nums = activeSelection.numbers;
+    const total = nums.length || 15;
+    const scale = total / 15;
+
+    const molduraNums = nums.filter((n) => MOLDURA_SET.has(n));
+    const mioloNums = nums.filter((n) => MIOLO_SET.has(n));
+    const cruzNums = nums.filter((n) => CRUZ_SET.has(n));
+    const paresCount = nums.filter((n) => n % 2 === 0).length;
+    const primosCount = nums.filter((n) => PRIMOS_SET.has(n)).length;
+    const fiboCount = nums.filter((n) => FIBO_SET.has(n)).length;
+
+    const molduraIdealMin = Math.round(9 * scale);
+    const molduraIdealMax = Math.round(11 * scale);
+    const mioloIdealMin = Math.round(4 * scale);
+    const mioloIdealMax = Math.round(6 * scale);
+    const cruzIdealMin = Math.round(4 * scale);
+    const cruzIdealMax = Math.round(6 * scale);
+    const paresIdealMin = Math.round(6 * scale);
+    const paresIdealMax = Math.round(8 * scale);
+    const primosIdealMin = Math.round(4 * scale);
+    const primosIdealMax = Math.round(7 * scale);
+    const fiboIdealMin = Math.round(3 * scale);
+    const fiboIdealMax = Math.round(5 * scale);
+
+    const axes = [
+      {
+        eixo: 'Moldura',
+        atualPct: Number(((molduraNums.length / 16) * 100).toFixed(1)),
+        idealPct: Number((((10 * scale) / 16) * 100).toFixed(1)),
+        count: molduraNums.length,
+        capacity: 16,
+        idealRange: `${molduraIdealMin}–${molduraIdealMax}`,
+        inRange: molduraNums.length >= molduraIdealMin && molduraNums.length <= molduraIdealMax,
+      },
+      {
+        eixo: 'Centro (Miolo)',
+        atualPct: Number(((mioloNums.length / 9) * 100).toFixed(1)),
+        idealPct: Number((((5 * scale) / 9) * 100).toFixed(1)),
+        count: mioloNums.length,
+        capacity: 9,
+        idealRange: `${mioloIdealMin}–${mioloIdealMax}`,
+        inRange: mioloNums.length >= mioloIdealMin && mioloNums.length <= mioloIdealMax,
+      },
+      {
+        eixo: 'Cruz Central',
+        atualPct: Number(((cruzNums.length / 9) * 100).toFixed(1)),
+        idealPct: Number((((5.4 * scale) / 9) * 100).toFixed(1)),
+        count: cruzNums.length,
+        capacity: 9,
+        idealRange: `${cruzIdealMin}–${cruzIdealMax}`,
+        inRange: cruzNums.length >= cruzIdealMin && cruzNums.length <= cruzIdealMax,
+      },
+      {
+        eixo: 'Pares',
+        atualPct: Number(((paresCount / 12) * 100).toFixed(1)),
+        idealPct: Number((((7.2 * scale) / 12) * 100).toFixed(1)),
+        count: paresCount,
+        capacity: 12,
+        idealRange: `${paresIdealMin}–${paresIdealMax}`,
+        inRange: paresCount >= paresIdealMin && paresCount <= paresIdealMax,
+      },
+      {
+        eixo: 'Primos',
+        atualPct: Number(((primosCount / 9) * 100).toFixed(1)),
+        idealPct: Number((((5.4 * scale) / 9) * 100).toFixed(1)),
+        count: primosCount,
+        capacity: 9,
+        idealRange: `${primosIdealMin}–${primosIdealMax}`,
+        inRange: primosCount >= primosIdealMin && primosCount <= primosIdealMax,
+      },
+      {
+        eixo: 'Fibonacci',
+        atualPct: Number(((fiboCount / 7) * 100).toFixed(1)),
+        idealPct: Number((((4.2 * scale) / 7) * 100).toFixed(1)),
+        count: fiboCount,
+        capacity: 7,
+        idealRange: `${fiboIdealMin}–${fiboIdealMax}`,
+        inRange: fiboCount >= fiboIdealMin && fiboCount <= fiboIdealMax,
+      },
+    ];
+
+    const balancedAxesCount = axes.filter((a) => a.inRange).length;
+
+    return {
+      axes,
+      balancedAxesCount,
+      spatialCards: [
+        {
+          id: 'moldura',
+          label: 'Moldura (Borda 5×5)',
+          count: molduraNums.length,
+          capacity: 16,
+          pctOfGame: Number(((molduraNums.length / total) * 100).toFixed(1)),
+          idealRange: `${molduraIdealMin}–${molduraIdealMax}`,
+          inRange: molduraNums.length >= molduraIdealMin && molduraNums.length <= molduraIdealMax,
+          numbers: molduraNums,
+          accent: 'text-emerald-400',
+        },
+        {
+          id: 'miolo',
+          label: 'Centro (Miolo 3×3)',
+          count: mioloNums.length,
+          capacity: 9,
+          pctOfGame: Number(((mioloNums.length / total) * 100).toFixed(1)),
+          idealRange: `${mioloIdealMin}–${mioloIdealMax}`,
+          inRange: mioloNums.length >= mioloIdealMin && mioloNums.length <= mioloIdealMax,
+          numbers: mioloNums,
+          accent: 'text-sky-400',
+        },
+        {
+          id: 'cruz',
+          label: 'Cruz Central',
+          count: cruzNums.length,
+          capacity: 9,
+          pctOfGame: Number(((cruzNums.length / total) * 100).toFixed(1)),
+          idealRange: `${cruzIdealMin}–${cruzIdealMax}`,
+          inRange: cruzNums.length >= cruzIdealMin && cruzNums.length <= cruzIdealMax,
+          numbers: cruzNums,
+          accent: 'text-amber-300',
+        },
+      ],
+    };
+  }, [activeSelection.numbers]);
+
+  return (
+    <section
+      aria-label="Radar de Equilíbrio Espacial das Dezenas Recomendadas"
+      className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 space-y-5"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+            <Compass className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-sans text-emerald-400 font-medium">Validação de Equilíbrio</span>
+            <span aria-hidden="true">·</span>
+            <span>Moldura · Centro · Cruz</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {analysis.balancedAxesCount}/6 eixos na faixa ideal
+            </span>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
+            Radar de Distribuição Espacial — Moldura, Centro e Cruz ({activeSelection.label})
+          </h3>
+          <p className="text-xs text-slate-400 max-w-2xl">
+            Compare o preenchimento percentual das dezenas sugeridas pela IA para o Concurso #{latestDraw.concurso + 1} frente ao perfil histórico equilibrado do volante 5×5.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800 text-xs">
+            {(
+              [
+                { id: 'base18', label: 'Base 18' },
+                { id: 'ouro1', label: 'Ouro #1' },
+                { id: 'ouro2', label: 'Ouro #2' },
+                { id: 'ouro3', label: 'Ouro #3' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setSelectedTarget(opt.id)}
+                className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer whitespace-nowrap ${
+                  selectedTarget === opt.id
+                    ? 'bg-slate-800 text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {onApplySelection && (
+            <button
+              type="button"
+              onClick={() => onApplySelection(activeSelection.numbers)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-medium transition cursor-pointer whitespace-nowrap"
+            >
+              <span>Carregar seleção</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+        {/* Recharts RadarChart (Spider Chart) */}
+        <div className="lg:col-span-7 rounded-xl border border-slate-800 bg-slate-950/60 p-3 sm:p-4">
+          <div className="h-[290px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="74%" data={analysis.axes}>
+                <PolarGrid stroke="#1e293b" />
+                <PolarAngleAxis
+                  dataKey="eixo"
+                  tick={{ fill: '#cbd5e1', fontSize: 11, fontWeight: 500 }}
+                />
+                <PolarRadiusAxis
+                  angle={30}
+                  domain={[0, 100]}
+                  tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Radar
+                  name="Referência Ideal (%)"
+                  dataKey="idealPct"
+                  stroke="#fbbf24"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  fill="#fbbf24"
+                  fillOpacity={0.08}
+                />
+                <Radar
+                  name={`${activeSelection.label} (%)`}
+                  dataKey="atualPct"
+                  stroke="#10b981"
+                  strokeWidth={2.4}
+                  fill="#10b981"
+                  fillOpacity={0.28}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const row = payload[0].payload as (typeof analysis.axes)[number];
+                    return (
+                      <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs font-mono tabular-nums space-y-1 shadow-xl">
+                        <div className="font-sans font-semibold text-white border-b border-slate-800 pb-1">
+                          {row.eixo}
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-slate-400 font-sans">Presentes:</span>
+                          <span className="text-emerald-400 font-semibold">
+                            {row.count} de {row.capacity} ({row.atualPct}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-slate-400 font-sans">Faixa ideal:</span>
+                          <span className="text-amber-300">
+                            {row.idealRange} ({row.idealPct}%)
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-sans pt-0.5">
+                          <span className={row.inRange ? 'text-emerald-400' : 'text-amber-400'}>
+                            {row.inRange ? 'Dentro do equilíbrio histórico' : 'Leve desvio da faixa ideal'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#cbd5e1', paddingTop: '6px' }} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Cards Espaciais: Moldura, Centro (Miolo) e Cruz Central */}
+        <div className="lg:col-span-5 space-y-3">
+          {analysis.spatialCards.map((card) => (
+            <div
+              key={card.id}
+              className="rounded-xl border border-slate-800 bg-slate-950/75 p-3.5 space-y-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-200">{card.label}</span>
+                <span
+                  className={`text-[11px] font-medium ${
+                    card.inRange ? 'text-emerald-400' : 'text-amber-400'
+                  }`}
+                >
+                  {card.inRange ? 'Equilibrado' : 'Ajustar'}
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-3 font-mono tabular-nums">
+                <div className={`text-lg font-bold ${card.accent}`}>
+                  {card.count}{' '}
+                  <span className="text-xs font-normal text-slate-500">/ {card.capacity}</span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {card.pctOfGame}% do jogo · ideal{' '}
+                  <span className="text-slate-200">{card.idealRange}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {card.numbers.map((n) => (
+                  <span
+                    key={`${card.id}-${n}`}
+                    className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono tabular-nums text-[11px] text-slate-200"
+                  >
+                    {String(n).padStart(2, '0')}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
   dynamicStats = DEZENAS_STATS,
@@ -669,6 +1026,14 @@ export const AIPredictorTab: React.FC<AIPredictorTabProps> = ({
         isLoading={isLoading}
         onApplyTop18={() => onApplyRecommendation(recomendadas18)}
         onFixHotNumbers={onFixAnchors}
+      />
+
+      {/* GRÁFICO DE RADAR (SPIDER CHART): EQUILÍBRIO MOLDURA · CENTRO (MIOLO) · CRUZ */}
+      <EquilibrioPadroesRadarPanel
+        recomendadas18={recomendadas18}
+        goldenBets={goldenBets}
+        latestDraw={latestDraw}
+        onApplySelection={onApplyRecommendation}
       />
 
       {/* COMBINAÇÕES IDEAIS SUGERIDAS PELA IA */}

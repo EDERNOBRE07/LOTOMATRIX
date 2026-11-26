@@ -62,6 +62,10 @@ export interface BatchMatrixVariationResult {
   isExactAudit: boolean;
   durationMs: number;
   coverageCurve: SetCoverCurvePoint[];
+  schoenheimLowerBound14: number;
+  minTicketsSuggested14: number;
+  estimatedCostMin14: number;
+  isExact14Achieved: boolean;
 }
 
 interface BatchMatrixProcessorProps {
@@ -87,12 +91,13 @@ const POOL_COLORS: Record<number, string> = {
   21: '#2dd4bf',
 };
 
-type BudgetPreset = 'auto' | '12' | '16' | '24';
+type BudgetPreset = 'suggested' | '12' | '16' | '24' | 'auto';
 type PoolSourceMode = 'ia_ciclo' | 'volante_atual' | 'frequencia';
 type ChartMetricMode = 'cobertura14' | 'cobertura13';
 type SortColumn =
   | 'poolSize'
   | 'tickets'
+  | 'minTicketsSuggested14'
   | 'custoTotal'
   | 'setCoverEfficiencyPct'
   | 'cobertura14Pct'
@@ -102,15 +107,82 @@ type SortColumn =
 
 const PRESET_TICKETS_BY_POOL: Record<
   number,
-  { mode14: FechamentoMode; mode13: FechamentoMode; autoTickets: number }
+  { mode14: FechamentoMode; mode13: FechamentoMode; autoTickets: number; suggestedBudget: number }
 > = {
-  16: { mode14: '16_14_15', mode13: '16_14_15', autoTickets: 8 },
-  17: { mode14: '17_14_15', mode13: '17_14_15', autoTickets: 8 },
-  18: { mode14: '18_14_15', mode13: '18_13_14', autoTickets: 24 },
-  19: { mode14: '19_14_15', mode13: '19_14_15', autoTickets: 18 },
-  20: { mode14: '20_14_15', mode13: '20_compacto_9', autoTickets: 24 },
-  21: { mode14: '21_13_15', mode13: '21_13_15', autoTickets: 24 },
+  16: { mode14: '16_14_15', mode13: '16_14_15', autoTickets: 8, suggestedBudget: 2 },
+  17: { mode14: '17_14_15', mode13: '17_14_15', autoTickets: 8, suggestedBudget: 8 },
+  18: { mode14: '18_14_15', mode13: '18_13_14', autoTickets: 24, suggestedBudget: 24 },
+  19: { mode14: '19_14_15', mode13: '19_14_15', autoTickets: 18, suggestedBudget: 40 },
+  20: { mode14: '20_14_15', mode13: '20_compacto_9', autoTickets: 24, suggestedBudget: 44 },
+  21: { mode14: '21_13_15', mode13: '21_13_15', autoTickets: 24, suggestedBudget: 48 },
 };
+
+function binomialCoefficient(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  const r = Math.min(k, n - k);
+  let res = 1;
+  for (let i = 1; i <= r; i++) {
+    res = (res * (n - r + i)) / i;
+  }
+  return Math.round(res);
+}
+
+/**
+ * Heurística Greedy Set Cover para estimar o número mínimo de bilhetes necessários
+ * para atingir garantia matemática de 14 pontos em um pool de `poolSize` dezenas,
+ * combinando o limite inferior de Schönheim C(n,15) / (1 + 15*(n-15)) com a eficiência
+ * real de Set Cover observada no pool e a curva incremental de cobertura.
+ */
+function estimateMinTicketsGreedySetCover14(
+  poolSize: number,
+  cobertura14Pct: number,
+  setCoverEfficiencyPct: number,
+  coverageCurve: SetCoverCurvePoint[]
+): {
+  schoenheimLowerBound14: number;
+  minTicketsSuggested14: number;
+  estimatedCostMin14: number;
+  isExact14Achieved: boolean;
+} {
+  const totalSpace = Math.max(1, binomialCoefficient(poolSize, 15));
+  const ball14 = 1 + 15 * Math.max(0, poolSize - 15);
+  const schoenheimLowerBound14 = Math.max(1, Math.ceil(totalSpace / ball14));
+
+  const exactHitPoint = coverageCurve.find((pt) => pt.cobertura14Pct >= 99.95);
+  if (exactHitPoint) {
+    return {
+      schoenheimLowerBound14,
+      minTicketsSuggested14: exactHitPoint.ticketCount,
+      estimatedCostMin14: Number((exactHitPoint.ticketCount * VALOR_APOSTA_LOTOFACIL).toFixed(2)),
+      isExact14Achieved: true,
+    };
+  }
+
+  // Fator harmônico de covering design (Johnson-Lovász calibrado para Lotofácil k=15, t=14)
+  const harmonicOverhead = 1.24 + 0.11 * Math.max(0, poolSize - 17);
+  const effRatio = Math.min(0.98, Math.max(0.45, setCoverEfficiencyPct / 100));
+  const efficiencyAdjustment = Math.min(1.4, Math.max(0.84, 0.86 / effRatio));
+
+  // Se já existe cobertura parcial alta (> 50%), pondera também o ritmo real da curva
+  let curveProjection = Math.ceil(schoenheimLowerBound14 * harmonicOverhead * efficiencyAdjustment);
+  if (cobertura14Pct >= 50 && cobertura14Pct < 99.95 && coverageCurve.length > 0) {
+    const kNow = coverageCurve.length;
+    const pCovered = Math.min(0.995, cobertura14Pct / 100);
+    const tailFactor = Math.log(1 / Math.max(0.005, 1 - pCovered));
+    const projectedFull = Math.ceil(
+      (kNow / Math.max(0.25, tailFactor)) * Math.log(Math.max(2, totalSpace * 0.45))
+    );
+    curveProjection = Math.round(curveProjection * 0.65 + projectedFull * 0.35);
+  }
+
+  const minTicketsSuggested14 = Math.max(schoenheimLowerBound14, curveProjection);
+  return {
+    schoenheimLowerBound14,
+    minTicketsSuggested14,
+    estimatedCostMin14: Number((minTicketsSuggested14 * VALOR_APOSTA_LOTOFACIL).toFixed(2)),
+    isExact14Achieved: false,
+  };
+}
 
 function popcount25(mask: number): number {
   let x = mask;
@@ -412,7 +484,11 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
               const mode: FechamentoMode =
                 targetHits === 14 ? presetMeta.mode14 : presetMeta.mode13;
               const maxTickets =
-                budgetPreset === 'auto' ? presetMeta.autoTickets : Number(budgetPreset);
+                budgetPreset === 'suggested'
+                  ? presetMeta.suggestedBudget
+                  : budgetPreset === 'auto'
+                  ? presetMeta.autoTickets
+                  : Number(budgetPreset);
 
               const subsetSet = new Set(subsetPool);
               const scopedFilters: FilterCriteria = {
@@ -431,6 +507,12 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
               );
 
               const audit = auditVariationSetCoverBitwise(subsetPool, tickets, targetHits);
+              const greedyEstimate = estimateMinTicketsGreedySetCover14(
+                poolSize,
+                audit.cobertura14Pct,
+                audit.setCoverEfficiencyPct,
+                audit.coverageCurve
+              );
               const custoTotal = Number((tickets.length * VALOR_APOSTA_LOTOFACIL).toFixed(2));
               const eficiencia14Por10Reais =
                 custoTotal > 0 ? Number((audit.cobertura14Pct / (custoTotal / 10)).toFixed(2)) : 0;
@@ -465,6 +547,10 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                 isExactAudit: audit.isExactAudit,
                 durationMs: Math.max(1, Math.round(performance.now() - t0)),
                 coverageCurve: audit.coverageCurve,
+                schoenheimLowerBound14: greedyEstimate.schoenheimLowerBound14,
+                minTicketsSuggested14: greedyEstimate.minTicketsSuggested14,
+                estimatedCostMin14: greedyEstimate.estimatedCostMin14,
+                isExact14Achieved: greedyEstimate.isExact14Achieved,
               });
             }, 0);
           })
@@ -501,7 +587,11 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortColumn(column);
-      setSortDir(column === 'poolSize' || column === 'custoTotal' ? 'asc' : 'desc');
+      setSortDir(
+        column === 'poolSize' || column === 'custoTotal' || column === 'minTicketsSuggested14'
+          ? 'asc'
+          : 'desc'
+      );
     }
   };
 
@@ -530,9 +620,12 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
     const bestCoverage14 = [...results].sort(
       (a, b) => b.cobertura14Pct - a.cobertura14Pct || a.custoTotal - b.custoTotal
     )[0];
+    const mostEconomical14 = [...results].sort(
+      (a, b) => a.minTicketsSuggested14 - b.minTicketsSuggested14 || a.poolSize - b.poolSize
+    )[0];
     const totalTickets = results.reduce((acc, r) => acc + r.tickets.length, 0);
     const totalMs = results.reduce((acc, r) => acc + r.durationMs, 0);
-    return { bestEfficiency, bestSetCover, bestCoverage14, totalTickets, totalMs };
+    return { bestEfficiency, bestSetCover, bestCoverage14, mostEconomical14, totalTickets, totalMs };
   }, [results]);
 
   // Série Recharts: Cobertura Set Cover (%) vs Número de Bilhetes (k = 1..maxTickets) por tamanho de pool
@@ -690,6 +783,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
           <div className="flex flex-wrap gap-1 p-0.5 rounded-lg bg-slate-950 border border-slate-800">
             {(
               [
+                { id: 'suggested', label: 'Sug. 14' },
                 { id: '12', label: '12 J' },
                 { id: '16', label: '16 J' },
                 { id: '24', label: '24 J' },
@@ -830,25 +924,27 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
             </div>
 
             <div>
-              <div className="text-[11px] font-sans text-slate-400">Auditoria Simultânea</div>
+              <div className="text-[11px] font-sans text-slate-400">Mín. Sugerido 14 pts (Greedy)</div>
               <div className="mt-1 text-lg font-semibold text-sky-400">
-                {results.length} pools · {summary.totalTickets} jogos
+                {summary.mostEconomical14.poolSize} Dez. · {summary.mostEconomical14.minTicketsSuggested14} jogos
               </div>
               <div className="text-[11px] font-sans text-slate-500">
-                Processado em {summary.totalMs} ms
+                R$ {summary.mostEconomical14.estimatedCostMin14.toFixed(2).replace('.', ',')} · teór. ≥
+                {summary.mostEconomical14.schoenheimLowerBound14}J ({summary.totalMs} ms)
               </div>
             </div>
           </div>
 
-          {/* Recharts: Curva de Eficiência Set Cover — Cobertura (%) vs Número de Bilhetes */}
+          {/* Recharts: Curva de Eficiência Set Cover — Número de Bilhetes vs Garantia Matemática (%) */}
           <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h4 className="text-xs sm:text-sm font-semibold text-slate-100">
-                  Curva de Eficiência Set Cover — Cobertura Acumulada vs Número de Bilhetes
+                  Curva de Eficiência de Cobertura — Número de Bilhetes vs Garantia Matemática (%)
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Evolução real da cobertura conforme novos bilhetes são adicionados pelo algoritmo greedy em cada tamanho de pool.
+                  Comparativo simultâneo da garantia acumulada bilhete a bilhete entre pools de{' '}
+                  {results.map((r) => `${r.poolSize}`).join(', ')} dezenas com estimativa heurística Greedy Set Cover para 14 pontos.
                 </p>
               </div>
               <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-xs self-start sm:self-auto">
@@ -879,7 +975,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={curveChartData} margin={{ top: 10, right: 18, left: -12, bottom: 6 }}>
+                <LineChart data={curveChartData} margin={{ top: 10, right: 18, left: -8, bottom: 6 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis
                     dataKey="bilhetes"
@@ -903,12 +999,24 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                     tickFormatter={(v) => `${v}%`}
                   />
                   <ReferenceLine
+                    y={100}
+                    stroke="#10b981"
+                    strokeOpacity={0.35}
+                    strokeDasharray="3 3"
+                    label={{
+                      value: 'Garantia 100%',
+                      position: 'insideTopRight',
+                      fill: '#34d399',
+                      fontSize: 10,
+                    }}
+                  />
+                  <ReferenceLine
                     y={80}
                     stroke="#334155"
                     strokeDasharray="4 4"
                     label={{
                       value: 'Meta 80%',
-                      position: 'insideTopRight',
+                      position: 'insideBottomRight',
                       fill: '#64748b',
                       fontSize: 10,
                     }}
@@ -923,14 +1031,18 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                             {(Number(label) * VALOR_APOSTA_LOTOFACIL).toFixed(2).replace('.', ',')})
                           </div>
                           {payload.map((entry) => {
-                            const poolNum = String(entry.dataKey).replace('pool_', '');
+                            const poolNum = Number(String(entry.dataKey).replace('pool_', ''));
+                            const poolResult = results.find((r) => r.poolSize === poolNum);
                             const gainVal = entry.payload?.[`gain_${poolNum}`];
                             return (
                               <div
                                 key={String(entry.dataKey)}
                                 className="flex items-center justify-between gap-5"
                               >
-                                <span style={{ color: entry.color }}>{entry.name}:</span>
+                                <span style={{ color: entry.color }}>
+                                  Pool {poolNum} Dez.
+                                  {poolResult ? ` (mín.14: ${poolResult.minTicketsSuggested14}J)` : ''}:
+                                </span>
                                 <span className="text-slate-100 font-semibold">
                                   {entry.value}%
                                   {chartMetric === 'cobertura14' && typeof gainVal === 'number' && (
@@ -984,7 +1096,10 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                 <thead>
                   <tr className="bg-slate-950/90 border-b border-slate-800 text-slate-400">
                     <th className="py-2.5 px-3">{renderSortButton('poolSize', 'Pool', false)}</th>
-                    <th className="py-2.5 px-3 text-right">{renderSortButton('tickets', 'Bilhetes')}</th>
+                    <th className="py-2.5 px-3 text-right">{renderSortButton('tickets', 'Gerados')}</th>
+                    <th className="py-2.5 px-3 text-right">
+                      {renderSortButton('minTicketsSuggested14', 'Mín. Sug. 14 pts')}
+                    </th>
                     <th className="py-2.5 px-3 text-right">{renderSortButton('custoTotal', 'Custo')}</th>
                     <th className="py-2.5 px-3 text-right">
                       {renderSortButton('setCoverEfficiencyPct', 'Set Cover')}
@@ -1046,6 +1161,16 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
                           </td>
                           <td className="py-3 px-3 text-right text-slate-200 font-semibold">
                             {item.tickets.length}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="font-semibold text-sky-300">
+                              {item.minTicketsSuggested14} jogos
+                            </div>
+                            <div className="text-[10px] font-sans text-slate-500">
+                              {item.isExact14Achieved
+                                ? '100% atingido'
+                                : `R$ ${item.estimatedCostMin14.toFixed(0)} · teór. ≥${item.schoenheimLowerBound14}`}
+                            </div>
                           </td>
                           <td className="py-3 px-3 text-right text-slate-300">
                             R$ {item.custoTotal.toFixed(2).replace('.', ',')}
@@ -1124,7 +1249,7 @@ export const BatchMatrixProcessor: React.FC<BatchMatrixProcessorProps> = ({
 
                         {isExpanded && (
                           <tr className="bg-slate-950/75">
-                            <td colSpan={9} className="p-3.5 space-y-2.5 font-sans">
+                            <td colSpan={10} className="p-3.5 space-y-2.5 font-sans">
                               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <span className="text-slate-400">
                                   Subset Pool ({item.poolSize} dezenas):{' '}

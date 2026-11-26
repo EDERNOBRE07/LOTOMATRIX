@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   AlertTriangle,
@@ -12,14 +12,21 @@ import {
   Moon,
   ShieldCheck,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Check,
   BookOpen,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { LotofacilDraw } from '../types/lotofacil';
+import { RECENT_DRAWS } from '../data/lotofacilData';
 import { LotoSniperLogo } from './LotoSniperLogo';
 import { DevServerHealthStatus } from './DevServerHealthStatus';
 import { staggerBallVariants, staggerContainerVariants } from '../utils/staggerAnimation';
+import {
+  calcularParametrosConcurso,
+  resolvePreviousDrawDezenas,
+} from '../utils/concursoParametros';
 
 export type HeaderAppTheme = 'gold' | 'high_contrast' | 'slate';
 
@@ -63,6 +70,7 @@ const THEME_META: Record<
 
 interface HeaderProps {
   latestDraw: LotofacilDraw;
+  recentDraws?: LotofacilDraw[];
   isSyncing: boolean;
   onSyncNow: () => void;
   syncSource?: string;
@@ -78,6 +86,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   latestDraw,
+  recentDraws = RECENT_DRAWS,
   isSyncing,
   onSyncNow,
   syncSource = 'caixa-oficial',
@@ -92,7 +101,49 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [dismissedAlert, setDismissedAlert] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [viewedDrawOffset, setViewedDrawOffset] = useState<number>(0);
+  const [showDrawParams, setShowDrawParams] = useState<boolean>(true);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Histórico unificado ordenado do concurso mais recente para o mais antigo
+  const drawsHistory = useMemo<LotofacilDraw[]>(() => {
+    const merged: LotofacilDraw[] = [latestDraw];
+    const seen = new Set<number>([latestDraw.concurso]);
+    for (const d of recentDraws) {
+      if (!seen.has(d.concurso)) {
+        merged.push(d);
+        seen.add(d.concurso);
+      }
+    }
+    return merged.sort((a, b) => b.concurso - a.concurso);
+  }, [latestDraw, recentDraws]);
+
+  // Sempre retorna ao concurso recém-carregado quando latestDraw é atualizado
+  useEffect(() => {
+    setViewedDrawOffset(0);
+  }, [latestDraw.concurso]);
+
+  const safeOffset = Math.min(viewedDrawOffset, Math.max(0, drawsHistory.length - 1));
+  const displayedDraw = drawsHistory[safeOffset] || latestDraw;
+  const isViewingLatest = safeOffset === 0;
+
+  const previousDezenas = useMemo(
+    () => resolvePreviousDrawDezenas(displayedDraw.concurso, drawsHistory),
+    [displayedDraw.concurso, drawsHistory]
+  );
+
+  const parametrosConcurso = useMemo(
+    () => calcularParametrosConcurso(displayedDraw.dezenas || [], previousDezenas),
+    [displayedDraw.dezenas, previousDezenas]
+  );
+
+  const sequenciaResumo = useMemo(() => {
+    if (parametrosConcurso.blocosConsecutivos.length === 0) return 'Sem seq.';
+    return parametrosConcurso.blocosConsecutivos
+      .slice(0, 3)
+      .map((b) => `${String(b[0]).padStart(2, '0')}–${String(b[b.length - 1]).padStart(2, '0')}`)
+      .join(', ');
+  }, [parametrosConcurso.blocosConsecutivos]);
 
   const [currentTheme, setCurrentTheme] = useState<HeaderAppTheme>(() => {
     try {
@@ -462,115 +513,269 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* PAINEL OFICIAL DE TELEMETRIA: ÚLTIMO CONCURSO, CICLO DAS 25 DEZENAS & GANHADORES */}
       <div className="bg-slate-950/70 border-t border-slate-800/80 px-4 sm:px-6 lg:px-8 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-          {/* Concurso, Data do Sorteio & Progresso do Ciclo Atual (Alinhados Visualmente) */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
-            {/* Concurso & Data */}
-            <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-inner">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-slate-400 font-medium">Concurso:</span>
-              <strong className="text-white font-mono font-black text-sm">#{latestDraw.concurso}</strong>
-              <span className="text-slate-500 font-mono">|</span>
-              <span className="text-amber-300 font-mono font-semibold">
-                🗓️ {latestDraw.data}
-              </span>
+        <div className="max-w-7xl mx-auto space-y-2.5">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+            {/* Concurso, Navegação Histórica, Data do Sorteio & Progresso do Ciclo Atual */}
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+              {/* Concurso & Data com navegação reativa entre concursos */}
+              <div className="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700/80 shadow-inner">
+                <button
+                  type="button"
+                  disabled={safeOffset >= drawsHistory.length - 1}
+                  onClick={() =>
+                    setViewedDrawOffset((prev) => Math.min(drawsHistory.length - 1, prev + 1))
+                  }
+                  className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                  title="Ver concurso anterior"
+                  aria-label="Ver concurso anterior"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className={`w-2 h-2 rounded-full ${isViewingLatest ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400'}`} />
+                <span className="text-slate-400 font-medium">Concurso:</span>
+                <strong className="text-white font-mono font-black text-sm tabular-nums">
+                  #{displayedDraw.concurso}
+                </strong>
+                <span className="text-slate-500 font-mono">|</span>
+                <span className="text-amber-300 font-mono font-semibold tabular-nums">
+                  {displayedDraw.data}
+                </span>
+                <button
+                  type="button"
+                  disabled={safeOffset <= 0}
+                  onClick={() => setViewedDrawOffset((prev) => Math.max(0, prev - 1))}
+                  className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                  title="Ver próximo concurso"
+                  aria-label="Ver próximo concurso"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                {!isViewingLatest && (
+                  <button
+                    type="button"
+                    onClick={() => setViewedDrawOffset(0)}
+                    className="ml-1 px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold transition cursor-pointer"
+                  >
+                    Atual
+                  </button>
+                )}
+              </div>
+
+              {/* Progresso do Ciclo Atual das 25 Dezenas Alinhado com a Data */}
+              <div
+                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition shadow-sm ${
+                  isRetaFinalCiclo
+                    ? 'bg-amber-950/40 border-amber-500/60 text-amber-200'
+                    : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Flame className={`w-3.5 h-3.5 ${isRetaFinalCiclo ? 'text-amber-400 animate-bounce' : 'text-amber-400/80'}`} />
+                  <span className="font-bold text-white">
+                    Ciclo: <span className="text-amber-400 font-mono font-black">{Math.max(0, 25 - cyclePendingNumbers.length)}/25</span> dezenas sorteadas
+                  </span>
+                  <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
+                    ({Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100)}%)
+                  </span>
+                </div>
+
+                {/* Barra de progresso visual do ciclo */}
+                <div className="w-16 sm:w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/60 hidden sm:block">
+                  <div
+                    className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100))}%` }}
+                  />
+                </div>
+
+                {/* Indicador de Pressão Estatística Atual */}
+                <span
+                  className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold tracking-wider ${
+                    isRetaFinalCiclo
+                      ? 'bg-amber-400 text-slate-950 shadow-sm animate-pulse'
+                      : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  }`}
+                  title={
+                    isRetaFinalCiclo
+                      ? `Pressão Máxima de Fechamento: Restam apenas [${cyclePendingNumbers.map(n => n.toString().padStart(2, '0')).join(', ')}] para fechar todas as 25 dezenas!`
+                      : `Ciclo em andamento no ${concursosNoCiclo}º concurso.`
+                  }
+                >
+                  {isRetaFinalCiclo
+                    ? `⚡ Pressão Iminente (${cyclePendingNumbers.length} rest.)`
+                    : `${concursosNoCiclo}º Conc. do Ciclo`}
+                </span>
+              </div>
             </div>
 
-            {/* Progresso do Ciclo Atual das 25 Dezenas Alinhado com a Data */}
-            <div
-              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition shadow-sm ${
-                isRetaFinalCiclo
-                  ? 'bg-amber-950/40 border-amber-500/60 text-amber-200'
-                  : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <Flame className={`w-3.5 h-3.5 ${isRetaFinalCiclo ? 'text-amber-400 animate-bounce' : 'text-amber-400/80'}`} />
-                <span className="font-bold text-white">
-                  Ciclo: <span className="text-amber-400 font-mono font-black">{Math.max(0, 25 - cyclePendingNumbers.length)}/25</span> dezenas sorteadas
-                </span>
-                <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
-                  ({Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100)}%)
+            {/* 15 Dezenas Sorteadas no Concurso Exibido (Staggered Fade-In ao Atualizar/Navegar) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+                Dezenas:
+              </span>
+              <motion.div
+                key={`header-dezenas-${displayedDraw.concurso}-${(displayedDraw.dezenas || []).join('-')}`}
+                variants={staggerContainerVariants}
+                initial="hidden"
+                animate="visible"
+                className="flex items-center gap-1 flex-wrap"
+              >
+                {(displayedDraw.dezenas || []).map((num) => (
+                  <motion.span
+                    key={num}
+                    variants={staggerBallVariants}
+                    className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
+                    title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${displayedDraw.concurso}`}
+                  >
+                    {num.toString().padStart(2, '0')}
+                  </motion.span>
+                ))}
+              </motion.div>
+            </div>
+
+            {/* Número Oficial de Ganhadores + Botão de Toggle dos Parâmetros Estatísticos */}
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-200">
+                <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  <strong>15 pts:</strong>{' '}
+                  <span className="font-mono font-bold text-white tabular-nums">
+                    {displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1}
+                  </span>{' '}
+                  {(displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1) === 1 ? 'ganhador' : 'ganhadores'}
                 </span>
               </div>
 
-              {/* Barra de progresso visual do ciclo */}
-              <div className="w-16 sm:w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/60 hidden sm:block">
-                <div
-                  className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100))}%` }}
+              <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80 text-slate-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                <span>
+                  <strong>14 pts:</strong>{' '}
+                  <span className="font-mono font-bold text-cyan-300 tabular-nums">
+                    {displayedDraw.premiacoes?.faixa14?.ganhadores ?? 325}
+                  </span>{' '}
+                  apostas
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDrawParams((prev) => !prev)}
+                aria-expanded={showDrawParams}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition cursor-pointer"
+                title="Exibir ou recolher parâmetros estatísticos do concurso"
+              >
+                <span>Parâmetros</span>
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform ${showDrawParams ? 'rotate-180' : ''}`}
                 />
+              </button>
+            </div>
+          </div>
+
+          {/* PAINEL AUTOMÁTICO DE PARÂMETROS ESTATÍSTICOS COMPLETOS DO CONCURSO */}
+          {showDrawParams && (
+            <div
+              aria-label={`Parâmetros estatísticos do Concurso ${displayedDraw.concurso}`}
+              className="pt-2 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2"
+            >
+              {/* 1. Pares e Ímpares */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Pares / Ímpares</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-white tabular-nums">
+                  {parametrosConcurso.pares}P / {parametrosConcurso.impares}I
+                </div>
               </div>
 
-              {/* Indicador de Pressão Estatística Atual */}
-              <span
-                className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold tracking-wider ${
-                  isRetaFinalCiclo
-                    ? 'bg-amber-400 text-slate-950 shadow-sm animate-pulse'
-                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                }`}
+              {/* 2. Repetidas do Concurso Anterior */}
+              <div
+                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
                 title={
-                  isRetaFinalCiclo
-                    ? `Pressão Máxima de Fechamento: Restam apenas [${cyclePendingNumbers.map(n => n.toString().padStart(2, '0')).join(', ')}] para fechar todas as 25 dezenas!`
-                    : `Ciclo em andamento no ${concursosNoCiclo}º concurso.`
+                  parametrosConcurso.repetidasAnterior !== null
+                    ? `Dezenas repetidas em relação ao concurso #${displayedDraw.concurso - 1}`
+                    : 'Concurso imediatamente anterior indisponível no histórico local'
                 }
               >
-                {isRetaFinalCiclo
-                  ? `⚡ Pressão Iminente (${cyclePendingNumbers.length} rest.)`
-                  : `${concursosNoCiclo}º Conc. do Ciclo`}
-              </span>
-            </div>
-          </div>
+                <div className="text-[10px] text-slate-400 leading-tight">Repetidas (#{displayedDraw.concurso - 1})</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums">
+                  {parametrosConcurso.repetidasAnterior !== null
+                    ? `${parametrosConcurso.repetidasAnterior} dez.`
+                    : 'N/A'}
+                </div>
+              </div>
 
-          {/* 15 Dezenas Sorteadas no Último Concurso (Staggered Fade-In ao Atualizar Concurso) */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
-              Dezenas:
-            </span>
-            <motion.div
-              key={`header-dezenas-${latestDraw.concurso}-${(latestDraw.dezenas || []).join('-')}`}
-              variants={staggerContainerVariants}
-              initial="hidden"
-              animate="visible"
-              className="flex items-center gap-1 flex-wrap"
-            >
-              {(latestDraw.dezenas || []).map((num) => (
-                <motion.span
-                  key={num}
-                  variants={staggerBallVariants}
-                  className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
-                  title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${latestDraw.concurso}`}
-                >
-                  {num.toString().padStart(2, '0')}
-                </motion.span>
-              ))}
-            </motion.div>
-          </div>
+              {/* 3. Soma Total */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Soma Total</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-amber-300 tabular-nums">
+                  {parametrosConcurso.somaTotal}
+                </div>
+              </div>
 
-          {/* Número Oficial de Ganhadores com 15 Pontos e 14 Pontos */}
-          <div className="flex items-center gap-2 text-xs">
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-200">
-              <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>
-                <strong>15 pts:</strong>{' '}
-                <span className="font-mono font-bold text-white">
-                  {latestDraw.premiacoes?.faixa15?.ganhadores ?? 1}
-                </span>{' '}
-                {(latestDraw.premiacoes?.faixa15?.ganhadores ?? 1) === 1 ? 'ganhador' : 'ganhadores'}
-              </span>
-            </div>
+              {/* 4. Números Primos */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Primos</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-sky-300 tabular-nums">
+                  {parametrosConcurso.primos} dez.
+                </div>
+              </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80 text-slate-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
-              <span>
-                <strong>14 pts:</strong>{' '}
-                <span className="font-mono font-bold text-cyan-300">
-                  {latestDraw.premiacoes?.faixa14?.ganhadores ?? 325}
-                </span>{' '}
-                apostas
-              </span>
+              {/* 5. Moldura e Miolo */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Moldura / Miolo</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums">
+                  {parametrosConcurso.moldura}M / {parametrosConcurso.miolo}C
+                </div>
+              </div>
+
+              {/* 6. Sequência de Fibonacci */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Fibonacci</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-amber-200 tabular-nums">
+                  {parametrosConcurso.fibonacci} dez.
+                </div>
+              </div>
+
+              {/* 7. Números em Sequência */}
+              <div
+                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
+                title={`Blocos consecutivos encontrados: ${sequenciaResumo}`}
+              >
+                <div className="text-[10px] text-slate-400 leading-tight">Sequência</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums truncate">
+                  Máx {parametrosConcurso.maiorSequencia}{' '}
+                  <span className="text-[10px] font-normal text-slate-400">
+                    ({sequenciaResumo})
+                  </span>
+                </div>
+              </div>
+
+              {/* 8. Cruz da Lotofácil */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                <div className="text-[10px] text-slate-400 leading-tight">Cruz Central</div>
+                <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-300 tabular-nums">
+                  {parametrosConcurso.cruz} dez.
+                </div>
+              </div>
+
+              {/* 9. Quadrantes (Q1, Q2, Q3, Q4) */}
+              <div
+                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 col-span-2 sm:col-span-1"
+                title={
+                  parametrosConcurso.quadrantes.centro13
+                    ? 'Distribuição pelos 4 quadrantes (dezena central 13 também sorteada)'
+                    : 'Distribuição pelos 4 quadrantes do volante 5×5'
+                }
+              >
+                <div className="text-[10px] text-slate-400 leading-tight">
+                  Quadrantes (Q1–Q4)
+                </div>
+                <div className="mt-0.5 text-[11px] font-mono font-semibold text-cyan-300 tabular-nums">
+                  {parametrosConcurso.quadrantes.q1}·{parametrosConcurso.quadrantes.q2}·
+                  {parametrosConcurso.quadrantes.q3}·{parametrosConcurso.quadrantes.q4}
+                  {parametrosConcurso.quadrantes.centro13 ? ' (+13)' : ''}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </header>
