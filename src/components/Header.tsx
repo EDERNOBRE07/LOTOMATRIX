@@ -42,30 +42,39 @@ import {
   mesclarEOrdenarHistorico,
   ParametroStatus,
 } from '../utils/concursoParametros';
+import { FAIXAS_LOTOFACIL } from '../utils/lotofacilStatsConfig';
 import { downloadResultadosEstatisticosPDF } from '../services/resultadosEstatisticosPdfGenerator';
 
 const STATUS_CARD_THEME: Record<
   ParametroStatus,
-  { card: string; badge: string; value: string }
+  { card: string; borderLeft: string; badge: string; dot: string; value: string }
 > = {
   ideal: {
-    card: 'bg-emerald-500/[0.06] border-emerald-500/35 hover:border-emerald-400/60',
-    badge: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/35',
+    card: 'bg-emerald-500/[0.06] border-emerald-500/35 hover:border-emerald-400/65',
+    borderLeft: 'border-l-emerald-400',
+    badge: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40',
+    dot: 'bg-emerald-400',
     value: 'text-emerald-300',
   },
   alerta: {
-    card: 'bg-amber-500/[0.07] border-amber-500/40 hover:border-amber-400/65',
-    badge: 'bg-amber-500/15 text-amber-300 border border-amber-500/35',
+    card: 'bg-amber-500/[0.07] border-amber-500/40 hover:border-amber-400/70',
+    borderLeft: 'border-l-amber-400',
+    badge: 'bg-amber-500/15 text-amber-300 border border-amber-500/40',
+    dot: 'bg-amber-400',
     value: 'text-amber-200',
   },
   critico: {
-    card: 'bg-rose-500/[0.08] border-rose-500/45 hover:border-rose-400/70',
-    badge: 'bg-rose-500/15 text-rose-300 border border-rose-500/40',
+    card: 'bg-rose-500/[0.08] border-rose-500/45 hover:border-rose-400/75',
+    borderLeft: 'border-l-rose-400',
+    badge: 'bg-rose-500/15 text-rose-300 border border-rose-500/45',
+    dot: 'bg-rose-400',
     value: 'text-rose-300',
   },
   neutro: {
     card: 'bg-slate-900/90 border-slate-700/80 hover:border-slate-600',
+    borderLeft: 'border-l-slate-500',
     badge: 'bg-slate-800 text-slate-300 border border-slate-700',
+    dot: 'bg-slate-400',
     value: 'text-slate-300',
   },
 };
@@ -795,11 +804,14 @@ export const Header: React.FC<HeaderProps> = ({
         {isResultsExpanded && (
           <motion.div
             key="expanded-results-panel"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, height: 0, overflow: 'hidden' }}
+            animate={{
+              opacity: 1,
+              height: 'auto',
+              transitionEnd: { overflow: 'visible' },
+            }}
+            exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
             transition={{ duration: 0.24, ease: 'easeInOut' }}
-            className="overflow-hidden"
           >
             <div className="px-4 sm:px-6 lg:px-8 py-3">
               <div className="max-w-7xl mx-auto space-y-2.5">
@@ -1197,7 +1209,7 @@ export const Header: React.FC<HeaderProps> = ({
                         ? `Repetidas (#${previousDraw.concurso})`
                         : `Repetidas (#${displayedDraw.concurso - 1})`
                       : metrica.label;
-                  const tooltipFull = `${displayLabel}: ${metrica.valorExibicao} — ${metrica.tooltipTexto}`;
+                  const tooltipFull = `${displayLabel}: ${metrica.valorExibicao} (${metrica.statusLabel}) — ${metrica.tooltipTexto}`;
 
                   return (
                     <div
@@ -1205,38 +1217,51 @@ export const Header: React.FC<HeaderProps> = ({
                       tabIndex={0}
                       title={tooltipFull}
                       aria-label={tooltipFull}
-                      className={`group relative rounded-lg border px-2.5 py-2 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 ${
+                      className={`group relative rounded-lg border border-l-[3px] px-2.5 py-2 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 ${
                         theme.card
-                      } ${isQuadrantes ? 'col-span-2 sm:col-span-1' : ''}`}
+                      } ${theme.borderLeft} ${isQuadrantes ? 'col-span-2 sm:col-span-1' : ''}`}
                     >
-                      <div className="text-[10px] text-slate-400 leading-tight truncate">
-                        {displayLabel}
-                      </div>
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="min-w-0">
+                          <div className="text-[10px] text-slate-400 leading-tight truncate">
+                            {displayLabel}
+                          </div>
+                          <div
+                            className={`mt-1 text-xs font-mono font-bold tabular-nums truncate ${theme.value}`}
+                          >
+                            {metrica.valorExibicao}
+                          </div>
+                        </div>
 
-                      <div className="mt-1 flex items-center justify-between gap-1.5">
+                        {/* Badge lateral dinâmica (Esmeralda / Âmbar / Rosa) */}
                         <span
-                          className={`text-xs font-mono font-semibold tabular-nums truncate ${theme.value}`}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold leading-none shrink-0 self-start ${theme.badge}`}
                         >
-                          {metrica.valorExibicao}
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-semibold leading-none shrink-0 ${theme.badge}`}
-                        >
-                          {metrica.statusLabel}
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} aria-hidden="true" />
+                          <span>{metrica.statusLabel}</span>
                         </span>
                       </div>
 
-                      <div className="mt-1 text-[9.5px] text-slate-500 font-mono tabular-nums truncate">
-                        Ideal: {metrica.faixaIdealTexto}
+                      <div className="mt-1.5 text-[9.5px] text-slate-500 font-mono tabular-nums truncate">
+                        Ref: {metrica.faixaIdealTexto}
                       </div>
 
-                      {/* Tooltip visual interativo com faixa ideal configurada */}
+                      {/* Tooltip explicativo com as faixas de referência configuradas */}
                       <div
                         role="tooltip"
-                        className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-40 w-52 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-[10px] text-slate-200 shadow-xl"
+                        className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-56 rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-2 text-[10px] text-slate-200 shadow-2xl"
                       >
-                        <div className="font-semibold text-white">{displayLabel}</div>
-                        <div className="mt-0.5 text-slate-300 leading-snug">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-white truncate">{displayLabel}</span>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${theme.badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
+                            {metrica.statusLabel}
+                          </span>
+                        </div>
+                        <div className="mt-1 font-mono text-[10px] text-slate-300">
+                          Atual: <strong className={theme.value}>{metrica.valorExibicao}</strong>
+                        </div>
+                        <div className="mt-1 text-slate-400 leading-snug border-t border-slate-800 pt-1">
                           {metrica.tooltipTexto}
                         </div>
                       </div>
@@ -1288,7 +1313,10 @@ export const Header: React.FC<HeaderProps> = ({
                           : `${trendLast5.avgPrimos} dez.`}
                       </span>
                       {' · '}
-                      Ideal: {trendMetric === 'somaTotal' ? '180–215' : '5–6'}
+                      Ideal:{' '}
+                      {trendMetric === 'somaTotal'
+                        ? `${FAIXAS_LOTOFACIL.soma.ideal[0]}–${FAIXAS_LOTOFACIL.soma.ideal[1]}`
+                        : `${FAIXAS_LOTOFACIL.primos.ideal[0]}–${FAIXAS_LOTOFACIL.primos.ideal[1]}`}
                     </div>
                   </div>
 

@@ -18,9 +18,9 @@ import {
   calcularParametrosConcurso,
   obterConcursoAnterior,
   mesclarEOrdenarHistorico,
+  ParametroStatus,
 } from '../utils/concursoParametros';
 import {
-  buildResultadosEstatisticosRows,
   downloadResultadosEstatisticosPDF,
 } from '../services/resultadosEstatisticosPdfGenerator';
 import {
@@ -53,6 +53,40 @@ import {
   AlertTriangle,
   Scale,
 } from 'lucide-react';
+
+const CONFERENCIA_METRIC_THEME: Record<
+  ParametroStatus,
+  { card: string; borderLeft: string; badge: string; dot: string; value: string }
+> = {
+  ideal: {
+    card: 'bg-emerald-500/[0.06] border-emerald-500/35 hover:border-emerald-400/65',
+    borderLeft: 'border-l-emerald-400',
+    badge: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40',
+    dot: 'bg-emerald-400',
+    value: 'text-emerald-300',
+  },
+  alerta: {
+    card: 'bg-amber-500/[0.07] border-amber-500/40 hover:border-amber-400/70',
+    borderLeft: 'border-l-amber-400',
+    badge: 'bg-amber-500/15 text-amber-300 border border-amber-500/40',
+    dot: 'bg-amber-400',
+    value: 'text-amber-200',
+  },
+  critico: {
+    card: 'bg-rose-500/[0.08] border-rose-500/45 hover:border-rose-400/75',
+    borderLeft: 'border-l-rose-400',
+    badge: 'bg-rose-500/15 text-rose-300 border border-rose-500/45',
+    dot: 'bg-rose-400',
+    value: 'text-rose-300',
+  },
+  neutro: {
+    card: 'bg-slate-900/90 border-slate-700/80 hover:border-slate-600',
+    borderLeft: 'border-l-slate-500',
+    badge: 'bg-slate-800 text-slate-300 border border-slate-700',
+    dot: 'bg-slate-400',
+    value: 'text-slate-300',
+  },
+};
 
 export interface PontosTierMetric {
   pontos: number;
@@ -273,11 +307,6 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   const targetDrawParametros = useMemo(() => {
     return calcularParametrosConcurso(targetDraw.dezenas || [], targetDrawPrevious?.dezenas ?? null);
   }, [targetDraw, targetDrawPrevious]);
-
-  const targetDrawStatRows = useMemo(
-    () => buildResultadosEstatisticosRows(targetDraw.concurso, targetDrawParametros),
-    [targetDraw.concurso, targetDrawParametros]
-  );
 
   const recent5TrendForPdf = useMemo(() => {
     const idx = allDraws.findIndex((d) => d.concurso === targetDraw.concurso);
@@ -856,46 +885,75 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
             ))}
         </div>
 
-        {/* Tabela estruturada de Resultados Estatísticos */}
-        <div className="overflow-x-auto border border-slate-800 rounded-lg">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400">
-                <th className="py-2.5 px-3 font-medium">Parâmetro Estatístico</th>
-                <th className="py-2.5 px-3 font-medium">Valor Calculado</th>
-                <th className="py-2.5 px-3 font-medium">Referência Histórica</th>
-                <th className="py-2.5 px-3 font-medium text-right">Avaliação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {targetDrawStatRows.map((row) => (
-                <tr key={row.parametro} className="hover:bg-slate-900/50 transition-colors">
-                  <td className="py-2.5 px-3 font-medium text-slate-200">{row.parametro}</td>
-                  <td className="py-2.5 px-3 font-mono font-semibold text-white tabular-nums">
-                    {row.valor}
-                  </td>
-                  <td className="py-2.5 px-3 font-mono text-slate-400 tabular-nums">
-                    {row.referencia}
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-medium">
+        {/* Grid Tailwind de Cards de Resultados Estatísticos com Badge Lateral Dinâmica e Tooltip Explicativo */}
+        <div
+          aria-label={`Grade de parâmetros estatísticos do Concurso ${targetDraw.concurso}`}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5"
+        >
+          {targetDrawParametros.metricasLista.map((metrica) => {
+            const theme = CONFERENCIA_METRIC_THEME[metrica.status];
+            const displayLabel =
+              metrica.id === 'repetidas'
+                ? targetDrawPrevious
+                  ? `Repetidas (#${targetDrawPrevious.concurso})`
+                  : `Repetidas (#${targetDraw.concurso - 1})`
+                : metrica.label;
+            const tooltipFull = `${displayLabel}: ${metrica.valorExibicao} (${metrica.statusLabel}) — ${metrica.tooltipTexto}`;
+
+            return (
+              <div
+                key={metrica.id}
+                tabIndex={0}
+                title={tooltipFull}
+                aria-label={tooltipFull}
+                className={`group relative rounded-xl border border-l-[3px] p-3 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 ${theme.card} ${theme.borderLeft}`}
+              >
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-[11px] font-medium text-slate-400 truncate">
+                      {displayLabel}
+                    </div>
+                    <div className={`text-sm sm:text-base font-mono font-bold tabular-nums ${theme.value}`}>
+                      {metrica.valorExibicao}
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 tabular-nums truncate">
+                      Ref. ideal: {metrica.faixaIdealTexto}
+                    </div>
+                  </div>
+
+                  {/* Badge lateral dinâmica (Esmeralda / Âmbar / Rosa) */}
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold leading-none shrink-0 self-start ${theme.badge}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} aria-hidden="true" />
+                    <span>{metrica.statusLabel}</span>
+                  </span>
+                </div>
+
+                {/* Tooltip explicativo com as faixas de referência configuradas */}
+                <div
+                  role="tooltip"
+                  className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-40 w-60 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-[11px] text-slate-200 shadow-2xl"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-white truncate">{displayLabel}</span>
                     <span
-                      className={
-                        row.status === 'ideal'
-                          ? 'text-emerald-400'
-                          : row.status === 'alerta'
-                          ? 'text-amber-400'
-                          : row.status === 'critico'
-                          ? 'text-rose-400'
-                          : 'text-slate-400'
-                      }
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${theme.badge}`}
                     >
-                      {row.statusLabel}
+                      <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
+                      {metrica.statusLabel}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="mt-1 font-mono text-[10px] text-slate-300">
+                    Valor calculado: <strong className={theme.value}>{metrica.valorExibicao}</strong>
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-400 leading-snug border-t border-slate-800 pt-1">
+                    {metrica.tooltipTexto}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

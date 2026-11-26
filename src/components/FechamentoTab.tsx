@@ -531,6 +531,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     dezenasPorJogo: number;
     tentativasUsadas: number;
     bloqueadosPorHistorico: number;
+    tempoMs: number;
     atingiuLimiteSeguranca: boolean;
   } | null>(null);
 
@@ -579,17 +580,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         };
       });
 
+      const elapsed = Math.max(1, Math.round(performance.now() - t0));
+      setGenerationTimeMs(elapsed);
+
       setGoldGenerationSummary({
         gerados: tickets.length,
         solicitados: qtdValida,
         dezenasPorJogo: dezValidas,
         tentativasUsadas: resultado.tentativasUsadas,
         bloqueadosPorHistorico: resultado.bloqueadosPorHistorico,
+        tempoMs: elapsed,
         atingiuLimiteSeguranca: resultado.atingiuLimiteSeguranca,
       });
-
-      const elapsed = Math.max(1, Math.round(performance.now() - t0));
-      setGenerationTimeMs(elapsed);
 
       if (tickets.length > 0) {
         const label = `Padrão Ouro • ${dezValidas} Dezenas (${tickets.length} jogos)`;
@@ -5495,7 +5497,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     <strong className="text-white">
                       {goldGenerationSummary.tentativasUsadas.toLocaleString('pt-BR')}
                     </strong>{' '}
-                    tentativas •{' '}
+                    tentativas ({goldGenerationSummary.tempoMs} ms) •{' '}
                     <strong className="text-emerald-300">
                       {goldGenerationSummary.bloqueadosPorHistorico}
                     </strong>{' '}
