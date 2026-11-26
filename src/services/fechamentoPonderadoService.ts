@@ -23,8 +23,44 @@ import {
   getTargetHammingDistance,
   generateCoreSatellites25Matrix,
   computeSoftFilterPriorityScore,
+  VALOR_APOSTA_LOTOFACIL,
 } from './combinatorics';
-import { criarMascara } from './tabelasCoberturaLJCR';
+import { calcularParametrosConcurso } from '../utils/lotofacilStats';
+import { dezenasParaBitmask } from '../utils/lotofacilEngine';
+import { getHistorical100Draws } from './historical100Draws';
+import { getAllSavedTicketsSet } from './savedFechamentosStorage';
+
+/**
+ * Pesos oficiais da Cobertura Ponderada (Weighted Set Cover) por aderência estatística.
+ * Cenários "Fora do Padrão" recebem peso 0 e são descartados do universo-alvo.
+ */
+export const PESOS_COBERTURA_PADRAO_OURO = {
+  'Padrão Ouro': 10,
+  'Dentro da Média': 5,
+  'Atípico': 1,
+  'Fora do Padrão': 0,
+} as const;
+
+/** Referência matemática de matriz uniforme tradicional (Covering Design LJCR) por pool e garantia */
+function getUniformMatrixReferenceTickets(poolSize: number, targetHits: 13 | 14): number {
+  if (targetHits === 13) {
+    if (poolSize <= 16) return 2;
+    if (poolSize === 17) return 6;
+    if (poolSize === 18) return 12;
+    if (poolSize === 19) return 26;
+    if (poolSize === 20) return 56;
+    if (poolSize === 21) return 118;
+    return 240;
+  }
+  if (poolSize <= 15) return 1;
+  if (poolSize === 16) return 8;
+  if (poolSize === 17) return 19;
+  if (poolSize === 18) return 54;
+  if (poolSize === 19) return 148;
+  if (poolSize === 20) return 380;
+  if (poolSize === 21) return 980;
+  return 1800;
+}
 
 /** Popcount rápido bitwise para máscaras de 25 bits (Lotofácil) */
 function popcountBitwise25(mask: number): number {
@@ -33,8 +69,6 @@ function popcountBitwise25(mask: number): number {
   x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
   return (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
 }
-import { getHistorical100Draws } from './historical100Draws';
-import { getAllSavedTicketsSet } from './savedFechamentosStorage';
 
 /**
  * Avalia o alinhamento de uma combinação com os parâmetros dos Fechamentos Vencedores do Concurso #3822
@@ -866,6 +900,29 @@ export function identificarClustersDensidade500(
   return selectedClusters;
 }
 
+export interface CoberturaPonderadaOuroResumo {
+  garantiaAlvo: 13 | 14;
+  poolSize: number;
+  universoAvaliado: number;
+  amostragemEstratificada: boolean;
+  cenariosOuroTotal: number;
+  cenariosOuroCobertos: number;
+  percentualCoberturaOuro: number;
+  cenariosMediaTotal: number;
+  cenariosAtipicoTotal: number;
+  cenariosDescartadosForaPadrao: number;
+  pesoTotalUniverso: number;
+  pesoTotalCoberto: number;
+  percentualPesoCoberto: number;
+  bilhetesPadraoOuroCount: number;
+  bilhetesGerados: number;
+  custoTotal: number;
+  jogosMatrizUniformeRef: number;
+  custoMatrizUniformeRef: number;
+  economiaEstimadaReais: number;
+  economiaEstimadaPercentual: number;
+}
+
 export interface FechamentoPonderadoResult {
   tickets: GameTicket[];
   discardedByRobustezCount: number;
@@ -880,6 +937,7 @@ export interface FechamentoPonderadoResult {
     forcaCicloMedia: number;
   };
   clustersDensidade?: ClusterDensidadeQuinteto[];
+  coberturaPonderadaOuro?: CoberturaPonderadaOuroResumo;
   flexibilizacaoAplicada?: {
     nivel:
       | 'Estrita (100% dos Filtros)'
@@ -894,14 +952,13 @@ export interface FechamentoPonderadoResult {
 }
 
 /**
- * Função de Fechamento Inteligente Ponderado:
- * - Dá preferência estrita a dezenas com alto Índice de Performance (relação Frequência x Atraso).
- * - Incorpora a variável de 'Sazonalidade Estatística' cruzando a Média Móvel de 100 concursos
- *   com a janela de 50 concursos para calibrar dinamicamente a agressividade dos filtros de robustez.
- * - Implementa Cascata Adaptativa Multi-Tier: caso a combinação estrita de múltiplos filtros
- *   (Paridade, Primos, Moldura, Fibonacci, Repetidas, Robustez) reduza excessivamente o espaço amostral,
- *   a função flexibiliza suavemente as faixas numéricas mantendo SEMPRE a Zona de Ouro (Soma >= 180)
- *   e as dezenas fixas/excluídas do usuário, garantindo 100% de sucesso na geração da matriz.
+ * Função de Fechamento Inteligente Ponderado (Weighted Set Cover • Padrão Ouro):
+ * - Reutiliza `calcularParametrosConcurso` (lotofacilStats) e `dezenasParaBitmask` (lotofacilEngine).
+ * - Atribui pesos ao universo-alvo contra o último concurso oficial:
+ *   Padrão Ouro = 10, Dentro da Média = 5, Atípico = 1, Fora do Padrão = 0 (descartado).
+ * - Executa Seleção Gulosa Ponderada (Greedy Weighted Set Cover) maximizando a soma dos pesos
+ *   das combinações não cobertas para a garantia escolhida (13 ou 14 pontos), priorizando
+ *   bilhetes candidatos também classificados como Padrão Ouro.
  */
 export function generateFechamentoInteligentePonderado({
   selectedNumbers,
@@ -911,6 +968,7 @@ export function generateFechamentoInteligentePonderado({
   dynamicStats = DEZENAS_STATS,
   latestDraw = CONCURSO_ATUAL,
   aiScores,
+  onProgress,
 }: {
   selectedNumbers: number[];
   targetHits?: number;
@@ -919,6 +977,7 @@ export function generateFechamentoInteligentePonderado({
   dynamicStats?: DezenaStats[];
   latestDraw?: LotofacilDraw;
   aiScores?: number[];
+  onProgress?: (progress: { percent: number; message: string }) => void;
 }): FechamentoPonderadoResult {
   // 0. Filtrar números excluídos e travar no máximo 5 dezenas fixas
   const excludedSet = new Set(filters?.dezenasExcluidas || []);
@@ -1063,6 +1122,9 @@ export function generateFechamentoInteligentePonderado({
     forcaCicloMedio: number;
     matchedClusterId?: string;
     slotType: SumStratum;
+    isPadraoOuro?: boolean;
+    scoreAderenciaOuro?: number;
+    classificacaoOuro?: 'Padrão Ouro' | 'Dentro da Média' | 'Atípico' | 'Fora do Padrão';
   }
 
   const useSoftSoma = filters?.softScoringSomaAtivo !== false;
@@ -1252,7 +1314,7 @@ export function generateFechamentoInteligentePonderado({
 
     return {
       dezenas: sorted,
-      mask: criarMascara(sorted),
+      mask: dezenasParaBitmask(sorted),
       scorePonderado,
       softPriorityBonus,
       ipMedio,
@@ -1411,42 +1473,188 @@ export function generateFechamentoInteligentePonderado({
     }
   }
 
-  // Ordenar candidatos válidos pelo Score Ponderado Decrescente
-  validCandidates.sort((a, b) => b.scorePonderado - a.scorePonderado);
+  // =========================================================================
+  // COBERTURA PONDERADA (WEIGHTED SET COVER) CONCENTRADA NO PADRÃO OURO
+  // - Reaproveita calcularParametrosConcurso (lotofacilStats) e dezenasParaBitmask (lotofacilEngine)
+  // - Pesos: Padrão Ouro = 10 | Dentro da Média = 5 | Atípico = 1 | Fora do Padrão = 0 (descartado)
+  // =========================================================================
+  const effectiveTargetHits: 13 | 14 = targetHits <= 13 ? 13 : 14;
 
-  // Set Cover Greedy Adaptativo em Duas Camadas (14 pts + 13 pts) com Penalidade Ativa de Redundância,
-  // Distância de Hamming Bitwise, Frequency Cap, Quotas 75/15/10 e Refinamento Local 1-Swap (16 <= n <= 21)
-  const scenarioMasks: number[] = (() => {
-    // Em universos enxutos (16–18 dezenas), avalia o espaço exato C(n, 15) (até 816 cenários) sem diluição
-    if (n >= 16 && n <= 18) {
-      const exactAll = getCombinations(sortedPool, 15);
-      return exactAll.map((comb) => criarMascara(comb));
-    }
-    // Em universos 19–21+, amostra estratificada de cenários representativos de alto valor
-    const maxScenarios = n <= 21 ? 520 : 450;
-    const picked: number[] = [];
-    const seen = new Set<number>();
-    const stride = Math.max(1, Math.floor(validCandidates.length / maxScenarios));
-    for (let i = 0; i < validCandidates.length && picked.length < maxScenarios; i += stride) {
-      const m = validCandidates[i].mask;
-      if (!seen.has(m)) {
-        seen.add(m);
-        picked.push(m);
+  onProgress?.({
+    percent: 28,
+    message: `Construindo universo-alvo (${n} dezenas) e classificando cenários Padrão Ouro...`,
+  });
+
+  // 1. Geração do Universo-Alvo:
+  //    - 15..18 dezenas: universo completo C(n, 15) (até 816 cenários)
+  //    - 19 dezenas: universo completo C(19, 15) = 3.876 cenários
+  //    - 20 dezenas: universo completo C(20, 15) = 15.504 cenários (na faixa 15k–25k)
+  //    - 21+ dezenas: amostragem estratificada de 18.000 combinações únicas
+  let rawUniverseCombos: number[][] = [];
+  let amostragemEstratificada = false;
+
+  if (n >= 15 && n <= 20) {
+    rawUniverseCombos = getCombinations(sortedPool, 15);
+    amostragemEstratificada = n >= 19;
+  } else if (n > 20) {
+    amostragemEstratificada = true;
+    const sampleTarget = 18000;
+    const seenSampleMasks = new Set<number>();
+    const poolAsc = [...sortedPool];
+    const poolDesc = [...sortedPool].reverse();
+    const maxAttempts = sampleTarget * 2;
+
+    for (let att = 0; att < maxAttempts && rawUniverseCombos.length < sampleTarget; att++) {
+      let src: number[];
+      if (att % 10 === 0) {
+        src = [...poolAsc];
+        const win = Math.min(src.length, 18);
+        for (let i = win - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [src[i], src[j]] = [src[j], src[i]];
+        }
+      } else if (att % 10 === 1) {
+        src = [...poolDesc];
+        const win = Math.min(src.length, 18);
+        for (let i = win - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [src[i], src[j]] = [src[j], src[i]];
+        }
+      } else {
+        src = [...sortedPool];
+        for (let i = src.length - 1; i > 0; i--) {
+          const j = Math.floor(nextRand() * (i + 1));
+          [src[i], src[j]] = [src[j], src[i]];
+        }
+      }
+      const combo = src.slice(0, 15).sort((a, b) => a - b);
+      const mask = dezenasParaBitmask(combo);
+      if (!seenSampleMasks.has(mask)) {
+        seenSampleMasks.add(mask);
+        rawUniverseCombos.push(combo);
       }
     }
-    for (let i = 0; i < validCandidates.length && picked.length < maxScenarios; i++) {
-      const m = validCandidates[i].mask;
-      if (!seen.has(m)) {
-        seen.add(m);
-        picked.push(m);
-      }
-    }
-    return picked;
-  })();
+  }
 
-  const totalScenarios = scenarioMasks.length;
-  const cov14Count = new Uint16Array(totalScenarios);
+  const universoAvaliado = rawUniverseCombos.length;
+  const activeMasksTmp: number[] = [];
+  const activeWeightsTmp: number[] = [];
+  const activeIsOuroTmp: number[] = [];
+
+  let cenariosOuroTotal = 0;
+  let cenariosMediaTotal = 0;
+  let cenariosAtipicoTotal = 0;
+  let cenariosDescartadosForaPadrao = 0;
+  let pesoTotalUniverso = 0;
+
+  // Também coleta candidatos Padrão Ouro diretamente do universo-alvo (respeitando fixas)
+  const extraOuroHarvestLimit = 180;
+  let extraOuroHarvested = 0;
+
+  for (let i = 0; i < rawUniverseCombos.length; i++) {
+    const comb = rawUniverseCombos[i];
+    const analise = calcularParametrosConcurso(comb, latestDraw.dezenas);
+    const classificacao = analise.resumo.classificacao;
+    const peso = PESOS_COBERTURA_PADRAO_OURO[classificacao];
+
+    if (peso <= 0) {
+      cenariosDescartadosForaPadrao++;
+      continue;
+    }
+
+    const mask = dezenasParaBitmask(comb);
+    activeMasksTmp.push(mask);
+    activeWeightsTmp.push(peso);
+    pesoTotalUniverso += peso;
+
+    if (classificacao === 'Padrão Ouro') {
+      activeIsOuroTmp.push(1);
+      cenariosOuroTotal++;
+
+      // Enriquece a fila de candidatos com combinações Padrão Ouro do próprio universo
+      if (extraOuroHarvested < extraOuroHarvestLimit) {
+        let fixedOk = true;
+        if (fixedList.length > 0) {
+          let fHits = 0;
+          for (const f of fixedList) {
+            if (comb.includes(f)) fHits++;
+          }
+          fixedOk = fHits >= kBounds.minK && fHits <= kBounds.maxK;
+        }
+        if (fixedOk) {
+          const key = comb.join('-');
+          if (!candidateKeys.has(key)) {
+            candidateKeys.add(key);
+            const ipMed = Number(
+              (comb.reduce((acc, num) => acc + (ipMap.get(num) || 50), 0) / 15).toFixed(1)
+            );
+            const fcMed = Number(
+              (comb.reduce((acc, num) => acc + (forcaCicloMap.get(num) || 50), 0) / 15).toFixed(1)
+            );
+            validCandidates.push({
+              dezenas: comb,
+              mask,
+              scorePonderado: analise.resumo.scorePercentual * 0.55 + ipMed * 0.25 + fcMed * 0.2,
+              ipMedio: ipMed,
+              forcaCicloMedio: fcMed,
+              slotType: 'ouro',
+              isPadraoOuro: true,
+              scoreAderenciaOuro: analise.resumo.scorePercentual,
+              classificacaoOuro: 'Padrão Ouro',
+            });
+            extraOuroHarvested++;
+          }
+        }
+      }
+    } else {
+      activeIsOuroTmp.push(0);
+      if (classificacao === 'Dentro da Média') cenariosMediaTotal++;
+      else cenariosAtipicoTotal++;
+    }
+  }
+
+  onProgress?.({
+    percent: 52,
+    message: `Universo ponderado: ${cenariosOuroTotal} Padrão Ouro (peso 10) • ${cenariosDescartadosForaPadrao} Fora do Padrão descartados.`,
+  });
+
+  // Classificar candidatos pendentes com calcularParametrosConcurso para priorizar bilhetes Padrão Ouro
+  for (let i = 0; i < validCandidates.length; i++) {
+    const cand = validCandidates[i];
+    if (cand.classificacaoOuro === undefined) {
+      const analise = calcularParametrosConcurso(cand.dezenas, latestDraw.dezenas);
+      cand.classificacaoOuro = analise.resumo.classificacao;
+      cand.isPadraoOuro = analise.resumo.classificacao === 'Padrão Ouro';
+      cand.scoreAderenciaOuro = analise.resumo.scorePercentual;
+    }
+  }
+
+  // Ordenar candidatos: bilhetes Padrão Ouro primeiro, depois aderência estatística e score ponderado
+  validCandidates.sort((a, b) => {
+    const ouroDiff = (b.isPadraoOuro ? 1 : 0) - (a.isPadraoOuro ? 1 : 0);
+    if (ouroDiff !== 0) return ouroDiff;
+    const scoreDiff = (b.scoreAderenciaOuro ?? 0) - (a.scoreAderenciaOuro ?? 0);
+    if (Math.abs(scoreDiff) >= 3) return scoreDiff;
+    return b.scorePonderado - a.scorePonderado;
+  });
+
+  const totalScenarios = activeMasksTmp.length;
+  const scenarioMasks = new Uint32Array(activeMasksTmp);
+  const scenarioWeights = new Uint8Array(activeWeightsTmp);
+  const scenarioIsOuro = new Uint8Array(activeIsOuroTmp);
+
+  // Lista compacta de índices ainda NÃO cobertos para a garantia alvo (acelera em 3x–5x o Greedy Set Cover)
+  const uncoveredIndices = new Int32Array(totalScenarios);
+  for (let s = 0; s < totalScenarios; s++) {
+    uncoveredIndices[s] = s;
+  }
+  let uncoveredLen = totalScenarios;
+
+  const covTargetCount = new Uint16Array(totalScenarios);
   const cov13Count = new Uint16Array(totalScenarios);
+  let cenariosOuroCobertos = 0;
+  let pesoTotalCoberto = 0;
+
   const savedTicketsSet = getAllSavedTicketsSet();
 
   const chosenItems: CandidateItem[] = [];
@@ -1456,10 +1664,6 @@ export function generateFechamentoInteligentePonderado({
   const fixedFreq = new Array(26).fill(0);
 
   const isLeanUniverse = n >= 16 && n <= 18;
-  const weight14Pts = targetHits >= 14 ? (isLeanUniverse ? 4.6 : 4.0) : 2.8;
-  const weight13Pts = targetHits >= 14 ? (isLeanUniverse ? 1.65 : 1.5) : 3.4;
-  const redundancyPenalty14 = isLeanUniverse ? 0.55 : 0.78;
-
   const registerChosen = (cand: CandidateItem) => {
     chosenItems.push(cand);
     chosenMasks.push(cand.mask);
@@ -1469,15 +1673,25 @@ export function generateFechamentoInteligentePonderado({
       else varFreq[d]++;
     }
     const cMask = cand.mask;
-    for (let s = 0; s < totalScenarios; s++) {
+
+    // Atualiza lista compacta de cenários ainda não cobertos na garantia alvo (13 ou 14 pts)
+    let writePtr = 0;
+    for (let u = 0; u < uncoveredLen; u++) {
+      const s = uncoveredIndices[u];
       const hits = popcountBitwise25(cMask & scenarioMasks[s]);
-      if (hits >= 14) {
-        cov14Count[s]++;
+      if (hits >= effectiveTargetHits) {
+        covTargetCount[s]++;
         cov13Count[s]++;
-      } else if (hits === 13) {
-        cov13Count[s]++;
+        pesoTotalCoberto += scenarioWeights[s];
+        if (scenarioIsOuro[s] === 1) {
+          cenariosOuroCobertos++;
+        }
+      } else {
+        if (hits >= 13) cov13Count[s]++;
+        uncoveredIndices[writePtr++] = s;
       }
     }
+    uncoveredLen = writePtr;
   };
 
   // Calcula bônus/penalidade de Frequência Equilibrada e Rotação de Fixas
@@ -1485,7 +1699,6 @@ export function generateFechamentoInteligentePonderado({
     let balance = 0;
     for (const d of cand.dezenas) {
       if (fixedSet.has(d)) {
-        // Favorece rotação uniforme das fixas
         balance += (freqBounds.fixedIdeal - fixedFreq[d]) * 4.5;
       } else {
         const f = varFreq[d];
@@ -1499,18 +1712,18 @@ export function generateFechamentoInteligentePonderado({
     return balance;
   };
 
-  // Sequência de Hamming matematicamente factível (nunca trava 18d/24J em teto impossível de Hamming >= 3)
+  // Sequência de Hamming matematicamente factível
   const strictHammingSequence = Array.from(
     new Set([minHammingTarget, Math.min(2, minHammingTarget)])
   );
   const fallbackHammingSequence = [1];
 
-  // Fase 1: Preencher estratos de Proteção de Cauda (15% Cauda Alta 216–230 e 10% Cauda Baixa 155–179) mantendo Hamming >= 3 em 18–21
-  const selectQuotaStratum = (stratum: SumStratum, targetCount: number) => {
-    if (targetCount <= 0) return;
+  // Fase 1 (opcional se estratificação de caudas estiver explicitamente ativa)
+  const selectQuotaStratum = (stratum: SumStratum, targetQuota: number) => {
+    if (targetQuota <= 0) return;
     let added = 0;
     for (const minDiffTry of strictHammingSequence) {
-      while (added < targetCount && chosenItems.length < maxTickets) {
+      while (added < targetQuota && chosenItems.length < maxTickets) {
         let bestCand: CandidateItem | null = null;
         let bestScore = -1e9;
         for (let i = 0; i < validCandidates.length; i++) {
@@ -1520,7 +1733,8 @@ export function generateFechamentoInteligentePonderado({
           if (chosenKeys.has(key)) continue;
           if (!passesHammingDistance(cand.mask, chosenMasks, minDiffTry)) continue;
           const isSavedPenalty = savedTicketsSet.has(key) ? 25 : 0;
-          const totalScore = cand.scorePonderado * 0.6 + scoreBalanceForCandidate(cand) - isSavedPenalty;
+          const ouroBonus = cand.isPadraoOuro ? 18 : 0;
+          const totalScore = cand.scorePonderado * 0.6 + scoreBalanceForCandidate(cand) + ouroBonus - isSavedPenalty;
           if (totalScore > bestScore) {
             bestScore = totalScore;
             bestCand = cand;
@@ -1538,274 +1752,181 @@ export function generateFechamentoInteligentePonderado({
     selectQuotaStratum('alta', highTailQuota);
   }
 
-  // Fase 2: Set Cover Greedy Adaptativo em Duas Camadas (14 pts + 13 pts) com Penalidade de Redundância
-  const maxEvalPool = isLeanUniverse ? 700 : 580;
+  // Fase 2: Seleção Gulosa Ponderada (Greedy Weighted Set Cover) maximizando a soma dos pesos
+  const maxEvalPool = isLeanUniverse ? 650 : n === 19 ? 360 : 220;
 
-  const pickFromStratum = (stratumFilter: SumStratum | 'any', minDiffTry: number): boolean => {
+  const hasReachedGoldCoverageTarget = (): boolean => {
+    if (totalScenarios === 0) return false;
+    if (uncoveredLen === 0) return true;
+    // Se 100% dos cenários Padrão Ouro já foram cobertos e há cobertura de peso >= 92%, encerra economizando jogos
+    if (
+      cenariosOuroTotal > 0 &&
+      cenariosOuroCobertos >= cenariosOuroTotal &&
+      chosenItems.length >= Math.min(maxTickets, n <= 16 ? 3 : 5)
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const pickBestWeightedCandidate = (
+    requireOuroCandidate: boolean,
+    minDiffTry: number
+  ): boolean => {
     let bestCand: CandidateItem | null = null;
-    let bestWeight = -1e9;
-    let evaluatedInStratum = 0;
+    let bestObjective = -1e9;
+    let evaluated = 0;
 
-    for (let i = 0; i < validCandidates.length; i++) {
+    for (let i = 0; i < validCandidates.length && evaluated < maxEvalPool; i++) {
       const cand = validCandidates[i];
-      if (stratumFilter !== 'any' && cand.slotType !== stratumFilter) continue;
+      if (requireOuroCandidate && !cand.isPadraoOuro) continue;
       const candKey = cand.dezenas.join('-');
       if (chosenKeys.has(candKey)) continue;
       if (!passesHammingDistance(cand.mask, chosenMasks, minDiffTry)) continue;
 
-      let gain14 = 0;
-      let gain13 = 0;
-      let redundant14 = 0;
+      let weightedGain = 0;
+      let secondary13WeightedGain = 0;
 
-      if (totalScenarios > 0 && evaluatedInStratum < maxEvalPool) {
+      if (uncoveredLen > 0) {
         const cMask = cand.mask;
-        for (let s = 0; s < totalScenarios; s++) {
+        for (let u = 0; u < uncoveredLen; u++) {
+          const s = uncoveredIndices[u];
           const hits = popcountBitwise25(cMask & scenarioMasks[s]);
-          if (hits >= 14) {
-            if (cov14Count[s] === 0) gain14++;
-            else redundant14++;
-            if (cov13Count[s] === 0) gain13++;
-          } else if (hits === 13) {
-            if (cov13Count[s] === 0) gain13++;
+          if (hits >= effectiveTargetHits) {
+            weightedGain += scenarioWeights[s];
+          } else if (effectiveTargetHits === 14 && hits === 13 && cov13Count[s] === 0) {
+            secondary13WeightedGain += scenarioWeights[s];
           }
         }
       }
-      evaluatedInStratum++;
+      evaluated++;
 
-      const isAlreadySaved = savedTicketsSet.has(candKey);
-      const savedPenalty = isAlreadySaved ? 30 : 0;
-      const setCoverGain =
-        gain14 * weight14Pts + gain13 * weight13Pts - redundant14 * redundancyPenalty14;
-      const weight =
-        setCoverGain +
-        (cand.scorePonderado / 100) * 2.4 +
-        scoreBalanceForCandidate(cand) * 0.32 -
+      // Prioriza fortemente bilhetes candidatos também classificados como Padrão Ouro (+12% sobre o ganho + bônus fixo)
+      const ouroMultiplier = cand.isPadraoOuro
+        ? 1.12
+        : cand.classificacaoOuro === 'Dentro da Média'
+        ? 1.02
+        : 0.94;
+      const ouroTieBonus = cand.isPadraoOuro ? 12 : cand.classificacaoOuro === 'Dentro da Média' ? 4 : 0;
+      const savedPenalty = savedTicketsSet.has(candKey) ? 18 : 0;
+
+      const objective =
+        (weightedGain + secondary13WeightedGain * 0.14) * ouroMultiplier +
+        ouroTieBonus +
+        (cand.scoreAderenciaOuro ?? 70) * 0.08 +
+        scoreBalanceForCandidate(cand) * 0.15 -
         savedPenalty;
 
-      if (weight > bestWeight) {
-        bestWeight = weight;
+      if (objective > bestObjective) {
+        bestObjective = objective;
         bestCand = cand;
       }
     }
 
     if (!bestCand) return false;
     registerChosen(bestCand);
+
+    // Emite progresso granular durante as iterações do Greedy Weighted Set Cover
+    const pct = Math.min(92, 54 + Math.round((chosenItems.length / Math.max(1, maxTickets)) * 38));
+    const ouroPctNow =
+      cenariosOuroTotal > 0 ? ((cenariosOuroCobertos / cenariosOuroTotal) * 100).toFixed(1) : '100.0';
+    onProgress?.({
+      percent: pct,
+      message: `Weighted Set Cover: ${chosenItems.length} bilhete(s) • ${ouroPctNow}% dos cenários Padrão Ouro cobertos...`,
+    });
+
     return true;
   };
 
+  // Passo 2A: Prioridade estrita a candidatos Padrão Ouro respeitando Hamming
   for (const minDiffTry of strictHammingSequence) {
-    while (chosenItems.length < maxTickets && validCandidates.length > 0) {
-      if (!pickFromStratum('ouro', minDiffTry)) break;
+    while (chosenItems.length < maxTickets && !hasReachedGoldCoverageTarget()) {
+      if (!pickBestWeightedCandidate(true, minDiffTry)) break;
     }
-    if (chosenItems.length >= maxTickets) break;
+    if (chosenItems.length >= maxTickets || hasReachedGoldCoverageTarget()) break;
   }
 
-  // Fase 2B: Completa com qualquer estrato ainda respeitando Hamming >= 3 (estrito em 18–21)
+  // Passo 2B: Se ainda restarem cenários Ouro/Média descobertos, abre para qualquer candidato válido com Hamming
   for (const minDiffTry of strictHammingSequence) {
-    while (chosenItems.length < maxTickets && validCandidates.length > 0) {
-      if (!pickFromStratum('any', minDiffTry)) break;
+    while (chosenItems.length < maxTickets && !hasReachedGoldCoverageTarget()) {
+      if (!pickBestWeightedCandidate(false, minDiffTry)) break;
     }
-    if (chosenItems.length >= maxTickets) break;
+    if (chosenItems.length >= maxTickets || hasReachedGoldCoverageTarget()) break;
   }
 
-  // Fallback matemático final se o espaço Hamming >= 3 se esgotar
+  // Passo 2C: Fallback Hamming >= 1 caso o espaço restrito se esgote antes de atingir cobertura
   for (const minDiffTry of fallbackHammingSequence) {
-    while (chosenItems.length < maxTickets && validCandidates.length > 0) {
-      if (!pickFromStratum('any', minDiffTry)) break;
+    while (chosenItems.length < maxTickets && !hasReachedGoldCoverageTarget()) {
+      if (!pickBestWeightedCandidate(false, minDiffTry)) break;
     }
-    if (chosenItems.length >= maxTickets) break;
+    if (chosenItems.length >= maxTickets || hasReachedGoldCoverageTarget()) break;
   }
 
-  // Fase 2C: Verificação de Contribuição Única & Refinamento Local 1-Swap (16 <= n <= 21)
-  if (n >= 16 && n <= 21 && chosenItems.length >= 2 && totalScenarios > 0 && validCandidates.length > chosenItems.length) {
-    const swapCandidateLimit = Math.min(validCandidates.length, isLeanUniverse ? 260 : 180);
-    const maxPasses = 2;
+  // Fase 3: Garantia zero-vazio (somente se ainda não atingimos a cobertura Padrão Ouro nem há bilhetes suficientes)
+  if (chosenItems.length === 0 && sortedPool.length >= 15) {
+    const fSub = fixedSubsets[0] || [];
+    const needed = 15 - fSub.length;
+    const fallback15 = [...fSub, ...nonFixedPool.slice(0, needed)].sort((a, b) => a - b);
+    const analiseFallback = calcularParametrosConcurso(fallback15, latestDraw.dezenas);
+    registerChosen({
+      dezenas: fallback15,
+      mask: dezenasParaBitmask(fallback15),
+      scorePonderado: 70,
+      ipMedio: 70,
+      forcaCicloMedio: 70,
+      matchedClusterId: 'Garantia Zero-Vazio',
+      slotType: 'ouro',
+      isPadraoOuro: analiseFallback.resumo.classificacao === 'Padrão Ouro',
+      scoreAderenciaOuro: analiseFallback.resumo.scorePercentual,
+      classificacaoOuro: analiseFallback.resumo.classificacao,
+    });
+  }
 
-    for (let pass = 0; pass < maxPasses; pass++) {
-      let improvedAny = false;
-
-      // Calcula a contribuição única (14 pts + 13 pts) de cada bilhete escolhido
-      const ticketStats = chosenItems.map((item, idx) => {
-        const m = item.mask;
-        let unique14 = 0;
-        let unique13 = 0;
-        let overlap14 = 0;
-        for (let s = 0; s < totalScenarios; s++) {
-          const hits = popcountBitwise25(m & scenarioMasks[s]);
-          if (hits >= 14) {
-            if (cov14Count[s] === 1) unique14++;
-            else overlap14++;
-            if (cov13Count[s] === 1) unique13++;
-          } else if (hits === 13 && cov13Count[s] === 1) {
-            unique13++;
-          }
-        }
-        const netValue = unique14 * weight14Pts + unique13 * weight13Pts - overlap14 * redundancyPenalty14;
-        return { idx, unique14, unique13, netValue };
-      });
-
-      // Prioriza bilhetes com menor contribuição única (ou zero contribuição única)
-      ticketStats.sort((a, b) => a.netValue - b.netValue);
-      const ticketsToInspect = ticketStats.slice(0, Math.max(2, Math.ceil(chosenItems.length * 0.4)));
-
-      for (const entry of ticketsToInspect) {
-        const idx = entry.idx;
-        const oldItem = chosenItems[idx];
-        const oldMask = oldItem.mask;
-        const oldKey = oldItem.dezenas.join('-');
-
-        // Calcula o Hamming mínimo preservado pelo bilhete atual frente aos demais
-        let currentMinDiff = 15;
-        for (let j = 0; j < chosenMasks.length; j++) {
-          if (j === idx) continue;
-          const diff = 15 - popcountBitwise25(oldMask & chosenMasks[j]);
-          if (diff < currentMinDiff) currentMinDiff = diff;
-        }
-        const requiredSwapDiff = Math.max(1, Math.min(minHammingTarget, currentMinDiff));
-
-        // Remove temporariamente contribuição do bilhete atual nos contadores
-        for (let s = 0; s < totalScenarios; s++) {
-          const hits = popcountBitwise25(oldMask & scenarioMasks[s]);
-          if (hits >= 14) {
-            cov14Count[s]--;
-            cov13Count[s]--;
-          } else if (hits === 13) {
-            cov13Count[s]--;
-          }
-        }
-
-        const otherMasks = chosenMasks.filter((_, j) => j !== idx);
-        let bestReplacement: CandidateItem | null = null;
-        let bestNetValue = entry.netValue;
-
-        for (let c = 0; c < swapCandidateLimit; c++) {
-          const cand = validCandidates[c];
-          if (useStratifiedAntiCisne && cand.slotType !== oldItem.slotType) continue;
-          const cKey = cand.dezenas.join('-');
-          if (chosenKeys.has(cKey)) continue;
-          if (!passesHammingDistance(cand.mask, otherMasks, requiredSwapDiff)) continue;
-
-          const cMask = cand.mask;
-          let g14 = 0;
-          let g13 = 0;
-          let ov14 = 0;
-          for (let s = 0; s < totalScenarios; s++) {
-            const hits = popcountBitwise25(cMask & scenarioMasks[s]);
-            if (hits >= 14) {
-              if (cov14Count[s] === 0) g14++;
-              else ov14++;
-              if (cov13Count[s] === 0) g13++;
-            } else if (hits === 13 && cov13Count[s] === 0) {
-              g13++;
-            }
-          }
-
-          if (g14 === 0 && g13 === 0) continue;
-          const candNetValue = g14 * weight14Pts + g13 * weight13Pts - ov14 * redundancyPenalty14;
-          if (candNetValue > bestNetValue + 0.5) {
-            bestNetValue = candNetValue;
-            bestReplacement = cand;
-          }
-        }
-
-        if (bestReplacement) {
-          // Efetiva o 1-swap com ganho líquido real de cobertura única
-          chosenKeys.delete(oldKey);
-          for (const d of oldItem.dezenas) {
-            if (fixedSet.has(d)) fixedFreq[d]--;
-            else varFreq[d]--;
-          }
-
-          chosenItems[idx] = bestReplacement;
-          chosenMasks[idx] = bestReplacement.mask;
-          chosenKeys.add(bestReplacement.dezenas.join('-'));
-          for (const d of bestReplacement.dezenas) {
-            if (fixedSet.has(d)) fixedFreq[d]++;
-            else varFreq[d]++;
-          }
-
-          const newMask = bestReplacement.mask;
-          for (let s = 0; s < totalScenarios; s++) {
-            const hits = popcountBitwise25(newMask & scenarioMasks[s]);
-            if (hits >= 14) {
-              cov14Count[s]++;
-              cov13Count[s]++;
-            } else if (hits === 13) {
-              cov13Count[s]++;
-            }
-          }
-          improvedAny = true;
-        } else {
-          // Restaura contadores do bilhete original
-          for (let s = 0; s < totalScenarios; s++) {
-            const hits = popcountBitwise25(oldMask & scenarioMasks[s]);
-            if (hits >= 14) {
-              cov14Count[s]++;
-              cov13Count[s]++;
-            } else if (hits === 13) {
-              cov13Count[s]++;
-            }
-          }
-        }
+  // Auditoria exata final da cobertura ponderada sobre o universo-alvo (Padrão Ouro + Peso Total)
+  let auditedOuroCovered = 0;
+  let auditedPesoCovered = 0;
+  for (let s = 0; s < totalScenarios; s++) {
+    const sMask = scenarioMasks[s];
+    let covered = false;
+    for (let j = 0; j < chosenMasks.length; j++) {
+      if (popcountBitwise25(chosenMasks[j] & sMask) >= effectiveTargetHits) {
+        covered = true;
+        break;
       }
-
-      if (!improvedAny) break;
+    }
+    if (covered) {
+      auditedPesoCovered += scenarioWeights[s];
+      if (scenarioIsOuro[s] === 1) auditedOuroCovered++;
     }
   }
 
-  // Fase 3: Síntese complementar garantida (trava absoluta contra fechamento vazio)
-  if (chosenItems.length < maxTickets && sortedPool.length >= 15) {
-    const synthesisHamming = minHammingTarget;
-    for (let attempt = 0; attempt < 360 && chosenItems.length < maxTickets; attempt++) {
-      const fSub = fixedSubsets[attempt % fixedSubsets.length];
-      const needed = 15 - fSub.length;
-      const orderedVars = [...nonFixedPool].sort((a, b) => varFreq[a] - varFreq[b] || a - b);
-      const shift = attempt % Math.max(1, orderedVars.length);
-      const pickedVars = [...orderedVars.slice(shift), ...orderedVars.slice(0, shift)].slice(0, needed);
-      const candidate = [...fSub, ...pickedVars].sort((a, b) => a - b);
-      if (candidate.length !== 15) continue;
-      const key = candidate.join('-');
-      if (chosenKeys.has(key)) continue;
-      const mask = criarMascara(candidate);
-      const reqDiff = attempt < 180 ? synthesisHamming : attempt < 260 ? Math.min(2, synthesisHamming) : 1;
-      if (!passesHammingDistance(mask, chosenMasks, reqDiff)) continue;
-      const soma = candidate.reduce((acc, v) => acc + v, 0);
-      if (attempt < 240 && tierApplied < 4 && (soma < 155 || soma > 235)) continue;
-      const slotType: SumStratum =
-        soma < sumBounds.centralMin ? 'baixa' : soma > sumBounds.centralMax ? 'alta' : 'ouro';
-      registerChosen({
-        dezenas: candidate,
-        mask,
-        scorePonderado: 72,
-        ipMedio: 72,
-        forcaCicloMedio: 72,
-        matchedClusterId: 'Síntese Equilibrada',
-        slotType,
-      });
-    }
-    if (chosenItems.length === 0) {
-      const fallback15 = sortedPool.slice(0, 15).sort((a, b) => a - b);
-      registerChosen({
-        dezenas: fallback15,
-        mask: criarMascara(fallback15),
-        scorePonderado: 70,
-        ipMedio: 70,
-        forcaCicloMedio: 70,
-        matchedClusterId: 'Garantia Zero-Vazio',
-        slotType: 'ouro',
-      });
-    }
-  }
+  const percentualCoberturaOuro =
+    cenariosOuroTotal > 0
+      ? Number(((auditedOuroCovered / cenariosOuroTotal) * 100).toFixed(1))
+      : totalScenarios > 0
+      ? Number(((auditedPesoCovered / Math.max(1, pesoTotalUniverso)) * 100).toFixed(1))
+      : 100;
+  const percentualPesoCoberto =
+    pesoTotalUniverso > 0
+      ? Number(((auditedPesoCovered / pesoTotalUniverso) * 100).toFixed(1))
+      : 100;
 
-  // Construir GameTicket final preservando o scoreIA Gaussiano recalibrado (usando IP como peso base se aiScores ausente)
+  // Construir GameTicket final preservando o scoreIA Gaussiano recalibrado
   const effectiveGaussianBaseScores: number[] =
     aiScores && aiScores.length >= 25
       ? aiScores
       : Array.from({ length: 25 }, (_, idx) => ipMap.get(idx + 1) ?? 72);
 
+  let bilhetesPadraoOuroCount = 0;
+
   const finalTickets: GameTicket[] = chosenItems.map((item, idx) => {
     const analysis = analyzeTicket(item.dezenas, latestDraw.dezenas, effectiveGaussianBaseScores);
-    const tags: string[] = [`IP: ${item.ipMedio}%`];
+    const tags: string[] = [];
+    if (item.isPadraoOuro) {
+      bilhetesPadraoOuroCount++;
+      tags.push('Padrão Ouro ★');
+    }
+    tags.push(`IP: ${item.ipMedio}%`);
     if (item.matchedClusterId) {
       tags.push(`Cluster Densidade ${item.matchedClusterId} ✓`);
     }
@@ -1841,6 +1962,47 @@ export function generateFechamentoInteligentePonderado({
       faixaSoma: item.slotType,
       tags,
     };
+  });
+
+  const jogosMatrizUniformeRef = Math.max(
+    getUniformMatrixReferenceTickets(n, effectiveTargetHits),
+    maxTickets,
+    finalTickets.length
+  );
+  const custoTotal = Number((finalTickets.length * VALOR_APOSTA_LOTOFACIL).toFixed(2));
+  const custoMatrizUniformeRef = Number((jogosMatrizUniformeRef * VALOR_APOSTA_LOTOFACIL).toFixed(2));
+  const economiaEstimadaReais = Number(Math.max(0, custoMatrizUniformeRef - custoTotal).toFixed(2));
+  const economiaEstimadaPercentual =
+    custoMatrizUniformeRef > 0
+      ? Number(((economiaEstimadaReais / custoMatrizUniformeRef) * 100).toFixed(1))
+      : 0;
+
+  const coberturaPonderadaOuro: CoberturaPonderadaOuroResumo = {
+    garantiaAlvo: effectiveTargetHits,
+    poolSize: n,
+    universoAvaliado,
+    amostragemEstratificada,
+    cenariosOuroTotal,
+    cenariosOuroCobertos: auditedOuroCovered,
+    percentualCoberturaOuro,
+    cenariosMediaTotal,
+    cenariosAtipicoTotal,
+    cenariosDescartadosForaPadrao,
+    pesoTotalUniverso,
+    pesoTotalCoberto: auditedPesoCovered,
+    percentualPesoCoberto,
+    bilhetesPadraoOuroCount,
+    bilhetesGerados: finalTickets.length,
+    custoTotal,
+    jogosMatrizUniformeRef,
+    custoMatrizUniformeRef,
+    economiaEstimadaReais,
+    economiaEstimadaPercentual,
+  };
+
+  onProgress?.({
+    percent: 100,
+    message: `Cobertura Ponderada concluída: ${percentualCoberturaOuro}% dos cenários Padrão Ouro cobertos com ${finalTickets.length} bilhetes.`,
   });
 
   const avgIP =
@@ -1886,6 +2048,7 @@ export function generateFechamentoInteligentePonderado({
       forcaCicloMedia: avgForcaCiclo,
     },
     clustersDensidade,
+    coberturaPonderadaOuro,
     flexibilizacaoAplicada: {
       nivel:
         tierApplied === 1

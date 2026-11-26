@@ -454,8 +454,8 @@ export function handleGeneratorWorkerMessage(
       postMsg({
         type: 'PROGRESS',
         jobId,
-        percent: 20,
-        message: 'Calculando IP, Fixas Rotativas (K de N) e auto-calibração de soma do universo...',
+        percent: 18,
+        message: 'Inicializando Cobertura Ponderada (Weighted Set Cover • Padrão Ouro)...',
       });
 
       const result: FechamentoPonderadoResult = generateFechamentoInteligentePonderado({
@@ -470,13 +470,14 @@ export function handleGeneratorWorkerMessage(
         dynamicStats: data.dynamicStats,
         latestDraw: data.latestDraw,
         aiScores: data.aiScores,
-      });
-
-      postMsg({
-        type: 'PROGRESS',
-        jobId,
-        percent: 90,
-        message: 'Aplicando Set Cover Adaptativo (14+13 pts), refinamento 1-swap e Hamming bitwise...',
+        onProgress: (prog) => {
+          postMsg({
+            type: 'PROGRESS',
+            jobId,
+            percent: prog.percent,
+            message: prog.message,
+          });
+        },
       });
 
       postMsg({

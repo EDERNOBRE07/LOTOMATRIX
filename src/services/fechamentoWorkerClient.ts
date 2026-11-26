@@ -517,7 +517,7 @@ export class FechamentoWorkerClient {
 
       scheduleYield(() => {
         try {
-          params.onProgress?.({ percent: 70, message: 'Aplicando Fixas Rotativas (K de N), Hamming e Anti-Cisne Negro 75/15/10...' });
+          params.onProgress?.({ percent: 25, message: 'Avaliando cenários Padrão Ouro (pesos 10/5/1) e executando Weighted Set Cover...' });
           const result = generateFechamentoInteligentePonderado({
             selectedNumbers: params.selectedNumbers,
             targetHits: params.targetHits,
@@ -526,10 +526,11 @@ export class FechamentoWorkerClient {
             dynamicStats: params.dynamicStats,
             latestDraw: params.latestDraw,
             aiScores: params.aiScores,
+            onProgress: (prog) => params.onProgress?.(prog),
           });
 
           scheduleYield(() => {
-            params.onProgress?.({ percent: 100, message: 'Fechamento Ponderado concluído com sucesso!' });
+            params.onProgress?.({ percent: 100, message: 'Cobertura Ponderada (Padrão Ouro) concluída com sucesso!' });
             resolve(result);
           });
         } catch (err) {

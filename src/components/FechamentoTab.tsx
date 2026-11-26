@@ -45,6 +45,7 @@ import {
   resolveModoFixas,
   resolveEffectiveFiltersForStudio,
   analyzeTicket,
+  type CoberturaPonderadaOuroResumo,
 } from '../services/combinatorics';
 import { CentralUnificadaFechamento, UNIFIED_MATRIX_CATALOG, MatrixCatalogItem } from './CentralUnificadaFechamento';
 import { BentoGridFechamento } from './BentoGridFechamento';
@@ -513,6 +514,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // Estado da Garantia Efetiva Auditada (LJCR & Set Cover)
   const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);
+  const [ponderadoOuroResumo, setPonderadoOuroResumo] = useState<CoberturaPonderadaOuroResumo | null>(null);
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
   const [fechamentoFilter, setFechamentoFilter] = useState<'all' | 'improbable' | string>('all');
   const [onlyGoldPattern, setOnlyGoldPattern] = useState<boolean>(false);
@@ -595,6 +597,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       if (tickets.length > 0) {
         const label = `Padrão Ouro • ${dezValidas} Dezenas (${tickets.length} jogos)`;
+        setPonderadoOuroResumo(null);
         setGeneratedTickets(tickets);
         setFechamentoFilter('all');
         setOnlyGoldPattern(false);
@@ -2264,6 +2267,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(exportMeta));
       } catch {}
 
+      setPonderadoOuroResumo(null);
       setGeneratedTickets(tickets);
 
       // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR, limitado a <= 21 dezenas)
@@ -2432,6 +2436,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       setDiscardedByRobustezCount(result.discardedByRobustezCount);
       setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
+      setPonderadoOuroResumo(result.coberturaPonderadaOuro ?? null);
       setGeneratedTickets(result.tickets);
 
       const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
@@ -2476,8 +2481,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
           ? ` • ${result.clustersDensidade.length} Clusters de Densidade (500 Concursos) Ativados`
           : '';
 
+      const resumoOuro = result.coberturaPonderadaOuro;
       setDocumentMessage(
-        `✓ Fechamento Ponderado concluído fora da thread principal! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
+        resumoOuro
+          ? `✓ Cobertura Ponderada Padrão Ouro concluída! ${resumoOuro.bilhetesGerados} bilhetes • ${resumoOuro.percentualCoberturaOuro.toFixed(1)}% dos cenários Ouro cobertos (${resumoOuro.garantiaAlvo} pts) • Economia estimada de R$ ${resumoOuro.economiaEstimadaReais.toFixed(2).replace('.', ',')}.`
+          : `✓ Fechamento Ponderado concluído fora da thread principal! ${result.tickets.length} bilhetes com IP Médio de ${result.averagePerformanceIndex}%. Agressividade: ${result.sazonalidade?.agressividadeFiltros || 'Calibrada'}. ${result.discardedByRobustezCount} combinações atípicas descartadas.`
       );
       setTimeout(() => setDocumentMessage(null), 6000);
 
@@ -2516,6 +2524,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         diag.reasons.unshift(err.message);
       }
       setGenerationError(diag);
+      setPonderadoOuroResumo(null);
       setGeneratedTickets([]);
     } finally {
       setIsGenerating(false);
@@ -3950,6 +3959,48 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </span>
               </div>
 
+              {/* Controle Segmentado Rápido: Cobertura Uniforme vs Ponderada (Padrão Ouro) */}
+              <div
+                role="tablist"
+                aria-label="Modo de cobertura combinatória"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950/90 border border-slate-800 mb-3"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedMotor === 'padrao'}
+                  onClick={() => {
+                    setSelectedMotor('padrao');
+                    soundService.playFilterClick();
+                  }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    selectedMotor === 'padrao'
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60 shadow-sm shadow-emerald-500/10'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent hover:bg-slate-900/70'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span>Cobertura Padrão (Uniforme)</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedMotor === 'ponderado'}
+                  onClick={() => {
+                    setSelectedMotor('ponderado');
+                    soundService.playFilterClick();
+                  }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    selectedMotor === 'ponderado'
+                      ? 'bg-amber-500/20 text-amber-200 border border-amber-400/70 shadow-sm shadow-amber-500/15'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent hover:bg-slate-900/70'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span>Cobertura Ponderada (Padrão Ouro)</span>
+                </button>
+              </div>
+
               {/* Lista Interativa dos 5 Motores */}
               <div className="space-y-2">
                 {/* Motor 1: Padrão (Cobertura Hamming / LJCR) */}
@@ -3981,7 +4032,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           Motor Padrão · Cobertura LJCR / Hamming
                         </span>
                         <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">
-                          RECOMENDADO
+                          UNIFORME
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
@@ -3998,7 +4049,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </span>
                 </button>
 
-                {/* Motor 2: Ponderação IA & Robustez */}
+                {/* Motor 2: Cobertura Ponderada Padrão Ouro (Weighted Set Cover) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -4007,7 +4058,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   }}
                   className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
                     selectedMotor === 'ponderado'
-                      ? 'bg-purple-500/15 border-purple-400 ring-1 ring-purple-400/40 shadow-md shadow-purple-500/10'
+                      ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/40 shadow-md shadow-amber-500/10'
                       : 'bg-slate-950/70 border-slate-800 hover:border-slate-600'
                   }`}
                 >
@@ -4015,8 +4066,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     <span
                       className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
                         selectedMotor === 'ponderado'
-                          ? 'bg-purple-400 text-slate-950 border-purple-300'
-                          : 'bg-slate-900 text-purple-400 border-slate-700'
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-900 text-amber-400 border-slate-700'
                       }`}
                     >
                       <Flame className="w-4 h-4" />
@@ -4024,20 +4075,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs sm:text-sm font-black text-white">
-                          Ponderação IA &amp; Robustez 50
+                          Cobertura Ponderada · Padrão Ouro
                         </span>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/35">
-                          IP SCORE
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          PESOS 10/5/1
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Ranqueamento por Frequência × Atraso nos últimos 50 concursos com filtro de robustez estatística.
+                        Weighted Set Cover: prioriza cenários Padrão Ouro (peso 10), descarta Fora do Padrão (peso 0) e reduz o custo frente à matriz uniforme.
                       </p>
                     </div>
                   </div>
                   <span
                     className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
-                      selectedMotor === 'ponderado' ? 'border-purple-400 bg-purple-400' : 'border-slate-600'
+                      selectedMotor === 'ponderado' ? 'border-amber-400 bg-amber-400' : 'border-slate-600'
                     }`}
                   >
                     {selectedMotor === 'ponderado' && <Check className="w-2.5 h-2.5 text-slate-950" />}
@@ -5534,6 +5585,94 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Resumo de Eficiência: Cobertura Ponderada (Weighted Set Cover - Padrão Ouro) */}
+          {ponderadoOuroResumo && generatedTickets.length > 0 && (
+            <div className="rounded-xl bg-gradient-to-br from-amber-950/35 via-slate-900/95 to-slate-950 border border-amber-500/40 p-3.5 shadow-lg shadow-amber-950/20">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                  <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-xs font-black tracking-wide uppercase text-amber-200">
+                    Resumo de Eficiência · Cobertura Ponderada (Padrão Ouro)
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/35">
+                    Garantia {ponderadoOuroResumo.garantiaAlvo} pts • {ponderadoOuroResumo.poolSize} dez.
+                  </span>
+                  {ponderadoOuroResumo.amostragemEstratificada && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                      Amostra {ponderadoOuroResumo.universoAvaliado.toLocaleString('pt-BR')} cenários
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPonderadoOuroResumo(null)}
+                  className="text-slate-400 hover:text-white p-0.5 rounded transition cursor-pointer shrink-0"
+                  title="Dispensar resumo de eficiência"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* 1. Bilhetes Gerados e Custo Total */}
+                <div className="rounded-lg bg-slate-950/75 border border-slate-800 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                    Bilhetes e Custo Total
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+                    <span className="text-sm sm:text-base font-black text-white font-mono tabular-nums">
+                      {ponderadoOuroResumo.bilhetesGerados} bilhetes
+                    </span>
+                    <span className="text-xs font-mono font-bold text-amber-300 tabular-nums">
+                      R$ {ponderadoOuroResumo.custoTotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                    {ponderadoOuroResumo.bilhetesPadraoOuroCount} de {ponderadoOuroResumo.bilhetesGerados} em Padrão Ouro
+                  </div>
+                </div>
+
+                {/* 2. % Cobertura sobre Cenários Padrão Ouro */}
+                <div className="rounded-lg bg-emerald-950/25 border border-emerald-500/35 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300/90 font-semibold">
+                    Cobertura Padrão Ouro
+                  </div>
+                  <div className="text-sm sm:text-base font-black text-emerald-300 font-mono tabular-nums mt-0.5">
+                    {ponderadoOuroResumo.percentualCoberturaOuro.toFixed(1)}% dos cenários Ouro cobertos
+                  </div>
+                  <div className="text-[10px] text-slate-300/80 mt-0.5 font-mono tabular-nums">
+                    {ponderadoOuroResumo.cenariosOuroCobertos.toLocaleString('pt-BR')}/
+                    {ponderadoOuroResumo.cenariosOuroTotal.toLocaleString('pt-BR')} Ouro •{' '}
+                    {ponderadoOuroResumo.cenariosDescartadosForaPadrao.toLocaleString('pt-BR')} Fora do Padrão descartados
+                  </div>
+                </div>
+
+                {/* 3. Economia Estimada vs Matriz Uniforme */}
+                <div className="rounded-lg bg-amber-950/25 border border-amber-500/35 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-amber-300/90 font-semibold">
+                    Economia vs. Matriz Uniforme
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+                    <span className="text-sm sm:text-base font-black text-amber-300 font-mono tabular-nums">
+                      {ponderadoOuroResumo.economiaEstimadaReais > 0
+                        ? `R$ ${ponderadoOuroResumo.economiaEstimadaReais.toFixed(2).replace('.', ',')}`
+                        : 'Cobertura Otimizada'}
+                    </span>
+                    {ponderadoOuroResumo.economiaEstimadaPercentual > 0 && (
+                      <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 tabular-nums">
+                        -{ponderadoOuroResumo.economiaEstimadaPercentual.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 font-mono tabular-nums">
+                    Ref. uniforme: {ponderadoOuroResumo.jogosMatrizUniformeRef} jogos (R${' '}
+                    {ponderadoOuroResumo.custoMatrizUniformeRef.toFixed(2).replace('.', ',')})
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

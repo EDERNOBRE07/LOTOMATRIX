@@ -48,6 +48,7 @@ import {
   getIntervalosRobustez50,
   isCombinationRobust50,
   generateFechamentoInteligentePonderado,
+  PESOS_COBERTURA_PADRAO_OURO,
 } from './fechamentoPonderadoService';
 export {
   calculateIndicePerformance,
@@ -55,11 +56,13 @@ export {
   getIntervalosRobustez50,
   isCombinationRobust50,
   generateFechamentoInteligentePonderado,
+  PESOS_COBERTURA_PADRAO_OURO,
 };
 export type {
   PerformanceIndexResult,
   Robustez50Intervals,
   FechamentoPonderadoResult,
+  CoberturaPonderadaOuroResumo,
 } from './fechamentoPonderadoService';
 
 export {
