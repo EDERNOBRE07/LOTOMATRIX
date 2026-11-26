@@ -19,8 +19,10 @@ import {
   ArrowRight,
   Layers,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import { soundService } from '../services/soundAlert';
+import { calcularParametrosConcurso } from '../utils/lotofacilStats';
 
 interface LinhaDoTempo100ConcursosComponentProps {
   latestDraw?: LotofacilDraw;
@@ -51,9 +53,53 @@ export const LinhaDoTempo100ConcursosComponent: React.FC<LinhaDoTempo100Concurso
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterDelay, setFilterDelay] = useState<'todos' | 'sorteadas' | 'atrasadas_4plus'>('todos');
+  const [historyPatternFilter, setHistoryPatternFilter] = useState<'todos' | 'padrao_ouro' | 'fora_padrao'>('todos');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const selectedDraw = draws[selectedIndex] || draws[0];
+
+  // Avaliação estatística memoizada dos 100 concursos passando o concurso N-1 para Repetidas
+  const evaluatedDraws = useMemo(() => {
+    return draws.map((draw, idx) => {
+      const candidatePrev = draws[idx + 1];
+      const prevDezenas =
+        candidatePrev && candidatePrev.concurso === draw.concurso - 1
+          ? candidatePrev.dezenas
+          : null;
+      return {
+        draw,
+        originalIndex: idx,
+        analise: calcularParametrosConcurso(draw.dezenas, prevDezenas),
+      };
+    });
+  }, [draws]);
+
+  const historyPatternCounts = useMemo(() => {
+    let padraoOuro = 0;
+    let foraDoPadrao = 0;
+    for (const item of evaluatedDraws) {
+      if (item.analise.resumo.classificacao === 'Padrão Ouro') padraoOuro++;
+      if (item.analise.resumo.foraDoPadrao) foraDoPadrao++;
+    }
+    return {
+      todos: evaluatedDraws.length,
+      padraoOuro,
+      foraDoPadrao,
+    };
+  }, [evaluatedDraws]);
+
+  const filteredTimelineDraws = useMemo(() => {
+    if (historyPatternFilter === 'padrao_ouro') {
+      return evaluatedDraws.filter((item) => item.analise.resumo.classificacao === 'Padrão Ouro');
+    }
+    if (historyPatternFilter === 'fora_padrao') {
+      return evaluatedDraws.filter((item) => item.analise.resumo.foraDoPadrao);
+    }
+    return evaluatedDraws;
+  }, [evaluatedDraws, historyPatternFilter]);
+
+  const selectedDrawAnalise =
+    evaluatedDraws[selectedIndex]?.analise ?? evaluatedDraws[0]?.analise;
 
   // Recalculate historical delay of all 25 numbers up to the selected contest
   const delaysAtDate = useMemo(() => {
@@ -225,48 +271,120 @@ export const LinhaDoTempo100ConcursosComponent: React.FC<LinhaDoTempo100Concurso
         </div>
       </div>
 
+      {/* Filtro Rápido de Histórico por Padrão Estatístico */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/60 border border-slate-800 rounded-2xl px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-slate-400 mr-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <span>Filtrar Histórico:</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setHistoryPatternFilter('todos')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+              historyPatternFilter === 'todos'
+                ? 'bg-slate-800 border-slate-500 text-white'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Todos ({historyPatternCounts.todos})
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryPatternFilter('padrao_ouro')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+              historyPatternFilter === 'padrao_ouro'
+                ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-emerald-300'
+            }`}
+          >
+            Padrão Ouro ({historyPatternCounts.padraoOuro})
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryPatternFilter('fora_padrao')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer inline-flex items-center gap-1.5 ${
+              historyPatternFilter === 'fora_padrao'
+                ? 'bg-rose-500/20 border-rose-400/60 text-rose-200'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-rose-300'
+            }`}
+          >
+            <AlertTriangle className="w-3 h-3 text-rose-400" />
+            <span>Fora do Padrão ({historyPatternCounts.foraDoPadrao})</span>
+          </button>
+        </div>
+        <span className="text-[11px] font-mono tabular-nums text-slate-400">
+          Exibindo {filteredTimelineDraws.length} de {evaluatedDraws.length} concursos
+        </span>
+      </div>
+
       {/* Horizontal Navigable Timeline Scroller */}
       <div className="relative">
-        <div
-          ref={scrollContainerRef}
-          className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950/40 snap-x"
-        >
-          {draws.map((d, idx) => {
-            const isSelected = idx === selectedIndex;
-            return (
-              <button
-                key={d.concurso}
-                onClick={() => handleSelectConcurso(idx)}
-                className={`snap-center shrink-0 px-3.5 py-2.5 rounded-2xl border transition-all duration-150 cursor-pointer text-left flex flex-col min-w-[105px] ${
-                  isSelected
-                    ? 'bg-gradient-to-b from-emerald-500/20 to-teal-500/30 border-emerald-400 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-400/40'
-                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 text-slate-400'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span
-                    className={`font-mono font-black text-xs ${
-                      isSelected ? 'text-emerald-300' : 'text-slate-300'
-                    }`}
-                  >
-                    #{d.concurso}
-                  </span>
-                  {idx === 0 && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-400 mt-0.5">{d.data}</span>
-                <span
-                  className={`text-[9px] font-mono mt-1 ${
-                    isSelected ? 'text-emerald-400 font-bold' : 'text-slate-500'
+        {filteredTimelineDraws.length === 0 ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-6 text-center text-xs text-slate-400">
+            Nenhum concurso encontrado para este filtro nos últimos 100 sorteios.
+          </div>
+        ) : (
+          <div
+            ref={scrollContainerRef}
+            className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950/40 snap-x"
+          >
+            {filteredTimelineDraws.map(({ draw: d, originalIndex: idx, analise }) => {
+              const isSelected = idx === selectedIndex;
+              const isAnomaly = analise.resumo.foraDoPadrao;
+              const scorePct = analise.resumo.scorePercentual;
+              const miniScoreColor =
+                scorePct >= 80
+                  ? 'text-emerald-400'
+                  : scorePct >= 55
+                  ? 'text-amber-300'
+                  : 'text-rose-400';
+
+              return (
+                <button
+                  key={d.concurso}
+                  onClick={() => handleSelectConcurso(idx)}
+                  className={`snap-center shrink-0 px-3.5 py-2.5 rounded-2xl border transition-all duration-150 cursor-pointer text-left flex flex-col min-w-[122px] ${
+                    isSelected
+                      ? 'bg-gradient-to-b from-emerald-500/20 to-teal-500/30 border-emerald-400 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                      : isAnomaly
+                      ? 'bg-rose-950/20 border-rose-500/40 border-l-4 border-l-rose-500 hover:border-rose-400/70 text-slate-300'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 text-slate-400'
                   }`}
                 >
-                  {idx === 0 ? 'Atual' : `${idx} sorteios atrás`}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span
+                      className={`font-mono font-black text-xs tabular-nums ${
+                        isSelected ? 'text-emerald-300' : 'text-slate-200'
+                      }`}
+                    >
+                      #{d.concurso}
+                    </span>
+                    <span className={`font-mono font-bold text-[10px] tabular-nums ${miniScoreColor}`}>
+                      {scorePct}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 font-mono tabular-nums">
+                    {d.data}
+                  </span>
+                  {isAnomaly ? (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/35 w-fit">
+                      Anomalia ({analise.resumo.criticos})
+                    </span>
+                  ) : (
+                    <span
+                      className={`text-[9px] font-mono mt-1 ${
+                        isSelected ? 'text-emerald-400 font-bold' : 'text-slate-500'
+                      }`}
+                    >
+                      {idx === 0 ? 'Atual' : analise.resumo.classificacao}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Current Selected Contest Summary Card */}
@@ -317,6 +435,69 @@ export const LinhaDoTempo100ConcursosComponent: React.FC<LinhaDoTempo100Concurso
             </div>
           </div>
         </div>
+
+        {/* Índice de Padrão do Concurso Selecionado */}
+        {selectedDrawAnalise && (() => {
+          const { resumo } = selectedDrawAnalise;
+          const barColor =
+            resumo.scorePercentual >= 80
+              ? 'bg-emerald-500'
+              : resumo.scorePercentual >= 55
+              ? 'bg-amber-500'
+              : 'bg-rose-500';
+          const scoreColor =
+            resumo.scorePercentual >= 80
+              ? 'text-emerald-400'
+              : resumo.scorePercentual >= 55
+              ? 'text-amber-300'
+              : 'text-rose-400';
+          const badgeClass =
+            resumo.classificacao === 'Padrão Ouro'
+              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+              : resumo.classificacao === 'Dentro da Média'
+              ? 'bg-sky-500/15 text-sky-300 border-sky-500/35'
+              : resumo.classificacao === 'Atípico'
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+              : 'bg-rose-500/15 text-rose-300 border-rose-500/45';
+
+          return (
+            <div
+              className={`mt-4 rounded-xl border px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2.5 ${
+                resumo.foraDoPadrao
+                  ? 'bg-rose-950/20 border-rose-500/40 border-l-4 border-l-rose-500'
+                  : 'bg-slate-900/80 border-slate-800'
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-2.5 text-xs">
+                <span className="font-semibold text-slate-200">Índice de Padrão do Concurso</span>
+                <div className="flex items-center gap-2">
+                  <span className={`font-mono font-bold text-sm tabular-nums ${scoreColor}`}>
+                    {resumo.scorePercentual}%
+                  </span>
+                  <div className="w-24 sm:w-32 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                      style={{ width: `${Math.min(100, Math.max(0, resumo.scorePercentual))}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="font-mono text-[11px] tabular-nums text-slate-300">
+                  {resumo.ideais}/{resumo.totalAvaliados} ideais
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[10px] tabular-nums">
+                  {resumo.alertas} alertas
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 font-mono text-[10px] tabular-nums">
+                  {resumo.criticos} críticos
+                </span>
+              </div>
+
+              <span className={`px-2.5 py-0.5 rounded-md border text-[11px] font-semibold ${badgeClass}`}>
+                {resumo.classificacao}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* 15 Sorteados Balls of that draw */}
         <div className="mt-4">

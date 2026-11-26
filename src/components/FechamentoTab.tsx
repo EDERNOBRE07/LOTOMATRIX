@@ -101,6 +101,11 @@ import {
   computeVoidHeatmap,
 } from '../services/vaziosService';
 import {
+  calcularParametrosConcurso as calcularAderenciaTicket,
+  filtrarERanquearJogos,
+  ParametrosConcurso as AnaliseAderenciaTicket,
+} from '../utils/lotofacilStats';
+import {
   Sparkles,
   Zap,
   Copy,
@@ -505,6 +510,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [indicadorGarantia, setIndicadorGarantia] = useState<IndicadorGarantiaPayload | null>(null);
   const [generatedTickets, setGeneratedTickets] = useState<GameTicket[]>([]);
   const [fechamentoFilter, setFechamentoFilter] = useState<'all' | 'improbable' | string>('all');
+  const [onlyGoldPattern, setOnlyGoldPattern] = useState<boolean>(false);
+  const [sortByAdherenceScore, setSortByAdherenceScore] = useState<boolean>(true);
+  const [expandedScoreTicketId, setExpandedScoreTicketId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
@@ -918,20 +926,39 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     effectiveFilters.bola15Max,
   ]);
 
-  // Bilhetes exibidos com suporte a filtro do monitoramento e auditoria em tempo real
+  // Avaliação estatística automática de todos os palpites gerados usando o último concurso oficial
+  const ticketAdherenceMap = useMemo<Map<string, AnaliseAderenciaTicket>>(() => {
+    const map = new Map<string, AnaliseAderenciaTicket>();
+    for (const ticket of generatedTickets) {
+      map.set(ticket.id, calcularAderenciaTicket(ticket.dezenas, latestDraw.dezenas));
+    }
+    return map;
+  }, [generatedTickets, latestDraw.dezenas]);
+
+  const goldPatternApprovedCount = useMemo(() => {
+    if (generatedTickets.length === 0) return 0;
+    return filtrarERanquearJogos(
+      generatedTickets.map((t) => t.dezenas),
+      latestDraw.dezenas,
+      { apenasPadraoOuro: true, maxCriticos: 0 }
+    ).length;
+  }, [generatedTickets, latestDraw.dezenas]);
+
+  // Bilhetes exibidos com suporte a filtro do monitoramento, auditoria e ranking estatístico pré-aposta
   const displayedTickets = useMemo(() => {
     const isCruzAtiva = studioFiltersEnabled && effectiveFilters.cruzAtiva !== false;
     const isExtremidadesAtiva = studioFiltersEnabled && effectiveFilters.extremidadesAtiva !== false;
     const isEstritaCruz = effectiveFilters.validacaoEstritaCruz === true;
 
+    let baseList: GameTicket[] = generatedTickets;
+
     if (fechamentoFilter === 'improbable' && fechamentoMonitoringSummary) {
       const improbableIds = fechamentoMonitoringSummary.gamesWithAnomalies.map((g) => g.gameId);
-      return generatedTickets.filter((t) =>
+      baseList = generatedTickets.filter((t) =>
         improbableIds.includes(`Bilhete #${t.index.toString().padStart(2, '0')}`)
       );
-    }
-    if (fechamentoFilter === 'auditado') {
-      return generatedTickets.filter((t) => {
+    } else if (fechamentoFilter === 'auditado') {
+      baseList = generatedTickets.filter((t) => {
         const b1 = t.bola1 ?? t.dezenas[0];
         const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
         const cruzCount = t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
@@ -948,9 +975,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             b15 > (effectiveFilters.bola15Max ?? 25));
         return !cruzFalhou && !extremidadesFalhou;
       });
-    }
-    if (fechamentoFilter === 'fora_padrao') {
-      return generatedTickets.filter((t) => {
+    } else if (fechamentoFilter === 'fora_padrao') {
+      baseList = generatedTickets.filter((t) => {
         const b1 = t.bola1 ?? t.dezenas[0];
         const b15 = t.bola15 ?? t.dezenas[t.dezenas.length - 1];
         const cruzCount = t.dezenas.filter((n) => CRUZ_DEZENAS.includes(n)).length;
@@ -967,13 +993,43 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             b15 > (effectiveFilters.bola15Max ?? 25));
         return cruzFalhou || extremidadesFalhou;
       });
-    }
-    if (fechamentoFilter.startsWith('Bilhete #')) {
-      return generatedTickets.filter(
+    } else if (fechamentoFilter.startsWith('Bilhete #')) {
+      baseList = generatedTickets.filter(
         (t) => `Bilhete #${t.index.toString().padStart(2, '0')}` === fechamentoFilter
       );
     }
-    return generatedTickets;
+
+    if (!onlyGoldPattern && !sortByAdherenceScore) {
+      return baseList;
+    }
+
+    // Filtra e ranqueia usando filtrarERanquearJogos preservando metadados dos bilhetes originais
+    const ranked = filtrarERanquearJogos(
+      baseList.map((t) => t.dezenas),
+      latestDraw.dezenas,
+      onlyGoldPattern ? { apenasPadraoOuro: true, maxCriticos: 0 } : {}
+    );
+
+    const buckets = new Map<string, GameTicket[]>();
+    for (const t of baseList) {
+      const key = t.dezenas.join('-');
+      const existing = buckets.get(key);
+      if (existing) existing.push(t);
+      else buckets.set(key, [t]);
+    }
+
+    const mappedRanked: GameTicket[] = [];
+    for (const item of ranked) {
+      const key = item.dezenas.join('-');
+      const bucket = buckets.get(key);
+      const matched = bucket?.shift();
+      if (matched) mappedRanked.push(matched);
+    }
+
+    if (!sortByAdherenceScore) {
+      return mappedRanked.sort((a, b) => a.index - b.index);
+    }
+    return mappedRanked;
   }, [
     generatedTickets,
     fechamentoFilter,
@@ -988,6 +1044,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     effectiveFilters.bola1Max,
     effectiveFilters.bola15Min,
     effectiveFilters.bola15Max,
+    onlyGoldPattern,
+    sortByAdherenceScore,
+    latestDraw.dezenas,
   ]);
 
   // Seleção e aplicação instantânea de Presets Estatísticos (Conservador, Balanceado, Agressivo)
@@ -5174,6 +5233,80 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           )}
 
+          {/* Controles de Filtro Pré-Aposta (Score Estatístico + Padrão Ouro) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={onlyGoldPattern}
+                onClick={() => setOnlyGoldPattern((prev) => !prev)}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                  onlyGoldPattern
+                    ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                    : 'bg-slate-950/70 border-slate-700 text-slate-300 hover:border-slate-600'
+                }`}
+                title="Filtrar usando filtrarERanquearJogos para manter apenas jogos Padrão Ouro (Score ≥ 85% e 0 parâmetros críticos)"
+              >
+                <span
+                  className={`w-7 h-4 rounded-full p-0.5 flex items-center transition-colors ${
+                    onlyGoldPattern ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <span className="w-3 h-3 rounded-full bg-white shadow-sm" />
+                </span>
+                <span>Apenas Padrão Ouro (0 vermelhos)</span>
+                <span className="font-mono text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-300 border border-emerald-500/30">
+                  {goldPatternApprovedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSortByAdherenceScore((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+                  sortByAdherenceScore
+                    ? 'bg-slate-800 border-emerald-500/40 text-emerald-300'
+                    : 'bg-slate-950/60 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+                title="Alternar ordenação automática do maior Score estatístico para o menor"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>{sortByAdherenceScore ? 'Ordenado: Maior Score ↓' : 'Ordenado: Nº do Bilhete'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-300">
+              <span>
+                Exibindo <strong className="text-white">{displayedTickets.length}</strong> de{' '}
+                <strong className="text-white">{generatedTickets.length}</strong> jogos aprovados
+              </span>
+              <span className="text-[10px] text-slate-500 hidden md:inline">
+                (ref. #{latestDraw.concurso})
+              </span>
+            </div>
+          </div>
+
+          {/* Empty state quando o filtro Padrão Ouro não retorna jogos */}
+          {displayedTickets.length === 0 && generatedTickets.length > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-5 text-center space-y-2">
+              <p className="text-xs text-amber-200 font-medium">
+                Nenhum dos {generatedTickets.length} jogos gerados atingiu os critérios ativos
+                {onlyGoldPattern ? ' (Padrão Ouro: Score ≥ 85% e 0 vermelhos).' : '.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnlyGoldPattern(false);
+                  setFechamentoFilter('all');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition cursor-pointer"
+              >
+                Exibir todos os {generatedTickets.length} jogos ordenados por Score
+              </button>
+            </div>
+          )}
+
           {/* Tickets List */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1">
             {displayedTickets.map((ticket) => {
@@ -5200,6 +5333,18 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               const isForaDoPadrao = cruzFalhou || extremidadesFalhou;
               const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
 
+              const analiseTicket =
+                ticketAdherenceMap.get(ticket.id) ??
+                calcularAderenciaTicket(ticket.dezenas, latestDraw.dezenas);
+              const scorePct = analiseTicket.resumo.scorePercentual;
+              const scoreBadgeClass =
+                scorePct >= 80
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
+                  : scorePct >= 55
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:border-amber-400'
+                  : 'bg-rose-500/15 text-rose-300 border-rose-500/45 hover:border-rose-400';
+              const isScoreExpanded = expandedScoreTicketId === ticket.id;
+
               return (
                 <div
                   key={`${ticket.id}-${goldenGlowTrigger}`}
@@ -5210,7 +5355,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   } ${goldenGlowTrigger > 0 ? 'animate-golden-glow' : ''}`}
                 >
                   {/* Header of Ticket */}
-                  <div className="flex items-center justify-between text-xs mb-2">
+                  <div className="flex items-center justify-between text-xs mb-2 gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded text-[11px]">
                         Bilhete #{ticket.index.toString().padStart(2, '0')}
@@ -5247,21 +5392,83 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => handleCopyTicket(ticket)}
-                      className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer"
-                      title="Copiar dezenas deste jogo"
-                    >
-                      {copiedTicketId === ticket.id ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Badge Compacto de Score Estatístico (Hover = resumo, Clique = 9 parâmetros) */}
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedScoreTicketId((prev) => (prev === ticket.id ? null : ticket.id))
+                          }
+                          aria-expanded={isScoreExpanded}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-mono text-[11px] font-bold tabular-nums transition cursor-pointer ${scoreBadgeClass}`}
+                          title={`Score Estatístico: ${scorePct}% (${analiseTicket.resumo.classificacao}) — ${analiseTicket.resumo.ideais}/${analiseTicket.resumo.totalAvaliados} ideais, ${analiseTicket.resumo.alertas} alertas, ${analiseTicket.resumo.criticos} críticos. Clique para ver os 9 parâmetros.`}
+                        >
+                          <span>Score {scorePct}%</span>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${
+                              isScoreExpanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+
+                        {/* Popover rápido no hover quando não expandido */}
+                        {!isScoreExpanded && (
+                          <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute right-0 top-full mt-1.5 z-30 w-64 rounded-lg bg-slate-950 border border-slate-700 p-2.5 shadow-2xl">
+                            <div className="flex items-center justify-between text-[11px] pb-1.5 mb-1.5 border-b border-slate-800">
+                              <span className="font-semibold text-white">
+                                {analiseTicket.resumo.classificacao}
+                              </span>
+                              <span className="font-mono tabular-nums text-slate-300">
+                                {analiseTicket.resumo.ideais}/{analiseTicket.resumo.totalAvaliados} ideais
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1 text-[10px]">
+                              {analiseTicket.metricas.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded bg-slate-900"
+                                >
+                                  <span className="text-slate-400 truncate">{m.label.split(' ')[0]}</span>
+                                  <span
+                                    className={`font-mono font-semibold tabular-nums ${
+                                      m.status === 'ideal'
+                                        ? 'text-emerald-300'
+                                        : m.status === 'alerta'
+                                        ? 'text-amber-300'
+                                        : m.status === 'critico'
+                                        ? 'text-rose-300'
+                                        : 'text-slate-300'
+                                    }`}
+                                  >
+                                    {m.valorExibicao}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-1.5 text-[9.5px] text-slate-500 text-right">
+                              Clique para fixar os 9 parâmetros
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleCopyTicket(ticket)}
+                        className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer"
+                        title="Copiar dezenas deste jogo"
+                      >
+                        {copiedTicketId === ticket.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Number Balls */}
-                  <div className="flex flex-wrap gap-1.5 my-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5 my-2.5">
                     {ticket.dezenas.map((num) => {
                       const isKey = cyclePendingNumbers.includes(num);
                       return (
@@ -5278,6 +5485,62 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       );
                     })}
                   </div>
+
+                  {/* Expansão dos 9 Parâmetros Estatísticos do Bilhete */}
+                  {isScoreExpanded && (
+                    <div className="mb-2.5 rounded-lg bg-slate-900/95 border border-slate-800 p-2.5 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pb-1.5 border-b border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white">
+                            9 Parâmetros · {analiseTicket.resumo.classificacao}
+                          </span>
+                          <span className="font-mono tabular-nums text-slate-400">
+                            ({analiseTicket.resumo.ideais}/{analiseTicket.resumo.totalAvaliados} ideais ·{' '}
+                            {analiseTicket.resumo.alertas} alertas · {analiseTicket.resumo.criticos} críticos)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedScoreTicketId(null)}
+                          className="text-slate-400 hover:text-white text-[10px] underline cursor-pointer"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {analiseTicket.metricas.map((m) => {
+                          const cellClass =
+                            m.status === 'ideal'
+                              ? 'bg-emerald-500/[0.08] border-emerald-500/30 text-emerald-300'
+                              : m.status === 'alerta'
+                              ? 'bg-amber-500/[0.08] border-amber-500/35 text-amber-200'
+                              : m.status === 'critico'
+                              ? 'bg-rose-500/[0.1] border-rose-500/40 text-rose-300'
+                              : 'bg-slate-950 border-slate-800 text-slate-300';
+                          return (
+                            <div
+                              key={m.id}
+                              className={`rounded-md border px-2 py-1.5 ${cellClass}`}
+                              title={m.tooltipTexto}
+                            >
+                              <div className="text-[9.5px] text-slate-400 truncate">{m.label}</div>
+                              <div className="flex items-center justify-between gap-1 mt-0.5">
+                                <span className="text-[11px] font-mono font-bold tabular-nums truncate">
+                                  {m.valorExibicao}
+                                </span>
+                                <span className="text-[8.5px] uppercase font-semibold opacity-90 shrink-0">
+                                  {m.statusLabel}
+                                </span>
+                              </div>
+                              <div className="text-[8.5px] text-slate-500 font-mono truncate mt-0.5">
+                                {m.faixaIdealTexto}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Analytical Tags */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 pt-2 border-t border-slate-850">
