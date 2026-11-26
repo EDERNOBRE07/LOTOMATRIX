@@ -7,11 +7,14 @@ import {
   CRUZ_DEZENAS,
   DEZENAS_STATS,
   CONCURSO_ATUAL,
+  RECENT_DRAWS,
 } from '../data/lotofacilData';
 import { LotofacilDraw, DezenaStats } from '../types/lotofacil';
 import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics';
 import { calculateCurvaAbc } from '../services/curvaAbcService';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X, CheckCircle2 } from 'lucide-react';
+import { dezenasParaBitmask, verificarNoHistorico } from '../utils/lotofacilEngine';
+import { mesclarEOrdenarHistorico } from '../utils/concursoParametros';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 import { soundService } from '../services/soundAlert';
 
@@ -23,6 +26,7 @@ interface VolanteSelectorProps {
   statsList?: DezenaStats[];
   cyclePendingNumbers?: number[];
   latestDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
   onToggleNumber: (n: number) => void;
   onSetFixed: (n: number) => void;
   onSetExcluded: (n: number) => void;
@@ -43,6 +47,7 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   statsList = DEZENAS_STATS,
   cyclePendingNumbers = [17, 22],
   latestDraw = CONCURSO_ATUAL,
+  drawsHistory = RECENT_DRAWS,
   onToggleNumber,
   onSetFixed,
   onSetExcluded,
@@ -272,6 +277,21 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
       isUnder: count < targetCount,
     };
   }, [selectedNumbers, targetCount]);
+
+  // Verificação em tempo real via bitmask contra o histórico oficial (alerta 14 ou 15 pontos)
+  const historicoMasks = React.useMemo(() => {
+    const merged = mesclarEOrdenarHistorico(latestDraw, drawsHistory, RECENT_DRAWS);
+    return merged.map((d) => ({
+      concurso: d.concurso,
+      mask: dezenasParaBitmask(d.dezenas),
+    }));
+  }, [latestDraw, drawsHistory]);
+
+  const historicoMatch = React.useMemo(() => {
+    if (selectedNumbers.length < 15 || selectedNumbers.length > 20) return null;
+    const match = verificarNoHistorico(dezenasParaBitmask(selectedNumbers), historicoMasks, 14);
+    return match.jaSaiu ? match : null;
+  }, [selectedNumbers, historicoMasks]);
 
   const handleNumberClick = (n: number) => {
     setLastClickedNum(n);
@@ -669,6 +689,21 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           />
         </div>
+
+        {/* Alerta em Tempo Real: Combinação já premiada com 14 ou 15 pontos no histórico */}
+        {historicoMatch && (
+          <div
+            role="alert"
+            className="mt-3 flex items-center gap-2.5 px-3 py-2 rounded-lg bg-rose-950/75 border border-rose-500/70 text-rose-200 text-xs font-medium shadow-sm"
+          >
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>
+              <strong className="text-rose-100">Atenção:</strong> este jogo já fez{' '}
+              <strong className="font-mono text-rose-100">{historicoMatch.maiorAcerto} pontos</strong> no concurso{' '}
+              <strong className="font-mono text-rose-100">{historicoMatch.concursoNumero}</strong>.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Visual Filter Overlays */}

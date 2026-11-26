@@ -16,7 +16,8 @@ import {
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import {
   calcularParametrosConcurso,
-  resolvePreviousDrawDezenas,
+  obterConcursoAnterior,
+  mesclarEOrdenarHistorico,
 } from '../utils/concursoParametros';
 import {
   buildResultadosEstatisticosRows,
@@ -107,6 +108,7 @@ export interface ParsedGameItem {
 
 interface ModuloConferenciaJogosProps {
   latestDraw?: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
   generatedTickets?: GameTicket[];
   onImportFechamento?: () => void;
   inspectedVolanteNumbers?: number[];
@@ -116,6 +118,7 @@ interface ModuloConferenciaJogosProps {
 
 export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   latestDraw = CONCURSO_ATUAL,
+  drawsHistory = RECENT_DRAWS,
   generatedTickets = [],
   inspectedVolanteNumbers = [],
   onAddVolanteToConference,
@@ -249,24 +252,27 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     }
   }, [generatedTickets.length]);
 
-  // Combine draws with latestDraw strictly placed first
+  // Histórico unificado ordenado em ordem decrescente (mais recente -> mais antigo)
   const allDraws = useMemo(() => {
-    const others = RECENT_DRAWS.filter((d) => d.concurso !== latestDraw.concurso);
-    return [latestDraw, ...others];
-  }, [latestDraw]);
+    return mesclarEOrdenarHistorico(latestDraw, drawsHistory, RECENT_DRAWS);
+  }, [latestDraw, drawsHistory]);
 
   // Selected draw object
   const targetDraw = useMemo(() => {
-    return allDraws.find((d) => d.concurso === selectedConcursoId) || latestDraw;
+    return allDraws.find((d) => d.concurso === selectedConcursoId) || allDraws[0] || latestDraw;
   }, [allDraws, selectedConcursoId, latestDraw]);
 
   const isCurrentPriority = targetDraw.concurso === latestDraw.concurso;
 
-  // Parâmetros estatísticos completos do concurso selecionado + tendência dos últimos 5 concursos
+  // Parâmetros estatísticos completos do concurso selecionado com busca robusta do concurso anterior (N - 1)
+  const targetDrawPrevious = useMemo(
+    () => obterConcursoAnterior(targetDraw, allDraws),
+    [targetDraw, allDraws]
+  );
+
   const targetDrawParametros = useMemo(() => {
-    const prevDezenas = resolvePreviousDrawDezenas(targetDraw.concurso, allDraws);
-    return calcularParametrosConcurso(targetDraw.dezenas || [], prevDezenas);
-  }, [targetDraw, allDraws]);
+    return calcularParametrosConcurso(targetDraw.dezenas || [], targetDrawPrevious?.dezenas ?? null);
+  }, [targetDraw, targetDrawPrevious]);
 
   const targetDrawStatRows = useMemo(
     () => buildResultadosEstatisticosRows(targetDraw.concurso, targetDrawParametros),
@@ -896,11 +902,42 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
       <div id="entrada-jogos-conferencia" className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden scroll-mt-24">
         <div className="p-3 bg-slate-900/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold text-slate-200">
-              Entrada de Jogos para Conferência ({parsedGames.length} {parsedGames.length === 1 ? 'jogo identificado' : 'jogos identificados'})
-            </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-bold text-slate-200">
+                Entrada de Jogos para Conferência ({parsedGames.length} {parsedGames.length === 1 ? 'jogo identificado' : 'jogos identificados'})
+              </span>
+            </div>
+
+            {/* SELETOR DE CONCURSO OFICIAL (PADRÃO DARK/GOLD) NA ENTRADA DE JOGOS */}
+            <div className="flex items-center gap-2 bg-slate-950/90 border border-amber-500/40 rounded-lg px-2.5 py-1 shadow-inner">
+              <label
+                htmlFor="seletor-concurso-entrada-conferencia"
+                className="text-[11px] font-bold text-amber-300 whitespace-nowrap flex items-center gap-1"
+              >
+                <Star className={`w-3 h-3 ${isCurrentPriority ? 'text-amber-400 fill-amber-400' : 'text-amber-500/70'}`} />
+                <span>Conferir contra:</span>
+              </label>
+              <select
+                id="seletor-concurso-entrada-conferencia"
+                aria-label="Selecionar concurso oficial para conferência"
+                value={targetDraw.concurso}
+                onChange={(e) => setSelectedConcursoId(Number(e.target.value))}
+                className="bg-slate-900 text-amber-200 text-xs font-mono font-bold rounded-md px-2.5 py-1 border border-amber-500/40 hover:border-amber-400 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition cursor-pointer"
+              >
+                {allDraws.map((d) => {
+                  const isLatest = d.concurso === allDraws[0]?.concurso;
+                  return (
+                    <option key={`entrada-opt-${d.concurso}`} value={d.concurso} className="bg-slate-950 text-slate-100">
+                      {isLatest
+                        ? `Concurso #${d.concurso} - ${d.data} (Último)`
+                        : `Concurso #${d.concurso} - ${d.data}`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">

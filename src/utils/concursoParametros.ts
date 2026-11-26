@@ -3,6 +3,7 @@ import {
   ADERENCIA_CONFIG,
   CONJUNTOS_LOTOFACIL,
   STATUS_PARAMETRO_LABELS,
+  obterFaixasEscaladas,
   StatusParametro,
   StatusParametroLabel,
   MetricaResultado,
@@ -160,8 +161,11 @@ export function avaliarStatusSomaTotal(somaTotal: number): StatusParametro {
   return avaliarFaixa(somaTotal, FAIXAS_LOTOFACIL.soma.ideal, FAIXAS_LOTOFACIL.soma.alerta);
 }
 
-function avaliarStatusQuadrantes(qVals: readonly number[]): StatusParametro {
-  const { ideal, alerta } = FAIXAS_LOTOFACIL.quadrantePorBloco;
+function avaliarStatusQuadrantes(
+  qVals: readonly number[],
+  faixaQuadrante: { ideal: readonly [number, number]; alerta: readonly [number, number] } = FAIXAS_LOTOFACIL.quadrantePorBloco
+): StatusParametro {
+  const { ideal, alerta } = faixaQuadrante;
   if (qVals.some((v) => v < alerta[0] || v > alerta[1])) {
     return 'critico';
   }
@@ -275,38 +279,47 @@ export function calcularParametrosConcurso(
   const quadrantes: QuadrantesDistribuicao = { q1, q2, q3, q4, centro13 };
   const qVals = [q1, q2, q3, q4];
 
-  const statusPares = avaliarFaixa(pares, FAIXAS_LOTOFACIL.pares.ideal, FAIXAS_LOTOFACIL.pares.alerta);
+  const qtdDezenasRef = unicasOrdenadas.length >= 15 ? unicasOrdenadas.length : 15;
+  const isJogoExpandido = qtdDezenasRef > 15;
+  const faixas = obterFaixasEscaladas(qtdDezenasRef);
+
+  const fmtRange = (r: readonly [number, number], sufixo: string) =>
+    r[0] === r[1] ? `${r[0]} ${sufixo}`.trim() : `${r[0]} a ${r[1]} ${sufixo}`.trim();
+
+  const textoPares = isJogoExpandido ? fmtRange(faixas.pares.ideal, 'pares') : FAIXAS_LOTOFACIL.pares.texto;
+  const textoRepetidas = isJogoExpandido
+    ? fmtRange(faixas.repetidas.ideal, 'repetidas')
+    : FAIXAS_LOTOFACIL.repetidas.texto;
+  const textoSoma = isJogoExpandido ? `${faixas.soma.ideal[0]} a ${faixas.soma.ideal[1]}` : FAIXAS_LOTOFACIL.soma.texto;
+  const textoPrimos = isJogoExpandido ? fmtRange(faixas.primos.ideal, 'primos') : FAIXAS_LOTOFACIL.primos.texto;
+  const textoMoldura = isJogoExpandido
+    ? `${faixas.moldura.ideal[0]} a ${faixas.moldura.ideal[1]} na moldura`
+    : FAIXAS_LOTOFACIL.moldura.texto;
+  const textoFibonacci = isJogoExpandido
+    ? fmtRange(faixas.fibonacci.ideal, 'Fibonacci')
+    : FAIXAS_LOTOFACIL.fibonacci.texto;
+  const textoSequencia = isJogoExpandido
+    ? `Maior seq: ${faixas.sequencia.ideal[0]} a ${faixas.sequencia.ideal[1]}`
+    : FAIXAS_LOTOFACIL.sequencia.texto;
+  const textoCruz = isJogoExpandido
+    ? `${faixas.cruz.ideal[0]} a ${faixas.cruz.ideal[1]} na cruz`
+    : FAIXAS_LOTOFACIL.cruz.texto;
+  const textoQuadrantes = isJogoExpandido
+    ? `${faixas.quadrantePorBloco.ideal[0]} a ${faixas.quadrantePorBloco.ideal[1]} por quadrante`
+    : FAIXAS_LOTOFACIL.quadrantePorBloco.texto;
+
+  const statusPares = avaliarFaixa(pares, faixas.pares.ideal, faixas.pares.alerta);
   const statusRepetidas: StatusParametro =
     repetidasAnterior !== null
-      ? avaliarFaixa(
-          repetidasAnterior,
-          FAIXAS_LOTOFACIL.repetidas.ideal,
-          FAIXAS_LOTOFACIL.repetidas.alerta
-        )
+      ? avaliarFaixa(repetidasAnterior, faixas.repetidas.ideal, faixas.repetidas.alerta)
       : 'neutro';
-  const statusSoma = avaliarFaixa(somaTotal, FAIXAS_LOTOFACIL.soma.ideal, FAIXAS_LOTOFACIL.soma.alerta);
-  const statusPrimos = avaliarFaixa(
-    primos,
-    FAIXAS_LOTOFACIL.primos.ideal,
-    FAIXAS_LOTOFACIL.primos.alerta
-  );
-  const statusMoldura = avaliarFaixa(
-    moldura,
-    FAIXAS_LOTOFACIL.moldura.ideal,
-    FAIXAS_LOTOFACIL.moldura.alerta
-  );
-  const statusFibonacci = avaliarFaixa(
-    fibonacci,
-    FAIXAS_LOTOFACIL.fibonacci.ideal,
-    FAIXAS_LOTOFACIL.fibonacci.alerta
-  );
-  const statusSequencia = avaliarFaixa(
-    maiorSequencia,
-    FAIXAS_LOTOFACIL.sequencia.ideal,
-    FAIXAS_LOTOFACIL.sequencia.alerta
-  );
-  const statusCruz = avaliarFaixa(cruz, FAIXAS_LOTOFACIL.cruz.ideal, FAIXAS_LOTOFACIL.cruz.alerta);
-  const statusQuadrantes = avaliarStatusQuadrantes(qVals);
+  const statusSoma = avaliarFaixa(somaTotal, faixas.soma.ideal, faixas.soma.alerta);
+  const statusPrimos = avaliarFaixa(primos, faixas.primos.ideal, faixas.primos.alerta);
+  const statusMoldura = avaliarFaixa(moldura, faixas.moldura.ideal, faixas.moldura.alerta);
+  const statusFibonacci = avaliarFaixa(fibonacci, faixas.fibonacci.ideal, faixas.fibonacci.alerta);
+  const statusSequencia = avaliarFaixa(maiorSequencia, faixas.sequencia.ideal, faixas.sequencia.alerta);
+  const statusCruz = avaliarFaixa(cruz, faixas.cruz.ideal, faixas.cruz.alerta);
+  const statusQuadrantes = avaliarStatusQuadrantes(qVals, faixas.quadrantePorBloco);
 
   const blocosTexto =
     blocosConsecutivos.length > 0
@@ -316,6 +329,8 @@ export function calcularParametrosConcurso(
           .join(', ')
       : 'Sem seq.';
 
+  const escalaNota = isJogoExpandido ? ` (escala ${qtdDezenasRef} dez.)` : '';
+
   const metricasLista: MetricaResultado[] = [
     {
       id: 'pares_impares',
@@ -324,8 +339,10 @@ export function calcularParametrosConcurso(
       valorNumerico: pares,
       status: statusPares,
       statusLabel: STATUS_PARAMETRO_LABELS[statusPares],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.pares.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.pares.detalheTooltip,
+      faixaIdealTexto: textoPares,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.pares.ideal[0]}–${faixas.pares.ideal[1]} · Alerta: ${faixas.pares.alerta[0]}–${faixas.pares.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.pares.detalheTooltip,
     },
     {
       id: 'repetidas',
@@ -334,10 +351,12 @@ export function calcularParametrosConcurso(
       valorNumerico: repetidasAnterior ?? -1,
       status: statusRepetidas,
       statusLabel: STATUS_PARAMETRO_LABELS[statusRepetidas],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.repetidas.texto,
+      faixaIdealTexto: textoRepetidas,
       tooltipTexto:
         repetidasAnterior !== null
-          ? FAIXAS_LOTOFACIL.repetidas.detalheTooltip
+          ? isJogoExpandido
+            ? `Ideal: ${faixas.repetidas.ideal[0]}–${faixas.repetidas.ideal[1]} · Alerta: ${faixas.repetidas.alerta[0]}–${faixas.repetidas.alerta[1]}${escalaNota}`
+            : FAIXAS_LOTOFACIL.repetidas.detalheTooltip
           : 'Concurso anterior indisponível no histórico local (Neutro)',
     },
     {
@@ -347,8 +366,10 @@ export function calcularParametrosConcurso(
       valorNumerico: somaTotal,
       status: statusSoma,
       statusLabel: STATUS_PARAMETRO_LABELS[statusSoma],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.soma.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.soma.detalheTooltip,
+      faixaIdealTexto: textoSoma,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.soma.ideal[0]}–${faixas.soma.ideal[1]} · Alerta: ${faixas.soma.alerta[0]}–${faixas.soma.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.soma.detalheTooltip,
     },
     {
       id: 'primos',
@@ -357,8 +378,10 @@ export function calcularParametrosConcurso(
       valorNumerico: primos,
       status: statusPrimos,
       statusLabel: STATUS_PARAMETRO_LABELS[statusPrimos],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.primos.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.primos.detalheTooltip,
+      faixaIdealTexto: textoPrimos,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.primos.ideal[0]}–${faixas.primos.ideal[1]} · Alerta: ${faixas.primos.alerta[0]}–${faixas.primos.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.primos.detalheTooltip,
     },
     {
       id: 'moldura',
@@ -367,8 +390,10 @@ export function calcularParametrosConcurso(
       valorNumerico: moldura,
       status: statusMoldura,
       statusLabel: STATUS_PARAMETRO_LABELS[statusMoldura],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.moldura.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.moldura.detalheTooltip,
+      faixaIdealTexto: textoMoldura,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.moldura.ideal[0]}–${faixas.moldura.ideal[1]} · Alerta: ${faixas.moldura.alerta[0]}–${faixas.moldura.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.moldura.detalheTooltip,
     },
     {
       id: 'fibonacci',
@@ -377,8 +402,10 @@ export function calcularParametrosConcurso(
       valorNumerico: fibonacci,
       status: statusFibonacci,
       statusLabel: STATUS_PARAMETRO_LABELS[statusFibonacci],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.fibonacci.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.fibonacci.detalheTooltip,
+      faixaIdealTexto: textoFibonacci,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.fibonacci.ideal[0]}–${faixas.fibonacci.ideal[1]} · Alerta: ${faixas.fibonacci.alerta[0]}–${faixas.fibonacci.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.fibonacci.detalheTooltip,
     },
     {
       id: 'sequencia',
@@ -387,8 +414,10 @@ export function calcularParametrosConcurso(
       valorNumerico: maiorSequencia,
       status: statusSequencia,
       statusLabel: STATUS_PARAMETRO_LABELS[statusSequencia],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.sequencia.texto,
-      tooltipTexto: `${FAIXAS_LOTOFACIL.sequencia.detalheTooltip} · Blocos: ${blocosTexto}`,
+      faixaIdealTexto: textoSequencia,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.sequencia.ideal[0]}–${faixas.sequencia.ideal[1]} consecutivas${escalaNota} · Blocos: ${blocosTexto}`
+        : `${FAIXAS_LOTOFACIL.sequencia.detalheTooltip} · Blocos: ${blocosTexto}`,
     },
     {
       id: 'cruz',
@@ -397,8 +426,10 @@ export function calcularParametrosConcurso(
       valorNumerico: cruz,
       status: statusCruz,
       statusLabel: STATUS_PARAMETRO_LABELS[statusCruz],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.cruz.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.cruz.detalheTooltip,
+      faixaIdealTexto: textoCruz,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.cruz.ideal[0]}–${faixas.cruz.ideal[1]} · Alerta: ${faixas.cruz.alerta[0]}–${faixas.cruz.alerta[1]}${escalaNota}`
+        : FAIXAS_LOTOFACIL.cruz.detalheTooltip,
     },
     {
       id: 'quadrantes',
@@ -407,8 +438,10 @@ export function calcularParametrosConcurso(
       valorNumerico: qVals,
       status: statusQuadrantes,
       statusLabel: STATUS_PARAMETRO_LABELS[statusQuadrantes],
-      faixaIdealTexto: FAIXAS_LOTOFACIL.quadrantePorBloco.texto,
-      tooltipTexto: FAIXAS_LOTOFACIL.quadrantePorBloco.detalheTooltip,
+      faixaIdealTexto: textoQuadrantes,
+      tooltipTexto: isJogoExpandido
+        ? `Ideal: ${faixas.quadrantePorBloco.ideal[0]}–${faixas.quadrantePorBloco.ideal[1]} por quadrante${escalaNota}`
+        : FAIXAS_LOTOFACIL.quadrantePorBloco.detalheTooltip,
     },
   ];
 
@@ -450,44 +483,29 @@ export function calcularParametrosConcurso(
   };
 
   const metricas: ConcursoMetricasAvaliadas = {
-    paresImpares: criarMetricaAvaliada(
-      pares,
-      `${pares}P / ${impares}I`,
-      statusPares,
-      FAIXAS_LOTOFACIL.pares.texto
-    ),
+    paresImpares: criarMetricaAvaliada(pares, `${pares}P / ${impares}I`, statusPares, textoPares),
     repetidasAnterior: criarMetricaAvaliada(
       repetidasAnterior,
       repetidasAnterior !== null ? `${repetidasAnterior} dez.` : 'N/A',
       statusRepetidas,
-      FAIXAS_LOTOFACIL.repetidas.texto
+      textoRepetidas
     ),
-    somaTotal: criarMetricaAvaliada(somaTotal, `${somaTotal}`, statusSoma, FAIXAS_LOTOFACIL.soma.texto),
-    primos: criarMetricaAvaliada(primos, `${primos} dez.`, statusPrimos, FAIXAS_LOTOFACIL.primos.texto),
-    molduraMiolo: criarMetricaAvaliada(
-      moldura,
-      `${moldura}M / ${miolo}C`,
-      statusMoldura,
-      FAIXAS_LOTOFACIL.moldura.texto
-    ),
-    fibonacci: criarMetricaAvaliada(
-      fibonacci,
-      `${fibonacci} dez.`,
-      statusFibonacci,
-      FAIXAS_LOTOFACIL.fibonacci.texto
-    ),
+    somaTotal: criarMetricaAvaliada(somaTotal, `${somaTotal}`, statusSoma, textoSoma),
+    primos: criarMetricaAvaliada(primos, `${primos} dez.`, statusPrimos, textoPrimos),
+    molduraMiolo: criarMetricaAvaliada(moldura, `${moldura}M / ${miolo}C`, statusMoldura, textoMoldura),
+    fibonacci: criarMetricaAvaliada(fibonacci, `${fibonacci} dez.`, statusFibonacci, textoFibonacci),
     sequencia: criarMetricaAvaliada(
       maiorSequencia,
       `Máx ${maiorSequencia} (${blocosTexto})`,
       statusSequencia,
-      FAIXAS_LOTOFACIL.sequencia.texto
+      textoSequencia
     ),
-    cruz: criarMetricaAvaliada(cruz, `${cruz} dez.`, statusCruz, FAIXAS_LOTOFACIL.cruz.texto),
+    cruz: criarMetricaAvaliada(cruz, `${cruz} dez.`, statusCruz, textoCruz),
     quadrantes: criarMetricaAvaliada(
       quadrantes,
       `${q1}-${q2}-${q3}-${q4}${centro13 ? ' (+13)' : ''}`,
       statusQuadrantes,
-      FAIXAS_LOTOFACIL.quadrantePorBloco.texto
+      textoQuadrantes
     ),
   };
 
@@ -531,19 +549,81 @@ export function calcularAderenciaConcurso(
 }
 
 /**
- * Localiza com segurança as dezenas do concurso imediatamente anterior (concurso - 1)
- * dentro de um histórico de sorteios carregado no estado/banco.
+ * Mescla múltiplos concursos/listas removendo duplicatas por número de concurso
+ * e retornando sempre em ordem estritamente decrescente (mais recente -> mais antigo).
+ */
+export function mesclarEOrdenarHistorico<T extends { concurso: number; dezenas?: number[] }>(
+  ...fontes: ReadonlyArray<ReadonlyArray<T> | T | null | undefined>
+): T[] {
+  const map = new Map<number, T>();
+  for (const fonte of fontes) {
+    if (!fonte) continue;
+    const itens = Array.isArray(fonte) ? fonte : [fonte];
+    for (const item of itens) {
+      if (!item || !Number.isFinite(item.concurso)) continue;
+      if (!map.has(item.concurso)) {
+        map.set(item.concurso, item);
+      } else {
+        const existente = map.get(item.concurso)!;
+        const existenteOk = Array.isArray(existente.dezenas) && existente.dezenas.length === 15;
+        const novoOk = Array.isArray(item.dezenas) && item.dezenas.length === 15;
+        if (!existenteOk && novoOk) {
+          map.set(item.concurso, item);
+        }
+      }
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.concurso - a.concurso);
+}
+
+/**
+ * Localiza o concurso imediatamente anterior (N - 1) no histórico.
+ * 1) Tenta encontrar correspondência exata `concurso === atual - 1`.
+ * 2) Caso haja lacuna temporária no histórico, localiza o item imediatamente anterior
+ *    na lista ordenada por número de concurso (`concurso < atual`, maior disponível).
+ * 3) Se o concurso atual for o mais antigo da base carregada, retorna `null` com segurança.
+ */
+export function obterConcursoAnterior<T extends { concurso: number; dezenas: number[] }>(
+  concursoAtual: { concurso: number } | { numero: number } | number | null | undefined,
+  historicoConcursos: ReadonlyArray<T> | null | undefined
+): T | null {
+  if (concursoAtual == null || !Array.isArray(historicoConcursos) || historicoConcursos.length === 0) {
+    return null;
+  }
+
+  const numeroAtual =
+    typeof concursoAtual === 'number'
+      ? concursoAtual
+      : 'concurso' in concursoAtual
+      ? Number(concursoAtual.concurso)
+      : Number(concursoAtual.numero);
+
+  if (!Number.isFinite(numeroAtual)) return null;
+
+  const validosOrdenados = historicoConcursos
+    .filter((d) => d && Number.isFinite(d.concurso) && Array.isArray(d.dezenas) && d.dezenas.length > 0)
+    .sort((a, b) => b.concurso - a.concurso);
+
+  if (validosOrdenados.length === 0) return null;
+
+  const exactPrev = validosOrdenados.find((d) => d.concurso === numeroAtual - 1);
+  if (exactPrev) {
+    return exactPrev;
+  }
+
+  // Fallback seguro: item imediatamente anterior na lista ordenada decrescente
+  const immediatePrev = validosOrdenados.find((d) => d.concurso < numeroAtual);
+  return immediatePrev ?? null;
+}
+
+/**
+ * Localiza com segurança as dezenas do concurso imediatamente anterior (concurso - 1
+ * ou item imediatamente anterior no histórico ordenado).
  */
 export function resolvePreviousDrawDezenas(
   concursoAtual: number,
   drawsHistory: ReadonlyArray<{ concurso: number; dezenas: number[] }>
 ): number[] | null {
-  if (!Number.isFinite(concursoAtual) || !Array.isArray(drawsHistory) || drawsHistory.length === 0) {
-    return null;
-  }
-  const exactPrev = drawsHistory.find((d) => d.concurso === concursoAtual - 1);
-  if (exactPrev && Array.isArray(exactPrev.dezenas) && exactPrev.dezenas.length > 0) {
-    return exactPrev.dezenas;
-  }
-  return null;
+  const prev = obterConcursoAnterior(concursoAtual, drawsHistory);
+  return prev ? prev.dezenas : null;
 }

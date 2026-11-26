@@ -127,7 +127,7 @@ export const AppShellSidebar: React.FC<AppShellSidebarProps> = ({
 
   return (
     <aside
-      className={`hidden md:flex flex-col justify-between shrink-0 bg-slate-950/90 border-r border-slate-800/80 backdrop-blur-xl transition-all duration-300 ease-in-out sticky top-[73px] h-[calc(100vh-73px)] z-30 select-none ${
+      className={`hidden md:flex flex-col justify-between shrink-0 bg-slate-950/90 border-r border-slate-800/80 backdrop-blur-xl transition-all duration-300 ease-in-out sticky top-12 h-[calc(100vh-48px)] z-30 select-none ${
         isCollapsed ? 'w-20 px-2 py-4' : 'w-64 p-3.5'
       }`}
     >

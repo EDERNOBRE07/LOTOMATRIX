@@ -135,3 +135,70 @@ export const CONJUNTOS_LOTOFACIL = {
     Q4: [18, 19, 20, 23, 24, 25] as const,
   },
 } as const;
+
+export interface FaixasEscaladasLotofacil {
+  pares: { ideal: [number, number]; alerta: [number, number] };
+  repetidas: { ideal: [number, number]; alerta: [number, number] };
+  soma: { ideal: [number, number]; alerta: [number, number] };
+  primos: { ideal: [number, number]; alerta: [number, number] };
+  moldura: { ideal: [number, number]; alerta: [number, number] };
+  fibonacci: { ideal: [number, number]; alerta: [number, number] };
+  sequencia: { ideal: [number, number]; alerta: [number, number] };
+  cruz: { ideal: [number, number]; alerta: [number, number] };
+  quadrantePorBloco: { ideal: [number, number]; alerta: [number, number] };
+}
+
+/**
+ * Escala proporcionalmente (N / 15) as faixas estatísticas da Lotofácil para
+ * jogos de 15 a 20 dezenas, respeitando o teto matemático de cada grupo.
+ */
+export function obterFaixasEscaladas(qtdDezenas: number): FaixasEscaladasLotofacil {
+  const nSeguro = Number.isFinite(qtdDezenas) && qtdDezenas >= 15 ? qtdDezenas : 15;
+  const fator = nSeguro / 15;
+  const escalar = (faixa: readonly [number, number], teto: number): [number, number] => [
+    Math.min(teto, Math.round(faixa[0] * fator)),
+    Math.min(teto, Math.round(faixa[1] * fator)),
+  ];
+
+  const extraSeq = Math.max(0, nSeguro - 15);
+
+  return {
+    pares: {
+      ideal: escalar(FAIXAS_LOTOFACIL.pares.ideal, 12),
+      alerta: escalar(FAIXAS_LOTOFACIL.pares.alerta, 12),
+    },
+    repetidas: {
+      ideal: escalar(FAIXAS_LOTOFACIL.repetidas.ideal, 15),
+      alerta: escalar(FAIXAS_LOTOFACIL.repetidas.alerta, 15),
+    },
+    soma: {
+      ideal: [Math.round(FAIXAS_LOTOFACIL.soma.ideal[0] * fator), Math.round(FAIXAS_LOTOFACIL.soma.ideal[1] * fator)],
+      alerta: [Math.round(FAIXAS_LOTOFACIL.soma.alerta[0] * fator), Math.round(FAIXAS_LOTOFACIL.soma.alerta[1] * fator)],
+    },
+    primos: {
+      ideal: escalar(FAIXAS_LOTOFACIL.primos.ideal, 9),
+      alerta: escalar(FAIXAS_LOTOFACIL.primos.alerta, 9),
+    },
+    moldura: {
+      ideal: escalar(FAIXAS_LOTOFACIL.moldura.ideal, 16),
+      alerta: escalar(FAIXAS_LOTOFACIL.moldura.alerta, 16),
+    },
+    fibonacci: {
+      ideal: escalar(FAIXAS_LOTOFACIL.fibonacci.ideal, 7),
+      alerta: escalar(FAIXAS_LOTOFACIL.fibonacci.alerta, 7),
+    },
+    sequencia: {
+      ideal: [3, 5 + extraSeq],
+      alerta: [2, 6 + extraSeq],
+    },
+    cruz: {
+      ideal: escalar(FAIXAS_LOTOFACIL.cruz.ideal, 9),
+      alerta: escalar(FAIXAS_LOTOFACIL.cruz.alerta, 9),
+    },
+    quadrantePorBloco: {
+      ideal: escalar(FAIXAS_LOTOFACIL.quadrantePorBloco.ideal, 6),
+      alerta: escalar(FAIXAS_LOTOFACIL.quadrantePorBloco.alerta, 6),
+    },
+  };
+}
+

@@ -12,6 +12,7 @@ import {
   Moon,
   ShieldCheck,
   ChevronDown,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -19,7 +20,7 @@ import {
   Download,
   History,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LotofacilDraw } from '../types/lotofacil';
 import { RECENT_DRAWS } from '../data/lotofacilData';
 import { LotoSniperLogo } from './LotoSniperLogo';
@@ -37,7 +38,8 @@ import {
 } from 'recharts';
 import {
   calcularParametrosConcurso,
-  resolvePreviousDrawDezenas,
+  obterConcursoAnterior,
+  mesclarEOrdenarHistorico,
   ParametroStatus,
 } from '../utils/concursoParametros';
 import { downloadResultadosEstatisticosPDF } from '../services/resultadosEstatisticosPdfGenerator';
@@ -111,6 +113,7 @@ const THEME_META: Record<
 interface HeaderProps {
   latestDraw: LotofacilDraw;
   recentDraws?: LotofacilDraw[];
+  activeTab?: string;
   isSyncing: boolean;
   onSyncNow: () => void;
   syncSource?: string;
@@ -127,6 +130,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   latestDraw,
   recentDraws = RECENT_DRAWS,
+  activeTab = 'fechamento',
   isSyncing,
   onSyncNow,
   syncSource = 'caixa-oficial',
@@ -142,24 +146,40 @@ export const Header: React.FC<HeaderProps> = ({
   const [dismissedAlert, setDismissedAlert] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [viewedDrawOffset, setViewedDrawOffset] = useState<number>(0);
-  const [showDrawParams, setShowDrawParams] = useState<boolean>(true);
+  // Modo Compacto / Expansível Inteligente: inicia expandido em "Painel & Estatísticas" e recolhido (Mini) nos demais módulos
+  const [isResultsExpanded, setIsResultsExpanded] = useState<boolean>(
+    activeTab === 'estatisticas'
+  );
+  const lastEstatisticasExpandedRef = useRef<boolean>(true);
+  const prevTabRef = useRef<string>(activeTab);
+
+  useEffect(() => {
+    if (prevTabRef.current === activeTab) return;
+    prevTabRef.current = activeTab;
+    if (activeTab === 'estatisticas') {
+      setIsResultsExpanded(lastEstatisticasExpandedRef.current);
+    } else {
+      // Auto-recolhimento automático para Modo Mini ao trocar para qualquer outro módulo
+      setIsResultsExpanded(false);
+    }
+  }, [activeTab]);
+
+  const handleSetResultsExpanded = (next: boolean) => {
+    setIsResultsExpanded(next);
+    if (activeTab === 'estatisticas') {
+      lastEstatisticasExpandedRef.current = next;
+    }
+  };
+
   const [trendMetric, setTrendMetric] = useState<'somaTotal' | 'primos'>('somaTotal');
   const [pdfExported, setPdfExported] = useState<boolean>(false);
   const [showHistoryFilterPanel, setShowHistoryFilterPanel] = useState<boolean>(false);
   const [historyFilterMode, setHistoryFilterMode] = useState<'todos' | 'padrao_ouro' | 'fora_padrao'>('todos');
   const themeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Histórico unificado ordenado do concurso mais recente para o mais antigo
+  // Histórico unificado sempre ordenado do concurso mais recente para o mais antigo
   const drawsHistory = useMemo<LotofacilDraw[]>(() => {
-    const merged: LotofacilDraw[] = [latestDraw];
-    const seen = new Set<number>([latestDraw.concurso]);
-    for (const d of recentDraws) {
-      if (!seen.has(d.concurso)) {
-        merged.push(d);
-        seen.add(d.concurso);
-      }
-    }
-    return merged.sort((a, b) => b.concurso - a.concurso);
+    return mesclarEOrdenarHistorico(latestDraw, recentDraws, RECENT_DRAWS);
   }, [latestDraw, recentDraws]);
 
   // Sempre retorna ao concurso recém-carregado quando latestDraw é atualizado
@@ -171,21 +191,22 @@ export const Header: React.FC<HeaderProps> = ({
   const displayedDraw = drawsHistory[safeOffset] || latestDraw;
   const isViewingLatest = safeOffset === 0;
 
-  const previousDezenas = useMemo(
-    () => resolvePreviousDrawDezenas(displayedDraw.concurso, drawsHistory),
-    [displayedDraw.concurso, drawsHistory]
+  // Busca robusta do concurso anterior (N - 1 ou imediatamente anterior no histórico ordenado)
+  const previousDraw = useMemo(
+    () => obterConcursoAnterior(displayedDraw, drawsHistory),
+    [displayedDraw, drawsHistory]
   );
 
   const parametrosConcurso = useMemo(
-    () => calcularParametrosConcurso(displayedDraw.dezenas || [], previousDezenas),
-    [displayedDraw.dezenas, previousDezenas]
+    () => calcularParametrosConcurso(displayedDraw.dezenas || [], previousDraw?.dezenas ?? null),
+    [displayedDraw.dezenas, previousDraw]
   );
 
   // Avaliação memoizada de todo o histórico de concursos carregado (passando N-1 para Repetidas)
   const evaluatedDrawsHistory = useMemo(() => {
     return drawsHistory.map((draw, idx) => {
-      const prevDezenas = resolvePreviousDrawDezenas(draw.concurso, drawsHistory);
-      const stats = calcularParametrosConcurso(draw.dezenas || [], prevDezenas);
+      const prevDraw = obterConcursoAnterior(draw, drawsHistory);
+      const stats = calcularParametrosConcurso(draw.dezenas || [], prevDraw?.dezenas ?? null);
       return {
         draw,
         originalIndex: idx,
@@ -367,8 +388,27 @@ export const Header: React.FC<HeaderProps> = ({
     return 'Base Oficial';
   };
 
+  const miniShortClassLabel =
+    parametrosConcurso.resumo.classificacao === 'Padrão Ouro'
+      ? 'Ouro'
+      : parametrosConcurso.resumo.classificacao === 'Dentro da Média'
+      ? 'Média'
+      : parametrosConcurso.resumo.classificacao === 'Atípico'
+      ? 'Atípico'
+      : 'Fora';
+
+  const miniBadgeColorClass =
+    parametrosConcurso.resumo.classificacao === 'Padrão Ouro'
+      ? 'bg-amber-400/15 text-amber-300 border-amber-400/50'
+      : parametrosConcurso.resumo.classificacao === 'Dentro da Média'
+      ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+      : parametrosConcurso.resumo.classificacao === 'Atípico'
+      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+      : 'bg-rose-500/15 text-rose-300 border-rose-500/45';
+
   return (
-    <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40 transition-all duration-300">
+    <>
+    <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur relative z-40 transition-all duration-300">
       {/* Alerta Visual Intermitente na Reta Final do Ciclo */}
       {isRetaFinalCiclo && !dismissedAlert && (
         <div className="bg-gradient-to-r from-amber-950/90 via-orange-950/95 to-amber-950/90 border-b border-amber-500/50 px-4 py-2 text-xs shadow-[0_0_20px_rgba(245,158,11,0.25)] relative overflow-hidden">
@@ -641,195 +681,310 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
       </div>
+    </header>
 
-      {/* PAINEL OFICIAL DE TELEMETRIA: ÚLTIMO CONCURSO, CICLO DAS 25 DEZENAS & GANHADORES */}
-      <div className="bg-slate-950/70 border-t border-slate-800/80 px-4 sm:px-6 lg:px-8 py-2.5">
-        <div className="max-w-7xl mx-auto space-y-2.5">
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-            {/* Concurso, Navegação Histórica, Data do Sorteio & Progresso do Ciclo Atual */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
-              {/* Concurso & Data com navegação reativa entre concursos */}
-              <div className="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700/80 shadow-inner">
-                <button
-                  type="button"
-                  disabled={safeOffset >= drawsHistory.length - 1}
-                  onClick={() =>
-                    setViewedDrawOffset((prev) => Math.min(drawsHistory.length - 1, prev + 1))
-                  }
-                  className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-                  title="Ver concurso anterior"
-                  aria-label="Ver concurso anterior"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <span className={`w-2 h-2 rounded-full ${isViewingLatest ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400'}`} />
-                <span className="text-slate-400 font-medium">Concurso:</span>
-                <strong className="text-white font-mono font-black text-sm tabular-nums">
-                  #{displayedDraw.concurso}
-                </strong>
-                <span className="text-slate-500 font-mono">|</span>
-                <span className="text-amber-300 font-mono font-semibold tabular-nums">
-                  {displayedDraw.data}
-                </span>
-                <button
-                  type="button"
-                  disabled={safeOffset <= 0}
-                  onClick={() => setViewedDrawOffset((prev) => Math.max(0, prev - 1))}
-                  className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-                  title="Ver próximo concurso"
-                  aria-label="Ver próximo concurso"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-                {!isViewingLatest && (
-                  <button
-                    type="button"
-                    onClick={() => setViewedDrawOffset(0)}
-                    className="ml-1 px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold transition cursor-pointer"
-                  >
-                    Atual
-                  </button>
-                )}
-              </div>
-
-              {/* Progresso do Ciclo Atual das 25 Dezenas Alinhado com a Data */}
-              <div
-                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition shadow-sm ${
-                  isRetaFinalCiclo
-                    ? 'bg-amber-950/40 border-amber-500/60 text-amber-200'
-                    : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Flame className={`w-3.5 h-3.5 ${isRetaFinalCiclo ? 'text-amber-400 animate-bounce' : 'text-amber-400/80'}`} />
-                  <span className="font-bold text-white">
-                    Ciclo: <span className="text-amber-400 font-mono font-black">{Math.max(0, 25 - cyclePendingNumbers.length)}/25</span> dezenas sorteadas
-                  </span>
-                  <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
-                    ({Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100)}%)
-                  </span>
-                </div>
-
-                {/* Barra de progresso visual do ciclo */}
-                <div className="w-16 sm:w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/60 hidden sm:block">
-                  <div
-                    className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100))}%` }}
-                  />
-                </div>
-
-                {/* Indicador de Pressão Estatística Atual */}
-                <span
-                  className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold tracking-wider ${
-                    isRetaFinalCiclo
-                      ? 'bg-amber-400 text-slate-950 shadow-sm animate-pulse'
-                      : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                  }`}
-                  title={
-                    isRetaFinalCiclo
-                      ? `Pressão Máxima de Fechamento: Restam apenas [${cyclePendingNumbers.map(n => n.toString().padStart(2, '0')).join(', ')}] para fechar todas as 25 dezenas!`
-                      : `Ciclo em andamento no ${concursosNoCiclo}º concurso.`
-                  }
-                >
-                  {isRetaFinalCiclo
-                    ? `⚡ Pressão Iminente (${cyclePendingNumbers.length} rest.)`
-                    : `${concursosNoCiclo}º Conc. do Ciclo`}
-                </span>
-              </div>
-            </div>
-
-            {/* 15 Dezenas Sorteadas no Concurso Exibido (Staggered Fade-In ao Atualizar/Navegar) */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
-                Dezenas:
-              </span>
-              <motion.div
-                key={`header-dezenas-${displayedDraw.concurso}-${(displayedDraw.dezenas || []).join('-')}`}
-                variants={staggerContainerVariants}
-                initial="hidden"
-                animate="visible"
-                className="flex items-center gap-1 flex-wrap"
-              >
-                {(displayedDraw.dezenas || []).map((num) => (
-                  <motion.span
-                    key={num}
-                    variants={staggerBallVariants}
-                    className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
-                    title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${displayedDraw.concurso}`}
-                  >
-                    {num.toString().padStart(2, '0')}
-                  </motion.span>
-                ))}
-              </motion.div>
-            </div>
-
-            {/* Número Oficial de Ganhadores + Botão de Toggle dos Parâmetros Estatísticos */}
-            <div className="flex items-center gap-2 text-xs flex-wrap">
-              <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-200">
-                <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>
-                  <strong>15 pts:</strong>{' '}
-                  <span className="font-mono font-bold text-white tabular-nums">
-                    {displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1}
-                  </span>{' '}
-                  {(displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1) === 1 ? 'ganhador' : 'ganhadores'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80 text-slate-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
-                <span>
-                  <strong>14 pts:</strong>{' '}
-                  <span className="font-mono font-bold text-cyan-300 tabular-nums">
-                    {displayedDraw.premiacoes?.faixa14?.ganhadores ?? 325}
-                  </span>{' '}
-                  apostas
-                </span>
-              </div>
-
+    {/* PAINEL DE RESULTADOS DO CONCURSO ATUAL: MODO MINI (~48px STICKY) vs EXPANDIDO (FLUXO LIVRE SEM TRAVAR SCROLL) */}
+    <section
+      aria-label={`Painel do Concurso ${displayedDraw.concurso}`}
+      className={
+        isResultsExpanded
+          ? 'relative z-30 bg-slate-950/90 border-b border-slate-800/80 transition-colors duration-200'
+          : 'sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-amber-500/30 shadow-[0_4px_20px_rgba(2,6,23,0.75)] transition-colors duration-200'
+      }
+    >
+      {/* ESTADO RECOLHIDO: MODO MINI (~48px DE ALTURA) */}
+      {!isResultsExpanded && (
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[48px] py-1.5 flex items-center justify-between gap-2 sm:gap-3 flex-wrap lg:flex-nowrap">
+          {/* Seletor compacto do concurso (< #3838 >) */}
+          <div className="flex items-center gap-1 bg-slate-900/95 px-2 py-1 rounded-lg border border-amber-500/30 shrink-0">
+            <button
+              type="button"
+              disabled={safeOffset >= drawsHistory.length - 1}
+              onClick={() =>
+                setViewedDrawOffset((prev) => Math.min(drawsHistory.length - 1, prev + 1))
+              }
+              className="p-0.5 rounded text-slate-400 hover:text-amber-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+              title="Ver concurso anterior"
+              aria-label="Ver concurso anterior"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                isViewingLatest ? 'bg-emerald-400' : 'bg-sky-400'
+              }`}
+            />
+            <strong className="text-amber-300 font-mono font-black text-xs sm:text-sm tabular-nums">
+              #{displayedDraw.concurso}
+            </strong>
+            <span className="hidden xl:inline text-[11px] font-mono text-slate-400 tabular-nums ml-0.5">
+              {displayedDraw.data}
+            </span>
+            <button
+              type="button"
+              disabled={safeOffset <= 0}
+              onClick={() => setViewedDrawOffset((prev) => Math.max(0, prev - 1))}
+              className="p-0.5 rounded text-slate-400 hover:text-amber-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+              title="Ver próximo concurso"
+              aria-label="Ver próximo concurso"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            {!isViewingLatest && (
               <button
                 type="button"
-                onClick={handleExportCurrentDrawPDF}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap shrink-0"
-                title={`Exportar relatório em PDF com os parâmetros estatísticos do Concurso #${displayedDraw.concurso}`}
+                onClick={() => setViewedDrawOffset(0)}
+                className="ml-0.5 px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold transition cursor-pointer"
+                title="Voltar ao último concurso"
               >
-                {pdfExported ? (
-                  <>
-                    <Check className="w-3 h-3" />
-                    <span>PDF Baixado</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-3 h-3" />
-                    <span>Exportar Relatório PDF</span>
-                  </>
-                )}
+                Atual
               </button>
-
-              <button
-                type="button"
-                onClick={() => setShowDrawParams((prev) => !prev)}
-                aria-expanded={showDrawParams}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-700/80 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap shrink-0"
-                title="Exibir ou recolher parâmetros estatísticos do concurso"
-              >
-                <span>Parâmetros</span>
-                <ChevronDown
-                  className={`w-3 h-3 transition-transform ${showDrawParams ? 'rotate-180' : ''}`}
-                />
-              </button>
-            </div>
+            )}
           </div>
 
-          {/* PAINEL AUTOMÁTICO DE PARÂMETROS ESTATÍSTICOS COMPLETOS COM SEMÁFORO DE STATUS */}
-          {showDrawParams && (
-            <div
-              aria-label={`Parâmetros estatísticos do Concurso ${displayedDraw.concurso}`}
-              className="pt-2 border-t border-slate-800/80 space-y-2.5"
+          {/* 15 Dezenas em bolinhas compactas */}
+          <div className="flex items-center gap-1 overflow-x-auto py-0.5 scrollbar-none">
+            {(displayedDraw.dezenas || []).map((num) => (
+              <span
+                key={`mini-ball-${displayedDraw.concurso}-${num}`}
+                className="w-5 h-5 sm:w-[22px] sm:h-[22px] shrink-0 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[10px] flex items-center justify-center shadow-xs border border-amber-300/75 select-none tabular-nums"
+                title={`Dezena ${num.toString().padStart(2, '0')} • Concurso #${displayedDraw.concurso}`}
+              >
+                {num.toString().padStart(2, '0')}
+              </span>
+            ))}
+          </div>
+
+          {/* Badge de Aderência + Atualizar rápido + Botão Expandir Parâmetros */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border font-mono text-[11px] font-bold tabular-nums whitespace-nowrap ${miniBadgeColorClass}`}
+              title={`Índice de Padrão do Concurso #${displayedDraw.concurso}: ${parametrosConcurso.resumo.scorePercentual}% (${parametrosConcurso.resumo.classificacao})`}
             >
-              {/* Cabeçalho de Score Geral de Aderência ("Índice de Padrão do Concurso") */}
-              {(() => {
-                const { resumo } = parametrosConcurso;
+              <span>{parametrosConcurso.resumo.scorePercentual}%</span>
+              <span>{miniShortClassLabel}</span>
+            </span>
+
+            <button
+              type="button"
+              onClick={onSyncNow}
+              disabled={isSyncing}
+              className="p-1.5 rounded-lg border border-emerald-500/35 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 transition cursor-pointer disabled:opacity-50"
+              title="Atualizar último concurso da Caixa"
+              aria-label="Atualizar concurso"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetResultsExpanded(true)}
+              aria-expanded={false}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-400/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-[11px] font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Expandir painel completo com premiação, ciclo, 9 parâmetros e gráfico de tendência"
+            >
+              <span>Expandir Parâmetros</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ESTADO EXPANDIDO: LAYOUT COMPLETO SEM POSITION FIXED/STICKY E COM TRANSIÇÃO SUAVE */}
+      <AnimatePresence initial={false}>
+        {isResultsExpanded && (
+          <motion.div
+            key="expanded-results-panel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 sm:px-6 lg:px-8 py-3">
+              <div className="max-w-7xl mx-auto space-y-2.5">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                  {/* Concurso, Navegação Histórica, Data do Sorteio & Progresso do Ciclo Atual */}
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs">
+                    {/* Concurso & Data com navegação reativa entre concursos */}
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700/80 shadow-inner">
+                      <button
+                        type="button"
+                        disabled={safeOffset >= drawsHistory.length - 1}
+                        onClick={() =>
+                          setViewedDrawOffset((prev) => Math.min(drawsHistory.length - 1, prev + 1))
+                        }
+                        className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                        title="Ver concurso anterior"
+                        aria-label="Ver concurso anterior"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className={`w-2 h-2 rounded-full ${isViewingLatest ? 'bg-emerald-400 animate-pulse' : 'bg-sky-400'}`} />
+                      <span className="text-slate-400 font-medium">Concurso:</span>
+                      <strong className="text-white font-mono font-black text-sm tabular-nums">
+                        #{displayedDraw.concurso}
+                      </strong>
+                      <span className="text-slate-500 font-mono">|</span>
+                      <span className="text-amber-300 font-mono font-semibold tabular-nums">
+                        {displayedDraw.data}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={safeOffset <= 0}
+                        onClick={() => setViewedDrawOffset((prev) => Math.max(0, prev - 1))}
+                        className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                        title="Ver próximo concurso"
+                        aria-label="Ver próximo concurso"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      {!isViewingLatest && (
+                        <button
+                          type="button"
+                          onClick={() => setViewedDrawOffset(0)}
+                          className="ml-1 px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold transition cursor-pointer"
+                        >
+                          Atual
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Progresso do Ciclo Atual das 25 Dezenas Alinhado com a Data */}
+                    <div
+                      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition shadow-sm ${
+                        isRetaFinalCiclo
+                          ? 'bg-amber-950/40 border-amber-500/60 text-amber-200'
+                          : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Flame className={`w-3.5 h-3.5 ${isRetaFinalCiclo ? 'text-amber-400 animate-bounce' : 'text-amber-400/80'}`} />
+                        <span className="font-bold text-white">
+                          Ciclo: <span className="text-amber-400 font-mono font-black">{Math.max(0, 25 - cyclePendingNumbers.length)}/25</span> dezenas sorteadas
+                        </span>
+                        <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
+                          ({Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100)}%)
+                        </span>
+                      </div>
+
+                      {/* Barra de progresso visual do ciclo */}
+                      <div className="w-16 sm:w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/60 hidden sm:block">
+                        <div
+                          className="bg-gradient-to-r from-amber-500 to-yellow-400 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.round(((Math.max(0, 25 - cyclePendingNumbers.length)) / 25) * 100))}%` }}
+                        />
+                      </div>
+
+                      {/* Indicador de Pressão Estatística Atual */}
+                      <span
+                        className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold tracking-wider ${
+                          isRetaFinalCiclo
+                            ? 'bg-amber-400 text-slate-950 shadow-sm animate-pulse'
+                            : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        }`}
+                        title={
+                          isRetaFinalCiclo
+                            ? `Pressão Máxima de Fechamento: Restam apenas [${cyclePendingNumbers.map(n => n.toString().padStart(2, '0')).join(', ')}] para fechar todas as 25 dezenas!`
+                            : `Ciclo em andamento no ${concursosNoCiclo}º concurso.`
+                        }
+                      >
+                        {isRetaFinalCiclo
+                          ? `⚡ Pressão Iminente (${cyclePendingNumbers.length} rest.)`
+                          : `${concursosNoCiclo}º Conc. do Ciclo`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 15 Dezenas Sorteadas no Concurso Exibido (Staggered Fade-In ao Atualizar/Navegar) */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden md:inline">
+                      Dezenas:
+                    </span>
+                    <motion.div
+                      key={`header-dezenas-${displayedDraw.concurso}-${(displayedDraw.dezenas || []).join('-')}`}
+                      variants={staggerContainerVariants}
+                      initial="hidden"
+                      animate="visible"
+                      className="flex items-center gap-1 flex-wrap"
+                    >
+                      {(displayedDraw.dezenas || []).map((num) => (
+                        <motion.span
+                          key={num}
+                          variants={staggerBallVariants}
+                          className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-mono font-black text-[11px] sm:text-xs flex items-center justify-center shadow-sm shadow-amber-500/30 border border-amber-300/80 select-none hover:scale-110 transition-transform"
+                          title={`Dezena ${num.toString().padStart(2, '0')} sorteada no concurso #${displayedDraw.concurso}`}
+                        >
+                          {num.toString().padStart(2, '0')}
+                        </motion.span>
+                      ))}
+                    </motion.div>
+                  </div>
+
+                  {/* Número Oficial de Ganhadores + Exportar PDF + Botão Recolher */}
+                  <div className="flex items-center gap-2 text-xs flex-wrap">
+                    <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-200">
+                      <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>
+                        <strong>15 pts:</strong>{' '}
+                        <span className="font-mono font-bold text-white tabular-nums">
+                          {displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1}
+                        </span>{' '}
+                        {(displayedDraw.premiacoes?.faixa15?.ganhadores ?? 1) === 1 ? 'ganhador' : 'ganhadores'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80 text-slate-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                      <span>
+                        <strong>14 pts:</strong>{' '}
+                        <span className="font-mono font-bold text-cyan-300 tabular-nums">
+                          {displayedDraw.premiacoes?.faixa14?.ganhadores ?? 325}
+                        </span>{' '}
+                        apostas
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleExportCurrentDrawPDF}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-medium transition cursor-pointer whitespace-nowrap shrink-0"
+                      title={`Exportar relatório em PDF com os parâmetros estatísticos do Concurso #${displayedDraw.concurso}`}
+                    >
+                      {pdfExported ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          <span>PDF Baixado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3 h-3" />
+                          <span>Exportar Relatório PDF</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSetResultsExpanded(false)}
+                      aria-expanded={true}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-400/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-[11px] font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+                      title="Recolher painel de resultados para o Modo Mini"
+                    >
+                      <span>Recolher</span>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* PAINEL AUTOMÁTICO DE PARÂMETROS ESTATÍSTICOS COMPLETOS COM SEMÁFORO DE STATUS */}
+                <div
+                  aria-label={`Parâmetros estatísticos do Concurso ${displayedDraw.concurso}`}
+                  className="pt-2 border-t border-slate-800/80 space-y-2.5"
+                >
+                  {/* Cabeçalho de Score Geral de Aderência ("Índice de Padrão do Concurso") */}
+                  {(() => {
+                    const { resumo } = parametrosConcurso;
                 const progressColor =
                   resumo.scorePercentual >= 80
                     ? 'bg-emerald-500'
@@ -1038,7 +1193,9 @@ export const Header: React.FC<HeaderProps> = ({
                   const isQuadrantes = metrica.id === 'quadrantes';
                   const displayLabel =
                     metrica.id === 'repetidas'
-                      ? `Repetidas (#${displayedDraw.concurso - 1})`
+                      ? previousDraw
+                        ? `Repetidas (#${previousDraw.concurso})`
+                        : `Repetidas (#${displayedDraw.concurso - 1})`
                       : metrica.label;
                   const tooltipFull = `${displayLabel}: ${metrica.valorExibicao} — ${metrica.tooltipTexto}`;
 
@@ -1203,10 +1360,13 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 </div>
               )}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-    </header>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+    </>
   );
 };

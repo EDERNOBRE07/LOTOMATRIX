@@ -44,7 +44,8 @@ import {
 } from './services/nativeNotificationService';
 import { GameTicket, AIPredictionResponse, LotofacilDraw, FechamentoExportMeta, DezenaStats, FilterCriteria } from './types/lotofacil';
 import { CONCURSO_ATUAL, RECENT_DRAWS } from './data/lotofacilData';
-import { syncLatestLotofacil, computeDynamicStats } from './services/lotofacilSync';
+import { syncLatestLotofacil, computeDynamicStats, fetchConcursoByNumber } from './services/lotofacilSync';
+import { mesclarEOrdenarHistorico } from './utils/concursoParametros';
 import { buildOptimal18Pool, countMatches, normalizeGameTickets } from './services/combinatorics';
 import {
   getSavedFechamentos,
@@ -258,6 +259,30 @@ export default function App() {
 
   // Dynamic Contest State (Loaded automatically every time the app opens)
   const [latestDraw, setLatestDraw] = useState<LotofacilDraw>(CONCURSO_ATUAL);
+  const [historicoConcursos, setHistoricoConcursos] = useState<LotofacilDraw[]>(() => {
+    try {
+      const raw = localStorage.getItem('lotosniper_draws_history_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return mesclarEOrdenarHistorico(CONCURSO_ATUAL, parsed, RECENT_DRAWS);
+        }
+      }
+    } catch {}
+    return mesclarEOrdenarHistorico(CONCURSO_ATUAL, RECENT_DRAWS);
+  });
+  const historicoConcursosRef = React.useRef<LotofacilDraw[]>(historicoConcursos);
+  historicoConcursosRef.current = historicoConcursos;
+
+  const mergeIntoHistorico = (incoming: LotofacilDraw[]): LotofacilDraw[] => {
+    const merged = mesclarEOrdenarHistorico(incoming, historicoConcursosRef.current, RECENT_DRAWS);
+    historicoConcursosRef.current = merged;
+    setHistoricoConcursos(merged);
+    try {
+      localStorage.setItem('lotosniper_draws_history_v1', JSON.stringify(merged.slice(0, 200)));
+    } catch {}
+    return merged;
+  };
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [syncSource, setSyncSource] = useState<string>('caixa-oficial');
   const [syncNotice, setSyncNotice] = useState<{
@@ -392,8 +417,8 @@ export default function App() {
 
   // Dynamically recomputed cycle and delay statistics based on current loaded contest
   const { stats: dynamicStats, dezenasPendentesCiclo, concursosNoCiclo } = useMemo(() => {
-    return computeDynamicStats(latestDraw, RECENT_DRAWS);
-  }, [latestDraw]);
+    return computeDynamicStats(latestDraw, historicoConcursos);
+  }, [latestDraw, historicoConcursos]);
 
   // Efeito disparado na carga do concurso ou ajuste de limite para detectar alerta visual de fim de ciclo
   useEffect(() => {
@@ -585,6 +610,7 @@ export default function App() {
     const handleDrawUpdated = (e: any) => {
       const incomingDraw = e.detail;
       if (incomingDraw && incomingDraw.concurso) {
+        mergeIntoHistorico([incomingDraw]);
         setLatestDraw((prev) => {
           if (incomingDraw.concurso >= prev.concurso) {
             return incomingDraw;
@@ -836,6 +862,23 @@ export default function App() {
     setIsSyncing(true);
     try {
       const result = await syncLatestLotofacil(forceFresh);
+
+      // Garante que o concurso anterior (N - 1) esteja no histórico antes de calcular parâmetros e Repetidas
+      const prevNumber = result.draw.concurso - 1;
+      const hasExactPrev = historicoConcursosRef.current.some((d) => d.concurso === prevNumber);
+      let prevDraw: LotofacilDraw | null = null;
+      if (!hasExactPrev && prevNumber > 0) {
+        try {
+          prevDraw = await fetchConcursoByNumber(prevNumber);
+        } catch {
+          prevDraw = null;
+        }
+      }
+
+      const mergedHistory = mergeIntoHistorico(
+        prevDraw ? [result.draw, prevDraw] : [result.draw]
+      );
+
       setLatestDraw(result.draw);
       setSyncSource(result.source);
       setSyncNotice({
@@ -880,7 +923,7 @@ export default function App() {
       }
 
       // Dispara monitoramento passivo de oportunidades (Atrasos Críticos e Fechamento de Ciclo)
-      const { stats: newStats, dezenasPendentesCiclo: newPending, concursosNoCiclo: newCicloNum } = computeDynamicStats(result.draw, RECENT_DRAWS);
+      const { stats: newStats, dezenasPendentesCiclo: newPending, concursosNoCiclo: newCicloNum } = computeDynamicStats(result.draw, mergedHistory);
       triggerAutomaticOpportunityAlerts(result.draw, newStats, newPending, newCicloNum);
       auditAndTriggerIntelligentAlerts(result.draw, newStats, newCicloNum);
 
@@ -1024,7 +1067,8 @@ export default function App() {
       {/* Header with live synchronization controls */}
       <Header
         latestDraw={latestDraw}
-        recentDraws={RECENT_DRAWS}
+        recentDraws={historicoConcursos}
+        activeTab={activeTab}
         isSyncing={isSyncing}
         onSyncNow={handleManualSync}
         syncSource={syncSource}
@@ -1361,6 +1405,7 @@ export default function App() {
           {activeTab === 'fechamento' && (
             <FechamentoTab
               latestDraw={latestDraw}
+              drawsHistory={historicoConcursos}
               dynamicStats={dynamicStats}
               cyclePendingNumbers={dezenasPendentesCiclo}
               concursosNoCiclo={concursosNoCiclo}
@@ -1424,6 +1469,7 @@ export default function App() {
                 statsList={dynamicStats}
                 cyclePendingNumbers={dezenasPendentesCiclo}
                 latestDraw={latestDraw}
+                drawsHistory={historicoConcursos}
                 onToggleNumber={handleToggleConferenciaNumber}
                 onSetFixed={() => {}}
                 onSetExcluded={() => {}}
@@ -1435,6 +1481,7 @@ export default function App() {
               {/* Módulo de Conferência Oficial de Jogos */}
               <ModuloConferenciaJogos
                 latestDraw={latestDraw}
+                drawsHistory={historicoConcursos}
                 generatedTickets={savedTickets}
                 inspectedVolanteNumbers={conferenciaVolanteNumbers}
                 onGoToFechamento={() => setActiveTab('fechamento')}
@@ -1557,6 +1604,7 @@ export default function App() {
                     statsList={dynamicStats}
                     cyclePendingNumbers={dezenasPendentesCiclo}
                     latestDraw={latestDraw}
+                    drawsHistory={historicoConcursos}
                     onToggleNumber={handleToggleConferenciaNumber}
                     onSetFixed={() => {}}
                     onSetExcluded={() => {}}
@@ -1567,6 +1615,7 @@ export default function App() {
 
                   <ModuloConferenciaJogos
                     latestDraw={latestDraw}
+                    drawsHistory={historicoConcursos}
                     generatedTickets={savedTickets}
                     inspectedVolanteNumbers={conferenciaVolanteNumbers}
                     onGoToFechamento={() => setActiveTab('fechamento')}

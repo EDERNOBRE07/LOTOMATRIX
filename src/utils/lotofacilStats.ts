@@ -3,12 +3,15 @@ import {
   avaliarFaixa,
   avaliarStatusSomaTotal,
   resolvePreviousDrawDezenas,
+  obterConcursoAnterior,
+  mesclarEOrdenarHistorico,
 } from './concursoParametros';
 import {
   FAIXAS_LOTOFACIL,
   ADERENCIA_CONFIG,
   CONJUNTOS_LOTOFACIL,
   STATUS_PARAMETRO_LABELS,
+  obterFaixasEscaladas,
   StatusParametro,
   StatusParametroLabel,
   MetricaResultado,
@@ -21,9 +24,12 @@ export {
   ADERENCIA_CONFIG,
   CONJUNTOS_LOTOFACIL,
   STATUS_PARAMETRO_LABELS,
+  obterFaixasEscaladas,
   avaliarFaixa,
   avaliarStatusSomaTotal,
   resolvePreviousDrawDezenas,
+  obterConcursoAnterior,
+  mesclarEOrdenarHistorico,
 };
 
 export type {

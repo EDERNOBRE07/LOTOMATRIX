@@ -44,6 +44,7 @@ import {
   getRotatedFixedBounds,
   resolveModoFixas,
   resolveEffectiveFiltersForStudio,
+  analyzeTicket,
 } from '../services/combinatorics';
 import { CentralUnificadaFechamento, UNIFIED_MATRIX_CATALOG, MatrixCatalogItem } from './CentralUnificadaFechamento';
 import { BentoGridFechamento } from './BentoGridFechamento';
@@ -104,7 +105,9 @@ import {
   calcularParametrosConcurso as calcularAderenciaTicket,
   filtrarERanquearJogos,
   ParametrosConcurso as AnaliseAderenciaTicket,
+  mesclarEOrdenarHistorico,
 } from '../utils/lotofacilStats';
+import { gerarJogosOuroAsync } from '../utils/lotofacilEngine';
 import {
   Sparkles,
   Zap,
@@ -147,6 +150,7 @@ import {
 
 interface FechamentoTabProps {
   latestDraw: LotofacilDraw;
+  drawsHistory?: LotofacilDraw[];
   dynamicStats?: DezenaStats[];
   cyclePendingNumbers?: number[];
   concursosNoCiclo?: number;
@@ -164,6 +168,7 @@ interface FechamentoTabProps {
 
 export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   latestDraw = CONCURSO_ATUAL,
+  drawsHistory = RECENT_DRAWS,
   dynamicStats = DEZENAS_STATS,
   cyclePendingNumbers = [],
   concursosNoCiclo = 2,
@@ -514,6 +519,113 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const [sortByAdherenceScore, setSortByAdherenceScore] = useState<boolean>(true);
   const [expandedScoreTicketId, setExpandedScoreTicketId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Motor Assíncrono Padrão Ouro (15 a 20 dezenas + bloqueio histórico 14/15 pts via Bitmask)
+  const [goldDezenasPorJogo, setGoldDezenasPorJogo] = useState<number>(15);
+  const [goldQuantidadeJogos, setGoldQuantidadeJogos] = useState<number>(10);
+  const [bloquearJaSorteados, setBloquearJaSorteados] = useState<boolean>(true);
+  const [isGeneratingGold, setIsGeneratingGold] = useState<boolean>(false);
+  const [goldGenerationSummary, setGoldGenerationSummary] = useState<{
+    gerados: number;
+    solicitados: number;
+    dezenasPorJogo: number;
+    tentativasUsadas: number;
+    bloqueadosPorHistorico: number;
+    atingiuLimiteSeguranca: boolean;
+  } | null>(null);
+
+  const historicoConcursosMerged = useMemo(
+    () => mesclarEOrdenarHistorico(latestDraw, drawsHistory, RECENT_DRAWS),
+    [latestDraw, drawsHistory]
+  );
+
+  const handleGerarJogosPadraoOuro = async () => {
+    if (isGeneratingGold || isGenerating) return;
+    setIsGeneratingGold(true);
+    setGenerationError(null);
+    const t0 = performance.now();
+
+    try {
+      const qtdValida = Math.max(1, Math.min(50, Math.round(goldQuantidadeJogos || 10)));
+      const dezValidas = Math.max(15, Math.min(20, Math.round(goldDezenasPorJogo || 15)));
+
+      const resultado = await gerarJogosOuroAsync({
+        quantidadeJogos: qtdValida,
+        dezenasPorJogo: dezValidas,
+        ultimoConcurso: latestDraw.dezenas,
+        historicoConcursos: historicoConcursosMerged.map((d) => ({
+          concurso: d.concurso,
+          dezenas: d.dezenas,
+        })),
+        bloquearJaSorteados,
+        limiteBloqueioPontos: 14,
+        apenasPadraoOuro: true,
+        maxTentativas: 30000,
+      });
+
+      const stamp = Date.now();
+      const tickets: GameTicket[] = resultado.jogos.map((item, idx) => {
+        const analyzed = analyzeTicket(item.dezenas, latestDraw.dezenas, aiPrediction?.scores);
+        return {
+          ...analyzed,
+          id: `ouro-${dezValidas}d-${stamp}-${idx + 1}`,
+          index: idx + 1,
+          scoreIA: item.analise.resumo.scorePercentual,
+          tags: [
+            'Padrão Ouro',
+            `${dezValidas} dezenas`,
+            ...(bloquearJaSorteados ? ['Inédito 14/15'] : []),
+          ],
+        };
+      });
+
+      setGoldGenerationSummary({
+        gerados: tickets.length,
+        solicitados: qtdValida,
+        dezenasPorJogo: dezValidas,
+        tentativasUsadas: resultado.tentativasUsadas,
+        bloqueadosPorHistorico: resultado.bloqueadosPorHistorico,
+        atingiuLimiteSeguranca: resultado.atingiuLimiteSeguranca,
+      });
+
+      const elapsed = Math.max(1, Math.round(performance.now() - t0));
+      setGenerationTimeMs(elapsed);
+
+      if (tickets.length > 0) {
+        const label = `Padrão Ouro • ${dezValidas} Dezenas (${tickets.length} jogos)`;
+        setGeneratedTickets(tickets);
+        setFechamentoFilter('all');
+        setOnlyGoldPattern(false);
+        setSortByAdherenceScore(true);
+        setStrategyName(label);
+        setActiveModel(label);
+        setGoldenGlowTrigger(Date.now());
+
+        const meta: FechamentoExportMeta = {
+          modeName: label,
+          strategyName: label,
+          targetCount: dezValidas,
+          selectedNumbers: Array.from(new Set(tickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b),
+          fixedNumbers,
+          excludedNumbers,
+          filters: effectiveFilters,
+          garantia: `100% Padrão Ouro (${dezValidas} dez./jogo)`,
+          concurso: latestDraw.concurso,
+          dataConcurso: latestDraw.data,
+          timestamp: Date.now(),
+        };
+        onSaveTickets(tickets, meta);
+        try {
+          soundService.playGoldenZoneSuccessChime();
+        } catch {}
+      }
+    } catch (err) {
+      console.error('Erro ao gerar jogos Padrão Ouro:', err);
+    } finally {
+      setIsGeneratingGold(false);
+    }
+  };
+
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [sharedStrategyFeedback, setSharedStrategyFeedback] = useState<'shared' | 'copied' | null>(null);
@@ -4159,6 +4271,143 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   Motor ativo: <strong className="text-slate-200">{selectedMotorLabel}</strong>
                 </p>
               </div>
+
+              {/* Gerador 100% Padrão Ouro (15 a 20 dezenas + Bitmask Histórico 14/15 pts) */}
+              <div className="pt-3 mt-1 border-t border-slate-800/90 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-xs font-bold text-amber-200">
+                      Gerador 100% Padrão Ouro
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    15 a 20 dez. · Bitmask
+                  </span>
+                </div>
+
+                {/* Seletor de Dezenas por Jogo (15 a 20) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 font-medium">Dezenas por jogo:</span>
+                    <span className="font-mono text-amber-300 font-bold tabular-nums">
+                      {goldDezenasPorJogo} dezenas
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-6 gap-1">
+                    {[15, 16, 17, 18, 19, 20].map((qtd) => (
+                      <button
+                        key={qtd}
+                        type="button"
+                        onClick={() => setGoldDezenasPorJogo(qtd)}
+                        disabled={isGeneratingGold}
+                        className={`py-1.5 rounded-lg font-mono text-xs font-bold transition cursor-pointer border ${
+                          goldDezenasPorJogo === qtd
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm shadow-amber-500/30'
+                            : 'bg-slate-950/80 text-slate-300 border-slate-800 hover:border-amber-500/40 hover:text-amber-200'
+                        }`}
+                      >
+                        {qtd}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quantidade de jogos */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium">Quantidade de jogos:</span>
+                  <div className="flex items-center gap-1">
+                    {[5, 10, 15, 20].map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setGoldQuantidadeJogos(q)}
+                        disabled={isGeneratingGold}
+                        className={`px-2 py-1 rounded-md font-mono text-[11px] font-semibold transition cursor-pointer border ${
+                          goldQuantidadeJogos === q
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                            : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={goldQuantidadeJogos}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setGoldQuantidadeJogos(Number.isFinite(val) ? Math.max(1, Math.min(50, val)) : 1);
+                      }}
+                      aria-label="Quantidade de jogos Padrão Ouro"
+                      className="w-12 px-1.5 py-1 rounded-md bg-slate-950 border border-slate-700 text-center font-mono text-[11px] text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Toggle: Bloquear jogos já sorteados (14/15 pts) */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={bloquearJaSorteados}
+                  onClick={() => setBloquearJaSorteados((prev) => !prev)}
+                  disabled={isGeneratingGold}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition cursor-pointer ${
+                    bloquearJaSorteados
+                      ? 'bg-emerald-950/35 border-emerald-500/40 text-emerald-100'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold block truncate">
+                      Bloquear jogos já sorteados (14/15 pts)
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      Cruza via bitmask com {historicoConcursosMerged.length} concursos oficiais
+                    </span>
+                  </div>
+                  <span
+                    className={`w-8 h-4.5 rounded-full p-0.5 flex items-center shrink-0 transition-colors ${
+                      bloquearJaSorteados ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                    }`}
+                  >
+                    <span className="w-3.5 h-3.5 rounded-full bg-white shadow-sm" />
+                  </span>
+                </button>
+
+                {/* Botão Gerar Jogos Padrão Ouro */}
+                <button
+                  type="button"
+                  onClick={handleGerarJogosPadraoOuro}
+                  disabled={isGeneratingGold || isGenerating}
+                  className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-emerald-500/25 hover:from-amber-500/35 hover:to-emerald-500/35 border border-amber-400/60 text-amber-200 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-md disabled:opacity-60 disabled:cursor-wait"
+                >
+                  {isGeneratingGold ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-amber-300 shrink-0" />
+                      <span>Garimpando jogos Padrão Ouro...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Award className="w-4 h-4 text-amber-300 shrink-0" />
+                      <span>Gerar Jogos Padrão Ouro</span>
+                    </>
+                  )}
+                </button>
+
+                {goldGenerationSummary && generatedTickets.length === 0 && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-[11px] text-amber-200">
+                    Nenhum jogo 100% Padrão Ouro encontrado em{' '}
+                    <span className="font-mono font-bold">
+                      {goldGenerationSummary.tentativasUsadas.toLocaleString('pt-BR')}
+                    </span>{' '}
+                    tentativas ({goldGenerationSummary.bloqueadosPorHistorico} bloqueadas pelo histórico). Tente
+                    reduzir a quantidade ou ajustar o número de dezenas.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -4172,6 +4421,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               statsList={dynamicStats}
               cyclePendingNumbers={cyclePendingNumbers}
               latestDraw={latestDraw}
+              drawsHistory={historicoConcursosMerged}
               onToggleNumber={handleToggleNumber}
               onSetFixed={handleSetFixed}
               onSetExcluded={handleSetExcluded}
@@ -5233,6 +5483,58 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           )}
 
+          {/* Resumo Discreto da Operação Padrão Ouro + Aviso de Limite de Segurança */}
+          {goldGenerationSummary && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-amber-950/25 border border-amber-500/30 text-xs text-amber-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-mono text-[11px] sm:text-xs">
+                    <strong className="text-amber-300">{goldGenerationSummary.gerados} jogos Ouro</strong>{' '}
+                    ({goldGenerationSummary.dezenasPorJogo} dez.) gerados em{' '}
+                    <strong className="text-white">
+                      {goldGenerationSummary.tentativasUsadas.toLocaleString('pt-BR')}
+                    </strong>{' '}
+                    tentativas •{' '}
+                    <strong className="text-emerald-300">
+                      {goldGenerationSummary.bloqueadosPorHistorico}
+                    </strong>{' '}
+                    {goldGenerationSummary.bloqueadosPorHistorico === 1
+                      ? 'combinação bloqueada por já ter saído'
+                      : 'combinações bloqueadas por já terem saído'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGoldGenerationSummary(null)}
+                  className="text-slate-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                  title="Dispensar resumo"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {goldGenerationSummary.atingiuLimiteSeguranca && (
+                <div
+                  role="status"
+                  className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-400/50 text-xs text-amber-200"
+                >
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-amber-100">Limite de segurança atingido:</strong> encontramos{' '}
+                    <strong className="font-mono">
+                      {goldGenerationSummary.gerados} de {goldGenerationSummary.solicitados}
+                    </strong>{' '}
+                    jogos com 100% de aderência Padrão Ouro em{' '}
+                    {goldGenerationSummary.tentativasUsadas.toLocaleString('pt-BR')} tentativas. Para obter mais
+                    combinações, experimente reduzir a quantidade solicitada ou desativar temporariamente o bloqueio
+                    histórico.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Controles de Filtro Pré-Aposta (Score Estatístico + Padrão Ouro) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
             <div className="flex flex-wrap items-center gap-2">
@@ -5330,12 +5632,16 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   b15 < (effectiveFilters.bola15Min ?? 22) ||
                   b15 > (effectiveFilters.bola15Max ?? 25));
 
-              const isForaDoPadrao = cruzFalhou || extremidadesFalhou;
-              const isZonaOuroCruz = cruzCount >= 5 && cruzCount <= 6;
-
               const analiseTicket =
                 ticketAdherenceMap.get(ticket.id) ??
                 calcularAderenciaTicket(ticket.dezenas, latestDraw.dezenas);
+
+              const isMultiDezena = ticket.dezenas.length > 15;
+              const isForaDoPadrao = isMultiDezena
+                ? analiseTicket.resumo.criticos > 0
+                : cruzFalhou || extremidadesFalhou;
+              const isZonaOuroCruz = !isMultiDezena && cruzCount >= 5 && cruzCount <= 6;
+
               const scorePct = analiseTicket.resumo.scorePercentual;
               const scoreBadgeClass =
                 scorePct >= 80
@@ -5360,6 +5666,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       <span className="font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded text-[11px]">
                         Bilhete #{ticket.index.toString().padStart(2, '0')}
                       </span>
+
+                      {isMultiDezena && (
+                        <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          {ticket.dezenas.length} dez.
+                        </span>
+                      )}
 
                       {/* Selo Principal: Auditado vs Fora do Padrão */}
                       {isForaDoPadrao ? (
