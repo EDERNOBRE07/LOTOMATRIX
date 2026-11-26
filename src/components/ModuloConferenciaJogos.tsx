@@ -15,6 +15,14 @@ import {
 } from '../services/statisticalMonitor';
 import { StatisticalMonitoringAlert } from './StatisticalMonitoringAlert';
 import {
+  calcularParametrosConcurso,
+  resolvePreviousDrawDezenas,
+} from '../utils/concursoParametros';
+import {
+  buildResultadosEstatisticosRows,
+  downloadResultadosEstatisticosPDF,
+} from '../services/resultadosEstatisticosPdfGenerator';
+import {
   ClipboardCheck,
   CheckCircle2,
   AlertCircle,
@@ -166,6 +174,7 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   // CONTEST SELECTOR: LATEST CONTEST IS ALWAYS THE DEFAULT & HIGHEST PRIORITY
   const [selectedConcursoId, setSelectedConcursoId] = useState<number>(latestDraw.concurso);
   const [loadedFechamentoNotice, setLoadedFechamentoNotice] = useState<string | null>(null);
+  const [pdfExportedNotice, setPdfExportedNotice] = useState<boolean>(false);
 
   // Sync priority when latestDraw updates
   React.useEffect(() => {
@@ -252,6 +261,38 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
   }, [allDraws, selectedConcursoId, latestDraw]);
 
   const isCurrentPriority = targetDraw.concurso === latestDraw.concurso;
+
+  // Parâmetros estatísticos completos do concurso selecionado + tendência dos últimos 5 concursos
+  const targetDrawParametros = useMemo(() => {
+    const prevDezenas = resolvePreviousDrawDezenas(targetDraw.concurso, allDraws);
+    return calcularParametrosConcurso(targetDraw.dezenas || [], prevDezenas);
+  }, [targetDraw, allDraws]);
+
+  const targetDrawStatRows = useMemo(
+    () => buildResultadosEstatisticosRows(targetDraw.concurso, targetDrawParametros),
+    [targetDraw.concurso, targetDrawParametros]
+  );
+
+  const recent5TrendForPdf = useMemo(() => {
+    const idx = allDraws.findIndex((d) => d.concurso === targetDraw.concurso);
+    const startIdx = idx >= 0 ? idx : 0;
+    return allDraws
+      .slice(startIdx, startIdx + 5)
+      .reverse()
+      .map((d) => {
+        const p = calcularParametrosConcurso(d.dezenas || []);
+        return {
+          concurso: d.concurso,
+          data: d.data,
+          somaTotal: p.somaTotal,
+          primos: p.primos,
+          pares: p.pares,
+          impares: p.impares,
+          moldura: p.moldura,
+          fibonacci: p.fibonacci,
+        };
+      });
+  }, [allDraws, targetDraw.concurso]);
 
   // Robust line-by-line parser for the requested format
   const parsedGames = useMemo<ParsedGameItem[]>(() => {
@@ -636,6 +677,29 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
     setSelectedConcursoId(latestDraw.concurso);
   };
 
+  const handleExportResultadosEstatisticosPDF = () => {
+    downloadResultadosEstatisticosPDF({
+      targetDraw,
+      parametros: targetDrawParametros,
+      conferenceSummary: {
+        totalJogos: conferenceSummary.totalJogos,
+        totalPremiados: conferenceSummary.totalPremiados,
+        taxaAcerto: conferenceSummary.taxaAcerto,
+        custoApostas: conferenceSummary.custoApostas,
+        premiosValorTotal: conferenceSummary.premiosValorTotal,
+        saldoLiquido: conferenceSummary.saldoLiquido,
+        total15: conferenceSummary.total15,
+        total14: conferenceSummary.total14,
+        total13: conferenceSummary.total13,
+        total12: conferenceSummary.total12,
+        total11: conferenceSummary.total11,
+      },
+      recent5Trend: recent5TrendForPdf,
+    });
+    setPdfExportedNotice(true);
+    window.setTimeout(() => setPdfExportedNotice(false), 3000);
+  };
+
   return (
     <div className="bg-slate-900/95 rounded-2xl border border-slate-800 p-6 shadow-2xl space-y-6">
       {/* Header of Conference Module */}
@@ -711,6 +775,101 @@ export const ModuloConferenciaJogos: React.FC<ModuloConferenciaJogosProps> = ({
           </button>
         </div>
       )}
+
+      {/* TABELA DE RESULTADOS ESTATÍSTICOS DO CONCURSO SELECIONADO + EXPORTAÇÃO EM PDF */}
+      <section
+        aria-label={`Resultados Estatísticos do Concurso ${targetDraw.concurso}`}
+        className="bg-slate-950/90 rounded-xl border border-slate-800 p-4 sm:p-5 space-y-4"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+              <Table className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="font-sans text-emerald-400 font-medium">Resultados Estatísticos</span>
+              <span aria-hidden="true">·</span>
+              <span>Concurso #{targetDraw.concurso}</span>
+              <span aria-hidden="true">·</span>
+              <span>{targetDraw.data}</span>
+            </div>
+            <h3 className="text-sm sm:text-base font-semibold text-white tracking-tight">
+              Parâmetros Calculados do Concurso Selecionado
+            </h3>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleExportResultadosEstatisticosPDF}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 self-start sm:self-auto"
+          >
+            {pdfExportedNotice ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Relatório PDF Baixado</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar Relatório PDF</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Dezenas sorteadas do concurso selecionado */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-slate-400 font-medium mr-1">Dezenas sorteadas:</span>
+          {[...(targetDraw.dezenas || [])]
+            .sort((a, b) => a - b)
+            .map((num) => (
+              <span
+                key={`stat-ball-${num}`}
+                className="w-6 h-6 rounded-md bg-slate-900 border border-slate-700 text-amber-300 font-mono font-semibold text-[11px] flex items-center justify-center tabular-nums"
+              >
+                {String(num).padStart(2, '0')}
+              </span>
+            ))}
+        </div>
+
+        {/* Tabela estruturada de Resultados Estatísticos */}
+        <div className="overflow-x-auto border border-slate-800 rounded-lg">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400">
+                <th className="py-2.5 px-3 font-medium">Parâmetro Estatístico</th>
+                <th className="py-2.5 px-3 font-medium">Valor Calculado</th>
+                <th className="py-2.5 px-3 font-medium">Referência Histórica</th>
+                <th className="py-2.5 px-3 font-medium text-right">Avaliação</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {targetDrawStatRows.map((row) => (
+                <tr key={row.parametro} className="hover:bg-slate-900/50 transition-colors">
+                  <td className="py-2.5 px-3 font-medium text-slate-200">{row.parametro}</td>
+                  <td className="py-2.5 px-3 font-mono font-semibold text-white tabular-nums">
+                    {row.valor}
+                  </td>
+                  <td className="py-2.5 px-3 font-mono text-slate-400 tabular-nums">
+                    {row.referencia}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-medium">
+                    <span
+                      className={
+                        row.status === 'Equilibrado'
+                          ? 'text-emerald-400'
+                          : row.status === 'Atenção'
+                          ? 'text-amber-300'
+                          : 'text-slate-400'
+                      }
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* INPUT AREA (TEXTAREA FOR GAMES IN REQUESTED FORMAT) */}
       <div id="entrada-jogos-conferencia" className="bg-slate-950/90 rounded-xl border border-slate-800 overflow-hidden scroll-mt-24">

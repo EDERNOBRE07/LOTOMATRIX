@@ -24,6 +24,16 @@ import { LotoSniperLogo } from './LotoSniperLogo';
 import { DevServerHealthStatus } from './DevServerHealthStatus';
 import { staggerBallVariants, staggerContainerVariants } from '../utils/staggerAnimation';
 import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine,
+} from 'recharts';
+import {
   calcularParametrosConcurso,
   resolvePreviousDrawDezenas,
 } from '../utils/concursoParametros';
@@ -103,6 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [viewedDrawOffset, setViewedDrawOffset] = useState<number>(0);
   const [showDrawParams, setShowDrawParams] = useState<boolean>(true);
+  const [trendMetric, setTrendMetric] = useState<'somaTotal' | 'primos'>('somaTotal');
   const themeMenuRef = useRef<HTMLDivElement>(null);
 
   // Histórico unificado ordenado do concurso mais recente para o mais antigo
@@ -144,6 +155,33 @@ export const Header: React.FC<HeaderProps> = ({
       .map((b) => `${String(b[0]).padStart(2, '0')}–${String(b[b.length - 1]).padStart(2, '0')}`)
       .join(', ');
   }, [parametrosConcurso.blocosConsecutivos]);
+
+  // Evolução da Soma Total e Quantidade de Primos nos últimos 5 concursos (ancorado no concurso exibido)
+  const trendLast5 = useMemo(() => {
+    const window5 = drawsHistory.slice(safeOffset, safeOffset + 5).reverse();
+    const points = window5.map((d) => {
+      const stats = calcularParametrosConcurso(d.dezenas || []);
+      return {
+        concurso: d.concurso,
+        label: `#${d.concurso}`,
+        data: d.data,
+        somaTotal: stats.somaTotal,
+        primos: stats.primos,
+        isCurrent: d.concurso === displayedDraw.concurso,
+      };
+    });
+
+    const avgSoma =
+      points.length > 0
+        ? Number((points.reduce((acc, p) => acc + p.somaTotal, 0) / points.length).toFixed(1))
+        : 0;
+    const avgPrimos =
+      points.length > 0
+        ? Number((points.reduce((acc, p) => acc + p.primos, 0) / points.length).toFixed(1))
+        : 0;
+
+    return { points, avgSoma, avgPrimos };
+  }, [drawsHistory, safeOffset, displayedDraw.concurso]);
 
   const [currentTheme, setCurrentTheme] = useState<HeaderAppTheme>(() => {
     try {
@@ -675,105 +713,223 @@ export const Header: React.FC<HeaderProps> = ({
           {showDrawParams && (
             <div
               aria-label={`Parâmetros estatísticos do Concurso ${displayedDraw.concurso}`}
-              className="pt-2 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2"
+              className="pt-2 border-t border-slate-800/80 space-y-2.5"
             >
-              {/* 1. Pares e Ímpares */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Pares / Ímpares</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-white tabular-nums">
-                  {parametrosConcurso.pares}P / {parametrosConcurso.impares}I
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
+                {/* 1. Pares e Ímpares */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Pares / Ímpares</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-white tabular-nums">
+                    {parametrosConcurso.pares}P / {parametrosConcurso.impares}I
+                  </div>
+                </div>
+
+                {/* 2. Repetidas do Concurso Anterior */}
+                <div
+                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
+                  title={
+                    parametrosConcurso.repetidasAnterior !== null
+                      ? `Dezenas repetidas em relação ao concurso #${displayedDraw.concurso - 1}`
+                      : 'Concurso imediatamente anterior indisponível no histórico local'
+                  }
+                >
+                  <div className="text-[10px] text-slate-400 leading-tight">Repetidas (#{displayedDraw.concurso - 1})</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums">
+                    {parametrosConcurso.repetidasAnterior !== null
+                      ? `${parametrosConcurso.repetidasAnterior} dez.`
+                      : 'N/A'}
+                  </div>
+                </div>
+
+                {/* 3. Soma Total */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Soma Total</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-amber-300 tabular-nums">
+                    {parametrosConcurso.somaTotal}
+                  </div>
+                </div>
+
+                {/* 4. Números Primos */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Primos</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-sky-300 tabular-nums">
+                    {parametrosConcurso.primos} dez.
+                  </div>
+                </div>
+
+                {/* 5. Moldura e Miolo */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Moldura / Miolo</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums">
+                    {parametrosConcurso.moldura}M / {parametrosConcurso.miolo}C
+                  </div>
+                </div>
+
+                {/* 6. Sequência de Fibonacci */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Fibonacci</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-amber-200 tabular-nums">
+                    {parametrosConcurso.fibonacci} dez.
+                  </div>
+                </div>
+
+                {/* 7. Números em Sequência */}
+                <div
+                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
+                  title={`Blocos consecutivos encontrados: ${sequenciaResumo}`}
+                >
+                  <div className="text-[10px] text-slate-400 leading-tight">Sequência</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums truncate">
+                    Máx {parametrosConcurso.maiorSequencia}{' '}
+                    <span className="text-[10px] font-normal text-slate-400">
+                      ({sequenciaResumo})
+                    </span>
+                  </div>
+                </div>
+
+                {/* 8. Cruz da Lotofácil */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[10px] text-slate-400 leading-tight">Cruz Central</div>
+                  <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-300 tabular-nums">
+                    {parametrosConcurso.cruz} dez.
+                  </div>
+                </div>
+
+                {/* 9. Quadrantes (Q1, Q2, Q3, Q4) */}
+                <div
+                  className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 col-span-2 sm:col-span-1"
+                  title={
+                    parametrosConcurso.quadrantes.centro13
+                      ? 'Distribuição pelos 4 quadrantes (dezena central 13 também sorteada)'
+                      : 'Distribuição pelos 4 quadrantes do volante 5×5'
+                  }
+                >
+                  <div className="text-[10px] text-slate-400 leading-tight">
+                    Quadrantes (Q1–Q4)
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-mono font-semibold text-cyan-300 tabular-nums">
+                    {parametrosConcurso.quadrantes.q1}·{parametrosConcurso.quadrantes.q2}·
+                    {parametrosConcurso.quadrantes.q3}·{parametrosConcurso.quadrantes.q4}
+                    {parametrosConcurso.quadrantes.centro13 ? ' (+13)' : ''}
+                  </div>
                 </div>
               </div>
 
-              {/* 2. Repetidas do Concurso Anterior */}
-              <div
-                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
-                title={
-                  parametrosConcurso.repetidasAnterior !== null
-                    ? `Dezenas repetidas em relação ao concurso #${displayedDraw.concurso - 1}`
-                    : 'Concurso imediatamente anterior indisponível no histórico local'
-                }
-              >
-                <div className="text-[10px] text-slate-400 leading-tight">Repetidas (#{displayedDraw.concurso - 1})</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums">
-                  {parametrosConcurso.repetidasAnterior !== null
-                    ? `${parametrosConcurso.repetidasAnterior} dez.`
-                    : 'N/A'}
-                </div>
-              </div>
+              {/* Mini Gráfico de Linha: Tendência dos Últimos 5 Concursos (Soma Total ou Primos) */}
+              {trendLast5.points.length >= 2 && (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-3 py-2 flex flex-col md:flex-row md:items-center gap-3">
+                  <div className="md:w-64 shrink-0 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-slate-200">
+                        Tendência · Últimos {trendLast5.points.length} Concursos
+                      </span>
+                    </div>
 
-              {/* 3. Soma Total */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Soma Total</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-amber-300 tabular-nums">
-                  {parametrosConcurso.somaTotal}
-                </div>
-              </div>
+                    <div className="flex items-center gap-1 p-0.5 rounded-md bg-slate-950 border border-slate-800 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setTrendMetric('somaTotal')}
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer whitespace-nowrap ${
+                          trendMetric === 'somaTotal'
+                            ? 'bg-slate-800 text-amber-300'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Soma Total
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTrendMetric('primos')}
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer whitespace-nowrap ${
+                          trendMetric === 'primos'
+                            ? 'bg-slate-800 text-sky-300'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Qtd. Primos
+                      </button>
+                    </div>
 
-              {/* 4. Números Primos */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Primos</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-sky-300 tabular-nums">
-                  {parametrosConcurso.primos} dez.
-                </div>
-              </div>
+                    <div className="text-[10px] text-slate-400 font-mono tabular-nums">
+                      Média 5c:{' '}
+                      <span className={trendMetric === 'somaTotal' ? 'text-amber-300' : 'text-sky-300'}>
+                        {trendMetric === 'somaTotal'
+                          ? trendLast5.avgSoma
+                          : `${trendLast5.avgPrimos} dez.`}
+                      </span>
+                      {' · '}
+                      Ideal: {trendMetric === 'somaTotal' ? '175–220' : '4–7'}
+                    </div>
+                  </div>
 
-              {/* 5. Moldura e Miolo */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Moldura / Miolo</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums">
-                  {parametrosConcurso.moldura}M / {parametrosConcurso.miolo}C
+                  <div className="flex-1 h-[84px] min-w-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={trendLast5.points}
+                        margin={{ top: 8, right: 14, left: -18, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          stroke="#64748b"
+                          tick={{ fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke="#64748b"
+                          tick={{ fill: '#64748b', fontSize: 10, fontFamily: 'monospace' }}
+                          tickLine={false}
+                          axisLine={false}
+                          domain={
+                            trendMetric === 'somaTotal'
+                              ? ['dataMin - 10', 'dataMax + 10']
+                              : [0, 9]
+                          }
+                        />
+                        <ReferenceLine
+                          y={trendMetric === 'somaTotal' ? trendLast5.avgSoma : trendLast5.avgPrimos}
+                          stroke={trendMetric === 'somaTotal' ? '#fbbf24' : '#38bdf8'}
+                          strokeOpacity={0.35}
+                          strokeDasharray="3 3"
+                        />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const pt = payload[0].payload as (typeof trendLast5.points)[number];
+                            return (
+                              <div className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] font-mono tabular-nums shadow-xl space-y-0.5">
+                                <div className="text-white font-semibold">
+                                  Concurso {pt.label}{' '}
+                                  <span className="text-slate-400 font-normal">({pt.data})</span>
+                                </div>
+                                <div className="text-amber-300">Soma Total: {pt.somaTotal}</div>
+                                <div className="text-sky-300">Primos: {pt.primos} dez.</div>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey={trendMetric}
+                          stroke={trendMetric === 'somaTotal' ? '#fbbf24' : '#38bdf8'}
+                          strokeWidth={2}
+                          dot={{
+                            r: 3,
+                            fill: trendMetric === 'somaTotal' ? '#fbbf24' : '#38bdf8',
+                            strokeWidth: 0,
+                          }}
+                          activeDot={{
+                            r: 5,
+                            stroke: '#020617',
+                            strokeWidth: 1.5,
+                          }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
-
-              {/* 6. Sequência de Fibonacci */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Fibonacci</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-amber-200 tabular-nums">
-                  {parametrosConcurso.fibonacci} dez.
-                </div>
-              </div>
-
-              {/* 7. Números em Sequência */}
-              <div
-                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5"
-                title={`Blocos consecutivos encontrados: ${sequenciaResumo}`}
-              >
-                <div className="text-[10px] text-slate-400 leading-tight">Sequência</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-slate-100 tabular-nums truncate">
-                  Máx {parametrosConcurso.maiorSequencia}{' '}
-                  <span className="text-[10px] font-normal text-slate-400">
-                    ({sequenciaResumo})
-                  </span>
-                </div>
-              </div>
-
-              {/* 8. Cruz da Lotofácil */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5">
-                <div className="text-[10px] text-slate-400 leading-tight">Cruz Central</div>
-                <div className="mt-0.5 text-xs font-mono font-semibold text-emerald-300 tabular-nums">
-                  {parametrosConcurso.cruz} dez.
-                </div>
-              </div>
-
-              {/* 9. Quadrantes (Q1, Q2, Q3, Q4) */}
-              <div
-                className="bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1.5 col-span-2 sm:col-span-1"
-                title={
-                  parametrosConcurso.quadrantes.centro13
-                    ? 'Distribuição pelos 4 quadrantes (dezena central 13 também sorteada)'
-                    : 'Distribuição pelos 4 quadrantes do volante 5×5'
-                }
-              >
-                <div className="text-[10px] text-slate-400 leading-tight">
-                  Quadrantes (Q1–Q4)
-                </div>
-                <div className="mt-0.5 text-[11px] font-mono font-semibold text-cyan-300 tabular-nums">
-                  {parametrosConcurso.quadrantes.q1}·{parametrosConcurso.quadrantes.q2}·
-                  {parametrosConcurso.quadrantes.q3}·{parametrosConcurso.quadrantes.q4}
-                  {parametrosConcurso.quadrantes.centro13 ? ' (+13)' : ''}
-                </div>
-              </div>
+              )}
             </div>
           )}
         </div>
