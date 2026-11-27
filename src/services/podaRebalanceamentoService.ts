@@ -2,258 +2,233 @@ import { calcularParametrosConcurso, ParametrosConcurso } from '../utils/lotofac
 import { dezenasParaBitmask } from '../utils/lotofacilEngine';
 
 export interface ConfigPodaRebalanceamento {
-  bilhetes: number[][];
-  poolDezenas: number[];
-  ultimoConcurso: number[];
-  dezenasFixas?: number[];
-  maxSobreposicaoIdeal?: number; // Padrão: 12 (penaliza >= 13 e bloqueia duplicata 15)
+  bilhetes: number[][];            // Matriz de fechamento já gerada (jogos de 15 dezenas)
+  pool: number[];                  // Pool original de dezenas do fechamento (ex: 18 a 21 dezenas)
+  ultimoConcurso: number[];        // Último concurso oficial (para cálculo de repetidas)
+  dezenasFixas?: number[];         // Opcional: dezenas que a busca local nunca pode remover
+  scoreMinimoAlvo?: number;        // Padrão: 80 (%)
+  maxCriticosPermitidos?: number;  // Padrão: 0 (nenhum indicador vermelho)
+  podarIrrecuperaveis?: boolean;   // Se true, remove bilhetes que continuam 'Fora do Padrão' após busca local
   onProgress?: (percent: number) => void;
 }
 
-export interface AlteracaoBilheteRebalanceado {
-  indiceBilhete: number;
-  dezenaRemovida: number;
-  dezenaInserida: number;
+export interface AlteracaoBilhete {
+  indiceOriginal: number;
+  acao: 'mantido' | 'rebalanceado' | 'podado';
+  dezenasAntes: number[];
+  dezenasDepois?: number[];
+  dezenaRemovida?: number;
+  dezenaInserida?: number;
   scoreAntes: number;
-  scoreDepois: number;
+  scoreDepois?: number;
   criticosAntes: number;
-  criticosDepois: number;
-  classificacaoAntes: ParametrosConcurso['resumo']['classificacao'];
-  classificacaoDepois: ParametrosConcurso['resumo']['classificacao'];
-  maiorSobreposicaoDepois: number;
-}
-
-export interface BilheteRebalanceadoItem {
-  dezenas: number[];
-  analise: ParametrosConcurso;
-  foiRebalanceado: boolean;
-  alteracao?: AlteracaoBilheteRebalanceado;
+  criticosDepois?: number;
 }
 
 export interface ResultadoPodaRebalanceamento {
-  bilhetes: BilheteRebalanceadoItem[];
-  alteracoes: AlteracaoBilheteRebalanceado[];
-  totalAvaliados: number;
-  totalRebalanceados: number;
-  criticosEliminados: number;
-  promovidosPadraoOuro: number;
-  scoreMedioAntes: number;
-  scoreMedioDepois: number;
+  bilhetesOtimizados: { dezenas: number[]; analise: ParametrosConcurso }[];
+  alteracoes: AlteracaoBilhete[];
+  resumo: {
+    totalAntes: number;
+    totalDepois: number;
+    rebalanceados: number;
+    podados: number;
+    mantidos: number;
+    scoreMedioAntes: number;
+    scoreMedioDepois: number;
+    criticosAntes: number;
+    criticosDepois: number;
+    bilhetesOuroAntes: number;
+    bilhetesOuroDepois: number;
+  };
 }
 
 function contarBits(n: number): number {
   let c = 0;
-  let v = n;
-  while (v > 0) {
-    v &= v - 1;
+  while (n > 0) {
+    n &= n - 1;
     c++;
   }
   return c;
 }
 
-function pesoClassificacao(cls: ParametrosConcurso['resumo']['classificacao']): number {
-  if (cls === 'Padrão Ouro') return 45;
-  if (cls === 'Dentro da Média') return 20;
-  if (cls === 'Atípico') return 5;
-  return -25;
-}
-
-function calcularPenalidadeDiversidade(
-  maskCandidata: number,
-  masksAtuais: number[],
-  ignorarIndice: number,
-  maxSobreposicaoIdeal: number
-): { penalidade: number; maiorSobreposicao: number } {
-  let penalidade = 0;
-  let maiorSobreposicao = 0;
-
-  for (let j = 0; j < masksAtuais.length; j++) {
-    if (j === ignorarIndice) continue;
-    const overlap = contarBits(maskCandidata & masksAtuais[j]);
-    if (overlap > maiorSobreposicao) maiorSobreposicao = overlap;
-    if (overlap >= 14) {
-      penalidade += 45;
-    } else if (overlap > maxSobreposicaoIdeal) {
-      penalidade += (overlap - maxSobreposicaoIdeal) * 10;
-    }
-  }
-
-  return { penalidade, maiorSobreposicao };
-}
-
-function avaliarObjetivo(
-  analise: ParametrosConcurso,
-  penalidadeDiversidade: number
-): number {
-  const { scorePercentual, criticos, alertas, classificacao } = analise.resumo;
-  return (
-    pesoClassificacao(classificacao) +
-    scorePercentual * 1.6 -
-    criticos * 65 -
-    alertas * 7 -
-    penalidadeDiversidade
-  );
-}
-
 /**
- * Poda e Rebalanceamento por Busca Local (troca de 1 dezena dentro do próprio pool):
- * Em vez de deletar bilhetes com indicadores críticos ou fora do padrão (o que destrói a garantia
- * matemática da matriz), realiza substituições pontuais de 1 dezena que:
- * 1. Respeitam 100% das dezenas fixas (nunca removem uma fixa).
- * 2. Eliminam indicadores críticos e elevam o bilhete para Padrão Ouro (ou maior score possível).
- * 3. Preservam cobertura e diversidade da matriz evitando duplicatas e penalizando sobreposição via bitmask.
+ * Mede a maior sobreposição (em dezenas iguais) entre um bilhete candidato
+ * e todos os outros bilhetes da matriz. Quanto menor, maior a preservação de cobertura.
  */
-export async function rebalancearMatrizPorBuscaLocalAsync(
+function calcularMaxSobreposicao(candidatoMask: number, masksMatriz: number[], ignorarIndice: number): number {
+  let maxOverlap = 0;
+  for (let i = 0; i < masksMatriz.length; i++) {
+    if (i === ignorarIndice || masksMatriz[i] === 0) continue;
+    const overlap = contarBits(candidatoMask & masksMatriz[i]);
+    if (overlap > maxOverlap) maxOverlap = overlap;
+  }
+  return maxOverlap;
+}
+
+export async function executarPodaERebalanceamentoAsync(
   config: ConfigPodaRebalanceamento
 ): Promise<ResultadoPodaRebalanceamento> {
   const {
     bilhetes,
-    poolDezenas,
+    pool,
     ultimoConcurso,
     dezenasFixas = [],
-    maxSobreposicaoIdeal = 12,
+    scoreMinimoAlvo = 80,
+    maxCriticosPermitidos = 0,
+    podarIrrecuperaveis = false,
     onProgress,
   } = config;
 
-  if (!bilhetes || bilhetes.length === 0) {
-    return {
-      bilhetes: [],
-      alteracoes: [],
-      totalAvaliados: 0,
-      totalRebalanceados: 0,
-      criticosEliminados: 0,
-      promovidosPadraoOuro: 0,
-      scoreMedioAntes: 0,
-      scoreMedioDepois: 0,
-    };
-  }
-
   const setFixas = new Set(dezenasFixas);
-  const poolBase = Array.from(
-    new Set([...poolDezenas, ...bilhetes.flat()])
-  )
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
-    .sort((a, b) => a - b);
+  const poolOrdenado = [...new Set(pool)].sort((a, b) => a - b);
 
-  const atuais = bilhetes.map((b) => [...b].sort((a, b2) => a - b2));
-  const masksAtuais = atuais.map((b) => dezenasParaBitmask(b));
-  const masksSet = new Set<number>(masksAtuais);
-  const analisesIniciais = atuais.map((b) => calcularParametrosConcurso(b, ultimoConcurso));
-  const analisesFinais = [...analisesIniciais];
-  const alteracoesPorIndice = new Map<number, AlteracaoBilheteRebalanceado>();
+  // Estado mutável da matriz durante a busca local
+  const matrizAtual: number[][] = bilhetes.map((b) => [...b].sort((a, b2) => a - b2));
+  const masksAtuais: number[] = matrizAtual.map((b) => dezenasParaBitmask(b));
+  const setMasksUnicas = new Set<number>(masksAtuais);
+
+  const analisesIniciais = matrizAtual.map((b) => calcularParametrosConcurso(b, ultimoConcurso));
 
   const scoreMedioAntes =
-    analisesIniciais.reduce((acc, a) => acc + a.resumo.scorePercentual, 0) / analisesIniciais.length;
+    analisesIniciais.length > 0
+      ? Number(
+          (
+            analisesIniciais.reduce((acc, a) => acc + a.resumo.scorePercentual, 0) /
+            analisesIniciais.length
+          ).toFixed(1)
+        )
+      : 0;
+  const criticosAntes = analisesIniciais.reduce((acc, a) => acc + a.resumo.criticos, 0);
+  const bilhetesOuroAntes = analisesIniciais.filter((a) => a.resumo.classificacao === 'Padrão Ouro').length;
 
-  let criticosEliminados = 0;
-  let promovidosPadraoOuro = 0;
+  const alteracoes: AlteracaoBilhete[] = [];
+  const bilhetesFinais: { dezenas: number[]; analise: ParametrosConcurso }[] = [];
 
-  for (let i = 0; i < atuais.length; i++) {
-    if (i % 10 === 0) {
+  let rebalanceados = 0;
+  let podados = 0;
+  let mantidos = 0;
+
+  for (let idx = 0; idx < matrizAtual.length; idx++) {
+    if (idx % 10 === 0) {
       await new Promise((r) => setTimeout(r, 0));
-      onProgress?.(Math.round((i / atuais.length) * 100));
+      onProgress?.(Math.round((idx / matrizAtual.length) * 100));
     }
 
-    const analiseAtual = analisesFinais[i];
-    const precisaRebalancear =
-      analiseAtual.resumo.criticos > 0 ||
-      analiseAtual.resumo.classificacao !== 'Padrão Ouro';
+    const bilheteAtual = matrizAtual[idx];
+    const analiseAtual = analisesIniciais[idx];
+    const { scorePercentual: scoreAtual, criticos: criticosAtual } = analiseAtual.resumo;
 
-    if (!precisaRebalancear) continue;
+    const precisaOtimizar = criticosAtual > maxCriticosPermitidos || scoreAtual < scoreMinimoAlvo;
 
-    const bilheteAtual = atuais[i];
-    const maskAtual = masksAtuais[i];
-    const setAtual = new Set(bilheteAtual);
+    if (!precisaOtimizar) {
+      mantidos++;
+      bilhetesFinais.push({ dezenas: bilheteAtual, analise: analiseAtual });
+      alteracoes.push({
+        indiceOriginal: idx,
+        acao: 'mantido',
+        dezenasAntes: bilheteAtual,
+        dezenasDepois: bilheteAtual,
+        scoreAntes: scoreAtual,
+        scoreDepois: scoreAtual,
+        criticosAntes: criticosAtual,
+        criticosDepois: criticosAtual,
+      });
+      continue;
+    }
 
-    const removiveis = bilheteAtual.filter((n) => !setFixas.has(n));
-    const inseriveis = poolBase.filter((n) => !setAtual.has(n));
+    // --- BUSCA LOCAL 1-OPT (troca de 1 dezena dentro do pool) ---
+    const setBilhete = new Set(bilheteAtual);
+    const dezenasDisponiveisNoPool = poolOrdenado.filter((d) => !setBilhete.has(d));
+    const dezenasRemoviveis = bilheteAtual.filter((d) => !setFixas.has(d));
 
-    if (removiveis.length === 0 || inseriveis.length === 0) continue;
-
-    const divAtual = calcularPenalidadeDiversidade(maskAtual, masksAtuais, i, maxSobreposicaoIdeal);
-    const objetivoAtual = avaliarObjetivo(analiseAtual, divAtual.penalidade);
-
-    let melhorSwap: {
+    let melhorCandidato: {
       dezenas: number[];
       mask: number;
       analise: ParametrosConcurso;
-      outNum: number;
-      inNum: number;
-      objetivo: number;
-      maiorSobreposicao: number;
+      sai: number;
+      entra: number;
+      fitness: number;
     } | null = null;
 
-    for (const outNum of removiveis) {
-      const maskSemOut = maskAtual & ~(1 << (outNum - 1));
-      for (const inNum of inseriveis) {
-        const candMask = maskSemOut | (1 << (inNum - 1));
+    // Fitness base do bilhete original (penaliza fortemente críticos e sobreposição alta)
+    const overlapAtual = calcularMaxSobreposicao(masksAtuais[idx], masksAtuais, idx);
+    const fitnessAtual = scoreAtual * 2 - criticosAtual * 45 - Math.max(0, overlapAtual - 12) * 8;
 
-        // Nunca permite duplicata exata na matriz
-        if (masksSet.has(candMask)) continue;
+    for (const sai of dezenasRemoviveis) {
+      for (const entra of dezenasDisponiveisNoPool) {
+        const candidato = bilheteAtual.map((d) => (d === sai ? entra : d)).sort((a, b) => a - b);
+        const mask = dezenasParaBitmask(candidato);
 
-        const candDezenas = bilheteAtual
-          .map((n) => (n === outNum ? inNum : n))
-          .sort((a, b) => a - b);
+        // Nunca gerar bilhete duplicado na matriz
+        if (setMasksUnicas.has(mask)) continue;
 
-        const candAnalise = calcularParametrosConcurso(candDezenas, ultimoConcurso);
+        const analiseCand = calcularParametrosConcurso(candidato, ultimoConcurso);
+        const { scorePercentual: sc, criticos: cr, classificacao } = analiseCand.resumo;
 
-        // Exige melhoria estatística real (nunca piora críticos nem reduz score mantendo críticos)
-        if (candAnalise.resumo.criticos > analiseAtual.resumo.criticos) continue;
-        const melhorouEstatistica =
-          candAnalise.resumo.criticos < analiseAtual.resumo.criticos ||
-          (candAnalise.resumo.classificacao === 'Padrão Ouro' &&
-            analiseAtual.resumo.classificacao !== 'Padrão Ouro') ||
-          candAnalise.resumo.scorePercentual > analiseAtual.resumo.scorePercentual;
+        // Só aceita troca que realmente melhore ou elimine críticos
+        if (cr > criticosAtual) continue;
+        if (cr === criticosAtual && sc <= scoreAtual) continue;
 
-        if (!melhorouEstatistica) continue;
+        const maxOverlap = calcularMaxSobreposicao(mask, masksAtuais, idx);
+        const bonusOuro = classificacao === 'Padrão Ouro' ? 25 : 0;
+        const penalidadeOverlap = Math.max(0, maxOverlap - 12) * 10;
 
-        const divCand = calcularPenalidadeDiversidade(candMask, masksAtuais, i, maxSobreposicaoIdeal);
-        const objetivoCand = avaliarObjetivo(candAnalise, divCand.penalidade);
+        // Função objetivo combinando qualidade estatística + preservação de cobertura
+        const fitness = sc * 2 + bonusOuro - cr * 45 - penalidadeOverlap;
 
-        if (
-          objetivoCand > objetivoAtual &&
-          (!melhorSwap || objetivoCand > melhorSwap.objetivo)
-        ) {
-          melhorSwap = {
-            dezenas: candDezenas,
-            mask: candMask,
-            analise: candAnalise,
-            outNum,
-            inNum,
-            objetivo: objetivoCand,
-            maiorSobreposicao: divCand.maiorSobreposicao,
-          };
+        if (!melhorCandidato || fitness > melhorCandidato.fitness) {
+          melhorCandidato = { dezenas: candidato, mask, analise: analiseCand, sai, entra, fitness };
         }
       }
     }
 
-    if (melhorSwap) {
-      masksSet.delete(maskAtual);
-      masksSet.add(melhorSwap.mask);
-      atuais[i] = melhorSwap.dezenas;
-      masksAtuais[i] = melhorSwap.mask;
-      analisesFinais[i] = melhorSwap.analise;
+    if (melhorCandidato && melhorCandidato.fitness > fitnessAtual) {
+      // Aplica a substituição na matriz
+      setMasksUnicas.delete(masksAtuais[idx]);
+      setMasksUnicas.add(melhorCandidato.mask);
+      matrizAtual[idx] = melhorCandidato.dezenas;
+      masksAtuais[idx] = melhorCandidato.mask;
 
-      const deltaCriticos = Math.max(0, analiseAtual.resumo.criticos - melhorSwap.analise.resumo.criticos);
-      criticosEliminados += deltaCriticos;
-      if (
-        analiseAtual.resumo.classificacao !== 'Padrão Ouro' &&
-        melhorSwap.analise.resumo.classificacao === 'Padrão Ouro'
-      ) {
-        promovidosPadraoOuro++;
-      }
-
-      alteracoesPorIndice.set(i, {
-        indiceBilhete: i,
-        dezenaRemovida: melhorSwap.outNum,
-        dezenaInserida: melhorSwap.inNum,
-        scoreAntes: analiseAtual.resumo.scorePercentual,
-        scoreDepois: melhorSwap.analise.resumo.scorePercentual,
-        criticosAntes: analiseAtual.resumo.criticos,
-        criticosDepois: melhorSwap.analise.resumo.criticos,
-        classificacaoAntes: analiseAtual.resumo.classificacao,
-        classificacaoDepois: melhorSwap.analise.resumo.classificacao,
-        maiorSobreposicaoDepois: melhorSwap.maiorSobreposicao,
+      rebalanceados++;
+      bilhetesFinais.push({ dezenas: melhorCandidato.dezenas, analise: melhorCandidato.analise });
+      alteracoes.push({
+        indiceOriginal: idx,
+        acao: 'rebalanceado',
+        dezenasAntes: bilheteAtual,
+        dezenasDepois: melhorCandidato.dezenas,
+        dezenaRemovida: melhorCandidato.sai,
+        dezenaInserida: melhorCandidato.entra,
+        scoreAntes: scoreAtual,
+        scoreDepois: melhorCandidato.analise.resumo.scorePercentual,
+        criticosAntes: criticosAtual,
+        criticosDepois: melhorCandidato.analise.resumo.criticos,
+      });
+    } else if (podarIrrecuperaveis && analiseAtual.resumo.foraDoPadrao) {
+      // Poda apenas se o usuário ativou e o bilhete continuou 'Fora do Padrão'
+      setMasksUnicas.delete(masksAtuais[idx]);
+      masksAtuais[idx] = 0;
+      podados++;
+      alteracoes.push({
+        indiceOriginal: idx,
+        acao: 'podado',
+        dezenasAntes: bilheteAtual,
+        scoreAntes: scoreAtual,
+        criticosAntes: criticosAtual,
+      });
+    } else {
+      // Mantém original caso não haja troca melhor e poda esteja desativada
+      mantidos++;
+      bilhetesFinais.push({ dezenas: bilheteAtual, analise: analiseAtual });
+      alteracoes.push({
+        indiceOriginal: idx,
+        acao: 'mantido',
+        dezenasAntes: bilheteAtual,
+        dezenasDepois: bilheteAtual,
+        scoreAntes: scoreAtual,
+        scoreDepois: scoreAtual,
+        criticosAntes: criticosAtual,
+        criticosDepois: criticosAtual,
       });
     }
   }
@@ -261,23 +236,34 @@ export async function rebalancearMatrizPorBuscaLocalAsync(
   onProgress?.(100);
 
   const scoreMedioDepois =
-    analisesFinais.reduce((acc, a) => acc + a.resumo.scorePercentual, 0) / analisesFinais.length;
-
-  const alteracoes = Array.from(alteracoesPorIndice.values());
+    bilhetesFinais.length > 0
+      ? Number(
+          (
+            bilhetesFinais.reduce((acc, b) => acc + b.analise.resumo.scorePercentual, 0) /
+            bilhetesFinais.length
+          ).toFixed(1)
+        )
+      : 0;
+  const criticosDepois = bilhetesFinais.reduce((acc, b) => acc + b.analise.resumo.criticos, 0);
+  const bilhetesOuroDepois = bilhetesFinais.filter(
+    (b) => b.analise.resumo.classificacao === 'Padrão Ouro'
+  ).length;
 
   return {
-    bilhetes: atuais.map((dezenas, idx) => ({
-      dezenas,
-      analise: analisesFinais[idx],
-      foiRebalanceado: alteracoesPorIndice.has(idx),
-      alteracao: alteracoesPorIndice.get(idx),
-    })),
+    bilhetesOtimizados: bilhetesFinais,
     alteracoes,
-    totalAvaliados: atuais.length,
-    totalRebalanceados: alteracoes.length,
-    criticosEliminados,
-    promovidosPadraoOuro,
-    scoreMedioAntes: Number(scoreMedioAntes.toFixed(1)),
-    scoreMedioDepois: Number(scoreMedioDepois.toFixed(1)),
+    resumo: {
+      totalAntes: matrizAtual.length,
+      totalDepois: bilhetesFinais.length,
+      rebalanceados,
+      podados,
+      mantidos,
+      scoreMedioAntes,
+      scoreMedioDepois,
+      criticosAntes,
+      criticosDepois,
+      bilhetesOuroAntes,
+      bilhetesOuroDepois,
+    },
   };
 }

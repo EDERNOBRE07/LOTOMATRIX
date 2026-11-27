@@ -117,7 +117,8 @@ import {
   gerarFechamentoComFixasAsync,
 } from '../services/fechamentoFixasService';
 import {
-  rebalancearMatrizPorBuscaLocalAsync,
+  executarPodaERebalanceamentoAsync,
+  type AlteracaoBilhete,
   type ResultadoPodaRebalanceamento,
 } from '../services/podaRebalanceamentoService';
 import {
@@ -582,9 +583,20 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   } | null>(null);
   const [activeFixedHighlightNumbers, setActiveFixedHighlightNumbers] = useState<number[]>([]);
 
-  // Estado do Rebalanceamento por Busca Local (Poda Inteligente de 1 Dezena)
+  // Estado da Poda Pós-Fechamento + Rebalanceamento (Busca Local 1-opt)
   const [isRebalancingMatrix, setIsRebalancingMatrix] = useState<boolean>(false);
+  const [rebalanceProgress, setRebalanceProgress] = useState<number | null>(null);
+  const [podarIrrecuperaveis, setPodarIrrecuperaveis] = useState<boolean>(false);
   const [rebalanceamentoResumo, setRebalanceamentoResumo] = useState<ResultadoPodaRebalanceamento | null>(null);
+  const [preRebalanceBackup, setPreRebalanceBackup] = useState<GameTicket[] | null>(null);
+  const [rebalanceDiffByTicketId, setRebalanceDiffByTicketId] = useState<Record<string, AlteracaoBilhete>>({});
+
+  const resetRebalanceamentoState = () => {
+    setRebalanceamentoResumo(null);
+    setPreRebalanceBackup(null);
+    setRebalanceDiffByTicketId({});
+    setRebalanceProgress(null);
+  };
 
   const handleOptimizePoolByExclusion = (requestedSize?: 17 | 18 | 19 | 20) => {
     const desiredSize: 17 | 18 | 19 | 20 =
@@ -753,7 +765,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setGeneratedTickets(tickets);
       setGenerationType('matriz');
       setPonderadoOuroResumo(null);
-      setRebalanceamentoResumo(null);
+      resetRebalanceamentoState();
       setHasSavedInJogosSalvos(false);
       setFechamentoFilter('all');
       setOnlyGoldPattern(false);
@@ -831,42 +843,85 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const handleRebalancearBilhetesFracos = async () => {
     if (isRebalancingMatrix || generatedTickets.length === 0) return;
     setIsRebalancingMatrix(true);
+    setRebalanceProgress(5);
     try {
       const fixasAtivas =
         activeFixedHighlightNumbers.length > 0 ? activeFixedHighlightNumbers : fixedNumbers;
       const poolAtual =
         selectedNumbers.length >= 16
           ? selectedNumbers
-          : Array.from(new Set(generatedTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+          : Array.from(
+              new Set([...selectedNumbers, ...generatedTickets.flatMap((t) => t.dezenas)])
+            ).sort((a, b) => a - b);
 
-      const res = await rebalancearMatrizPorBuscaLocalAsync({
-        bilhetes: generatedTickets.map((t) => t.dezenas),
-        poolDezenas: poolAtual,
+      // Salva snapshot original da matriz antes de qualquer rebalanceamento para permitir "Desfazer"
+      const backupOriginal = preRebalanceBackup ?? generatedTickets;
+      const matrizBase = generatedTickets;
+
+      const res = await executarPodaERebalanceamentoAsync({
+        bilhetes: matrizBase.map((t) => t.dezenas),
+        pool: poolAtual,
         ultimoConcurso: latestDraw.dezenas,
         dezenasFixas: fixasAtivas,
+        podarIrrecuperaveis,
+        onProgress: (pct) => setRebalanceProgress(pct),
       });
 
       setRebalanceamentoResumo(res);
 
-      if (res.totalRebalanceados > 0) {
-        const updatedTickets: GameTicket[] = generatedTickets.map((orig, idx) => {
-          const item = res.bilhetes[idx];
-          if (!item || !item.foiRebalanceado) return orig;
+      const houveAlteracao = res.resumo.rebalanceados > 0 || res.resumo.podados > 0;
+      if (houveAlteracao) {
+        const alteracoesMantidasOuRebalanceadas = res.alteracoes.filter(
+          (alt) => alt.acao !== 'podado'
+        );
+        const nextDiffMap: Record<string, AlteracaoBilhete> = {};
+
+        const updatedTickets: GameTicket[] = res.bilhetesOtimizados.map((item, newIdx) => {
+          const alt = alteracoesMantidasOuRebalanceadas[newIdx];
+          const orig = alt ? matrizBase[alt.indiceOriginal] : matrizBase[newIdx];
+          const ticketId = orig?.id ?? `rebal-${Date.now()}-${newIdx + 1}`;
+
+          if (alt && alt.acao === 'rebalanceado') {
+            nextDiffMap[ticketId] = alt;
+            const analyzed = analyzeTicket(item.dezenas, latestDraw.dezenas, aiPrediction?.scores);
+            const existingTags = (orig?.tags || []).filter((tg) => !tg.startsWith('Rebalanceado'));
+            return {
+              ...analyzed,
+              id: ticketId,
+              index: newIdx + 1,
+              scoreIA: item.analise.resumo.scorePercentual,
+              tags: [...existingTags, 'Rebalanceado (Busca Local)'],
+            };
+          }
+
+          if (orig) {
+            return {
+              ...orig,
+              index: newIdx + 1,
+            };
+          }
+
           const analyzed = analyzeTicket(item.dezenas, latestDraw.dezenas, aiPrediction?.scores);
-          const existingTags = (orig.tags || []).filter((tg) => !tg.startsWith('Rebalanceado'));
           return {
             ...analyzed,
-            id: orig.id,
-            index: orig.index,
+            id: ticketId,
+            index: newIdx + 1,
             scoreIA: item.analise.resumo.scorePercentual,
-            tags: [...existingTags, 'Rebalanceado (1 troca)'],
           };
         });
+
+        setPreRebalanceBackup(backupOriginal);
+        setRebalanceDiffByTicketId(nextDiffMap);
         setGeneratedTickets(updatedTickets);
+        setHasSavedInJogosSalvos(false);
         setGoldenGlowTrigger(Date.now());
-        onSaveTickets(updatedTickets, getCurrentExportMeta());
+        const metaAtual = getCurrentExportMeta();
+        onSaveTickets(updatedTickets, metaAtual);
+        saveToAutoSave(updatedTickets, mode, poolAtual, metaAtual.filters || filters, 'matriz');
+
+        const { resumo } = res;
         setDocumentMessage(
-          `✓ Rebalanceamento concluído: ${res.totalRebalanceados} bilhete(s) aprimorado(s), ${res.criticosEliminados} crítico(s) eliminado(s), +${res.promovidosPadraoOuro} promovido(s) a Padrão Ouro (Score médio ${res.scoreMedioAntes}% → ${res.scoreMedioDepois}%).`
+          `✓ Rebalanceamento concluído: ${resumo.rebalanceados} rebalanceado(s), ${resumo.mantidos} mantido(s), ${resumo.podados} podado(s) • Score médio ${resumo.scoreMedioAntes}% → ${resumo.scoreMedioDepois}% • Padrão Ouro ${resumo.bilhetesOuroAntes} → ${resumo.bilhetesOuroDepois}.`
         );
         try {
           soundService.playGoldenZoneSuccessChime();
@@ -881,7 +936,23 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       console.error('Erro ao rebalancear bilhetes:', err);
     } finally {
       setIsRebalancingMatrix(false);
+      setTimeout(() => setRebalanceProgress(null), 900);
     }
+  };
+
+  const handleDesfazerRebalanceamento = () => {
+    if (!preRebalanceBackup) return;
+    const restored = preRebalanceBackup;
+    setGeneratedTickets(restored);
+    resetRebalanceamentoState();
+    setHasSavedInJogosSalvos(false);
+    const metaAtual = getCurrentExportMeta();
+    onSaveTickets(restored, metaAtual);
+    saveToAutoSave(restored, mode, selectedNumbers, metaAtual.filters || filters, 'matriz');
+    setDocumentMessage(
+      `↩️ Rebalanceamento desfeito: matriz original restaurada com ${restored.length} bilhete(s).`
+    );
+    setTimeout(() => setDocumentMessage(null), 5000);
   };
 
   const handleExportJSON = () => {
@@ -993,7 +1064,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         setPonderadoOuroResumo(null);
         setFixasResultadoResumo(null);
         setActiveFixedHighlightNumbers([]);
-        setRebalanceamentoResumo(null);
+        resetRebalanceamentoState();
         setGeneratedTickets(tickets);
         setFechamentoFilter('all');
         setOnlyGoldPattern(false);
@@ -1375,6 +1446,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setSelectedNumbers(item.selectedNumbers);
     syncFilters(item.filters);
     setGeneratedTickets(item.tickets);
+    resetRebalanceamentoState();
     setGenerationType(item.generationType);
     onSaveTickets(item.tickets);
     setIsAutoSaveModalOpen(false);
@@ -2674,7 +2746,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setPonderadoOuroResumo(null);
       setFixasResultadoResumo(null);
       setActiveFixedHighlightNumbers([]);
-      setRebalanceamentoResumo(null);
+      resetRebalanceamentoState();
       setGeneratedTickets(tickets);
 
       // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR, limitado a <= 21 dezenas)
@@ -2846,7 +2918,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setPonderadoOuroResumo(result.coberturaPonderadaOuro ?? null);
       setFixasResultadoResumo(null);
       setActiveFixedHighlightNumbers([]);
-      setRebalanceamentoResumo(null);
+      resetRebalanceamentoState();
       setGeneratedTickets(result.tickets);
 
       const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
@@ -2937,7 +3009,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setPonderadoOuroResumo(null);
       setFixasResultadoResumo(null);
       setActiveFixedHighlightNumbers([]);
-      setRebalanceamentoResumo(null);
+      resetRebalanceamentoState();
       setGeneratedTickets([]);
     } finally {
       setIsGenerating(false);
@@ -3037,7 +3109,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setGenerationError(null);
     setFixasResultadoResumo(null);
     setActiveFixedHighlightNumbers([]);
-    setRebalanceamentoResumo(null);
+    resetRebalanceamentoState();
     setGeneratedTickets(tickets);
     setGenerationType('turbo');
     setGenerationTimeMs(turboRes.elapsedMs);
@@ -3167,7 +3239,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
         setFixasResultadoResumo(null);
         setActiveFixedHighlightNumbers([]);
-        setRebalanceamentoResumo(null);
+        resetRebalanceamentoState();
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, fiboMeta);
         autoSaveFechamentoPrognostico(tickets, fiboMeta.strategyName || 'Distribuição de Fibonacci Otimizada (Zona de Ouro)', fiboMeta, latestDraw.dezenas);
@@ -3250,7 +3322,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
       setFixasResultadoResumo(null);
       setActiveFixedHighlightNumbers([]);
-      setRebalanceamentoResumo(null);
+      resetRebalanceamentoState();
       setGeneratedTickets(tickets);
 
       if (selectedNumbers.length >= 15 && selectedNumbers.length <= 21) {
@@ -3321,7 +3393,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     setSelectedNumbers(variation.subsetPool);
     setFixasResultadoResumo(null);
     setActiveFixedHighlightNumbers([]);
-    setRebalanceamentoResumo(null);
+    resetRebalanceamentoState();
     setGeneratedTickets(variation.tickets);
     setStrategyName(
       `Batch ${variation.poolSize} Dez. (${variation.tickets.length} Jogos · ${variation.cobertura14Pct.toFixed(1)}% 14+)`
@@ -6630,102 +6702,223 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           )}
 
-          {/* Resumo do Rebalanceamento por Busca Local (1 Troca) */}
-          {rebalanceamentoResumo && (
-            <div className="rounded-xl bg-slate-900/95 border border-emerald-500/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Wand2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="font-bold text-emerald-200">
-                  Poda &amp; Rebalanceamento (Busca Local 1 Troca):
-                </span>
-                <span className="font-mono text-slate-200">
-                  {rebalanceamentoResumo.totalRebalanceados}/{rebalanceamentoResumo.totalAvaliados} ajustados
-                </span>
-                <span className="font-mono text-amber-300">
-                  • {rebalanceamentoResumo.criticosEliminados} críticos eliminados
-                </span>
-                <span className="font-mono text-emerald-300">
-                  • +{rebalanceamentoResumo.promovidosPadraoOuro} Padrão Ouro
-                </span>
-                <span className="font-mono text-slate-300">
-                  • Score médio {rebalanceamentoResumo.scoreMedioAntes}% → {rebalanceamentoResumo.scoreMedioDepois}%
-                </span>
+          {/* Controles de Filtro Pré-Aposta + Otimização Pós-Fechamento (Busca Local) */}
+          <div className="space-y-2.5">
+            <div className="flex flex-col gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={onlyGoldPattern}
+                    onClick={() => setOnlyGoldPattern((prev) => !prev)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                      onlyGoldPattern
+                        ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                        : 'bg-slate-950/70 border-slate-700 text-slate-300 hover:border-slate-600'
+                    }`}
+                    title="Filtrar usando filtrarERanquearJogos para manter apenas jogos Padrão Ouro (Score ≥ 85% e 0 parâmetros críticos)"
+                  >
+                    <span
+                      className={`w-7 h-4 rounded-full p-0.5 flex items-center transition-colors ${
+                        onlyGoldPattern ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                      }`}
+                    >
+                      <span className="w-3 h-3 rounded-full bg-white shadow-sm" />
+                    </span>
+                    <span>Apenas Padrão Ouro (0 vermelhos)</span>
+                    <span className="font-mono text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-300 border border-emerald-500/30">
+                      {goldPatternApprovedCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSortByAdherenceScore((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+                      sortByAdherenceScore
+                        ? 'bg-slate-800 border-emerald-500/40 text-emerald-300'
+                        : 'bg-slate-950/60 border-slate-700 text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Alternar ordenação automática do maior Score estatístico para o menor"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>{sortByAdherenceScore ? 'Ordenado: Maior Score ↓' : 'Ordenado: Nº do Bilhete'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-300">
+                  <span>
+                    Exibindo <strong className="text-white">{displayedTickets.length}</strong> de{' '}
+                    <strong className="text-white">{generatedTickets.length}</strong> jogos aprovados
+                  </span>
+                  <span className="text-[10px] text-slate-500 hidden md:inline">
+                    (ref. #{latestDraw.concurso})
+                  </span>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setRebalanceamentoResumo(null)}
-                className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
 
-          {/* Controles de Filtro Pré-Aposta (Score Estatístico + Padrão Ouro + Rebalanceamento) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={onlyGoldPattern}
-                onClick={() => setOnlyGoldPattern((prev) => !prev)}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
-                  onlyGoldPattern
-                    ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
-                    : 'bg-slate-950/70 border-slate-700 text-slate-300 hover:border-slate-600'
-                }`}
-                title="Filtrar usando filtrarERanquearJogos para manter apenas jogos Padrão Ouro (Score ≥ 85% e 0 parâmetros críticos)"
-              >
-                <span
-                  className={`w-7 h-4 rounded-full p-0.5 flex items-center transition-colors ${
-                    onlyGoldPattern ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
-                  }`}
-                >
-                  <span className="w-3 h-3 rounded-full bg-white shadow-sm" />
-                </span>
-                <span>Apenas Padrão Ouro (0 vermelhos)</span>
-                <span className="font-mono text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-300 border border-emerald-500/30">
-                  {goldPatternApprovedCount}
-                </span>
-              </button>
+              {/* Barra de Otimização Pós-Fechamento: Rebalanceamento por Busca Local 1-opt */}
+              <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleRebalancearBilhetesFracos}
+                    disabled={isRebalancingMatrix || generatedTickets.length === 0}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-amber-400/70 bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-yellow-500/20 hover:from-amber-500/35 hover:to-yellow-500/30 text-amber-100 text-xs font-bold shadow-sm shadow-amber-500/15 transition cursor-pointer disabled:opacity-50"
+                    title="Executa busca local 1-opt trocando 1 dezena dentro do pool nos bilhetes com críticos ou score < 80%, preservando dezenas fixas e cobertura"
+                  >
+                    <Sliders className={`w-3.5 h-3.5 text-amber-300 ${isRebalancingMatrix ? 'animate-spin' : ''}`} />
+                    <span>
+                      {isRebalancingMatrix
+                        ? `Rebalanceando... ${rebalanceProgress ?? 0}%`
+                        : 'Rebalancear Matriz (Busca Local)'}
+                    </span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setSortByAdherenceScore((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
-                  sortByAdherenceScore
-                    ? 'bg-slate-800 border-emerald-500/40 text-emerald-300'
-                    : 'bg-slate-950/60 border-slate-700 text-slate-400 hover:text-slate-200'
-                }`}
-                title="Alternar ordenação automática do maior Score estatístico para o menor"
-              >
-                <Activity className="w-3.5 h-3.5" />
-                <span>{sortByAdherenceScore ? 'Ordenado: Maior Score ↓' : 'Ordenado: Nº do Bilhete'}</span>
-              </button>
+                  <label
+                    className="inline-flex items-center gap-2 text-[11px] text-slate-300 hover:text-slate-100 cursor-pointer select-none px-2 py-1 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition"
+                    title="Desmarcado por padrão para priorizar a preservação da garantia matemática. Se marcado, remove bilhetes que permanecerem 'Fora do Padrão' após a busca local."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={podarIrrecuperaveis}
+                      onChange={(e) => setPodarIrrecuperaveis(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-900 accent-amber-500 cursor-pointer"
+                    />
+                    <span>Podar bilhetes irrecuperáveis (Fora do Padrão)</span>
+                  </label>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleRebalancearBilhetesFracos}
-                disabled={isRebalancingMatrix || generatedTickets.length === 0}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/55 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-bold transition cursor-pointer disabled:opacity-50"
-                title="Troca 1 dezena dentro do pool nos bilhetes com críticos/abaixo do Padrão Ouro, preservando fixas e diversidade via bitmask"
-              >
-                <Wand2 className={`w-3.5 h-3.5 text-amber-300 ${isRebalancingMatrix ? 'animate-spin' : ''}`} />
-                <span>
-                  {isRebalancingMatrix ? 'Rebalanceando...' : 'Rebalancear Fracos (1 Troca)'}
-                </span>
-              </button>
+                {preRebalanceBackup && (
+                  <button
+                    type="button"
+                    onClick={handleDesfazerRebalanceamento}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-950/80 hover:bg-slate-800 hover:border-amber-500/40 text-slate-200 hover:text-amber-200 text-xs font-semibold transition cursor-pointer"
+                    title="Restaura os bilhetes originais de antes do rebalanceamento para comparação"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Desfazer Rebalanceamento</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-slate-300">
-              <span>
-                Exibindo <strong className="text-white">{displayedTickets.length}</strong> de{' '}
-                <strong className="text-white">{generatedTickets.length}</strong> jogos aprovados
-              </span>
-              <span className="text-[10px] text-slate-500 hidden md:inline">
-                (ref. #{latestDraw.concurso})
-              </span>
-            </div>
+            {/* Painel Compacto de Comparação "Antes vs. Depois" */}
+            {rebalanceamentoResumo && (
+              <div className="rounded-xl bg-slate-900/95 border border-amber-500/40 p-3.5 space-y-2.5 shadow-lg shadow-amber-950/20">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-xs font-bold text-amber-200 uppercase tracking-wider">
+                      Auditoria Pós-Fechamento — Antes vs. Depois (Busca Local)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {preRebalanceBackup && (
+                      <button
+                        type="button"
+                        onClick={handleDesfazerRebalanceamento}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-700 bg-slate-950/80 hover:border-amber-500/50 text-[11px] font-semibold text-amber-200 transition cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Desfazer</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRebalanceamentoResumo(null)}
+                      className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                      title="Fechar painel de comparação"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                  {/* Score Médio da Matriz */}
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                      Score Médio da Matriz
+                    </div>
+                    <div className="mt-0.5 font-mono font-bold tabular-nums text-sm flex items-center gap-1.5">
+                      <span className="text-slate-400">
+                        {rebalanceamentoResumo.resumo.scoreMedioAntes.toFixed(1)}%
+                      </span>
+                      <span className="text-slate-500">→</span>
+                      <span className="text-emerald-500">
+                        {rebalanceamentoResumo.resumo.scoreMedioDepois.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bilhetes Padrão Ouro */}
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                      Bilhetes Padrão Ouro
+                    </div>
+                    <div className="mt-0.5 font-mono font-bold tabular-nums text-sm flex items-center gap-1.5">
+                      <span className="text-slate-400">
+                        {rebalanceamentoResumo.resumo.bilhetesOuroAntes}
+                      </span>
+                      <span className="text-slate-500">→</span>
+                      <span className="text-amber-300">
+                        {rebalanceamentoResumo.resumo.bilhetesOuroDepois} jogos
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Indicadores Críticos (Vermelhos) */}
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                      Indicadores Críticos (Vermelhos)
+                    </div>
+                    <div className="mt-0.5 font-mono font-bold tabular-nums text-sm flex items-center gap-1.5">
+                      <span className="text-rose-400">
+                        {rebalanceamentoResumo.resumo.criticosAntes}
+                      </span>
+                      <span className="text-slate-500">→</span>
+                      <span
+                        className={
+                          rebalanceamentoResumo.resumo.criticosDepois === 0
+                            ? 'text-emerald-500'
+                            : 'text-amber-300'
+                        }
+                      >
+                        {rebalanceamentoResumo.resumo.criticosDepois}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Resumo das Ações */}
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                      Resumo das Ações
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] font-semibold text-slate-200 leading-snug">
+                      <span className="text-emerald-400">
+                        {rebalanceamentoResumo.resumo.rebalanceados} rebalanceados
+                      </span>
+                      {' • '}
+                      <span className="text-slate-300">
+                        {rebalanceamentoResumo.resumo.mantidos} mantidos
+                      </span>
+                      {' • '}
+                      <span
+                        className={
+                          rebalanceamentoResumo.resumo.podados > 0
+                            ? 'text-rose-400'
+                            : 'text-slate-400'
+                        }
+                      >
+                        {rebalanceamentoResumo.resumo.podados} podados
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Empty state quando o filtro Padrão Ouro não retorna jogos */}
@@ -6838,6 +7031,37 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                         </span>
                       )}
 
+                      {/* Mini badge de diff do Rebalanceamento (Busca Local) */}
+                      {(() => {
+                        const altDiff = rebalanceDiffByTicketId[ticket.id];
+                        if (
+                          !altDiff ||
+                          altDiff.acao !== 'rebalanceado' ||
+                          altDiff.dezenaRemovida === undefined ||
+                          altDiff.dezenaInserida === undefined
+                        ) {
+                          return null;
+                        }
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                            title={`Rebalanceamento (Busca Local 1-opt): removeu ${altDiff.dezenaRemovida
+                              .toString()
+                              .padStart(2, '0')} e inseriu ${altDiff.dezenaInserida
+                              .toString()
+                              .padStart(2, '0')} • Score ${altDiff.scoreAntes}% → ${
+                              altDiff.scoreDepois ?? scorePct
+                            }%`}
+                          >
+                            <span>
+                              Troca: -{altDiff.dezenaRemovida.toString().padStart(2, '0')} / +
+                              {altDiff.dezenaInserida.toString().padStart(2, '0')} •{' '}
+                              {altDiff.scoreAntes}% → {altDiff.scoreDepois ?? scorePct}%
+                            </span>
+                          </span>
+                        );
+                      })()}
+
                       <span className="text-[10px] text-slate-400 font-mono">
                         IA: {ticket.scoreIA}%
                       </span>
@@ -6928,12 +7152,17 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           : fixedNumbers);
                       const isFixedBall = activeFixasSet.includes(num);
                       const isKey = cyclePendingNumbers.includes(num);
+                      const isInsertedByRebalance =
+                        rebalanceDiffByTicketId[ticket.id]?.acao === 'rebalanceado' &&
+                        rebalanceDiffByTicketId[ticket.id]?.dezenaInserida === num;
                       return (
                         <span
                           key={num}
                           title={
                             isFixedBall
                               ? `Dezena ${num.toString().padStart(2, '0')} — FIXA (obrigatória em 100% dos bilhetes)`
+                              : isInsertedByRebalance
+                              ? `Dezena ${num.toString().padStart(2, '0')} — Inserida pelo Rebalanceamento (Busca Local)`
                               : isKey
                               ? `Dezena ${num.toString().padStart(2, '0')} — Pendente no Ciclo`
                               : `Dezena ${num.toString().padStart(2, '0')} — Variável`
@@ -6941,6 +7170,8 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                           className={`relative inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-mono text-xs font-bold transition shadow-sm ${
                             isFixedBall
                               ? 'bg-gradient-to-br from-amber-500/30 via-yellow-500/20 to-slate-900 text-amber-200 border-2 border-amber-400 ring-1 ring-amber-300/60 font-black shadow-amber-500/25'
+                              : isInsertedByRebalance
+                              ? 'bg-gradient-to-br from-emerald-500/30 to-slate-900 text-emerald-200 border border-emerald-400 ring-1 ring-emerald-400/60 font-black'
                               : isKey
                               ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 ring-1 ring-amber-300'
                               : 'bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 border border-slate-700'
