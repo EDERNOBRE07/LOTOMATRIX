@@ -110,6 +110,17 @@ import {
 } from '../utils/lotofacilStats';
 import { gerarJogosOuroAsync } from '../utils/lotofacilEngine';
 import {
+  otimizarPoolPorExclusao,
+  type ResultadoOtimizacaoPool,
+} from '../services/poolExclusionOptimizer';
+import {
+  gerarFechamentoComFixasAsync,
+} from '../services/fechamentoFixasService';
+import {
+  rebalancearMatrizPorBuscaLocalAsync,
+  type ResultadoPodaRebalanceamento,
+} from '../services/podaRebalanceamentoService';
+import {
   Sparkles,
   Zap,
   Copy,
@@ -147,6 +158,10 @@ import {
   Users,
   Calculator,
   Share2,
+  Lock,
+  Scissors,
+  Wand2,
+  FileJson,
 } from 'lucide-react';
 
 interface FechamentoTabProps {
@@ -309,7 +324,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // Motor selecionado no Passo 4 (Coluna Esquerda)
   const [selectedMotor, setSelectedMotor] = useState<
-    'padrao' | 'ponderado' | 'estratificada' | 'fibonacci' | 'turbo'
+    'padrao' | 'ponderado' | 'estratificada' | 'fibonacci' | 'turbo' | 'fixas_reduzida'
   >('padrao');
 
   // Feedback visual quando o usuário clica "Aplicar Filtros no Estúdio de Fechamento"
@@ -452,7 +467,12 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
 
   // Sincronização unidirecional (local -> global) apenas quando Fixas/Excluídas mudam localmente
   useEffect(() => {
-    const sanitized = sanitizeDezenasFixas(fixedNumbers);
+    const sanitized =
+      selectedMotor === 'fixas_reduzida'
+        ? Array.from(new Set(fixedNumbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)))
+            .sort((a, b) => a - b)
+            .slice(0, 6)
+        : sanitizeDezenasFixas(fixedNumbers);
     if (sanitized.length !== fixedNumbers.length) {
       setFixedNumbers(sanitized);
       return;
@@ -542,6 +562,379 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     [latestDraw, drawsHistory]
   );
 
+  // Estado do Otimizador de Pool por Exclusão (17, 18, 19 ou 20 dezenas)
+  const [poolExclusionResult, setPoolExclusionResult] = useState<ResultadoOtimizacaoPool | null>(null);
+
+  // Estado do Modo "Fixas + Matriz Reduzida" (1 a 6 fixas + variáveis)
+  const [fixasGarantia, setFixasGarantia] = useState<13 | 14>(14);
+  const [fixasMaxBilhetes, setFixasMaxBilhetes] = useState<number>(30);
+  const [fixasProgress, setFixasProgress] = useState<number | null>(null);
+  const [isGeneratingFixas, setIsGeneratingFixas] = useState<boolean>(false);
+  const [fixasResultadoResumo, setFixasResultadoResumo] = useState<{
+    totalJogos: number;
+    custoTotal: number;
+    coberturaPonderadaPercent: number;
+    coberturaOuroPercent: number;
+    garantiaCondicao: string;
+    fixasUsadas: number[];
+    totalPool: number;
+    garantiaTotal: 13 | 14;
+  } | null>(null);
+  const [activeFixedHighlightNumbers, setActiveFixedHighlightNumbers] = useState<number[]>([]);
+
+  // Estado do Rebalanceamento por Busca Local (Poda Inteligente de 1 Dezena)
+  const [isRebalancingMatrix, setIsRebalancingMatrix] = useState<boolean>(false);
+  const [rebalanceamentoResumo, setRebalanceamentoResumo] = useState<ResultadoPodaRebalanceamento | null>(null);
+
+  const handleOptimizePoolByExclusion = (requestedSize?: 17 | 18 | 19 | 20) => {
+    const desiredSize: 17 | 18 | 19 | 20 =
+      requestedSize ??
+      (targetCount === 17 || targetCount === 18 || targetCount === 19 || targetCount === 20
+        ? targetCount
+        : 18);
+
+    const modeMap: Record<17 | 18 | 19 | 20, FechamentoMode> = {
+      17: '17_14_15',
+      18: '18_14_15',
+      19: '19_14_15',
+      20: '20_14_15',
+    };
+
+    if (targetCount !== desiredSize) {
+      setMode(modeMap[desiredSize]);
+      setSelectedCatalogUniverse(desiredSize);
+      const firstMatch = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === desiredSize);
+      if (firstMatch) setSelectedCatalogId(firstMatch.id);
+    }
+
+    const historicoSimples = historicoConcursosMerged.map((d) => ({
+      concurso: d.concurso,
+      dezenas: d.dezenas,
+    }));
+
+    const resultado = otimizarPoolPorExclusao({
+      tamanhoPoolDesejado: desiredSize,
+      historicoRecente: historicoSimples,
+      dezenasFaltantesCiclo: cyclePendingNumbers,
+      dezenasFixasUsuario: fixedNumbers,
+      dezenasExcluidasUsuario: [],
+    });
+
+    setPoolExclusionResult(resultado);
+    setSelectedNumbers(resultado.poolOtimizado);
+    setExcludedNumbers(resultado.dezenasExcluidas);
+    const label = `Pool Equilibrado por Exclusão (${resultado.poolOtimizado.length} Dezenas)`;
+    setStrategyName(label);
+    setActiveModel(label);
+    setDocumentMessage(
+      `✓ Pool otimizado por exclusão (${resultado.poolOtimizado.length} dezenas): ${resultado.dezenasExcluidas.length} dezenas eliminadas [${resultado.dezenasExcluidas
+        .map((n) => n.toString().padStart(2, '0'))
+        .join(', ')}] mantendo ${resultado.metricasPool.pares}P/${resultado.metricasPool.impares}I e ${resultado.metricasPool.moldura} Moldura.`
+    );
+    try {
+      soundService.playGoldenZoneSuccessChime();
+    } catch {}
+    setTimeout(() => setDocumentMessage(null), 6500);
+  };
+
+  const handleSuggestCycleFixas = () => {
+    const cycleCandidates =
+      cyclePendingNumbers.length > 0
+        ? cyclePendingNumbers.slice(0, 6)
+        : [...dynamicStats]
+            .filter((s) => s.pendenteNoCiclo || s.atrasoAtual > 0)
+            .sort((a, b) => b.atrasoAtual - a.atrasoAtual)
+            .slice(0, 4)
+            .map((s) => s.numero);
+
+    const nextFixas = Array.from(new Set(cycleCandidates))
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)
+      .sort((a, b) => a - b)
+      .slice(0, 6);
+
+    if (nextFixas.length === 0) {
+      setDocumentMessage('⚠️ Nenhuma dezena pendente de ciclo identificada para fixar automaticamente.');
+      setTimeout(() => setDocumentMessage(null), 4500);
+      return;
+    }
+
+    setFixedNumbers(nextFixas);
+    setExcludedNumbers((prev) => prev.filter((n) => !nextFixas.includes(n)));
+    setSelectedNumbers((prev) => {
+      const merged = Array.from(new Set([...nextFixas, ...prev])).sort((a, b) => a - b);
+      const desiredMin = Math.max(targetCount, 19);
+      if (merged.length >= desiredMin) {
+        return merged.slice(0, Math.max(targetCount, merged.length));
+      }
+      const extras = Array.from({ length: 25 }, (_, i) => i + 1)
+        .filter((n) => !merged.includes(n) && !excludedNumbers.includes(n))
+        .sort((a, b) => (aiPrediction?.scores?.[b - 1] ?? 50) - (aiPrediction?.scores?.[a - 1] ?? 50));
+      return [...merged, ...extras.slice(0, desiredMin - merged.length)].sort((a, b) => a - b);
+    });
+
+    setDocumentMessage(
+      `✓ ${nextFixas.length} Fixas do Ciclo marcadas [${nextFixas
+        .map((n) => n.toString().padStart(2, '0'))
+        .join(', ')}] (Ouro / Cadeado) para 100% dos bilhetes!`
+    );
+    try {
+      soundService.playGoldenZoneSuccessChime();
+    } catch {}
+    setTimeout(() => setDocumentMessage(null), 6000);
+  };
+
+  const handleGenerateFixasMatrizReduzida = async () => {
+    if (isGeneratingFixas || isGenerating) return;
+
+    const fixasLimpa = Array.from(
+      new Set(fixedNumbers.filter((n) => Number.isInteger(n) && n >= 1 && n <= 25))
+    )
+      .sort((a, b) => a - b)
+      .slice(0, 6);
+
+    const variaveisLimpas = Array.from(
+      new Set(
+        selectedNumbers.filter(
+          (n) => Number.isInteger(n) && n >= 1 && n <= 25 && !fixasLimpa.includes(n)
+        )
+      )
+    ).sort((a, b) => a - b);
+
+    const minVarsNecessarias = 15 - fixasLimpa.length;
+
+    if (fixasLimpa.length < 1 || fixasLimpa.length > 6) {
+      setDocumentMessage('⚠️ Selecione entre 1 e 6 dezenas fixas (Ouro / Cadeado) no volante antes de gerar a Matriz Reduzida.');
+      setTimeout(() => setDocumentMessage(null), 5500);
+      return;
+    }
+
+    if (variaveisLimpas.length < minVarsNecessarias) {
+      setDocumentMessage(
+        `⚠️ Selecione pelo menos ${minVarsNecessarias} dezenas variáveis no volante (atualmente ${variaveisLimpas.length}) para completar bilhetes de 15 dezenas.`
+      );
+      setTimeout(() => setDocumentMessage(null), 5500);
+      return;
+    }
+
+    setIsGeneratingFixas(true);
+    setFixasProgress(5);
+    setGenerationError(null);
+    const t0 = performance.now();
+
+    try {
+      const resultado = await gerarFechamentoComFixasAsync({
+        dezenasFixas: fixasLimpa,
+        dezenasVariaveis: variaveisLimpas,
+        garantiaTotal: fixasGarantia,
+        ultimoConcurso: latestDraw.dezenas,
+        coberturaAlvoPercent: 95,
+        maxBilhetes: fixasMaxBilhetes,
+        onProgress: (pct) => setFixasProgress(pct),
+      });
+
+      const stamp = Date.now();
+      const tickets: GameTicket[] = resultado.bilhetes.map((item, idx) => {
+        const analyzed = analyzeTicket(item.dezenas, latestDraw.dezenas, aiPrediction?.scores);
+        return {
+          ...analyzed,
+          id: `fixas-${fixasLimpa.length}f-${variaveisLimpas.length}v-${stamp}-${idx + 1}`,
+          index: idx + 1,
+          scoreIA: item.analise.resumo.scorePercentual,
+          tags: [
+            `Fixas + Matriz Reduzida (${fixasLimpa.length}F + ${variaveisLimpas.length}V)`,
+            `Garantia ${fixasGarantia} pts`,
+            item.analise.resumo.classificacao,
+          ],
+        };
+      });
+
+      const elapsed = Math.max(1, Math.round(performance.now() - t0));
+      setGenerationTimeMs(elapsed);
+      setGeneratedTickets(tickets);
+      setGenerationType('matriz');
+      setPonderadoOuroResumo(null);
+      setRebalanceamentoResumo(null);
+      setHasSavedInJogosSalvos(false);
+      setFechamentoFilter('all');
+      setOnlyGoldPattern(false);
+      setSortByAdherenceScore(true);
+      setActiveFixedHighlightNumbers(fixasLimpa);
+
+      const custoTotal = tickets.length * VALOR_APOSTA_LOTOFACIL;
+      setFixasResultadoResumo({
+        totalJogos: tickets.length,
+        custoTotal,
+        coberturaPonderadaPercent: resultado.coberturaPonderadaPercent,
+        coberturaOuroPercent: resultado.coberturaOuroPercent,
+        garantiaCondicao: resultado.garantiaCondicao,
+        fixasUsadas: fixasLimpa,
+        totalPool: resultado.totalPool,
+        garantiaTotal: fixasGarantia,
+      });
+
+      const label = `Fixas + Matriz Reduzida (${resultado.totalPool} Dez: ${fixasLimpa.length}F + ${variaveisLimpas.length}V • ${fixasGarantia} Pts)`;
+      setStrategyName(label);
+      setActiveModel(label);
+      setGoldenGlowTrigger(Date.now());
+
+      const poolCompleto = [...fixasLimpa, ...variaveisLimpas].sort((a, b) => a - b);
+      const concursoBase = resolveConcursoBase(latestDraw.concurso, CONCURSO_ATUAL.concurso);
+      const meta: FechamentoExportMeta = {
+        strategyName: label,
+        modeName: label,
+        garantia: resultado.garantiaCondicao,
+        targetCount: resultado.totalPool,
+        selectedNumbers: poolCompleto,
+        fixedNumbers: fixasLimpa,
+        excludedNumbers,
+        filters: {
+          ...filters,
+          dezenasFixas: fixasLimpa,
+          dezenasExcluidas: excludedNumbers,
+          modoFixas: 'rigidas',
+        },
+        concurso: concursoBase,
+        concursoAlvo: Number(concursoBase) + 1,
+        dataConcurso: latestDraw.data,
+        timestamp: Date.now(),
+      };
+
+      try {
+        localStorage.setItem('lotosniper_active_fechamento_meta', JSON.stringify(meta));
+      } catch {}
+
+      onSaveTickets(tickets, meta);
+      saveToAutoSave(tickets, mode, poolCompleto, meta.filters || filters, 'matriz');
+      setDocumentMessage(
+        `✓ Matriz Reduzida gerada em ${elapsed}ms: ${tickets.length} bilhetes • Cobertura Padrão Ouro ${resultado.coberturaOuroPercent}% • ${resultado.garantiaCondicao}.`
+      );
+      try {
+        soundService.playGoldenZoneSuccessChime();
+      } catch {}
+    } catch (err: any) {
+      const msg = err?.message || 'Erro ao gerar Matriz Reduzida com Fixas.';
+      setGenerationError({
+        title: 'Não foi possível gerar a Matriz Reduzida com Fixas',
+        summary: msg,
+        reasons: [msg],
+        suggestions: [
+          'Verifique se há entre 1 e 6 dezenas fixas equilibradas entre pares/ímpares e moldura.',
+          'Garanta que o pool total tenha entre 18 e 21 dezenas selecionadas no volante.',
+        ],
+      });
+    } finally {
+      setIsGeneratingFixas(false);
+      setTimeout(() => setFixasProgress(null), 1200);
+    }
+  };
+
+  const handleRebalancearBilhetesFracos = async () => {
+    if (isRebalancingMatrix || generatedTickets.length === 0) return;
+    setIsRebalancingMatrix(true);
+    try {
+      const fixasAtivas =
+        activeFixedHighlightNumbers.length > 0 ? activeFixedHighlightNumbers : fixedNumbers;
+      const poolAtual =
+        selectedNumbers.length >= 16
+          ? selectedNumbers
+          : Array.from(new Set(generatedTickets.flatMap((t) => t.dezenas))).sort((a, b) => a - b);
+
+      const res = await rebalancearMatrizPorBuscaLocalAsync({
+        bilhetes: generatedTickets.map((t) => t.dezenas),
+        poolDezenas: poolAtual,
+        ultimoConcurso: latestDraw.dezenas,
+        dezenasFixas: fixasAtivas,
+      });
+
+      setRebalanceamentoResumo(res);
+
+      if (res.totalRebalanceados > 0) {
+        const updatedTickets: GameTicket[] = generatedTickets.map((orig, idx) => {
+          const item = res.bilhetes[idx];
+          if (!item || !item.foiRebalanceado) return orig;
+          const analyzed = analyzeTicket(item.dezenas, latestDraw.dezenas, aiPrediction?.scores);
+          const existingTags = (orig.tags || []).filter((tg) => !tg.startsWith('Rebalanceado'));
+          return {
+            ...analyzed,
+            id: orig.id,
+            index: orig.index,
+            scoreIA: item.analise.resumo.scorePercentual,
+            tags: [...existingTags, 'Rebalanceado (1 troca)'],
+          };
+        });
+        setGeneratedTickets(updatedTickets);
+        setGoldenGlowTrigger(Date.now());
+        onSaveTickets(updatedTickets, getCurrentExportMeta());
+        setDocumentMessage(
+          `✓ Rebalanceamento concluído: ${res.totalRebalanceados} bilhete(s) aprimorado(s), ${res.criticosEliminados} crítico(s) eliminado(s), +${res.promovidosPadraoOuro} promovido(s) a Padrão Ouro (Score médio ${res.scoreMedioAntes}% → ${res.scoreMedioDepois}%).`
+        );
+        try {
+          soundService.playGoldenZoneSuccessChime();
+        } catch {}
+      } else {
+        setDocumentMessage(
+          '✓ Todos os bilhetes já estão no melhor equilíbrio possível dentro do pool sem elevar sobreposição.'
+        );
+      }
+      setTimeout(() => setDocumentMessage(null), 6500);
+    } catch (err) {
+      console.error('Erro ao rebalancear bilhetes:', err);
+    } finally {
+      setIsRebalancingMatrix(false);
+    }
+  };
+
+  const handleExportJSON = () => {
+    if (generatedTickets.length === 0) return;
+    try {
+      const meta = getCurrentExportMeta();
+      const concursoAlvo = meta.concursoAlvo ?? Number(latestDraw.concurso) + 1;
+      const payload = {
+        aplicacao: 'LotoSniper Pro',
+        exportadoEm: new Date().toISOString(),
+        concursoBase: meta.concurso,
+        concursoAlvo,
+        estrategia: meta.strategyName,
+        garantia: fixasResultadoResumo?.garantiaCondicao ?? meta.garantia,
+        universoDezenas: meta.selectedNumbers,
+        dezenasFixas: fixasResultadoResumo?.fixasUsadas ?? meta.fixedNumbers,
+        dezenasExcluidas: meta.excludedNumbers,
+        totalJogos: generatedTickets.length,
+        custoTotal: Number((generatedTickets.length * VALOR_APOSTA_LOTOFACIL).toFixed(2)),
+        coberturaFixasResumo: fixasResultadoResumo ?? undefined,
+        poolExclusionResumo: poolExclusionResult?.metricasPool ?? undefined,
+        jogos: generatedTickets.map((t) => ({
+          bilhete: t.index,
+          dezenas: t.dezenas,
+          pares: t.pares,
+          impares: t.impares,
+          soma: t.soma,
+          moldura: t.moldura,
+          primos: t.primos,
+          fibonacci: t.fibonacci,
+          repetidas: t.repetidas,
+          scoreIA: t.scoreIA,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lotosniper_concurso_${concursoAlvo}_${generatedTickets.length}_jogos.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setDocumentMessage(`✓ Fechamento exportado em JSON (${generatedTickets.length} jogos)!`);
+      setTimeout(() => setDocumentMessage(null), 4000);
+    } catch (err: any) {
+      setDocumentMessage('⚠️ Falha ao exportar JSON: ' + (err?.message || 'Erro desconhecido'));
+      setTimeout(() => setDocumentMessage(null), 5000);
+    }
+  };
+
   const handleGerarJogosPadraoOuro = async () => {
     if (isGeneratingGold || isGenerating) return;
     setIsGeneratingGold(true);
@@ -598,6 +991,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       if (tickets.length > 0) {
         const label = `Padrão Ouro • ${dezValidas} Dezenas (${tickets.length} jogos)`;
         setPonderadoOuroResumo(null);
+        setFixasResultadoResumo(null);
+        setActiveFixedHighlightNumbers([]);
+        setRebalanceamentoResumo(null);
         setGeneratedTickets(tickets);
         setFechamentoFilter('all');
         setOnlyGoldPattern(false);
@@ -1837,19 +2233,24 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   };
 
   const handleSetFixed = (n: number) => {
+    const maxFixasPermitidas = selectedMotor === 'fixas_reduzida' ? 6 : MAX_DEZENAS_FIXAS;
     if (fixedNumbers.includes(n)) {
       setFixedNumbers(fixedNumbers.filter((num) => num !== n));
     } else {
-      if (fixedNumbers.length >= MAX_DEZENAS_FIXAS) {
+      if (fixedNumbers.length >= maxFixasPermitidas) {
         setDocumentMessage(
-          `⚠️ Limite máximo de ${MAX_DEZENAS_FIXAS} dezenas fixas atingido para evitar vulnerabilidade combinatória.`
+          `⚠️ Limite máximo de ${maxFixasPermitidas} dezenas fixas atingido${
+            selectedMotor === 'fixas_reduzida'
+              ? ' no modo Fixas + Matriz Reduzida.'
+              : ' para evitar vulnerabilidade combinatória.'
+          }`
         );
         setTimeout(() => setDocumentMessage(null), 4500);
         return;
       }
       const nextFixed = [...fixedNumbers, n].sort((a, b) => a - b);
       setFixedNumbers(nextFixed);
-      if (nextFixed.length > RECOMMENDED_MAX_FIXAS) {
+      if (selectedMotor !== 'fixas_reduzida' && nextFixed.length > RECOMMENDED_MAX_FIXAS) {
         setDocumentMessage(
           `⚠️ Alerta de Risco Combinatório (${nextFixed.length} fixas): o padrão auditado recomenda no máximo 2 a 3 dezenas fixas (80% dos jogos de 13 pts e ROIs de 142% a 285%).`
         );
@@ -1987,10 +2388,13 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       const concursoBase = resolveConcursoBase(metaData.concurso ?? latestDraw.concurso, CONCURSO_ATUAL.concurso);
       const concursoAlvo = Number(concursoBase) + 1;
       const poolToSave = activePool.length > 0 ? activePool : selectedNumbers;
-      const fixasToSave = sanitizeDezenasFixas(
-        metaData.fixedNumbers || fixedNumbers || [],
-        poolToSave
-      );
+      const rawFixasToSave = metaData.fixedNumbers || fixedNumbers || [];
+      const fixasToSave =
+        selectedMotor === 'fixas_reduzida' || Boolean(fixasResultadoResumo)
+          ? Array.from(new Set(rawFixasToSave.filter((n) => Number.isInteger(n) && n >= 1 && n <= 25)))
+              .sort((a, b) => a - b)
+              .slice(0, 6)
+          : sanitizeDezenasFixas(rawFixasToSave, poolToSave);
       const excluidasToSave = metaData.excludedNumbers || excludedNumbers || [];
       const canonicalType = fechamentoType ? getCanonicalFechamentoTypeName() : getCanonicalFechamentoTypeName();
       const garantiaTexto = metaData.garantia || preset?.garantia || '14 se 15';
@@ -2268,6 +2672,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       } catch {}
 
       setPonderadoOuroResumo(null);
+      setFixasResultadoResumo(null);
+      setActiveFixedHighlightNumbers([]);
+      setRebalanceamentoResumo(null);
       setGeneratedTickets(tickets);
 
       // Auditoria Canônica de Integridade e Cálculo Bitwise de Cobertura Efetiva (LJCR, limitado a <= 21 dezenas)
@@ -2437,6 +2844,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       setDiscardedByRobustezCount(result.discardedByRobustezCount);
       setTotalCombinacoesAvaliadas(result.totalCombinacoesAvaliadas);
       setPonderadoOuroResumo(result.coberturaPonderadaOuro ?? null);
+      setFixasResultadoResumo(null);
+      setActiveFixedHighlightNumbers([]);
+      setRebalanceamentoResumo(null);
       setGeneratedTickets(result.tickets);
 
       const newStratName = `⚡ Fechamento Ponderado (IP Médio ${result.averagePerformanceIndex}%)`;
@@ -2525,6 +2935,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       }
       setGenerationError(diag);
       setPonderadoOuroResumo(null);
+      setFixasResultadoResumo(null);
+      setActiveFixedHighlightNumbers([]);
+      setRebalanceamentoResumo(null);
       setGeneratedTickets([]);
     } finally {
       setIsGenerating(false);
@@ -2622,6 +3035,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
     }
 
     setGenerationError(null);
+    setFixasResultadoResumo(null);
+    setActiveFixedHighlightNumbers([]);
+    setRebalanceamentoResumo(null);
     setGeneratedTickets(tickets);
     setGenerationType('turbo');
     setGenerationTimeMs(turboRes.elapsedMs);
@@ -2749,6 +3165,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
         // Auditoria de conformidade preenchendo auditoriaAnomalias
         auditarTicketsGerados(tickets, filters);
 
+        setFixasResultadoResumo(null);
+        setActiveFixedHighlightNumbers([]);
+        setRebalanceamentoResumo(null);
         setGeneratedTickets(tickets);
         onSaveTickets(tickets, fiboMeta);
         autoSaveFechamentoPrognostico(tickets, fiboMeta.strategyName || 'Distribuição de Fibonacci Otimizada (Zona de Ouro)', fiboMeta, latestDraw.dezenas);
@@ -2829,6 +3248,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       // Auditoria de conformidade preenchendo auditoriaAnomalias
       auditarTicketsGerados(tickets, fullFilters);
 
+      setFixasResultadoResumo(null);
+      setActiveFixedHighlightNumbers([]);
+      setRebalanceamentoResumo(null);
       setGeneratedTickets(tickets);
 
       if (selectedNumbers.length >= 15 && selectedNumbers.length <= 21) {
@@ -2897,6 +3319,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   const handleApplyBatchVariation = (variation: BatchMatrixVariationResult) => {
     setMode(variation.mode);
     setSelectedNumbers(variation.subsetPool);
+    setFixasResultadoResumo(null);
+    setActiveFixedHighlightNumbers([]);
+    setRebalanceamentoResumo(null);
     setGeneratedTickets(variation.tickets);
     setStrategyName(
       `Batch ${variation.poolSize} Dez. (${variation.tickets.length} Jogos · ${variation.cobertura14Pct.toFixed(1)}% 14+)`
@@ -3043,6 +3468,10 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
   };
 
   const handleExecuteSelectedMotor = () => {
+    if (selectedMotor === 'fixas_reduzida') {
+      handleGenerateFixasMatrizReduzida();
+      return;
+    }
     if (selectedMotor === 'turbo') {
       setIsTurboModalOpen(true);
       return;
@@ -3067,18 +3496,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
       ? 'Motor Padrão · Cobertura LJCR/Hamming'
       : selectedMotor === 'ponderado'
       ? 'Ponderação IA & Robustez 50'
+      : selectedMotor === 'fixas_reduzida'
+      ? 'Fixas + Matriz Reduzida (Ouro)'
       : selectedMotor === 'estratificada'
       ? 'Anti-Cisne Negro (75/15/10%)'
       : selectedMotor === 'fibonacci'
       ? 'Padrões Fibonacci (5 Jogos)'
       : 'Gerador Turbo (Força Bruta 14 Pts)';
 
+  const variaveisFixasCount = selectedNumbers.filter((n) => !fixedNumbers.includes(n)).length;
+  const canExecuteFixasReduzida =
+    !isGeneratingFixas &&
+    fixedNumbers.length >= 1 &&
+    fixedNumbers.length <= 6 &&
+    variaveisFixasCount >= 15 - fixedNumbers.length;
+
   const canExecuteSelectedMotor =
-    !isGenerating &&
-    (selectedMotor === 'turbo' ||
-      selectedMotor === 'fibonacci' ||
-      isSpecial25Mode ||
-      selectedNumbers.length >= targetCount);
+    selectedMotor === 'fixas_reduzida'
+      ? canExecuteFixasReduzida
+      : !isGenerating &&
+        (selectedMotor === 'turbo' ||
+          selectedMotor === 'fibonacci' ||
+          isSpecial25Mode ||
+          selectedNumbers.length >= targetCount);
 
   return (
     <div className="space-y-6">
@@ -3366,44 +3806,70 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
-              const isHighEffTab = size === 16 || size === 17 || size === 18;
-              return (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCatalogUniverse(size);
-                    const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
-                    if (firstMatrix) {
-                      setSelectedCatalogId(firstMatrix.id);
-                      handleSelectClosingStrategy(firstMatrix.mode);
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
-                    selectedCatalogUniverse === size
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
-                      : isHighEffTab
-                      ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
-                      : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                  }`}
-                >
-                  <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
-                  {isHighEffTab && (
-                    <span
-                      className={`text-[9px] font-mono uppercase px-1 rounded font-black ${
-                        selectedCatalogUniverse === size
-                          ? 'bg-slate-950/20 text-slate-950'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                      }`}
-                    >
-                      Alta Efic.
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {[15, 16, 17, 18, 19, 20, 21, 25].map((size) => {
+                const isHighEffTab = size === 16 || size === 17 || size === 18;
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCatalogUniverse(size);
+                      const firstMatrix = UNIFIED_MATRIX_CATALOG.find((m) => m.dezenas === size);
+                      if (firstMatrix) {
+                        setSelectedCatalogId(firstMatrix.id);
+                        handleSelectClosingStrategy(firstMatrix.mode);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border flex items-center gap-1.5 ${
+                      selectedCatalogUniverse === size
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-black'
+                        : isHighEffTab
+                        ? 'bg-emerald-950/40 text-emerald-300 hover:text-white border-emerald-500/40'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    <span>{size === 25 ? '25 (Core 12 + Satélites)' : `${size} Dezenas`}</span>
+                    {isHighEffTab && (
+                      <span
+                        className={`text-[9px] font-mono uppercase px-1 rounded font-black ${
+                          selectedCatalogUniverse === size
+                            ? 'bg-slate-950/20 text-slate-950'
+                            : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                      >
+                        Alta Efic.
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const desired: 17 | 18 | 19 | 20 =
+                  selectedCatalogUniverse === 17 ||
+                  selectedCatalogUniverse === 18 ||
+                  selectedCatalogUniverse === 19 ||
+                  selectedCatalogUniverse === 20
+                    ? selectedCatalogUniverse
+                    : targetCount === 17 ||
+                      targetCount === 18 ||
+                      targetCount === 19 ||
+                      targetCount === 20
+                    ? targetCount
+                    : 18;
+                handleOptimizePoolByExclusion(desired);
+              }}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 border border-amber-400/60 bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-200 flex items-center gap-1.5 shadow-sm shadow-amber-500/15"
+              title="Calcula o Índice de Exclusão (0–100) das 25 dezenas e remove as candidatas mais fracas preservando equilíbrio de Pares/Ímpares, Moldura/Miolo, Repetidas e Ciclo"
+            >
+              <Scissors className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span>Sugerir Exclusões (Pool Equilibrado)</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
@@ -3850,6 +4316,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   onChange={(f) => handleFiltersChange(f, true)}
                   selectedNumbers={selectedNumbers}
                   latestDraw={latestDraw}
+                  onOptimizePoolByExclusion={handleOptimizePoolByExclusion}
+                  targetPoolSize={targetCount}
+                  poolExclusionMetrics={poolExclusionResult?.metricasPool ?? null}
                 />
 
                 <FilterControls
@@ -3959,11 +4428,11 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </span>
               </div>
 
-              {/* Controle Segmentado Rápido: Cobertura Uniforme vs Ponderada (Padrão Ouro) */}
+              {/* Controle Segmentado Rápido: Cobertura Uniforme vs Ponderada vs Fixas + Matriz Reduzida */}
               <div
                 role="tablist"
                 aria-label="Modo de cobertura combinatória"
-                className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950/90 border border-slate-800 mb-3"
+                className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-950/90 border border-slate-800 mb-3"
               >
                 <button
                   type="button"
@@ -3973,14 +4442,14 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     setSelectedMotor('padrao');
                     soundService.playFilterClick();
                   }}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                     selectedMotor === 'padrao'
                       ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60 shadow-sm shadow-emerald-500/10'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent hover:bg-slate-900/70'
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5 shrink-0" />
-                  <span>Cobertura Padrão (Uniforme)</span>
+                  <span>Cobertura Padrão</span>
                 </button>
                 <button
                   type="button"
@@ -3990,14 +4459,31 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     setSelectedMotor('ponderado');
                     soundService.playFilterClick();
                   }}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                     selectedMotor === 'ponderado'
                       ? 'bg-amber-500/20 text-amber-200 border border-amber-400/70 shadow-sm shadow-amber-500/15'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent hover:bg-slate-900/70'
                   }`}
                 >
                   <Award className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                  <span>Cobertura Ponderada (Padrão Ouro)</span>
+                  <span>Ponderada Ouro</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedMotor === 'fixas_reduzida'}
+                  onClick={() => {
+                    setSelectedMotor('fixas_reduzida');
+                    soundService.playFilterClick();
+                  }}
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    selectedMotor === 'fixas_reduzida'
+                      ? 'bg-gradient-to-r from-amber-500/25 to-yellow-500/20 text-amber-200 border border-amber-400/80 shadow-sm shadow-amber-500/20'
+                      : 'text-amber-300/80 hover:text-amber-200 border border-transparent hover:bg-amber-500/10'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span>Fixas + Matriz Reduzida</span>
                 </button>
               </div>
 
@@ -4092,6 +4578,52 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     }`}
                   >
                     {selectedMotor === 'ponderado' && <Check className="w-2.5 h-2.5 text-slate-950" />}
+                  </span>
+                </button>
+
+                {/* Motor 2B: Fixas + Matriz Reduzida (1 a 6 Fixas + Variáveis) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMotor('fixas_reduzida');
+                    soundService.playFilterClick();
+                  }}
+                  className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                    selectedMotor === 'fixas_reduzida'
+                      ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-slate-900 border-amber-400 ring-1 ring-amber-400/50 shadow-md shadow-amber-500/15'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-amber-500/40'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className={`p-2 rounded-lg border shrink-0 mt-0.5 ${
+                        selectedMotor === 'fixas_reduzida'
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-900 text-amber-400 border-slate-700'
+                      }`}
+                    >
+                      <Lock className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-black text-white">
+                          Fixas + Matriz Reduzida
+                        </span>
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          19–21 DEZ • 1–6 FIXAS
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Fecha apenas as variáveis em matriz reduzida ponderada Padrão Ouro (10/5/1), derrubando o número de jogos para 13 ou 14 pts.
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 mt-1 flex items-center justify-center ${
+                      selectedMotor === 'fixas_reduzida' ? 'border-amber-400 bg-amber-400' : 'border-slate-600'
+                    }`}
+                  >
+                    {selectedMotor === 'fixas_reduzida' && <Check className="w-2.5 h-2.5 text-slate-950" />}
                   </span>
                 </button>
 
@@ -4299,7 +4831,174 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 </div>
               </div>
 
-              {/* Botão Principal de Destaque: Gerar Fechamento */}
+              {/* Painel de Configuração e Garantia Matemática — Fixas + Matriz Reduzida */}
+              {selectedMotor === 'fixas_reduzida' && (() => {
+                const fixasAtivasCount = fixedNumbers.length;
+                const variaveisAtivasCount = selectedNumbers.filter((n) => !fixedNumbers.includes(n)).length;
+                const totalPoolAtual = fixasAtivasCount + variaveisAtivasCount;
+                const varsPorBilhete = Math.max(0, 15 - fixasAtivasCount);
+                const poolValido =
+                  fixasAtivasCount >= 1 &&
+                  fixasAtivasCount <= 6 &&
+                  variaveisAtivasCount >= varsPorBilhete;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-gradient-to-br from-amber-950/35 via-slate-950 to-slate-950 border border-amber-400/50 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Configuração · Fixas + Matriz Reduzida</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSuggestCycleFixas}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-200 text-[11px] font-bold transition cursor-pointer flex items-center gap-1"
+                        title="Marca automaticamente as dezenas faltantes do ciclo atual como Fixas (Ouro)"
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>Sugerir Fixas do Ciclo ({cyclePendingNumbers.length})</span>
+                      </button>
+                    </div>
+
+                    {/* Resumo em Tempo Real da Garantia Matemática */}
+                    <div
+                      className={`p-2.5 rounded-lg border text-[11px] leading-relaxed ${
+                        poolValido
+                          ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                          : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                      }`}
+                    >
+                      <div className="font-bold">
+                        Pool de <span className="font-mono text-white">{totalPoolAtual}</span> dezenas (
+                        <span className="font-mono text-amber-300">{fixasAtivasCount} Fixas</span> +{' '}
+                        <span className="font-mono text-emerald-300">{variaveisAtivasCount} Variáveis</span>) •{' '}
+                        Garantia: <span className="font-mono text-white">{fixasGarantia} pontos</span> se acertar as{' '}
+                        {fixasAtivasCount} {fixasAtivasCount === 1 ? 'fixa' : 'fixas'}
+                      </div>
+                      {!poolValido ? (
+                        <div className="text-[10px] text-amber-300 mt-1">
+                          {fixasAtivasCount < 1
+                            ? 'Marque de 1 a 6 dezenas como Fixa (Ouro / Cadeado) no volante ou clique em "Sugerir Fixas do Ciclo".'
+                            : `Selecione pelo menos ${varsPorBilhete} variáveis no volante (faltam ${Math.max(
+                                0,
+                                varsPorBilhete - variaveisAtivasCount
+                              )}).`}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-slate-300 mt-0.5 font-mono">
+                          Fecha {variaveisAtivasCount} variáveis em grupos de {varsPorBilhete} (garantia de{' '}
+                          {fixasGarantia - fixasAtivasCount} pts nas variáveis) • Custo teto: R${' '}
+                          {(fixasMaxBilhetes * VALOR_APOSTA_LOTOFACIL).toFixed(2).replace('.', ',')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Atalho Rápido de Tamanho do Pool Ideal (19, 20 ou 21 dezenas) */}
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-400 font-medium">Pool rápido (ideal):</span>
+                      <div className="flex items-center gap-1">
+                        {([19, 20, 21] as const).map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => {
+                              const modeForSz: FechamentoMode =
+                                sz === 19 ? '19_14_15' : sz === 20 ? '20_14_15' : '21_13_15';
+                              setMode(modeForSz);
+                              setSelectedCatalogUniverse(sz);
+                              if (sz === 19 || sz === 20) {
+                                handleOptimizePoolByExclusion(sz);
+                              } else {
+                                const optimal21 = buildOptimalPool(
+                                  21,
+                                  latestDraw,
+                                  dynamicStats,
+                                  cyclePendingNumbers
+                                );
+                                const merged21 = Array.from(
+                                  new Set([...fixedNumbers, ...optimal21.dezenas])
+                                )
+                                  .slice(0, 21)
+                                  .sort((a, b) => a - b);
+                                setSelectedNumbers(merged21);
+                              }
+                            }}
+                            className={`px-2 py-1 rounded-md font-mono text-[11px] font-bold border transition cursor-pointer ${
+                              totalPoolAtual === sz
+                                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/50'
+                            }`}
+                          >
+                            {sz} Dez
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Garantia (13 ou 14 pontos) */}
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-400 font-medium">Garantia desejada:</span>
+                      <div className="grid grid-cols-2 gap-1.5 w-44">
+                        {([13, 14] as const).map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setFixasGarantia(g)}
+                            disabled={isGeneratingFixas}
+                            className={`py-1 rounded-lg font-mono text-xs font-bold border transition cursor-pointer ${
+                              fixasGarantia === g
+                                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-500/40'
+                            }`}
+                          >
+                            {g} Pontos
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Limite Máximo de Bilhetes */}
+                    <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-400 font-medium">Limite máx. de bilhetes:</span>
+                      <div className="flex items-center gap-1">
+                        {[15, 20, 30, 40].map((lim) => (
+                          <button
+                            key={lim}
+                            type="button"
+                            onClick={() => setFixasMaxBilhetes(lim)}
+                            disabled={isGeneratingFixas}
+                            className={`px-2 py-1 rounded-md font-mono text-[11px] font-bold border transition cursor-pointer ${
+                              fixasMaxBilhetes === lim
+                                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400/70'
+                                : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                            }`}
+                          >
+                            {lim}j
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Barra de Progresso Assíncrona (onProgress) */}
+                    {(isGeneratingFixas || fixasProgress !== null) && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] font-mono text-amber-300">
+                          <span>Otimizando Matriz Reduzida (Weighted Set Cover)...</span>
+                          <span>{fixasProgress ?? 0}%</span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 transition-all duration-150"
+                            style={{ width: `${Math.min(100, fixasProgress ?? 0)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Botão Principal de Destaque: Gerar Fechamento / Gerar Matriz Reduzida */}
               <div className="space-y-2 pt-1">
                 <button
                   type="button"
@@ -4311,9 +5010,21 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                       : 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-70'
                   }`}
                 >
-                  <Zap className="w-5 h-5 fill-current shrink-0" />
+                  {selectedMotor === 'fixas_reduzida' ? (
+                    <Lock className="w-5 h-5 shrink-0" />
+                  ) : (
+                    <Zap className="w-5 h-5 fill-current shrink-0" />
+                  )}
                   <span>
-                    {isGenerating
+                    {selectedMotor === 'fixas_reduzida'
+                      ? isGeneratingFixas
+                        ? `Gerando Matriz Reduzida (${fixasProgress ?? 0}%)...`
+                        : !canExecuteFixasReduzida
+                        ? fixedNumbers.length < 1
+                          ? 'Marque 1 a 6 Dezenas Fixas (Ouro) no Volante'
+                          : `Selecione pelo menos ${Math.max(0, 15 - fixedNumbers.length)} Variáveis no Volante`
+                        : 'Gerar Matriz Reduzida'
+                      : isGenerating
                       ? 'Processando Matriz no Worker...'
                       : !canExecuteSelectedMotor
                       ? `Selecione mais ${Math.max(0, targetCount - selectedNumbers.length)} Dezenas no Volante`
@@ -4485,6 +5196,9 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               }}
               activeStrategy={strategyName}
               activeMode={mode}
+              maxFixas={selectedMotor === 'fixas_reduzida' ? 6 : MAX_DEZENAS_FIXAS}
+              isFixasReduzidaMode={selectedMotor === 'fixas_reduzida'}
+              onSuggestCycleFixas={handleSuggestCycleFixas}
               onActivateErre4Mode={(excl4, comp21) => {
                 setMode('erre_4_21');
                 setExcludedNumbers(excl4);
@@ -4503,9 +5217,143 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 setSelectedNumbers([]);
                 setFixedNumbers([]);
                 setExcludedNumbers([]);
+                setPoolExclusionResult(null);
               }}
               targetCount={targetCount}
             />
+
+            {/* Card Compacto: Dezenas Eliminadas & Saúde do Pool Otimizado por Exclusão */}
+            {poolExclusionResult && (
+              <div className="bg-slate-900/95 border border-rose-500/35 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="p-1.5 rounded-lg bg-rose-500/15 border border-rose-500/35 text-rose-300">
+                      <Scissors className="w-3.5 h-3.5" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-black text-white">
+                        Dezenas Eliminadas ({poolExclusionResult.dezenasExcluidas.length} excluídas → Pool de{' '}
+                        {poolExclusionResult.metricasPool.tamanho})
+                      </h4>
+                      <span className="text-[10px] text-slate-400">
+                        Passe o mouse sobre cada dezena eliminada para inspecionar os motivos técnicos da exclusão.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {([17, 18, 19, 20] as const).map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => handleOptimizePoolByExclusion(sz)}
+                        className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold border transition cursor-pointer ${
+                          poolExclusionResult.metricasPool.tamanho === sz
+                            ? 'bg-amber-400 text-slate-950 border-amber-300'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-amber-200'
+                        }`}
+                        title={`Otimizar pool de ${sz} dezenas por exclusão`}
+                      >
+                        {sz}d
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setPoolExclusionResult(null)}
+                      className="text-slate-400 hover:text-white p-1 rounded transition cursor-pointer ml-1"
+                      title="Ocultar diagnóstico de exclusão"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Badges Vermelhos Discretos das Dezenas Eliminadas com Tooltip de Motivos */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {poolExclusionResult.dezenasExcluidas.map((dez) => {
+                    const diag = poolExclusionResult.diagnosticoCompleto.find((d) => d.dezena === dez);
+                    const motivosTexto =
+                      diag && diag.motivos.length > 0
+                        ? diag.motivos.join(' • ')
+                        : 'Baixa prioridade estrutural relativa ao pool';
+                    return (
+                      <div key={dez} className="relative group">
+                        <span
+                          title={`Dezena ${dez.toString().padStart(2, '0')} (Índice Exclusão: ${
+                            diag?.scoreExclusao ?? 50
+                          }) — ${motivosTexto}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-200 font-mono text-xs font-bold cursor-help transition hover:border-rose-400 hover:bg-rose-950/80"
+                        >
+                          <span className="line-through opacity-90">{dez.toString().padStart(2, '0')}</span>
+                          <span className="text-[9px] text-rose-300/80 font-normal">
+                            #{diag?.scoreExclusao ?? 50}
+                          </span>
+                        </span>
+
+                        {/* Tooltip Rico no Hover */}
+                        <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-0 bottom-full mb-2 z-40 w-60 rounded-xl bg-slate-950 border border-rose-500/40 p-2.5 shadow-2xl">
+                          <div className="flex items-center justify-between text-[11px] pb-1 mb-1 border-b border-slate-800">
+                            <span className="font-mono font-black text-rose-300">
+                              Dezena {dez.toString().padStart(2, '0')} (Excluída)
+                            </span>
+                            <span className="font-mono text-[10px] text-amber-300">
+                              Índice {diag?.scoreExclusao ?? 50}
+                            </span>
+                          </div>
+                          <ul className="space-y-0.5 text-[10px] text-slate-200">
+                            {(diag?.motivos.length ? diag.motivos : ['Removida mantendo equilíbrio estrutural']).map(
+                              (m, i) => (
+                                <li key={i} className="flex items-start gap-1">
+                                  <span className="text-rose-400">•</span>
+                                  <span>{m}</span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Mini Resumo de Saúde do Pool Gerado */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-2.5 py-1.5">
+                    <span className="text-[9.5px] uppercase text-slate-400 block font-semibold">
+                      Pares / Ímpares
+                    </span>
+                    <span className="text-xs font-mono font-black text-emerald-300 tabular-nums">
+                      {poolExclusionResult.metricasPool.pares}P / {poolExclusionResult.metricasPool.impares}I
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-2.5 py-1.5">
+                    <span className="text-[9.5px] uppercase text-slate-400 block font-semibold">
+                      Moldura / Miolo
+                    </span>
+                    <span className="text-xs font-mono font-black text-amber-300 tabular-nums">
+                      {poolExclusionResult.metricasPool.moldura}M / {poolExclusionResult.metricasPool.miolo}C
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-2.5 py-1.5">
+                    <span className="text-[9.5px] uppercase text-slate-400 block font-semibold">
+                      Do Último Concurso
+                    </span>
+                    <span className="text-xs font-mono font-black text-cyan-300 tabular-nums">
+                      {poolExclusionResult.metricasPool.doUltimoConcurso} Rep ·{' '}
+                      {poolExclusionResult.metricasPool.ausentesDoUltimo} Aus
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-2.5 py-1.5">
+                    <span className="text-[9.5px] uppercase text-slate-400 block font-semibold">
+                      Faltantes do Ciclo
+                    </span>
+                    <span className="text-xs font-mono font-black text-amber-200 tabular-nums">
+                      {poolExclusionResult.metricasPool.faltantesCicloIncluidas}
+                      {cyclePendingNumbers.length > 0 ? `/${cyclePendingNumbers.length}` : ''} incluídas
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Atalhos Rápidos de Preenchimento do Volante */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
@@ -4519,6 +5367,15 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleOptimizePoolByExclusion()}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-amber-500/20 to-emerald-500/20 text-amber-200 border border-amber-400/50 hover:from-amber-500/30 hover:to-emerald-500/30 transition cursor-pointer flex items-center gap-1"
+                  title="Otimizar pool removendo as dezenas mais fracas mantendo equilíbrio estrutural"
+                >
+                  <Scissors className="w-3 h-3 text-amber-300" />
+                  <span>Sugerir Exclusões (Pool Equilibrado)</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleApplyTop18}
@@ -4560,6 +5417,7 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                     setSelectedNumbers([]);
                     setFixedNumbers([]);
                     setExcludedNumbers([]);
+                    setPoolExclusionResult(null);
                   }}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
                 >
@@ -5184,6 +6042,29 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                 <span>Exportar Cologa (.txt)</span>
               </button>
               <button
+                type="button"
+                onClick={handleExportJSON}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold text-xs transition cursor-pointer"
+                title="Exportar fechamento completo e metadados em arquivo JSON"
+              >
+                <FileJson className="w-3.5 h-3.5 text-amber-400" />
+                <span>Exportar JSON</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onGoToGamesManager) {
+                    onGoToGamesManager(generatedTickets, getCurrentExportMeta());
+                  }
+                  window.dispatchEvent(new CustomEvent('switch-tab', { detail: 'jogos' }));
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50 text-xs font-bold transition cursor-pointer"
+                title="Enviar bilhetes gerados diretamente para a aba de Conferência / Jogos Salvos"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>Enviar para Conferência</span>
+              </button>
+              <button
                 onClick={() => onGoToSimulator(generatedTickets)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition cursor-pointer"
               >
@@ -5676,7 +6557,111 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
             </div>
           )}
 
-          {/* Controles de Filtro Pré-Aposta (Score Estatístico + Padrão Ouro) */}
+          {/* Resumo Final: Fixas + Matriz Reduzida */}
+          {fixasResultadoResumo && (
+            <div className="rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-900/95 to-emerald-950/30 border border-amber-400/50 p-4 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-black text-amber-200">
+                    Resumo da Matriz Reduzida com Fixas
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 font-bold">
+                    Pool {fixasResultadoResumo.totalPool} dez. • Garantia {fixasResultadoResumo.garantiaTotal} pts
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFixasResultadoResumo(null)}
+                  className="text-slate-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                  title="Dispensar resumo da Matriz Reduzida"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                    Total de Jogos &amp; Custo
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+                    <span className="text-sm sm:text-base font-black text-white font-mono tabular-nums">
+                      {fixasResultadoResumo.totalJogos} jogos
+                    </span>
+                    <span className="text-xs font-mono font-bold text-amber-300 tabular-nums">
+                      R$ {fixasResultadoResumo.custoTotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                    <span className="text-[10px] text-amber-300 font-semibold">Fixas Ouro:</span>
+                    {fixasResultadoResumo.fixasUsadas.map((f) => (
+                      <span
+                        key={f}
+                        className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200 border border-amber-400/60"
+                      >
+                        {f.toString().padStart(2, '0')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-emerald-950/30 border border-emerald-500/35 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300/90 font-semibold">
+                    Cobertura Padrão Ouro
+                  </div>
+                  <div className="text-sm sm:text-base font-black text-emerald-300 font-mono tabular-nums mt-0.5">
+                    {fixasResultadoResumo.coberturaOuroPercent.toFixed(1)}% Padrão Ouro
+                  </div>
+                  <div className="text-[10px] text-slate-300 font-mono mt-0.5">
+                    Cobertura ponderada geral: {fixasResultadoResumo.coberturaPonderadaPercent.toFixed(1)}%
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-amber-950/25 border border-amber-500/35 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-amber-300/90 font-semibold">
+                    Condição de Garantia Matemática
+                  </div>
+                  <p className="text-[11px] text-amber-100 font-medium mt-0.5 leading-snug">
+                    {fixasResultadoResumo.garantiaCondicao}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Resumo do Rebalanceamento por Busca Local (1 Troca) */}
+          {rebalanceamentoResumo && (
+            <div className="rounded-xl bg-slate-900/95 border border-emerald-500/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Wand2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-bold text-emerald-200">
+                  Poda &amp; Rebalanceamento (Busca Local 1 Troca):
+                </span>
+                <span className="font-mono text-slate-200">
+                  {rebalanceamentoResumo.totalRebalanceados}/{rebalanceamentoResumo.totalAvaliados} ajustados
+                </span>
+                <span className="font-mono text-amber-300">
+                  • {rebalanceamentoResumo.criticosEliminados} críticos eliminados
+                </span>
+                <span className="font-mono text-emerald-300">
+                  • +{rebalanceamentoResumo.promovidosPadraoOuro} Padrão Ouro
+                </span>
+                <span className="font-mono text-slate-300">
+                  • Score médio {rebalanceamentoResumo.scoreMedioAntes}% → {rebalanceamentoResumo.scoreMedioDepois}%
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRebalanceamentoResumo(null)}
+                className="text-slate-400 hover:text-white p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Controles de Filtro Pré-Aposta (Score Estatístico + Padrão Ouro + Rebalanceamento) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -5716,6 +6701,19 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
               >
                 <Activity className="w-3.5 h-3.5" />
                 <span>{sortByAdherenceScore ? 'Ordenado: Maior Score ↓' : 'Ordenado: Nº do Bilhete'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRebalancearBilhetesFracos}
+                disabled={isRebalancingMatrix || generatedTickets.length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/55 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                title="Troca 1 dezena dentro do pool nos bilhetes com críticos/abaixo do Padrão Ouro, preservando fixas e diversidade via bitmask"
+              >
+                <Wand2 className={`w-3.5 h-3.5 text-amber-300 ${isRebalancingMatrix ? 'animate-spin' : ''}`} />
+                <span>
+                  {isRebalancingMatrix ? 'Rebalanceando...' : 'Rebalancear Fracos (1 Troca)'}
+                </span>
               </button>
             </div>
 
@@ -5923,17 +6921,37 @@ export const FechamentoTab: React.FC<FechamentoTabProps> = ({
                   {/* Number Balls */}
                   <div className="flex flex-wrap items-center gap-1.5 my-2.5">
                     {ticket.dezenas.map((num) => {
+                      const activeFixasSet =
+                        fixasResultadoResumo?.fixasUsadas ??
+                        (activeFixedHighlightNumbers.length > 0
+                          ? activeFixedHighlightNumbers
+                          : fixedNumbers);
+                      const isFixedBall = activeFixasSet.includes(num);
                       const isKey = cyclePendingNumbers.includes(num);
                       return (
                         <span
                           key={num}
-                          className={`inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-mono text-xs font-bold transition shadow-sm ${
-                            isKey
+                          title={
+                            isFixedBall
+                              ? `Dezena ${num.toString().padStart(2, '0')} — FIXA (obrigatória em 100% dos bilhetes)`
+                              : isKey
+                              ? `Dezena ${num.toString().padStart(2, '0')} — Pendente no Ciclo`
+                              : `Dezena ${num.toString().padStart(2, '0')} — Variável`
+                          }
+                          className={`relative inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-mono text-xs font-bold transition shadow-sm ${
+                            isFixedBall
+                              ? 'bg-gradient-to-br from-amber-500/30 via-yellow-500/20 to-slate-900 text-amber-200 border-2 border-amber-400 ring-1 ring-amber-300/60 font-black shadow-amber-500/25'
+                              : isKey
                               ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 ring-1 ring-amber-300'
                               : 'bg-gradient-to-br from-slate-800 to-slate-900 text-slate-100 border border-slate-700'
                           }`}
                         >
                           {num.toString().padStart(2, '0')}
+                          {isFixedBall && (
+                            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow">
+                              <Lock className="w-2 h-2" />
+                            </span>
+                          )}
                         </span>
                       );
                     })}

@@ -14,7 +14,7 @@ import { buildOptimal18Pool, buildOptimalPool } from '../services/combinatorics'
 import { calculateCurvaAbc } from '../services/curvaAbcService';
 import { dezenasParaBitmask, verificarNoHistorico } from '../utils/lotofacilEngine';
 import { mesclarEOrdenarHistorico } from '../utils/concursoParametros';
-import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Check, Pin, Ban, Layers, Eye, RefreshCw, Zap, Award, Play, X, CheckCircle2, AlertTriangle, Lock } from 'lucide-react';
 import { RollingNumbersSorteio } from './RollingNumbersSorteio';
 import { soundService } from '../services/soundAlert';
 
@@ -37,6 +37,9 @@ interface VolanteSelectorProps {
   activeStrategy?: string;
   onActivateErre4Mode?: (excluded4: number[], complementary21: number[]) => void;
   activeMode?: string;
+  maxFixas?: number;
+  isFixasReduzidaMode?: boolean;
+  onSuggestCycleFixas?: () => void;
 }
 
 export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
@@ -58,6 +61,9 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
   activeStrategy,
   onActivateErre4Mode,
   activeMode,
+  maxFixas = 5,
+  isFixasReduzidaMode = false,
+  onSuggestCycleFixas,
 }) => {
   const [visualMode, setVisualMode] = useState<
     'normal' | 'moldura' | 'cruz' | 'primos' | 'fibonacci' | 'atrasadas' | 'calor_ia' | 'curva_abc' | 'pivo_9'
@@ -521,58 +527,116 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
           </button>
 
           {/* Click Mode Toggle */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto text-xs">
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto text-xs flex-wrap">
             <button
+              type="button"
               onClick={() => setClickMode('select')}
               className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
                 clickMode === 'select'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                  ? 'bg-emerald-500 text-slate-950 shadow-sm font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Selecionar</span>
+              <span>{isFixasReduzidaMode ? 'Variável (Padrão)' : 'Selecionar'}</span>
             </button>
-          <button
-            onClick={() => setClickMode('fix')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
-              clickMode === 'fix'
-                ? 'bg-blue-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="Recomendado: máx. 2–3 fixas (80% dos 13 pts e ROIs de 142%–285%). Limite rígido: 5."
-          >
-            <Pin className="w-3.5 h-3.5" />
-            <span>Fixar ({fixedNumbers.length}/5 • Rec. 2–3)</span>
-          </button>
-          <button
-            onClick={() => setClickMode('exclude')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
-              clickMode === 'exclude'
-                ? 'bg-rose-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="Dezenas excluídas nunca entram em nenhum jogo"
-          >
-            <Ban className="w-3.5 h-3.5" />
-            <span>Excluir ({excludedNumbers.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setClickMode('exclude_4')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition cursor-pointer ${
-              clickMode === 'exclude_4'
-                ? 'bg-amber-500 text-slate-950 shadow-sm'
-                : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-500/10'
-            }`}
-            title="Modo Exclusão: escolha exatamente 4 dezenas para errar e o motor preenche automaticamente as 21 complementares"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>Modo Exclusão: Escolher 4 para Errar ({Math.min(4, excludedNumbers.length)}/4)</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setClickMode('fix')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
+                clickMode === 'fix'
+                  ? isFixasReduzidaMode
+                    ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black shadow-sm shadow-amber-500/30'
+                    : 'bg-blue-500 text-white shadow-sm'
+                  : isFixasReduzidaMode
+                  ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-500/15 border border-amber-500/35'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title={
+                isFixasReduzidaMode
+                  ? `Fixa (Ouro / Cadeado): obrigatória em 100% dos bilhetes da matriz reduzida (1 a ${maxFixas} fixas)`
+                  : `Recomendado: máx. 2–3 fixas (80% dos 13 pts e ROIs de 142%–285%). Limite rígido: ${maxFixas}.`
+              }
+            >
+              {isFixasReduzidaMode ? (
+                <Lock className="w-3.5 h-3.5" />
+              ) : (
+                <Pin className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {isFixasReduzidaMode
+                  ? `Fixa · Ouro (${fixedNumbers.length}/${maxFixas})`
+                  : `Fixar (${fixedNumbers.length}/${maxFixas} • Rec. 2–3)`}
+              </span>
+            </button>
+            {isFixasReduzidaMode && onSuggestCycleFixas && (
+              <button
+                type="button"
+                onClick={onSuggestCycleFixas}
+                className="px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition cursor-pointer bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50"
+                title="Marcar automaticamente como fixas as dezenas faltantes para fechar o ciclo atual"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Sugerir Fixas do Ciclo</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setClickMode('exclude')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition cursor-pointer ${
+                clickMode === 'exclude'
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Dezenas excluídas nunca entram em nenhum jogo"
+            >
+              <Ban className="w-3.5 h-3.5" />
+              <span>Excluir ({excludedNumbers.length})</span>
+            </button>
+            {!isFixasReduzidaMode && (
+              <button
+                type="button"
+                onClick={() => setClickMode('exclude_4')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition cursor-pointer ${
+                  clickMode === 'exclude_4'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-500/10'
+                }`}
+                title="Modo Exclusão: escolha exatamente 4 dezenas para errar e o motor preenche automaticamente as 21 complementares"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Modo Exclusão: Escolher 4 para Errar ({Math.min(4, excludedNumbers.length)}/4)</span>
+              </button>
+            )}
+          </div>
       </div>
     </div>
+
+      {/* Banner de Dois Estados no Modo Fixas + Matriz Reduzida */}
+      {isFixasReduzidaMode && (
+        <div className="mt-3 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-slate-950 to-emerald-500/10 border border-amber-400/45 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 font-bold text-amber-200">
+              <span className="w-4 h-4 rounded bg-amber-400 text-slate-950 inline-flex items-center justify-center">
+                <Lock className="w-2.5 h-2.5" />
+              </span>
+              Fixas (Ouro): <strong className="font-mono text-amber-300">{fixedNumbers.length}</strong>/{maxFixas}
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-bold text-emerald-200">
+              <span className="w-4 h-4 rounded bg-emerald-500 text-slate-950 inline-flex items-center justify-center">
+                <Check className="w-2.5 h-2.5 stroke-[3]" />
+              </span>
+              Variáveis (Matriz):{' '}
+              <strong className="font-mono text-emerald-300">
+                {selectedNumbers.filter((n) => !fixedNumbers.includes(n)).length}
+              </strong>
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-300">
+            Alterne entre <strong>Fixa · Ouro</strong> e <strong>Variável (Padrão)</strong> acima para marcar no volante.
+          </span>
+        </div>
+      )}
 
       {/* Real-Time Interactive Counter HUD & Visual Feedback Bar */}
       <div className="my-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 shadow-inner">
@@ -651,19 +715,30 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
             </span>
             {fixedNumbers.length > 0 && (
               <span
-                className={`px-2 py-1 rounded-lg border font-semibold ${
-                  fixedNumbers.length > 3
+                className={`px-2 py-1 rounded-lg border font-semibold inline-flex items-center gap-1 ${
+                  isFixasReduzidaMode
+                    ? 'bg-amber-500/20 border-amber-400/70 text-amber-200'
+                    : fixedNumbers.length > 3
                     ? 'bg-amber-950/60 border-amber-500/60 text-amber-300'
                     : 'bg-blue-950/60 border-blue-800 text-blue-300'
                 }`}
                 title={
-                  fixedNumbers.length > 3
+                  isFixasReduzidaMode
+                    ? `Fixas obrigatórias em 100% dos bilhetes da Matriz Reduzida (${fixedNumbers.length}/${maxFixas}).`
+                    : fixedNumbers.length > 3
                     ? 'Alerta de Risco Combinatório: acima do limite recomendado de 2 a 3 dezenas fixas.'
                     : 'Faixa recomendada de dezenas fixas (máx. 2–3).'
                 }
               >
-                Fixas: {fixedNumbers.length}
-                {fixedNumbers.length > 3 ? ' ⚠️ Risco (>3)' : ' ✓'}
+                {isFixasReduzidaMode && <Lock className="w-3 h-3 text-amber-300" />}
+                <span>
+                  Fixas: {fixedNumbers.length}
+                  {isFixasReduzidaMode
+                    ? `/${maxFixas} Ouro`
+                    : fixedNumbers.length > 3
+                    ? ' ⚠️ Risco (>3)'
+                    : ' ✓'}
+                </span>
               </span>
             )}
             {excludedNumbers.length > 0 && (
@@ -1066,8 +1141,14 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
 
             // Selection overrides
             if (isFixed) {
-              bgStyle = 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-600/30 ring-2 ring-blue-400';
-              borderStyle = 'border-blue-400';
+              if (isFixasReduzidaMode) {
+                bgStyle =
+                  'bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/40 ring-2 ring-amber-300';
+                borderStyle = 'border-amber-200';
+              } else {
+                bgStyle = 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-600/30 ring-2 ring-blue-400';
+                borderStyle = 'border-blue-400';
+              }
             } else if (isExcluded) {
               bgStyle = 'bg-rose-950/40 text-rose-400 opacity-60 line-through border-rose-900 ring-1 ring-rose-500/40';
               borderStyle = 'border-rose-500/40';
@@ -1141,8 +1222,16 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                   </span>
                 )}
                 {isFixed && (
-                  <span className="absolute top-1 left-1 w-3 h-3 rounded-full bg-white/20 flex items-center justify-center pointer-events-none">
-                    <Pin className="w-2 h-2 text-white fill-current" />
+                  <span
+                    className={`absolute top-1 left-1 w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none ${
+                      isFixasReduzidaMode ? 'bg-slate-950/75' : 'bg-white/20'
+                    }`}
+                  >
+                    {isFixasReduzidaMode ? (
+                      <Lock className="w-2 h-2 text-amber-300" />
+                    ) : (
+                      <Pin className="w-2 h-2 text-white fill-current" />
+                    )}
                   </span>
                 )}
                 {isExcluded && (
@@ -1191,7 +1280,13 @@ export const VolanteSelector: React.FC<VolanteSelectorProps> = ({
                 {/* Sub-label indicators */}
                 <div className="flex items-center gap-1 mt-1 text-[9px] font-mono leading-none">
                   {isFixed && (
-                    <span className="flex items-center text-blue-200 bg-blue-800/80 px-1 py-0.5 rounded">
+                    <span
+                      className={`flex items-center px-1 py-0.5 rounded font-bold ${
+                        isFixasReduzidaMode
+                          ? 'text-amber-300 bg-slate-950/85 border border-amber-500/40'
+                          : 'text-blue-200 bg-blue-800/80'
+                      }`}
+                    >
                       FIXA
                     </span>
                   )}

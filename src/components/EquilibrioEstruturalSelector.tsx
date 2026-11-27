@@ -10,15 +10,20 @@ import {
   ShieldCheck,
   Check,
   Info,
+  Scissors,
 } from 'lucide-react';
 import { ExpertTip } from './ExpertTip';
 import { FilterTooltip } from './FilterTooltip';
+import type { ResultadoOtimizacaoPool } from '../services/poolExclusionOptimizer';
 
 interface EquilibrioEstruturalSelectorProps {
   filters: FilterCriteria;
   onChange: (filters: FilterCriteria) => void;
   selectedNumbers?: number[];
   latestDraw?: LotofacilDraw;
+  onOptimizePoolByExclusion?: (poolSize?: 17 | 18 | 19 | 20) => void;
+  targetPoolSize?: number;
+  poolExclusionMetrics?: ResultadoOtimizacaoPool['metricasPool'] | null;
 }
 
 export type StructuralPreset = '7P_8I' | '8P_7I' | 'CANONICO_DUPLO' | 'AMPLO';
@@ -28,6 +33,9 @@ export const EquilibrioEstruturalSelector: React.FC<EquilibrioEstruturalSelector
   onChange,
   selectedNumbers = [],
   latestDraw = CONCURSO_ATUAL,
+  onOptimizePoolByExclusion,
+  targetPoolSize = 18,
+  poolExclusionMetrics = null,
 }) => {
   // Cálculo de pares e ímpares no volante atual selecionado
   const contagemVolante = useMemo(() => {
@@ -298,6 +306,42 @@ export const EquilibrioEstruturalSelector: React.FC<EquilibrioEstruturalSelector
           </button>
         </div>
       </div>
+
+      {/* Atalho Integrado: Otimização de Pool por Exclusão Equilibrada */}
+      {onOptimizePoolByExclusion && (
+        <div className="bg-slate-950/80 rounded-xl p-3.5 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-amber-200 flex items-center gap-1.5">
+                <Scissors className="w-3.5 h-3.5 text-amber-400" />
+                <span>Otimizador de Pool por Exclusão (17 a 20 dezenas)</span>
+              </span>
+              {poolExclusionMetrics && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  Pool {poolExclusionMetrics.tamanho}d: {poolExclusionMetrics.pares}P/{poolExclusionMetrics.impares}I · {poolExclusionMetrics.moldura}M/{poolExclusionMetrics.miolo}C · {poolExclusionMetrics.doUltimoConcurso} Rep.
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Elimina as dezenas mais saturadas ou frias sem desbalancear Pares/Ímpares, Moldura/Miolo e Repetidas.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const clamped =
+                targetPoolSize === 17 || targetPoolSize === 18 || targetPoolSize === 19 || targetPoolSize === 20
+                  ? targetPoolSize
+                  : 18;
+              onOptimizePoolByExclusion(clamped);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 border border-amber-400/50 text-amber-200 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+          >
+            <Scissors className="w-3.5 h-3.5 text-amber-300" />
+            <span>Sugerir Exclusões (Pool Equilibrado)</span>
+          </button>
+        </div>
+      )}
 
       {/* Nota de Auditoria Estrutural */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-slate-400 bg-slate-950/50 p-3 rounded-xl border border-slate-800/80">
